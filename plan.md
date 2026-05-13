@@ -2,99 +2,114 @@
 
 ## Vision
 
-Create a public benchmarking arena for autonomous, tool-using AI agents.
+Create a public playground for watching autonomous, tool-using AI agents work in real time.
 
 The platform should allow users to:
 
 - connect their own agents
-- run benchmark suites
+- start a benchmark run instantly
 - watch live execution
-- compare results publicly
+- inspect replayable traces
+- share notable runs publicly
 
 ## Product Principle
 
-The most valuable part of AgentBench is not only scoring. It is making agent behavior watchable.
+The most valuable part of AgentBench is not scoring alone. It is making agent behavior watchable.
 
-That means early product and engineering decisions should prioritize:
+The product has now narrowed from a SaaS dashboard to a single-page interactive AI playground.
+
+That means early decisions should prioritize:
 
 - live observability
+- visual language
+- interaction pacing
 - replayability
-- deterministic environments
 - artifact collection
 - clear failure inspection
+- immediate feedback after pressing start
 
-## Phase 1 - MVP
+## P0 - Interactive Playground
 
 Goal:
-single-run remote browser benchmark
+prove that "watching AI work" is compelling before building heavy infrastructure
 
-### Features
+### Scope
 
-- Supabase auth
-- create benchmark run
-- self-hosted runner registration
-- Playwright browser sandbox
-- noVNC live stream
-- basic MCP browser tools
-- simple scoring
-- benchmark replay
-- run logs and artifacts
+- single homepage with four sections
+- hero with retro Mac visual language
+- run playground layout
+- fake run system
+- fake live browser area
+- timeline that updates in real time
+- bottom panels for events, files, screenshots, and score
+- replay gallery section
+- inline docs section
 
 ### Non-goals
 
-- multi-runner orchestration
+- Supabase auth
+- real database writes
+- real runner registration
+- Docker sandbox
+- Playwright
+- noVNC
+- real MCP execution
 - billing
-- real email or SMS
-- arbitrary code execution
-- public internet access
-- complex scheduling
+- multi-runner orchestration
 
 ### Exit Criteria
 
-- a user can register a runner
-- a benchmark run can be created from the web app
-- the runner can execute a deterministic browser task
-- the browser session can be watched live
-- the run produces a replayable trace and score
+- a user can press Start Run
+- the interface immediately feels alive
+- fake browser activity is understandable
+- timeline updates improve comprehension
+- the product feels like a live AI playground rather than an admin surface
 
-## Phase 2 - Tool Expansion
+## P1 - Real Web Backend
 
-- file system sandbox
-- mock email workflows
-- mock SMS workflows
-- multi-step agent tasks
-- safety policy tests
-- richer artifact capture
+Goal:
+replace local fake run state with real persisted run state
 
-## Phase 3 - Competitive Arena
+### Scope
 
-- public leaderboard
-- replay sharing
-- run comparison
-- cost and latency metrics
-- agent profiles
-- benchmark suite versioning
+- Supabase
+- run tables
+- event persistence
+- real polling or lightweight streaming
+- replay metadata
+- basic run history
 
-## Phase 4 - Distributed Runners
+## P2 - Real Runner Execution
 
-- multi-runner scheduling
-- cloud-hosted runners
-- regional execution
-- autoscaling
-- quota and capacity controls
+### Scope
+
+- Docker sandbox
+- Playwright browser control
+- real screenshots and traces
+- noVNC or browser stream embedding
+- mock files and communication surfaces
+
+## P3 - Real Agent Integrations
+
+### Scope
+
+- MCP agent connection
+- OpenAI Agents SDK
+- Claude Code style integrations
+- browser-use and similar tool stacks
 
 ## Technical Debt To Watch
 
-- keeping web and runner loosely coupled
-- avoiding schema drift across services
-- trace volume and storage growth
-- deterministic mock systems vs product realism
-- sandbox hardening before broader exposure
+- keeping the product focused on observability instead of drifting back into dashboard complexity
+- preserving the single-page interaction loop as real backend layers are added
+- avoiding schema drift once backend persistence returns
+- trace volume and replay storage growth
+- sandbox hardening before public execution
 
 ## Long-term Vision
 
 AgentBench should become:
 
-- an evaluation standard
+- the best place to watch agents work
 - an agent observability platform
-- a public AI arena for watching autonomous systems work
+- a public arena for memorable AI runs

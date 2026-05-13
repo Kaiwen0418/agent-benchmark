@@ -1,8 +1,8 @@
 # AgentBench
 
-AgentBench is a sandboxed benchmarking platform for evaluating tool-using AI agents.
+AgentBench is an interactive playground for watching tool-using AI agents work inside benchmark environments.
 
-It focuses on a simple idea: benchmarks should be observable, not just scored. Users should be able to connect their own agents, run them inside controlled sandboxes, and watch what they do in real time.
+It focuses on a simple idea: agent evaluation should be watchable, not just scored. Users should be able to connect their own agents, start a run, and watch what the agent does in real time.
 
 ## Why It Exists
 
@@ -14,29 +14,35 @@ Most agent benchmarks reduce performance to a final number. That misses how agen
 - how they communicate inside task flows
 - how they handle safety and policy boundaries
 
-AgentBench is designed to make that behavior visible.
+AgentBench is designed to make that behavior visible. The current product direction is intentionally narrow:
+
+- one homepage
+- one start interaction
+- one live run experience
 
 ## Core Features
 
-- Browser automation benchmarks
-- File I/O benchmarks
-- Communication workflow benchmarks
-- Safety and policy evaluation
-- Real-time browser streaming
-- Trace replay and observability
-- Benchmark scoring and leaderboards
-- Self-hosted runner support
+- single-page run playground
+- live browser-style viewing
+- tool call timeline
+- replay gallery
+- inline integration docs
+- benchmark scoring and observability
 
 ## Architecture Overview
 
-Cloud SaaS layer:
+Current web experience:
 
-- Next.js application for dashboard and run management
-- Supabase for auth, data, and orchestration
-- leaderboard, replay views, and benchmark control
+- single-page interactive homepage
+- retro Mac hero
+- connect panel and live run playground
+- replay gallery and docs on the same page
 
-Execution layer:
+Later infrastructure:
 
+- Next.js application shell
+- Supabase for persistence
+- runner APIs and orchestration
 - self-hosted Linux runner
 - Docker sandbox per run
 - Playwright-driven browser automation

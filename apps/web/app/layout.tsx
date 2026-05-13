@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AgentBench Control Plane",
-  description: "Observable benchmark orchestration for tool-using AI agents.",
+  title: "AgentBench Playground",
+  description: "Single-page interactive playground for watching AI agents work in real time.",
 };
 
 export default function RootLayout({

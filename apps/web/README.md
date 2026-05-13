@@ -1,24 +1,29 @@
-# Web Control Plane
+# Web Playground
 
-This app is the first-stage SaaS shell for AgentBench.
+This app is now oriented around a single-page interactive AI playground.
 
-## Scope
+## Product Shape
 
-- landing page
-- login shell
-- dashboard shell
-- benchmark catalog
-- benchmark detail and run creation
-- run detail page with live browser placeholder
-- runner-facing polling APIs
+The homepage is the product:
+
+- hero
+- run playground
+- replay gallery
+- docs
+
+The core interaction is:
+
+- input agent endpoint
+- click start
+- watch a live mock run
 
 ## Current Mode
 
-The app is structured to support real Supabase-backed storage, but it currently includes a mock data path so the run lifecycle can be developed before the real runner is connected.
+P0 is experience-first. The app uses a local fake run system driven by Zustand so the team can tune pacing, observability, and visual language before wiring real backend infrastructure.
 
 ## Next Recommended Steps
 
-1. Wire real Supabase auth actions and protected routes.
-2. Replace `lib/db.ts` mock path with real Postgres access.
-3. Add a mock runner script under `apps/runner`.
-4. Add polling on the run detail page for events and status refresh.
+1. Tune the fake run pacing until the viewing experience feels sharp.
+2. Replace local mock state with real event polling from the run APIs.
+3. Reuse the live Mac container for a real noVNC or browser stream.
+4. Connect Supabase only after the homepage interaction feels compelling.

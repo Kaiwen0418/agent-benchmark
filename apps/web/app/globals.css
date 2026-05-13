@@ -4,12 +4,307 @@
 
 :root {
   color-scheme: light;
+  scroll-behavior: smooth;
 }
 
 body {
   @apply bg-background text-foreground antialiased;
 }
 
-a {
-  @apply text-accent transition-opacity hover:opacity-80;
+::selection {
+  background: #d7ff00;
+  color: #111111;
+}
+
+.hero-scene {
+  perspective: 2000px;
+  display: flex;
+  justify-content: center;
+}
+
+.mac-display {
+  position: relative;
+  transform-style: preserve-3d;
+  transform: scale(1.2) rotateY(-14deg) rotateX(5deg);
+  transition: transform 200ms ease;
+}
+
+.hero-scene:hover .mac-display {
+  transform: scale(1.23) rotateY(-8deg) rotateX(3deg);
+}
+
+.mac-shell {
+  position: relative;
+  width: 360px;
+  padding: 38px 22px 68px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #fffef9, #e7e2d7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 28px 80px rgba(17, 17, 17, 0.12);
+}
+
+.mac-screen-inset {
+  border-radius: 32px;
+  background: linear-gradient(135deg, #e8e2d5, #f6f2ea);
+  padding: 12px;
+  box-shadow: inset 0 10px 25px rgba(17, 17, 17, 0.06);
+}
+
+.mac-crt {
+  position: relative;
+  overflow: hidden;
+  border-radius: 26px;
+  background: #050505;
+  min-height: 214px;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.25);
+}
+
+.crt-scanlines {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 50%, transparent 50%);
+  background-size: 100% 4px;
+  opacity: 0.35;
+}
+
+.mac-crt-ui {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 0.35fr 0.65fr;
+  min-height: 214px;
+  color: white;
+}
+
+.mac-sidebar {
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 18px 10px 18px 16px;
+}
+
+.mac-sidebar-item {
+  margin-bottom: 10px;
+  color: #8c8c86;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mac-sidebar-item.is-active {
+  color: #d7ff00;
+}
+
+.mac-window-area {
+  padding: 18px;
+}
+
+.mac-os-label {
+  color: #8c8c86;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mac-window {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: #121212;
+  padding: 12px;
+}
+
+.mac-window-header {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+  color: #8c8c86;
+  font-size: 11px;
+}
+
+.mac-terminal-line {
+  padding-top: 12px;
+  min-height: 72px;
+  color: #ddd9cf;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.terminal-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  margin-left: 3px;
+  vertical-align: middle;
+  background: #d7ff00;
+  animation: blink 1s step-end infinite;
+}
+
+.mac-logo {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: white;
+  color: #111111;
+  font-size: 20px;
+  font-weight: 500;
+  box-shadow: 0 8px 18px rgba(17, 17, 17, 0.08);
+}
+
+.mac-floppy-slot {
+  position: absolute;
+  bottom: 28px;
+  left: 102px;
+  width: 142px;
+  height: 11px;
+  border-radius: 999px;
+  background: #ddd8cf;
+  box-shadow: inset 0 2px 4px rgba(17, 17, 17, 0.1);
+}
+
+.mac-sticker {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 18px rgba(17, 17, 17, 0.08);
+}
+
+.mac-sticker-yellow {
+  left: 18px;
+  bottom: 80px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: #d7ff00;
+  color: #111111;
+}
+
+.mac-sticker-dark {
+  left: 50px;
+  bottom: 93px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: #111111;
+  color: white;
+}
+
+.mac-sticker-pill {
+  left: 102px;
+  bottom: 60px;
+  width: 88px;
+  height: 34px;
+  border-radius: 999px;
+  background: #efede6;
+  color: #5f594e;
+  font-size: 9px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.mac-vents {
+  position: absolute;
+  right: 22px;
+  bottom: 24px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  width: 42px;
+}
+
+.mac-vents span {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: #ddd8cf;
+}
+
+.mac-keyboard {
+  position: relative;
+  margin-top: 14px;
+  margin-left: 24px;
+  width: 320px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #fffef9, #ece5d8);
+  padding: 16px;
+  box-shadow: 0 20px 40px rgba(17, 17, 17, 0.1);
+  transform-origin: top center;
+  transform: perspective(900px) rotateX(66deg);
+}
+
+.mac-keyboard-tag {
+  position: absolute;
+  top: 14px;
+  left: -16px;
+  border-radius: 8px;
+  background: #d7ff00;
+  padding: 10px 8px;
+  color: #111111;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  writing-mode: vertical-rl;
+  text-transform: uppercase;
+}
+
+.mac-keys-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mac-key {
+  display: block;
+  height: 26px;
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 2px 0 #d0cbc1, 0 2px 5px rgba(17, 17, 17, 0.05);
+  animation: typeKey 2.2s ease-in-out infinite;
+}
+
+.mac-key:nth-child(3n + 1) {
+  animation-delay: 0.15s;
+}
+
+.mac-key:nth-child(5n + 2) {
+  animation-delay: 0.4s;
+}
+
+.mac-key-wide {
+  grid-column: span 2;
+}
+
+.mac-key-space {
+  grid-column: span 6;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes typeKey {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(2px);
+  }
+}
+
+@media (max-width: 1024px) {
+  .mac-display {
+    transform: scale(0.98);
+  }
 }
