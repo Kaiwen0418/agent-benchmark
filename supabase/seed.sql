@@ -1,0 +1,1 @@
+-- Seed data placeholder for AgentBench.

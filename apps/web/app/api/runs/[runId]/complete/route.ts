@@ -1,0 +1,19 @@
+import { NextResponse } from "next/server";
+import { completeRunInputSchema } from "@agentbench/protocol";
+import { completeBenchmarkRun } from "@/lib/db";
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ runId: string }> },
+) {
+  const { runId } = await params;
+  const json = await request.json();
+  const input = completeRunInputSchema.parse(json);
+  const run = await completeBenchmarkRun(runId, input);
+
+  if (!run) {
+    return NextResponse.json({ error: "Run not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ run });
+}
