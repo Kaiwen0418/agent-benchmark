@@ -4,11 +4,25 @@ import { ConnectAgentCard } from "./ConnectAgentCard";
 import { LiveMacContainer } from "./LiveMacContainer";
 import { RunPanels } from "./RunPanels";
 import { ToolCallTimeline } from "./ToolCallTimeline";
+import { cn } from "@/lib/utils";
 
-export function PlaygroundSection() {
+export function PlaygroundSection({
+  showLivePreview = true,
+  embedded = false,
+  sectionId,
+}: {
+  showLivePreview?: boolean;
+  embedded?: boolean;
+  sectionId?: string;
+}) {
   return (
-    <section id="playground" className="px-6 py-24 md:px-10 lg:px-16">
-      <div className="mx-auto max-w-7xl">
+    <section
+      id={sectionId}
+      className={cn(
+        embedded ? "min-h-[100svh] py-20" : "px-6 py-24 md:px-10 lg:px-16",
+      )}
+    >
+      <div className={cn(embedded ? "" : "mx-auto max-w-7xl")}>
         <div className="mb-10 max-w-2xl">
           <div className="text-xs uppercase tracking-[0.24em] text-[#726b5f]">Run Playground</div>
           <h2 className="mt-3 text-4xl font-medium tracking-[-0.05em] text-[#111111] md:text-5xl">
@@ -19,9 +33,9 @@ export function PlaygroundSection() {
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[0.42fr_0.58fr]">
+        <div className={cn("grid gap-6", showLivePreview && "lg:grid-cols-[0.42fr_0.58fr]")}>
           <ConnectAgentCard />
-          <LiveMacContainer />
+          {showLivePreview ? <LiveMacContainer /> : null}
         </div>
         <div className="mt-6">
           <ToolCallTimeline />

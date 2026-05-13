@@ -18,14 +18,14 @@ export function RunPanels() {
   const phase = usePlaygroundStore((state) => state.phase);
 
   return (
-    <div className="rounded-[2rem] border border-[#d8d0c3] bg-[#f9f7f1] p-6 shadow-[0_18px_60px_rgba(17,17,17,0.06)]">
-      <div className="mb-5 flex flex-wrap gap-3">
+    <div className="rounded-[1.6rem] border border-[#d8d0c3] bg-[#f9f7f1] p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
+      <div className="mb-4 flex flex-wrap gap-2.5">
         {tabs.map((tab) => (
           <button
             key={tab.value}
             type="button"
             onClick={() => setActiveTab(tab.value)}
-            className={`rounded-full px-4 py-2 text-sm transition ${
+            className={`rounded-full px-3.5 py-1.5 text-sm transition ${
               activeTab === tab.value
                 ? "bg-[#111111] text-white"
                 : "bg-[#efede6] text-[#4f4a43]"
@@ -42,7 +42,7 @@ export function RunPanels() {
             <p className="text-sm text-[#6a655c]">Agent reasoning summary will appear here.</p>
           ) : (
             reasoning.map((line, index) => (
-              <div key={`${line}-${index}`} className="rounded-[1.2rem] bg-[#efede6] p-4 text-sm text-[#4d473f]">
+              <div key={`${line}-${index}`} className="rounded-[1rem] bg-[#efede6] p-3.5 text-sm text-[#4d473f]">
                 {line}
               </div>
             ))
@@ -58,7 +58,7 @@ export function RunPanels() {
             artifacts
               .filter((artifact) => artifact.type === "file")
               .map((artifact) => (
-                <div key={artifact.id} className="rounded-[1.2rem] bg-[#efede6] p-4 text-sm text-[#4d473f]">
+                <div key={artifact.id} className="rounded-[1rem] bg-[#efede6] p-3.5 text-sm text-[#4d473f]">
                   {artifact.name}
                 </div>
               ))
@@ -74,9 +74,9 @@ export function RunPanels() {
             artifacts
               .filter((artifact) => artifact.type === "screenshot")
               .map((artifact) => (
-                <div key={artifact.id} className="rounded-[1.4rem] bg-[#efede6] p-4">
-                  <div className="h-40 rounded-[1rem] bg-white" />
-                  <div className="mt-3 text-sm text-[#4d473f]">{artifact.name}</div>
+                <div key={artifact.id} className="rounded-[1.1rem] bg-[#efede6] p-3.5">
+                  <div className="h-36 rounded-[0.9rem] bg-white" />
+                  <div className="mt-2.5 text-sm text-[#4d473f]">{artifact.name}</div>
                 </div>
               ))
           )}
@@ -85,19 +85,19 @@ export function RunPanels() {
 
       {activeTab === "score" ? (
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-[1.4rem] bg-[#d7ff00] p-5">
+          <div className="rounded-[1.1rem] bg-[#d7ff00] p-4">
             <div className="text-xs uppercase tracking-[0.2em] text-[#4b5520]">Success</div>
-            <div className="mt-3 text-4xl font-medium text-[#111111]">{score ?? "--"}</div>
+            <div className="mt-2.5 text-3xl font-medium text-[#111111]">{score ?? "--"}</div>
           </div>
-          <div className="rounded-[1.4rem] bg-[#efede6] p-5">
+          <div className="rounded-[1.1rem] bg-[#efede6] p-4">
             <div className="text-xs uppercase tracking-[0.2em] text-[#6a655c]">Safety</div>
-            <div className="mt-3 text-xl text-[#111111]">
+            <div className="mt-2.5 text-lg text-[#111111]">
               {phase === "completed" ? "Boundary respected" : "Pending"}
             </div>
           </div>
-          <div className="rounded-[1.4rem] bg-[#111111] p-5 text-white">
+          <div className="rounded-[1.1rem] bg-[#111111] p-4 text-white">
             <div className="text-xs uppercase tracking-[0.2em] text-white/60">Efficiency</div>
-            <div className="mt-3 text-xl">{score ? `${Math.max(1, Math.round(score / 10))} steps` : "--"}</div>
+            <div className="mt-2.5 text-lg">{score ? `${Math.max(1, Math.round(score / 10))} steps` : "--"}</div>
           </div>
         </div>
       ) : null}

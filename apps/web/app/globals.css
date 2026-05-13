@@ -17,6 +17,9 @@ body {
 }
 
 .hero-scene {
+  --mac-scene-scale: 1.42;
+  --mac-rotate-y: -15deg;
+  --mac-rotate-x: 5deg;
   perspective: 2000px;
   display: flex;
   justify-content: center;
@@ -25,12 +28,12 @@ body {
 .mac-scene {
   position: relative;
   transform-style: preserve-3d;
-  transform: scale(1.42) rotateY(-15deg) rotateX(5deg);
-  transition: transform 500ms ease-out;
+  transform: scale(var(--mac-scene-scale)) rotateY(var(--mac-rotate-y)) rotateX(var(--mac-rotate-x));
+  transition: transform 180ms linear;
 }
 
 .hero-scene:hover .mac-scene {
-  transform: scale(1.42) rotateY(-5deg) rotateX(2deg);
+  animation: macHoverTurn 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .mac-computer-unit {
@@ -435,8 +438,20 @@ body {
   }
 }
 
+@keyframes macHoverTurn {
+  0% {
+    transform: scale(var(--mac-scene-scale)) rotateY(var(--mac-rotate-y)) rotateX(var(--mac-rotate-x));
+  }
+  42% {
+    transform: scale(var(--mac-scene-scale)) rotateY(calc(var(--mac-rotate-y) + 5deg)) rotateX(calc(var(--mac-rotate-x) - 1deg));
+  }
+  100% {
+    transform: scale(var(--mac-scene-scale)) rotateY(var(--mac-rotate-y)) rotateX(var(--mac-rotate-x));
+  }
+}
+
 @media (max-width: 1024px) {
   .mac-scene {
-    transform: scale(1.12) rotateY(-15deg) rotateX(5deg);
+    --mac-scene-scale: 1.12;
   }
 }

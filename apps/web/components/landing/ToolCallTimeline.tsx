@@ -6,18 +6,18 @@ export function ToolCallTimeline() {
   const timeline = usePlaygroundStore((state) => state.timeline);
 
   return (
-    <div className="rounded-[2rem] border border-[#d8d0c3] bg-[#121212] p-6 text-white shadow-[0_20px_60px_rgba(17,17,17,0.12)]">
-      <div className="mb-4 text-xs uppercase tracking-[0.22em] text-[#8f8a80]">Tool Call Timeline</div>
+    <div className="rounded-[1.6rem] border border-[#d8d0c3] bg-[#121212] p-5 text-white shadow-[0_16px_40px_rgba(17,17,17,0.1)]">
+      <div className="mb-4 text-[11px] uppercase tracking-[0.22em] text-[#8f8a80]">Tool Call Timeline</div>
       <div className="space-y-3 font-mono text-sm">
         {timeline.length === 0 ? (
-          <div className="rounded-[1.3rem] border border-white/10 bg-white/5 p-4 text-[#b5aea1]">
+          <div className="rounded-[1rem] border border-white/10 bg-white/5 p-3.5 text-[#b5aea1]">
             Timeline will populate after the run starts.
           </div>
         ) : (
           timeline.map((entry) => (
             <div
               key={entry.id}
-              className="grid gap-3 rounded-[1.3rem] border border-white/10 bg-white/5 p-4 md:grid-cols-[0.8fr_1.2fr_0.4fr]"
+              className="grid gap-3 rounded-[1rem] border border-white/10 bg-white/5 p-3.5 md:grid-cols-[0.8fr_1.2fr_0.4fr]"
             >
               <div>
                 <div className="text-[#f7f0e0]">{entry.label}</div>

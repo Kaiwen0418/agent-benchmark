@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 const heroLines = [
@@ -11,7 +12,12 @@ const heroLines = [
 
 const keyRows = Array.from({ length: 30 });
 
-export function HeroMacFrame() {
+type HeroMacFrameProps = {
+  sceneStyle?: CSSProperties;
+  screenContent?: ReactNode;
+};
+
+export function HeroIntroScreenContent() {
   const [lineIndex, setLineIndex] = useState(0);
   const [typed, setTyped] = useState("");
 
@@ -35,35 +41,41 @@ export function HeroMacFrame() {
   }, [lineIndex]);
 
   return (
+    <div className="mac-crt-ui">
+      <div className="mac-sidebar">
+        <div className="mac-sidebar-item is-active">System</div>
+        <div className="mac-sidebar-item">Disk A</div>
+        <div className="mac-sidebar-item">Replay</div>
+        <div className="mac-sidebar-item">Trace</div>
+        <div className="mac-sidebar-item">Think</div>
+      </div>
+      <div className="mac-window-area">
+        <div className="mac-os-label">AgentBench OS 1.0</div>
+        <div className="mac-window">
+          <div className="mac-window-header">
+            <span>live-run.txt</span>
+            <span>[x]</span>
+          </div>
+          <div className="mac-terminal-line">
+            {typed}
+            <span className="terminal-cursor" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function HeroMacFrame({ sceneStyle, screenContent }: HeroMacFrameProps) {
+  return (
     <div className="hero-scene">
-      <div className="mac-scene">
+      <div className="mac-scene" style={sceneStyle}>
         <div className="mac-computer-unit">
           <div className="mac-face mac-front">
             <div className="mac-screen-inset">
               <div className="mac-crt">
                 <div className="crt-scanlines" />
-                <div className="mac-crt-ui">
-                  <div className="mac-sidebar">
-                    <div className="mac-sidebar-item is-active">System</div>
-                    <div className="mac-sidebar-item">Disk A</div>
-                    <div className="mac-sidebar-item">Replay</div>
-                    <div className="mac-sidebar-item">Trace</div>
-                    <div className="mac-sidebar-item">Think</div>
-                  </div>
-                  <div className="mac-window-area">
-                    <div className="mac-os-label">AgentBench OS 1.0</div>
-                    <div className="mac-window">
-                      <div className="mac-window-header">
-                        <span>live-run.txt</span>
-                        <span>[x]</span>
-                      </div>
-                      <div className="mac-terminal-line">
-                        {typed}
-                        <span className="terminal-cursor" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {screenContent ?? <HeroIntroScreenContent />}
               </div>
             </div>
             <div className="mac-logo">A</div>

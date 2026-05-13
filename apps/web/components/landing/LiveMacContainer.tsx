@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { HeroMacFrame } from "./HeroMacFrame";
 import { usePlaygroundStore } from "@/lib/playground-store";
 
 const browserSlides = [
@@ -31,7 +32,7 @@ const browserSlides = [
   },
 ];
 
-export function LiveMacContainer() {
+export function LiveMacScreenContent() {
   const phase = usePlaygroundStore((state) => state.phase);
   const score = usePlaygroundStore((state) => state.score);
   const liveSlide = usePlaygroundStore((state) => state.liveSlide);
@@ -63,75 +64,75 @@ export function LiveMacContainer() {
   }, [liveSlide, phase, score]);
 
   return (
-    <div className="rounded-[2.2rem] border border-[#d8d0c3] bg-[#ece8df] p-5 shadow-[0_24px_70px_rgba(17,17,17,0.08)]">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-xs uppercase tracking-[0.22em] text-[#6d675d]">Live Mac Screen</div>
-        <div className="inline-flex items-center gap-2 rounded-full bg-[#111111] px-4 py-2 text-xs uppercase tracking-[0.2em] text-white">
-          <span
-            className={`h-2.5 w-2.5 rounded-full ${
-              phase === "completed"
-                ? "bg-[#d7ff00]"
-                : phase === "failed"
-                  ? "bg-[#ff8f6b]"
-                  : phase === "idle"
-                    ? "bg-[#8d867b]"
-                    : "bg-[#6df6a4]"
-            }`}
-          />
-          {phase}
-        </div>
+    <div className="mac-crt-ui">
+      <div className="mac-sidebar">
+        <div className="mac-sidebar-item is-active">Run</div>
+        <div className="mac-sidebar-item">Events</div>
+        <div className="mac-sidebar-item">Files</div>
+        <div className="mac-sidebar-item">Score</div>
+        <div className="mac-sidebar-item">Replay</div>
       </div>
-
-      <div className="rounded-[2rem] bg-[#dcd6c7] p-5">
-        <div className="rounded-[1.8rem] bg-[#111111] p-4">
-          <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0b0b0b] p-5">
-            <div className="crt-scanlines" />
-            <div className="grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
-              <div className="rounded-[1.2rem] border border-white/10 bg-[#161616] p-4">
-                <div className="mb-4 flex items-center justify-between text-[11px] uppercase tracking-[0.2em] text-[#9f9f97]">
-                  <span>{slide.accent}</span>
-                  <span>Stream</span>
-                </div>
-                <div className="rounded-[1rem] border border-white/10 bg-[#f6f2e8] p-4 text-[#141414]">
-                  <div className="text-xs uppercase tracking-[0.2em] text-[#7b7469]">Browser view</div>
-                  <div className="mt-4 rounded-[1rem] bg-white p-4 shadow-[inset_0_0_0_1px_rgba(17,17,17,0.06)]">
-                    <div className="mb-3 flex gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#ff7d59]" />
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#ffd84d]" />
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#4bd776]" />
-                    </div>
-                    <div className="space-y-3">
-                      <div className="h-6 w-3/4 rounded-full bg-[#ece6d7]" />
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="h-28 rounded-[1rem] bg-[#efe8d5]" />
-                        <div className="h-28 rounded-[1rem] bg-[#ddd3be]" />
-                      </div>
-                      <div className="h-12 rounded-[1rem] bg-[#f3efe4]" />
-                    </div>
-                  </div>
-                </div>
+      <div className="mac-window-area">
+        <div className="flex items-center justify-between">
+          <div className="mac-os-label">Live Sandbox</div>
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[9px] uppercase tracking-[0.16em] text-white">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                phase === "completed"
+                  ? "bg-[#d7ff00]"
+                  : phase === "failed"
+                    ? "bg-[#ff8f6b]"
+                    : phase === "idle"
+                      ? "bg-[#8d867b]"
+                      : "bg-[#6df6a4]"
+              }`}
+            />
+            {phase}
+          </div>
+        </div>
+        <div className="mac-window mt-2">
+          <div className="mac-window-header">
+            <span>{slide.accent}</span>
+            <span>stream</span>
+          </div>
+          <div className="rounded-[0.8rem] bg-[#f6f2e8] p-3 text-[#141414]">
+            <div className="mb-2 text-[9px] uppercase tracking-[0.16em] text-[#7b7469]">
+              Browser View
+            </div>
+            <div className="rounded-[0.8rem] bg-white p-3 shadow-[inset_0_0_0_1px_rgba(17,17,17,0.06)]">
+              <div className="mb-2 flex gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-[#ff7d59]" />
+                <span className="h-2 w-2 rounded-full bg-[#ffd84d]" />
+                <span className="h-2 w-2 rounded-full bg-[#4bd776]" />
               </div>
-              <div className="space-y-4">
-                <div className="rounded-[1.2rem] border border-white/10 bg-[#171717] p-4">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-[#9f9f97]">Status</div>
-                  <div className="mt-3 text-xl font-medium text-white">{slide.title}</div>
-                  <p className="mt-3 text-sm leading-6 text-[#bfb8ab]">{slide.body}</p>
-                  <div className="mt-5 rounded-[1rem] bg-[#0d0d0d] p-3 font-mono text-xs text-[#d7ff00]">
-                    {statusLine}
-                  </div>
+              <div className="space-y-2">
+                <div className="h-4 w-3/4 rounded-full bg-[#ece6d7]" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="h-14 rounded-[0.8rem] bg-[#efe8d5]" />
+                  <div className="h-14 rounded-[0.8rem] bg-[#ddd3be]" />
                 </div>
-                <div className="rounded-[1.2rem] border border-white/10 bg-[#171717] p-4">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-[#9f9f97]">Boot log</div>
-                  <div className="mt-3 space-y-2 font-mono text-xs text-[#cbc3b4]">
-                    {bootMessages.slice(-5).map((message, index) => (
-                      <div key={`${message}-${index}`}>{">"} {message}</div>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-[1.2rem] border border-white/10 bg-[#171717] p-4">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-[#9f9f97]">Score</div>
-                  <div className="mt-3 text-4xl font-medium text-white">{score ?? "--"}</div>
-                </div>
+                <div className="h-8 rounded-[0.8rem] bg-[#f3efe4]" />
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-[0.9rem] bg-[#0d0d0d] p-3 font-mono text-[10px] leading-5 text-[#d7ff00]">
+              <div className="mb-2 text-[9px] uppercase tracking-[0.16em] text-white/50">
+                Status
+              </div>
+              <div>{slide.title}</div>
+              <div className="mt-1 text-white/75">{slide.body}</div>
+              <div className="mt-3 text-[#cbc3b4]">{statusLine}</div>
+            </div>
+            <div className="rounded-[0.9rem] bg-[#0d0d0d] p-3 text-white">
+              <div className="mb-2 text-[9px] uppercase tracking-[0.16em] text-white/50">
+                Score
+              </div>
+              <div className="text-3xl font-medium">{score ?? "--"}</div>
+              <div className="mt-3 space-y-1 font-mono text-[10px] leading-4 text-[#cbc3b4]">
+                {bootMessages.slice(-3).map((message, index) => (
+                  <div key={`${message}-${index}`}>{">"} {message}</div>
+                ))}
               </div>
             </div>
           </div>
@@ -139,4 +140,8 @@ export function LiveMacContainer() {
       </div>
     </div>
   );
+}
+
+export function LiveMacContainer() {
+  return <HeroMacFrame screenContent={<LiveMacScreenContent />} />;
 }

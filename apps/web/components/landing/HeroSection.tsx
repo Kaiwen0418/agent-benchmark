@@ -2,6 +2,7 @@
 
 import { ArrowDownRight } from "lucide-react";
 import { HeroMacFrame } from "./HeroMacFrame";
+import { cn } from "@/lib/utils";
 
 const stats = [
   { label: "Live Replay", value: "Real-time browser watch" },
@@ -10,10 +11,26 @@ const stats = [
   { label: "First Run", value: "Free playground pass" },
 ];
 
-export function HeroSection() {
+export function HeroSection({
+  showDevice = true,
+  embedded = false,
+  sectionId,
+}: {
+  showDevice?: boolean;
+  embedded?: boolean;
+  sectionId?: string;
+}) {
   return (
-    <section id="hero" className="relative overflow-hidden px-6 pb-16 pt-8 md:px-10 lg:px-16">
-      <div className="mx-auto max-w-7xl">
+    <section
+      id={sectionId}
+      className={cn(
+        "relative overflow-hidden",
+        embedded
+          ? "min-h-[100svh] pb-16 pt-8"
+          : "px-6 pb-16 pt-8 md:px-10 lg:px-16",
+      )}
+    >
+      <div className={cn(embedded ? "" : "mx-auto max-w-7xl")}>
         <div className="mb-8 flex items-center justify-between">
           <div className="text-sm font-medium tracking-[0.2em] text-[#4c4a46] uppercase">AgentBench</div>
           <a
@@ -25,7 +42,7 @@ export function HeroSection() {
           </a>
         </div>
 
-        <div className="grid items-center gap-12 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className={cn("grid items-center gap-12", showDevice && "lg:grid-cols-[0.9fr_1.1fr]")}>
           <div>
             <div className="mb-6 inline-flex rounded-full bg-[#efeee9] px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-[#575249]">
               Free Run Available
@@ -48,7 +65,7 @@ export function HeroSection() {
                 1 free run today
               </div>
             </div>
-            <div className="mt-12 grid max-w-xl gap-4 sm:grid-cols-2">
+            <div className="mt-10 grid max-w-[35rem] gap-3 sm:grid-cols-2">
               {stats.map((item, index) => (
                 <div
                   key={item.label}
@@ -60,13 +77,13 @@ export function HeroSection() {
                         : "bg-[#f1f1ee] text-[#111111]"
                   }`}
                 >
-                  <div className="text-sm opacity-70">{item.label}</div>
-                  <div className="mt-2 text-lg font-medium">{item.value}</div>
+                    <div className="text-[13px] opacity-70">{item.label}</div>
+                    <div className="mt-1.5 text-[16px] font-medium leading-6">{item.value}</div>
                 </div>
               ))}
             </div>
           </div>
-          <HeroMacFrame />
+          {showDevice ? <HeroMacFrame /> : null}
         </div>
 
         <div className="mt-10 flex items-center gap-3 text-sm text-[#66625a]">
