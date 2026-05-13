@@ -37,6 +37,8 @@ Browser actions should occur in controlled Playwright contexts tied to a single 
 - tag artifacts by run and benchmark version
 - separate user data from execution data
 - avoid leaking secrets into traces or screenshots
+- keep Supabase row-level security enabled on user-linked data
+- expose only public benchmark metadata to anonymous clients
 
 ## MVP Security Priorities
 

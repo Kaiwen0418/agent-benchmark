@@ -56,6 +56,7 @@ export type Runner = z.infer<typeof runnerSchema>;
 export const benchmarkRunSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid().nullable(),
+  guestId: z.string().nullable(),
   caseId: z.string().uuid(),
   runnerId: z.string().uuid().nullable(),
   status: runStatusSchema,
@@ -68,6 +69,21 @@ export const benchmarkRunSchema = z.object({
 });
 
 export type BenchmarkRun = z.infer<typeof benchmarkRunSchema>;
+
+export const quotaModeSchema = z.enum(["guest", "user"]);
+
+export type QuotaMode = z.infer<typeof quotaModeSchema>;
+
+export const quotaStatusSchema = z.object({
+  mode: quotaModeSchema,
+  isAuthenticated: z.boolean(),
+  used: z.number().int().nonnegative(),
+  limit: z.number().int().nonnegative(),
+  remaining: z.number().int().nonnegative(),
+  resetAt: z.string().nullable(),
+});
+
+export type QuotaStatus = z.infer<typeof quotaStatusSchema>;
 
 export const runEventSchema = z.object({
   id: z.string().uuid(),

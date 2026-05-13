@@ -1,15 +1,65 @@
 import { NextResponse } from "next/server";
 import { createRunInputSchema } from "@agentbench/protocol";
-import { createBenchmarkRun } from "@/lib/db";
+import { getCurrentUser, getOrCreateGuestId, GUEST_COOKIE_NAME } from "@/lib/auth";
+import { createBenchmarkRun, getQuotaStatus } from "@/lib/db";
 
 export async function POST(request: Request) {
   const json = await request.json();
   const input = createRunInputSchema.parse(json);
+  const user = await getCurrentUser();
+  const guest = user ? null : await getOrCreateGuestId();
+  const quota = await getQuotaStatus({
+    userId: user?.id ?? null,
+    guestId: guest?.guestId ?? null,
+  });
+
+  if (quota.remaining <= 0) {
+    const response = NextResponse.json(
+      {
+        error: quota.mode === "guest" ? "trial_limit_reached" : "daily_limit_reached",
+        message:
+          quota.mode === "guest"
+            ? "Guest trial used. Sign in to continue with 3 daily runs."
+            : "Daily run limit reached. Try again after reset.",
+        quota,
+      },
+      { status: 403 },
+    );
+
+    if (guest?.isNew) {
+      response.cookies.set(GUEST_COOKIE_NAME, guest.guestId, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 60 * 60 * 24 * 365,
+        path: "/",
+      });
+    }
+
+    return response;
+  }
 
   const run = await createBenchmarkRun({
     caseId: input.caseId,
-    userId: null,
+    userId: user?.id ?? null,
+    guestId: guest?.guestId ?? null,
   });
+  const nextQuota = {
+    ...quota,
+    used: quota.used + 1,
+    remaining: Math.max(0, quota.remaining - 1),
+  };
+  const response = NextResponse.json({ run, quota: nextQuota }, { status: 201 });
 
-  return NextResponse.json({ run }, { status: 201 });
+  if (guest?.isNew) {
+    response.cookies.set(GUEST_COOKIE_NAME, guest.guestId, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 365,
+      path: "/",
+    });
+  }
+
+  return response;
 }

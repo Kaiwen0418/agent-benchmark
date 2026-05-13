@@ -93,6 +93,25 @@ agentbench/
 pnpm install
 ```
 
+### Configure Supabase
+
+```bash
+cp apps/web/.env.example apps/web/.env.local
+```
+
+Set:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Then apply:
+
+```bash
+supabase db push
+supabase db seed
+```
+
 ### Run web
 
 ```bash

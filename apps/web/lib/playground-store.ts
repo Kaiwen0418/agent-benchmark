@@ -1,5 +1,6 @@
 "use client";
 
+import type { QuotaStatus } from "@agentbench/protocol";
 import { create } from "zustand";
 
 export type PlaygroundBenchmark =
@@ -46,11 +47,15 @@ type PlaygroundStore = {
   reasoning: string[];
   artifacts: ArtifactEntry[];
   bootMessages: string[];
+  quota: QuotaStatus | null;
+  quotaLoading: boolean;
+  runError: string | null;
   setEndpoint: (value: string) => void;
   setApiKey: (value: string) => void;
   setBenchmark: (value: PlaygroundBenchmark) => void;
   setActiveTab: (value: PanelTab) => void;
-  startRun: () => void;
+  fetchQuota: () => Promise<void>;
+  startRun: () => Promise<void>;
   reset: () => void;
 };
 
@@ -59,6 +64,13 @@ const BENCHMARK_LABELS: Record<PlaygroundBenchmark, string> = {
   "invoice-download": "Invoice Download",
   "email-draft": "Email Draft",
   "safety-test": "Safety Test",
+};
+
+const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
+  "web-search": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0001",
+  "invoice-download": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0002",
+  "email-draft": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0003",
+  "safety-test": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0004",
 };
 
 const SIMULATIONS: Record<PlaygroundBenchmark, SimulationStep[]> = {
@@ -119,6 +131,9 @@ const initialState = {
   reasoning: [] as string[],
   artifacts: [] as ArtifactEntry[],
   bootMessages: [] as string[],
+  quota: null as QuotaStatus | null,
+  quotaLoading: false,
+  runError: null as string | null,
 };
 
 let timeouts: number[] = [];
@@ -140,37 +155,109 @@ function stamp(offsetMs = 0) {
   });
 }
 
+async function requestQuota() {
+  const response = await fetch("/api/quota", {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to load quota");
+  }
+
+  return (await response.json()) as { quota: QuotaStatus };
+}
+
 export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   ...initialState,
   setEndpoint: (value) => set({ endpoint: value }),
   setApiKey: (value) => set({ apiKey: value }),
   setBenchmark: (value) => set({ benchmark: value }),
   setActiveTab: (value) => set({ activeTab: value }),
+  fetchQuota: async () => {
+    set({ quotaLoading: true });
+
+    try {
+      const result = await requestQuota();
+      set({ quota: result.quota, quotaLoading: false });
+    } catch {
+      set({ quotaLoading: false, runError: "Failed to load quota." });
+    }
+  },
   reset: () => {
     clearSimulation();
-    set(initialState);
+    set((state) => ({
+      ...initialState,
+      quota: state.quota,
+    }));
   },
-  startRun: () => {
+  startRun: async () => {
+    if (get().phase === "booting" || get().phase === "running") {
+      return;
+    }
+
     clearSimulation();
 
     const benchmark = get().benchmark;
     const steps = SIMULATIONS[benchmark];
 
     set({
-      phase: "booting",
-      statusLine: `Connecting ${BENCHMARK_LABELS[benchmark]}...`,
-      score: null,
-      timeline: [],
-      reasoning: [
-        "Preparing sandbox session",
-        "Negotiating agent endpoint",
-        "Warming benchmark fixtures",
-      ],
-      artifacts: [],
-      bootMessages: ["Sandbox idle", "Awaiting agent connection"],
-      activeTab: "events",
-      liveSlide: 0,
+      runError: null,
+      quotaLoading: true,
     });
+
+    try {
+      const response = await fetch("/api/runs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          caseId: BENCHMARK_CASE_IDS[benchmark],
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        set({
+          quota: result.quota ?? get().quota,
+          quotaLoading: false,
+          runError: result.message ?? "Unable to start run.",
+          phase: "idle",
+          statusLine: result.message ?? "Unable to start run.",
+        });
+        return;
+      }
+
+      set({
+        phase: "booting",
+        statusLine: `Connecting ${BENCHMARK_LABELS[benchmark]}...`,
+        score: null,
+        timeline: [],
+        reasoning: [
+          "Preparing sandbox session",
+          "Negotiating agent endpoint",
+          "Warming benchmark fixtures",
+        ],
+        artifacts: [],
+        bootMessages: ["Sandbox idle", "Awaiting agent connection"],
+        activeTab: "events",
+        liveSlide: 0,
+        quota: result.quota ?? get().quota,
+        quotaLoading: false,
+      });
+    } catch {
+      set({
+        quotaLoading: false,
+        runError: "Unable to reach the run API.",
+        phase: "idle",
+        statusLine: "Unable to reach the run API.",
+      });
+      return;
+    }
 
     if (typeof window === "undefined") {
       return;

@@ -1,3 +1,13 @@
+alter table public.profiles
+  alter column daily_run_limit set default 3;
+
+alter table public.benchmark_runs
+  add column if not exists guest_id text;
+
+create index if not exists idx_benchmark_runs_guest_id on public.benchmark_runs (guest_id);
+create index if not exists idx_benchmark_runs_user_id_created_at on public.benchmark_runs (user_id, created_at);
+create index if not exists idx_benchmark_runs_guest_id_created_at on public.benchmark_runs (guest_id, created_at);
+
 insert into public.benchmark_cases (id, slug, title, description, category, difficulty, is_public)
 values
   (
@@ -44,20 +54,3 @@ set
   category = excluded.category,
   difficulty = excluded.difficulty,
   is_public = excluded.is_public;
-
-insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)
-values (
-  '7e8a6df3-17c3-4ddb-9877-d0bd8a0f1001',
-  'mock-runner-eu-1',
-  'online',
-  2,
-  0,
-  now()
-)
-on conflict (id) do update
-set
-  name = excluded.name,
-  status = excluded.status,
-  capacity = excluded.capacity,
-  current_load = excluded.current_load,
-  last_heartbeat = excluded.last_heartbeat;

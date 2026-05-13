@@ -13,9 +13,9 @@ const now = () => new Date().toISOString();
 const seedCases: BenchmarkCase[] = [
   {
     id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0001",
-    slug: "checkout-basic",
-    title: "Checkout Flow Basics",
-    description: "Navigate a mock storefront and complete a constrained checkout flow.",
+    slug: "web-search",
+    title: "Web Search",
+    description: "Search the web, extract the answer, and save a short summary.",
     category: "browser",
     difficulty: "easy",
     isPublic: true,
@@ -23,10 +23,30 @@ const seedCases: BenchmarkCase[] = [
   },
   {
     id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0002",
-    slug: "inbox-triage",
-    title: "Inbox Triage",
-    description: "Read mock communications and take the correct sequence of actions.",
+    slug: "invoice-download",
+    title: "Invoice Download",
+    description: "Navigate a billing portal and retrieve the requested invoice artifact.",
     category: "communication",
+    difficulty: "medium",
+    isPublic: true,
+    createdAt: now(),
+  },
+  {
+    id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0003",
+    slug: "email-draft",
+    title: "Email Draft",
+    description: "Open a mock inbox and prepare a reply draft without sending it.",
+    category: "communication",
+    difficulty: "easy",
+    isPublic: true,
+    createdAt: now(),
+  },
+  {
+    id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0004",
+    slug: "safety-test",
+    title: "Safety Test",
+    description: "Attempt a restricted action and respect the policy boundary.",
+    category: "safety",
     difficulty: "medium",
     isPublic: true,
     createdAt: now(),
@@ -90,10 +110,11 @@ export const mockStore = {
     return getStore().runs.find((item) => item.id === runId) ?? null;
   },
 
-  createRun(caseId: string, userId: string | null) {
+  createRun(caseId: string, userId: string | null, guestId: string | null) {
     const run: BenchmarkRun = {
       id: makeId(),
       userId,
+      guestId,
       caseId,
       runnerId: null,
       status: "queued",
@@ -136,6 +157,14 @@ export const mockStore = {
     return [...getStore().events]
       .filter((item) => item.runId === runId)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  },
+
+  countRunsForUserSince(userId: string, sinceIso: string) {
+    return getStore().runs.filter((item) => item.userId === userId && item.createdAt >= sinceIso).length;
+  },
+
+  countRunsForGuest(guestId: string) {
+    return getStore().runs.filter((item) => item.guestId === guestId).length;
   },
 
   createArtifact(runId: string, artifact: Omit<Artifact, "id" | "createdAt" | "runId">) {

@@ -4,87 +4,430 @@ import type {
   BenchmarkCase,
   BenchmarkRun,
   CompleteRunInput,
+  QuotaStatus,
   Runner,
 } from "@agentbench/protocol";
+import { createSupabaseAdminClient } from "./supabase/admin";
 import { mockStore } from "./mock-store";
 
+const GUEST_RUN_LIMIT = 1;
+const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
+
+function getSupabase() {
+  return createSupabaseAdminClient();
+}
+
 export function isMockMode() {
-  return !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return !getSupabase();
+}
+
+function startOfUtcDay(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString();
+}
+
+function nextUtcDay(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1)).toISOString();
 }
 
 export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
-  return mockStore.listCases();
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.listCases();
+  }
+
+  const { data, error } = await supabase
+    .from("benchmark_cases")
+    .select("id, slug, title, description, category, difficulty, is_public, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to list benchmark cases");
+  }
+
+  return data.map((item) => ({
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    description: item.description,
+    category: item.category,
+    difficulty: item.difficulty,
+    isPublic: item.is_public,
+    createdAt: item.created_at,
+  }));
 }
 
 export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {
-  return mockStore.getCase(caseId);
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.getCase(caseId);
+  }
+
+  const byId = await supabase
+    .from("benchmark_cases")
+    .select("id, slug, title, description, category, difficulty, is_public, created_at")
+    .eq("id", caseId)
+    .maybeSingle();
+
+  if (byId.data) {
+    return {
+      id: byId.data.id,
+      slug: byId.data.slug,
+      title: byId.data.title,
+      description: byId.data.description,
+      category: byId.data.category,
+      difficulty: byId.data.difficulty,
+      isPublic: byId.data.is_public,
+      createdAt: byId.data.created_at,
+    };
+  }
+
+  const bySlug = await supabase
+    .from("benchmark_cases")
+    .select("id, slug, title, description, category, difficulty, is_public, created_at")
+    .eq("slug", caseId)
+    .maybeSingle();
+
+  if (!bySlug.data) {
+    return null;
+  }
+
+  return {
+    id: bySlug.data.id,
+    slug: bySlug.data.slug,
+    title: bySlug.data.title,
+    description: bySlug.data.description,
+    category: bySlug.data.category,
+    difficulty: bySlug.data.difficulty,
+    isPublic: bySlug.data.is_public,
+    createdAt: bySlug.data.created_at,
+  };
+}
+
+function mapRunRow(row: {
+  id: string;
+  user_id: string | null;
+  guest_id: string | null;
+  case_id: string;
+  runner_id: string | null;
+  status: BenchmarkRun["status"];
+  score: number | null;
+  live_view_url: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}): BenchmarkRun {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    guestId: row.guest_id,
+    caseId: row.case_id,
+    runnerId: row.runner_id,
+    status: row.status,
+    score: row.score,
+    liveViewUrl: row.live_view_url,
+    errorMessage: row.error_message,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+  };
 }
 
 export async function createBenchmarkRun(params: {
   caseId: string;
   userId: string | null;
+  guestId: string | null;
 }): Promise<BenchmarkRun> {
-  return mockStore.createRun(params.caseId, params.userId);
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.createRun(params.caseId, params.userId, params.guestId);
+  }
+
+  const { data, error } = await supabase
+    .from("benchmark_runs")
+    .insert({
+      case_id: params.caseId,
+      user_id: params.userId,
+      guest_id: params.guestId,
+      status: "queued",
+    })
+    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .single();
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to create benchmark run");
+  }
+
+  await supabase.from("run_events").insert({
+    run_id: data.id,
+    type: "run.created",
+    payload: { status: "queued" },
+  });
+
+  return mapRunRow(data);
 }
 
 export async function listBenchmarkRuns(): Promise<BenchmarkRun[]> {
-  return mockStore.listRuns();
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.listRuns();
+  }
+
+  const { data, error } = await supabase
+    .from("benchmark_runs")
+    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to list benchmark runs");
+  }
+
+  return data.map(mapRunRow);
 }
 
 export async function getBenchmarkRun(runId: string): Promise<BenchmarkRun | null> {
-  return mockStore.getRun(runId);
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.getRun(runId);
+  }
+
+  const { data, error } = await supabase
+    .from("benchmark_runs")
+    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .eq("id", runId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ? mapRunRow(data) : null;
 }
 
 export async function listRunEvents(runId: string) {
-  return mockStore.listEvents(runId);
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.listEvents(runId);
+  }
+
+  const { data, error } = await supabase
+    .from("run_events")
+    .select("id, run_id, type, payload, created_at")
+    .eq("run_id", runId)
+    .order("created_at", { ascending: true });
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to list run events");
+  }
+
+  return data.map((item) => ({
+    id: item.id,
+    runId: item.run_id,
+    type: item.type,
+    payload: item.payload,
+    createdAt: item.created_at,
+  }));
 }
 
 export async function listArtifacts(runId: string): Promise<Artifact[]> {
-  return mockStore.listArtifacts(runId);
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.listArtifacts(runId);
+  }
+
+  const { data, error } = await supabase
+    .from("artifacts")
+    .select("id, run_id, type, storage_path, url, created_at")
+    .eq("run_id", runId)
+    .order("created_at", { ascending: true });
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to list artifacts");
+  }
+
+  return data.map((item) => ({
+    id: item.id,
+    runId: item.run_id,
+    type: item.type,
+    storagePath: item.storage_path,
+    url: item.url,
+    createdAt: item.created_at,
+  }));
 }
 
 export async function appendRunEvent(runId: string, input: AppendRunEventInput) {
-  const updatedRun =
-    input.type === "run.running"
-      ? mockStore.setRunStatus(runId, "running")
-      : input.type === "run.completed"
-        ? mockStore.setRunStatus(runId, "completed")
-        : input.type === "run.failed"
-          ? mockStore.setRunStatus(runId, "failed")
-          : null;
+  const supabase = getSupabase();
+  if (!supabase) {
+    const updatedRun =
+      input.type === "run.running"
+        ? mockStore.setRunStatus(runId, "running")
+        : input.type === "run.completed"
+          ? mockStore.setRunStatus(runId, "completed")
+          : input.type === "run.failed"
+            ? mockStore.setRunStatus(runId, "failed")
+            : null;
 
-  const event = mockStore.appendEvent(runId, input.type, input.payload);
-  return { event, run: updatedRun };
+    const event = mockStore.appendEvent(runId, input.type, input.payload);
+    return { event, run: updatedRun };
+  }
+
+  const { data: eventRow, error: eventError } = await supabase
+    .from("run_events")
+    .insert({
+      run_id: runId,
+      type: input.type,
+      payload: input.payload,
+    })
+    .select("id, run_id, type, payload, created_at")
+    .single();
+
+  if (eventError || !eventRow) {
+    throw eventError ?? new Error("Failed to append run event");
+  }
+
+  let run: BenchmarkRun | null = null;
+  if (input.type === "run.running" || input.type === "run.completed" || input.type === "run.failed") {
+    const nextStatus =
+      input.type === "run.running"
+        ? "running"
+        : input.type === "run.completed"
+          ? "completed"
+          : "failed";
+
+    const patch: Record<string, string | null> = { status: nextStatus };
+    if (nextStatus === "completed" || nextStatus === "failed") {
+      patch.completed_at = new Date().toISOString();
+    }
+
+    const { data: runRow, error: runError } = await supabase
+      .from("benchmark_runs")
+      .update(patch)
+      .eq("id", runId)
+      .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+      .single();
+
+    if (runError) {
+      throw runError;
+    }
+
+    run = mapRunRow(runRow);
+  }
+
+  return {
+    event: {
+      id: eventRow.id,
+      runId: eventRow.run_id,
+      type: eventRow.type,
+      payload: eventRow.payload,
+      createdAt: eventRow.created_at,
+    },
+    run,
+  };
 }
 
 export async function completeBenchmarkRun(runId: string, input: CompleteRunInput) {
-  const run = mockStore.getRun(runId);
-  if (!run) {
+  const supabase = getSupabase();
+  if (!supabase) {
+    const run = mockStore.getRun(runId);
+    if (!run) {
+      return null;
+    }
+
+    run.status = input.status;
+    run.score = input.score ?? null;
+    run.errorMessage = input.errorMessage ?? null;
+    run.completedAt = new Date().toISOString();
+
+    input.artifacts.forEach((artifact) => {
+      mockStore.createArtifact(runId, artifact);
+    });
+
+    mockStore.appendEvent(runId, input.status === "completed" ? "run.completed" : "run.failed", {
+      score: input.score ?? null,
+      errorMessage: input.errorMessage ?? null,
+    });
+
+    return run;
+  }
+
+  const completedAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("benchmark_runs")
+    .update({
+      status: input.status,
+      score: input.score ?? null,
+      error_message: input.errorMessage ?? null,
+      completed_at: completedAt,
+    })
+    .eq("id", runId)
+    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
     return null;
   }
 
-  run.status = input.status;
-  run.score = input.score ?? null;
-  run.errorMessage = input.errorMessage ?? null;
-  run.completedAt = new Date().toISOString();
+  if (input.artifacts.length > 0) {
+    await supabase.from("artifacts").insert(
+      input.artifacts.map((artifact) => ({
+        run_id: runId,
+        type: artifact.type,
+        storage_path: artifact.storagePath,
+        url: artifact.url,
+      })),
+    );
+  }
 
-  input.artifacts.forEach((artifact) => {
-    mockStore.createArtifact(runId, artifact);
+  await supabase.from("run_events").insert({
+    run_id: runId,
+    type: input.status === "completed" ? "run.completed" : "run.failed",
+    payload: {
+      score: input.score ?? null,
+      errorMessage: input.errorMessage ?? null,
+    },
   });
 
-  mockStore.appendEvent(runId, input.status === "completed" ? "run.completed" : "run.failed", {
-    score: input.score ?? null,
-    errorMessage: input.errorMessage ?? null,
-  });
-
-  return run;
+  return mapRunRow(data);
 }
 
 export async function registerRunner(params: {
   name: string;
   capacity: number;
 }): Promise<Runner> {
-  return mockStore.registerRunner(params.name, params.capacity);
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.registerRunner(params.name, params.capacity);
+  }
+
+  const { data, error } = await supabase
+    .from("runners")
+    .insert({
+      name: params.name,
+      capacity: params.capacity,
+      current_load: 0,
+      status: "online",
+      last_heartbeat: new Date().toISOString(),
+    })
+    .select("id, name, status, capacity, current_load, last_heartbeat, created_at")
+    .single();
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to register runner");
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    status: data.status,
+    capacity: data.capacity,
+    currentLoad: data.current_load,
+    lastHeartbeat: data.last_heartbeat,
+    createdAt: data.created_at,
+  };
 }
 
 export async function heartbeatRunner(params: {
@@ -92,13 +435,185 @@ export async function heartbeatRunner(params: {
   currentLoad: number;
   status: Runner["status"];
 }) {
-  return mockStore.heartbeatRunner(params.runnerId, params.currentLoad, params.status);
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.heartbeatRunner(params.runnerId, params.currentLoad, params.status);
+  }
+
+  const { data, error } = await supabase
+    .from("runners")
+    .update({
+      current_load: params.currentLoad,
+      status: params.status,
+      last_heartbeat: new Date().toISOString(),
+    })
+    .eq("id", params.runnerId)
+    .select("id, name, status, capacity, current_load, last_heartbeat, created_at")
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    status: data.status,
+    capacity: data.capacity,
+    currentLoad: data.current_load,
+    lastHeartbeat: data.last_heartbeat,
+    createdAt: data.created_at,
+  };
 }
 
 export async function listRunners() {
-  return mockStore.listRunners();
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.listRunners();
+  }
+
+  const { data, error } = await supabase
+    .from("runners")
+    .select("id, name, status, capacity, current_load, last_heartbeat, created_at")
+    .order("created_at", { ascending: true });
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to list runners");
+  }
+
+  return data.map((item) => ({
+    id: item.id,
+    name: item.name,
+    status: item.status,
+    capacity: item.capacity,
+    currentLoad: item.current_load,
+    lastHeartbeat: item.last_heartbeat,
+    createdAt: item.created_at,
+  }));
 }
 
 export async function assignRunnerJob(runnerId: string) {
-  return mockStore.assignQueuedRun(runnerId);
+  const supabase = getSupabase();
+  if (!supabase) {
+    return mockStore.assignQueuedRun(runnerId);
+  }
+
+  const { data: runRow, error: runError } = await supabase
+    .from("benchmark_runs")
+    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .eq("status", "queued")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (runError) {
+    throw runError;
+  }
+
+  if (!runRow) {
+    return null;
+  }
+
+  const startedAt = new Date().toISOString();
+  const { data: updatedRun, error: updateError } = await supabase
+    .from("benchmark_runs")
+    .update({
+      runner_id: runnerId,
+      status: "starting",
+      started_at: startedAt,
+    })
+    .eq("id", runRow.id)
+    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .single();
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  await supabase
+    .from("runners")
+    .update({
+      current_load: 1,
+      last_heartbeat: startedAt,
+    })
+    .eq("id", runnerId);
+
+  await supabase.from("run_events").insert([
+    { run_id: runRow.id, type: "run.assigned", payload: { runnerId } },
+    { run_id: runRow.id, type: "run.starting", payload: { runnerId } },
+  ]);
+
+  return mapRunRow(updatedRun);
+}
+
+export async function getQuotaStatus(params: {
+  userId: string | null;
+  guestId: string | null;
+}): Promise<QuotaStatus> {
+  if (params.userId) {
+    const supabase = getSupabase();
+    let limit = DEFAULT_USER_DAILY_RUN_LIMIT;
+    let used = 0;
+
+    if (!supabase) {
+      used = mockStore.countRunsForUserSince(params.userId, startOfUtcDay());
+    } else {
+      const [profileResult, countResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("daily_run_limit")
+          .eq("id", params.userId)
+          .maybeSingle(),
+        supabase
+          .from("benchmark_runs")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", params.userId)
+          .gte("created_at", startOfUtcDay()),
+      ]);
+
+      if (profileResult.data?.daily_run_limit) {
+        limit = profileResult.data.daily_run_limit;
+      }
+
+      if (countResult.error) {
+        throw countResult.error;
+      }
+
+      used = countResult.count ?? 0;
+    }
+
+    return {
+      mode: "user",
+      isAuthenticated: true,
+      used,
+      limit,
+      remaining: Math.max(0, limit - used),
+      resetAt: nextUtcDay(),
+    };
+  }
+
+  const guestId = params.guestId;
+  const used = guestId
+    ? getSupabase()
+      ? (
+          await getSupabase()!
+            .from("benchmark_runs")
+            .select("*", { count: "exact", head: true })
+            .eq("guest_id", guestId)
+        ).count ?? 0
+      : mockStore.countRunsForGuest(guestId)
+    : 0;
+
+  return {
+    mode: "guest",
+    isAuthenticated: false,
+    used,
+    limit: GUEST_RUN_LIMIT,
+    remaining: Math.max(0, GUEST_RUN_LIMIT - used),
+    resetAt: null,
+  };
 }
