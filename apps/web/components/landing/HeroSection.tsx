@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowDownRight } from "lucide-react";
 import { HeroMacFrame } from "./HeroMacFrame";
 import { cn } from "@/lib/utils";
 
@@ -31,22 +30,8 @@ export function HeroSection({
       )}
     >
       <div className={cn(embedded ? "" : "mx-auto max-w-7xl")}>
-        <div className="mb-8 flex items-center justify-between">
-          <div className="text-sm font-medium tracking-[0.2em] text-[#4c4a46] uppercase">AgentBench</div>
-          <a
-            href="#playground"
-            className="inline-flex items-center gap-2 rounded-full bg-[#111111] px-5 py-3 text-sm text-white transition hover:bg-[#d7ff00] hover:text-[#111111]"
-          >
-            Start Run
-            <ArrowDownRight className="h-4 w-4" />
-          </a>
-        </div>
-
         <div className={cn("grid items-center gap-12", showDevice && "lg:grid-cols-[0.9fr_1.1fr]")}>
           <div>
-            <div className="mb-6 inline-flex rounded-full bg-[#efeee9] px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-[#575249]">
-              Free Run Available
-            </div>
             <h1 className="max-w-xl text-[3.4rem] font-[350] leading-[0.96] tracking-[-0.08em] text-[#111111] md:text-[5.4rem]">
               <span className="block">Watch AI</span>
               <span className="block font-medium">use the computer.</span>

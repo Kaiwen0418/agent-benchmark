@@ -75,7 +75,7 @@ export function LiveMacScreenContent() {
       <div className="mac-window-area">
         <div className="flex items-center justify-between">
           <div className="mac-os-label">Live Sandbox</div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[9px] uppercase tracking-[0.16em] text-white">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[8px] uppercase tracking-[0.16em] text-white">
             <span
               className={`h-2 w-2 rounded-full ${
                 phase === "completed"
@@ -95,41 +95,41 @@ export function LiveMacScreenContent() {
             <span>{slide.accent}</span>
             <span>stream</span>
           </div>
-          <div className="rounded-[0.8rem] bg-[#f6f2e8] p-3 text-[#141414]">
-            <div className="mb-2 text-[9px] uppercase tracking-[0.16em] text-[#7b7469]">
+          <div className="rounded-[0.75rem] bg-[#f6f2e8] p-2.5 text-[#141414]">
+            <div className="mb-2 text-[8px] uppercase tracking-[0.16em] text-[#7b7469]">
               Browser View
             </div>
-            <div className="rounded-[0.8rem] bg-white p-3 shadow-[inset_0_0_0_1px_rgba(17,17,17,0.06)]">
+            <div className="rounded-[0.75rem] bg-white p-2.5 shadow-[inset_0_0_0_1px_rgba(17,17,17,0.06)]">
               <div className="mb-2 flex gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-[#ff7d59]" />
                 <span className="h-2 w-2 rounded-full bg-[#ffd84d]" />
                 <span className="h-2 w-2 rounded-full bg-[#4bd776]" />
               </div>
               <div className="space-y-2">
-                <div className="h-4 w-3/4 rounded-full bg-[#ece6d7]" />
+                <div className="h-3.5 w-3/4 rounded-full bg-[#ece6d7]" />
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="h-14 rounded-[0.8rem] bg-[#efe8d5]" />
-                  <div className="h-14 rounded-[0.8rem] bg-[#ddd3be]" />
+                  <div className="h-12 rounded-[0.75rem] bg-[#efe8d5]" />
+                  <div className="h-12 rounded-[0.75rem] bg-[#ddd3be]" />
                 </div>
-                <div className="h-8 rounded-[0.8rem] bg-[#f3efe4]" />
+                <div className="h-7 rounded-[0.75rem] bg-[#f3efe4]" />
               </div>
             </div>
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-[0.9rem] bg-[#0d0d0d] p-3 font-mono text-[10px] leading-5 text-[#d7ff00]">
-              <div className="mb-2 text-[9px] uppercase tracking-[0.16em] text-white/50">
+            <div className="rounded-[0.8rem] bg-[#0d0d0d] p-2.5 font-mono text-[9px] leading-4 text-[#d7ff00]">
+              <div className="mb-2 text-[8px] uppercase tracking-[0.16em] text-white/50">
                 Status
               </div>
               <div>{slide.title}</div>
               <div className="mt-1 text-white/75">{slide.body}</div>
               <div className="mt-3 text-[#cbc3b4]">{statusLine}</div>
             </div>
-            <div className="rounded-[0.9rem] bg-[#0d0d0d] p-3 text-white">
-              <div className="mb-2 text-[9px] uppercase tracking-[0.16em] text-white/50">
+            <div className="rounded-[0.8rem] bg-[#0d0d0d] p-2.5 text-white">
+              <div className="mb-2 text-[8px] uppercase tracking-[0.16em] text-white/50">
                 Score
               </div>
-              <div className="text-3xl font-medium">{score ?? "--"}</div>
-              <div className="mt-3 space-y-1 font-mono text-[10px] leading-4 text-[#cbc3b4]">
+              <div className="text-[1.6rem] font-medium">{score ?? "--"}</div>
+              <div className="mt-3 space-y-1 font-mono text-[9px] leading-4 text-[#cbc3b4]">
                 {bootMessages.slice(-3).map((message, index) => (
                   <div key={`${message}-${index}`}>{">"} {message}</div>
                 ))}

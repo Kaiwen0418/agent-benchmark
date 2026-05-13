@@ -57,11 +57,11 @@ export function ImmersiveStage() {
 
   return (
     <>
-      <div id="hero" className="lg:hidden">
-        <HeroSection />
+      <div className="lg:hidden">
+        <HeroSection sectionId="hero" />
       </div>
-      <div id="playground" className="lg:hidden">
-        <PlaygroundSection />
+      <div className="lg:hidden">
+        <PlaygroundSection sectionId="playground" />
       </div>
 
       <section className="hidden px-6 pb-16 pt-8 md:px-10 lg:block lg:px-16">
@@ -74,15 +74,9 @@ export function ImmersiveStage() {
           </div>
 
           <div className="relative z-30">
-            <div className="sticky top-24 h-[calc(100svh-8rem)] overflow-visible">
-              <div
-                className="relative h-full overflow-visible"
-                style={{
-                  transform: `translateY(${progress * 96}px)`,
-                  transition: "transform 180ms linear",
-                }}
-              >
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-visible">
+            <div className="sticky top-1/2 overflow-visible">
+              <div className="relative flex -translate-y-1/2 justify-center overflow-visible">
+                <div className="pointer-events-none flex justify-center overflow-visible">
                   <div
                     className="pointer-events-auto w-full max-w-[44rem]"
                     style={{

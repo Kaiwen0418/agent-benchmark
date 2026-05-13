@@ -1,3 +1,11 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 export function TopNav() {
   const items = [
     { href: "#playground", label: "How it works" },
@@ -5,9 +13,44 @@ export function TopNav() {
     { href: "#docs", label: "Docs" },
     { href: "#playground", label: "Start Run" },
   ];
+  const [visibleProgress, setVisibleProgress] = useState(0);
+
+  useEffect(() => {
+    const update = () => {
+      const playground = Array.from(document.querySelectorAll<HTMLElement>("#playground")).find(
+        (element) => element.offsetParent !== null,
+      );
+      if (!playground) {
+        return;
+      }
+
+      const rect = playground.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const start = viewportHeight * 0.9;
+      const end = viewportHeight * 0.5;
+      const next = clamp((start - rect.top) / (start - end), 0, 1);
+      setVisibleProgress(next);
+    };
+
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-[#dbd3c5]/80 bg-[#f7f4ec]/90 backdrop-blur">
+    <nav
+      className="fixed inset-x-0 top-0 z-50 border-b border-[#dbd3c5]/80 bg-[#f7f4ec]/90 backdrop-blur transition-[opacity,transform] duration-300"
+      style={{
+        opacity: visibleProgress,
+        transform: `translateY(${(1 - visibleProgress) * -14}px)`,
+        pointerEvents: visibleProgress > 0.05 ? "auto" : "none",
+      }}
+    >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10 lg:px-16">
         <a href="#hero" className="text-sm font-medium uppercase tracking-[0.22em] text-[#111111]">
           AgentBench

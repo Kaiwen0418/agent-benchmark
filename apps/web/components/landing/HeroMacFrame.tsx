@@ -75,7 +75,9 @@ export function HeroMacFrame({ sceneStyle, screenContent }: HeroMacFrameProps) {
             <div className="mac-screen-inset">
               <div className="mac-crt">
                 <div className="crt-scanlines" />
-                {screenContent ?? <HeroIntroScreenContent />}
+                <div className="mac-crt-content">
+                  {screenContent ?? <HeroIntroScreenContent />}
+                </div>
               </div>
             </div>
             <div className="mac-logo">A</div>

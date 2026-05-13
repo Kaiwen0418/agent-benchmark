@@ -1,5 +1,6 @@
 "use client";
 
+import { usePlaygroundStore } from "@/lib/playground-store";
 import { ConnectAgentCard } from "./ConnectAgentCard";
 import { LiveMacContainer } from "./LiveMacContainer";
 import { RunPanels } from "./RunPanels";
@@ -15,6 +16,9 @@ export function PlaygroundSection({
   embedded?: boolean;
   sectionId?: string;
 }) {
+  const phase = usePlaygroundStore((state) => state.phase);
+  const hasActiveRun = phase !== "idle";
+
   return (
     <section
       id={sectionId}
@@ -37,12 +41,16 @@ export function PlaygroundSection({
           <ConnectAgentCard />
           {showLivePreview ? <LiveMacContainer /> : null}
         </div>
-        <div className="mt-6">
-          <ToolCallTimeline />
-        </div>
-        <div className="mt-6">
-          <RunPanels />
-        </div>
+        {hasActiveRun ? (
+          <>
+            <div className="mt-6">
+              <ToolCallTimeline />
+            </div>
+            <div className="mt-6">
+              <RunPanels />
+            </div>
+          </>
+        ) : null}
       </div>
     </section>
   );
