@@ -36,55 +36,73 @@ export function HeroMacFrame() {
 
   return (
     <div className="hero-scene">
-      <div className="mac-display">
-        <div className="mac-shell">
-          <div className="mac-screen-inset">
-            <div className="mac-crt">
-              <div className="crt-scanlines" />
-              <div className="mac-crt-ui">
-                <div className="mac-sidebar">
-                  <div className="mac-sidebar-item is-active">System</div>
-                  <div className="mac-sidebar-item">Disk A</div>
-                  <div className="mac-sidebar-item">Replay</div>
-                  <div className="mac-sidebar-item">Trace</div>
-                  <div className="mac-sidebar-item">Think</div>
-                </div>
-                <div className="mac-window-area">
-                  <div className="mac-os-label">AgentBench OS 1.0</div>
-                  <div className="mac-window">
-                    <div className="mac-window-header">
-                      <span>live-run.txt</span>
-                      <span>[x]</span>
-                    </div>
-                    <div className="mac-terminal-line">
-                      {typed}
-                      <span className="terminal-cursor" />
+      <div className="mac-scene">
+        <div className="mac-computer-unit">
+          <div className="mac-face mac-front">
+            <div className="mac-screen-inset">
+              <div className="mac-crt">
+                <div className="crt-scanlines" />
+                <div className="mac-crt-ui">
+                  <div className="mac-sidebar">
+                    <div className="mac-sidebar-item is-active">System</div>
+                    <div className="mac-sidebar-item">Disk A</div>
+                    <div className="mac-sidebar-item">Replay</div>
+                    <div className="mac-sidebar-item">Trace</div>
+                    <div className="mac-sidebar-item">Think</div>
+                  </div>
+                  <div className="mac-window-area">
+                    <div className="mac-os-label">AgentBench OS 1.0</div>
+                    <div className="mac-window">
+                      <div className="mac-window-header">
+                        <span>live-run.txt</span>
+                        <span>[x]</span>
+                      </div>
+                      <div className="mac-terminal-line">
+                        {typed}
+                        <span className="terminal-cursor" />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+            <div className="mac-logo">A</div>
+            <div className="mac-floppy-slot" />
+            <div className="mac-sticker mac-sticker-yellow">1</div>
+            <div className="mac-sticker mac-sticker-dark">2</div>
+            <div className="mac-sticker mac-sticker-pill">
+              LIVE
+              <br />
+              OBSERVE
+            </div>
+            <div className="mac-vents">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <span key={index} />
+              ))}
+            </div>
           </div>
-          <div className="mac-logo">A</div>
-          <div className="mac-floppy-slot" />
-          <div className="mac-sticker mac-sticker-yellow">1</div>
-          <div className="mac-sticker mac-sticker-dark">2</div>
-          <div className="mac-sticker mac-sticker-pill">LIVE<br />OBSERVE</div>
-          <div className="mac-vents">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <span key={index} />
-            ))}
-          </div>
-        </div>
-        <div className="mac-keyboard">
-          <div className="mac-keyboard-tag">PLAYGROUND</div>
-          <div className="mac-keys-grid">
-            {keyRows.map((_, index) => (
-              <span
-                key={index}
-                className={`mac-key ${index === 14 || index === 21 ? "mac-key-wide" : ""} ${index === 26 ? "mac-key-space" : ""}`}
-              />
-            ))}
+          <div className="mac-face mac-back" />
+          <div className="mac-face mac-left" />
+          <div className="mac-face mac-right" />
+          <div className="mac-face mac-top" />
+          <div className="mac-face mac-bottom" />
+          <div className="mac-keyboard-assembly">
+            <div className="mac-keyboard-tag">PLAYGROUND</div>
+            <div className="mac-keyboard-base">
+              <div className="mac-keys-grid">
+                {keyRows.map((_, index) => (
+                  <span
+                    key={index}
+                    className={`mac-key ${index === 12 || index === 21 ? "mac-key-wide" : ""} ${index === 26 ? "mac-key-space" : ""}`}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="mac-kb-front" />
+            <div className="mac-kb-back" />
+            <div className="mac-kb-left" />
+            <div className="mac-kb-right" />
+            <div className="mac-kb-shadow" />
           </div>
         </div>
       </div>
