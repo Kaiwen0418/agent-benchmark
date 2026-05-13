@@ -42,3 +42,4 @@ tmp/
 temp/
 .playwright-mcp/
 screenshots/
+supabase/.temp/
