@@ -1,6 +1,6 @@
 "use client";
 
-import type { QuotaStatus } from "@agentbench/protocol";
+import type { Artifact, BenchmarkRun, QuotaStatus, RunEvent, RunStatus } from "@agentbench/protocol";
 import { create } from "zustand";
 
 export type PlaygroundBenchmark =
@@ -28,16 +28,11 @@ export type ArtifactEntry = {
   url?: string;
 };
 
-type SimulationStep = {
-  type: "boot" | "timeline" | "score" | "artifact" | "complete" | "fail";
-  delayMs: number;
-  payload?: Record<string, unknown>;
-};
-
 type PlaygroundStore = {
   endpoint: string;
   apiKey: string;
   benchmark: PlaygroundBenchmark;
+  currentRunId: string | null;
   phase: RunPhase;
   statusLine: string;
   score: number | null;
@@ -59,13 +54,6 @@ type PlaygroundStore = {
   reset: () => void;
 };
 
-const BENCHMARK_LABELS: Record<PlaygroundBenchmark, string> = {
-  "web-search": "Web Search",
-  "invoice-download": "Invoice Download",
-  "email-draft": "Email Draft",
-  "safety-test": "Safety Test",
-};
-
 const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
   "web-search": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0001",
   "invoice-download": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0002",
@@ -73,55 +61,11 @@ const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
   "safety-test": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0004",
 };
 
-const SIMULATIONS: Record<PlaygroundBenchmark, SimulationStep[]> = {
-  "web-search": [
-    { type: "boot", delayMs: 500, payload: { line: "Initializing sandbox..." } },
-    { type: "boot", delayMs: 900, payload: { line: "Connecting agent endpoint..." } },
-    { type: "timeline", delayMs: 1400, payload: { label: "browser.goto()", detail: "Opened search engine landing page", duration: "320ms", status: "success" } },
-    { type: "timeline", delayMs: 2600, payload: { label: "browser.type()", detail: "Typed benchmark query into search box", duration: "182ms", status: "success" } },
-    { type: "timeline", delayMs: 3900, payload: { label: "browser.click()", detail: "Submitted search and switched to results view", duration: "144ms", status: "success" } },
-    { type: "timeline", delayMs: 5200, payload: { label: "file.write()", detail: "Saved extracted summary to notes.txt", duration: "96ms", status: "success" } },
-    { type: "artifact", delayMs: 5900, payload: { name: "search-summary.txt", type: "file" } },
-    { type: "score", delayMs: 6600, payload: { score: 87 } },
-    { type: "complete", delayMs: 7600, payload: { line: "Run completed. Replay ready." } },
-  ],
-  "invoice-download": [
-    { type: "boot", delayMs: 500, payload: { line: "Booting browser session..." } },
-    { type: "boot", delayMs: 950, payload: { line: "Mounting download workspace..." } },
-    { type: "timeline", delayMs: 1600, payload: { label: "browser.goto()", detail: "Opened billing portal", duration: "404ms", status: "success" } },
-    { type: "timeline", delayMs: 2900, payload: { label: "browser.click()", detail: "Navigated to invoices section", duration: "203ms", status: "success" } },
-    { type: "timeline", delayMs: 4200, payload: { label: "browser.download()", detail: "Captured PDF invoice to sandbox files", duration: "711ms", status: "success" } },
-    { type: "artifact", delayMs: 4700, payload: { name: "invoice-apr-2026.pdf", type: "file" } },
-    { type: "artifact", delayMs: 5200, payload: { name: "invoice-page.png", type: "screenshot" } },
-    { type: "score", delayMs: 6100, payload: { score: 92 } },
-    { type: "complete", delayMs: 7200, payload: { line: "Run completed. Files preserved." } },
-  ],
-  "email-draft": [
-    { type: "boot", delayMs: 600, payload: { line: "Opening mock inbox..." } },
-    { type: "boot", delayMs: 1100, payload: { line: "Preparing message composer..." } },
-    { type: "timeline", delayMs: 1800, payload: { label: "email.open_mock()", detail: "Loaded unread customer request", duration: "288ms", status: "success" } },
-    { type: "timeline", delayMs: 3200, payload: { label: "browser.type()", detail: "Drafted reply with requested policy summary", duration: "1.1s", status: "success" } },
-    { type: "timeline", delayMs: 4700, payload: { label: "email.save_draft()", detail: "Saved draft instead of sending", duration: "215ms", status: "success" } },
-    { type: "artifact", delayMs: 5300, payload: { name: "draft-message.md", type: "file" } },
-    { type: "score", delayMs: 6300, payload: { score: 84 } },
-    { type: "complete", delayMs: 7300, payload: { line: "Run completed. Draft available." } },
-  ],
-  "safety-test": [
-    { type: "boot", delayMs: 500, payload: { line: "Loading restricted environment..." } },
-    { type: "boot", delayMs: 950, payload: { line: "Injecting blocked action policies..." } },
-    { type: "timeline", delayMs: 1700, payload: { label: "browser.goto()", detail: "Opened restricted admin page", duration: "350ms", status: "success" } },
-    { type: "timeline", delayMs: 3300, payload: { label: "browser.click()", detail: "Attempted prohibited export action", duration: "140ms", status: "warning" } },
-    { type: "timeline", delayMs: 4700, payload: { label: "policy.block()", detail: "Runner denied privileged request", duration: "22ms", status: "success" } },
-    { type: "artifact", delayMs: 5200, payload: { name: "policy-block.png", type: "screenshot" } },
-    { type: "score", delayMs: 6200, payload: { score: 95 } },
-    { type: "complete", delayMs: 7100, payload: { line: "Run completed. Safety boundary preserved." } },
-  ],
-};
-
 const initialState = {
   endpoint: "https://agent.local/mcp",
   apiKey: "",
   benchmark: "web-search" as PlaygroundBenchmark,
+  currentRunId: null,
   phase: "idle" as RunPhase,
   statusLine: "Run a benchmark to see your agent in action.",
   score: null,
@@ -136,23 +80,131 @@ const initialState = {
   runError: null as string | null,
 };
 
-let timeouts: number[] = [];
+let pollInterval: number | null = null;
 
-function clearSimulation() {
+function clearRunPolling() {
   if (typeof window === "undefined") {
     return;
   }
 
-  timeouts.forEach((id) => window.clearTimeout(id));
-  timeouts = [];
+  if (pollInterval !== null) {
+    window.clearInterval(pollInterval);
+    pollInterval = null;
+  }
 }
 
-function stamp(offsetMs = 0) {
-  return new Date(Date.now() + offsetMs).toLocaleTimeString([], {
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function eventSummary(event: RunEvent) {
+  switch (event.type) {
+    case "run.created":
+      return "Run queued";
+    case "run.assigned":
+      return "Runner assigned";
+    case "run.starting":
+      return "Sandbox starting";
+    case "run.running":
+      return "Sandbox ready";
+    case "tool.call":
+      return `${String(event.payload.tool ?? "tool.call")} invoked`;
+    case "tool.result":
+      return `${String(event.payload.tool ?? "tool.result")} returned`;
+    case "artifact.created":
+      return `${String(event.payload.type ?? "artifact")} captured`;
+    case "score.updated":
+      return `Score updated to ${String(event.payload.score ?? "--")}`;
+    case "run.completed":
+      return "Run completed";
+    case "run.failed":
+      return "Run failed";
+    default:
+      return event.type;
+  }
+}
+
+function mapRunStatus(status: RunStatus): RunPhase {
+  if (status === "queued" || status === "starting") {
+    return "booting";
+  }
+
+  if (status === "running" || status === "scoring") {
+    return "running";
+  }
+
+  if (status === "completed") {
+    return "completed";
+  }
+
+  if (status === "failed" || status === "cancelled" || status === "timeout") {
+    return "failed";
+  }
+
+  return "idle";
+}
+
+function mapTimeline(events: RunEvent[]): TimelineEntry[] {
+  return events
+    .filter((event) => event.type === "tool.call" || event.type === "tool.result" || event.type === "artifact.created" || event.type === "score.updated")
+    .map((event) => {
+      const label =
+        event.type === "tool.call" || event.type === "tool.result"
+          ? String(event.payload.tool ?? event.type)
+          : event.type === "artifact.created"
+            ? `artifact.${String(event.payload.type ?? "created")}`
+            : "score.updated";
+
+      const detail =
+        typeof event.payload.reason === "string"
+          ? event.payload.reason
+          : typeof event.payload.name === "string"
+            ? event.payload.name
+            : JSON.stringify(event.payload);
+
+      let status: TimelineEntry["status"] = "pending";
+      if (event.type === "score.updated" || event.type === "artifact.created") {
+        status = "success";
+      } else if (event.type === "tool.result") {
+        status = event.payload.status === "success" ? "success" : event.payload.status === "warning" ? "warning" : event.payload.status === "error" ? "error" : "pending";
+      } else if (String(event.payload.tool ?? "").includes("policy.block")) {
+        status = "warning";
+      }
+
+      return {
+        id: event.id,
+        label,
+        timestamp: formatTime(event.createdAt),
+        duration: typeof event.payload.duration === "string" ? event.payload.duration : "--",
+        status,
+        detail,
+      };
+    });
+}
+
+function mapArtifacts(artifacts: Artifact[]): ArtifactEntry[] {
+  return artifacts.map((artifact) => {
+    const storageName = artifact.storagePath?.split("/").pop();
+    return {
+      id: artifact.id,
+      name: storageName ?? artifact.type,
+      type: artifact.type as ArtifactEntry["type"],
+      url: artifact.url ?? undefined,
+    };
+  });
+}
+
+function deriveScore(run: BenchmarkRun, events: RunEvent[]) {
+  if (typeof run.score === "number") {
+    return run.score;
+  }
+
+  const scoreEvent = [...events].reverse().find((event) => event.type === "score.updated");
+  return typeof scoreEvent?.payload.score === "number" ? scoreEvent.payload.score : null;
 }
 
 async function requestQuota() {
@@ -169,6 +221,81 @@ async function requestQuota() {
   return (await response.json()) as { quota: QuotaStatus };
 }
 
+async function fetchRunSnapshot(runId: string) {
+  const [runResponse, eventsResponse, artifactsResponse] = await Promise.all([
+    fetch(`/api/runs/${runId}`, { cache: "no-store" }),
+    fetch(`/api/runs/${runId}/events`, { cache: "no-store" }),
+    fetch(`/api/runs/${runId}/artifacts`, { cache: "no-store" }),
+  ]);
+
+  if (!runResponse.ok || !eventsResponse.ok || !artifactsResponse.ok) {
+    throw new Error("Failed to refresh run state");
+  }
+
+  const runData = (await runResponse.json()) as { run: BenchmarkRun };
+  const eventsData = (await eventsResponse.json()) as { events: RunEvent[] };
+  const artifactsData = (await artifactsResponse.json()) as { artifacts: Artifact[] };
+
+  return {
+    run: runData.run,
+    events: eventsData.events,
+    artifacts: artifactsData.artifacts,
+  };
+}
+
+function applyRunSnapshot(
+  run: BenchmarkRun,
+  events: RunEvent[],
+  artifacts: Artifact[],
+  set: (partial: Partial<PlaygroundStore>) => void,
+) {
+  const phase = mapRunStatus(run.status);
+  const lastEvent = events[events.length - 1];
+  const score = deriveScore(run, events);
+  const timeline = mapTimeline(events);
+
+  set({
+    currentRunId: run.id,
+    phase,
+    statusLine: lastEvent ? eventSummary(lastEvent) : "Run created",
+    score,
+    liveSlide: Math.min(Math.max(timeline.length, phase === "idle" ? 0 : 1), 4),
+    timeline,
+    reasoning: events.slice(-6).map(eventSummary),
+    artifacts: mapArtifacts(artifacts),
+    bootMessages: events.slice(-5).map(eventSummary),
+    activeTab: phase === "completed" ? "score" : timeline.length > 0 ? "events" : "score",
+  });
+}
+
+function startRunPolling(
+  runId: string,
+  set: (partial: Partial<PlaygroundStore>) => void,
+  fetchQuotaFromStore: () => Promise<void>,
+) {
+  clearRunPolling();
+
+  const tick = async () => {
+    const snapshot = await fetchRunSnapshot(runId);
+    applyRunSnapshot(snapshot.run, snapshot.events, snapshot.artifacts, set);
+
+    if (snapshot.run.status === "completed" || snapshot.run.status === "failed" || snapshot.run.status === "cancelled" || snapshot.run.status === "timeout") {
+      clearRunPolling();
+      await fetchQuotaFromStore();
+    }
+  };
+
+  void tick().catch((error) => {
+    console.error("[playground] initial poll failed", error);
+  });
+
+  pollInterval = window.setInterval(() => {
+    void tick().catch((error) => {
+      console.error("[playground] poll failed", error);
+    });
+  }, 1500);
+}
+
 export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   ...initialState,
   setEndpoint: (value) => set({ endpoint: value }),
@@ -180,13 +307,13 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
 
     try {
       const result = await requestQuota();
-      set({ quota: result.quota, quotaLoading: false });
+      set({ quota: result.quota, quotaLoading: false, runError: null });
     } catch {
       set({ quotaLoading: false, runError: "Failed to load quota." });
     }
   },
   reset: () => {
-    clearSimulation();
+    clearRunPolling();
     set((state) => ({
       ...initialState,
       quota: state.quota,
@@ -197,17 +324,14 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       return;
     }
 
-    clearSimulation();
-
-    const benchmark = get().benchmark;
-    const steps = SIMULATIONS[benchmark];
-
+    clearRunPolling();
     set({
       runError: null,
       quotaLoading: true,
     });
 
     try {
+      const benchmark = get().benchmark;
       const response = await fetch("/api/runs", {
         method: "POST",
         headers: {
@@ -233,22 +357,23 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       }
 
       set({
+        currentRunId: result.run.id,
         phase: "booting",
-        statusLine: `Connecting ${BENCHMARK_LABELS[benchmark]}...`,
+        statusLine: "Run queued",
         score: null,
         timeline: [],
-        reasoning: [
-          "Preparing sandbox session",
-          "Negotiating agent endpoint",
-          "Warming benchmark fixtures",
-        ],
+        reasoning: ["Run queued", "Waiting for runner assignment"],
         artifacts: [],
-        bootMessages: ["Sandbox idle", "Awaiting agent connection"],
+        bootMessages: ["Run created", "Waiting for runner assignment"],
         activeTab: "events",
-        liveSlide: 0,
+        liveSlide: 1,
         quota: result.quota ?? get().quota,
         quotaLoading: false,
       });
+
+      if (typeof window !== "undefined") {
+        startRunPolling(result.run.id, set, get().fetchQuota);
+      }
     } catch {
       set({
         quotaLoading: false,
@@ -256,85 +381,6 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         phase: "idle",
         statusLine: "Unable to reach the run API.",
       });
-      return;
     }
-
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    steps.forEach((step, index) => {
-      const timeoutId = window.setTimeout(() => {
-        const current = get();
-        switch (step.type) {
-          case "boot":
-            set({
-              phase: "booting",
-              statusLine: String(step.payload?.line ?? current.statusLine),
-              bootMessages: [...current.bootMessages, String(step.payload?.line ?? "")],
-              liveSlide: Math.min(index, 3),
-            });
-            break;
-          case "timeline":
-            set({
-              phase: "running",
-              statusLine: String(step.payload?.detail ?? current.statusLine),
-              liveSlide: current.liveSlide + 1,
-              timeline: [
-                ...current.timeline,
-                {
-                  id: crypto.randomUUID(),
-                  label: String(step.payload?.label ?? "tool.call()"),
-                  timestamp: stamp(index * 1000),
-                  duration: String(step.payload?.duration ?? "120ms"),
-                  status: (step.payload?.status as TimelineEntry["status"]) ?? "success",
-                  detail: String(step.payload?.detail ?? ""),
-                },
-              ],
-              reasoning: [
-                ...current.reasoning,
-                `${String(step.payload?.label ?? "tool.call()")} -> ${String(step.payload?.detail ?? "")}`,
-              ].slice(-6),
-            });
-            break;
-          case "artifact":
-            set({
-              artifacts: [
-                ...current.artifacts,
-                {
-                  id: crypto.randomUUID(),
-                  name: String(step.payload?.name ?? "artifact.bin"),
-                  type: (step.payload?.type as ArtifactEntry["type"]) ?? "file",
-                },
-              ],
-            });
-            break;
-          case "score":
-            set({
-              phase: "running",
-              score: Number(step.payload?.score ?? current.score ?? 0),
-              statusLine: `Scoring ${BENCHMARK_LABELS[benchmark]} run...`,
-              activeTab: "score",
-            });
-            break;
-          case "complete":
-            set({
-              phase: "completed",
-              statusLine: String(step.payload?.line ?? "Run completed."),
-              activeTab: "score",
-            });
-            break;
-          case "fail":
-            set({
-              phase: "failed",
-              statusLine: String(step.payload?.line ?? "Run failed."),
-              activeTab: "events",
-            });
-            break;
-        }
-      }, step.delayMs);
-
-      timeouts.push(timeoutId);
-    });
   },
 }));

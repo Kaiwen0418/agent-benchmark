@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { appendRunEventInputSchema } from "@agentbench/protocol";
 import { appendRunEvent, getBenchmarkRun, listRunEvents } from "@/lib/db";
+import { requireRunnerAuth } from "@/lib/runner-auth";
 
 export async function GET(
   _request: Request,
@@ -21,6 +22,11 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ runId: string }> },
 ) {
+  const authError = requireRunnerAuth(request);
+  if (authError) {
+    return authError;
+  }
+
   const { runId } = await params;
   const json = await request.json();
   const input = appendRunEventInputSchema.parse(json);

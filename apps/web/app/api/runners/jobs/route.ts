@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { listRunners, assignRunnerJob } from "@/lib/db";
+import { requireRunnerAuth } from "@/lib/runner-auth";
 
 export async function GET(request: Request) {
+  const authError = requireRunnerAuth(request);
+  if (authError) {
+    return authError;
+  }
+
   const runnerId = new URL(request.url).searchParams.get("runnerId");
 
   if (!runnerId) {
