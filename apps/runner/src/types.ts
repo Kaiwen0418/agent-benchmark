@@ -40,13 +40,8 @@ export type CompleteRunResponse = {
   run: BenchmarkRun;
 };
 
-export type MockExecutionPlan = {
-  score: number;
-  artifacts: Omit<Artifact, "id" | "runId" | "createdAt">[];
-  steps: Array<{
-    delayMs: number;
-    event: AppendRunEventInput;
-  }>;
-  completionDelayMs: number;
+export type ExecutionResult = {
   completion: CompleteRunInput;
+  emittedEvents: AppendRunEventInput[];
+  artifacts: Omit<Artifact, "id" | "runId" | "createdAt">[];
 };

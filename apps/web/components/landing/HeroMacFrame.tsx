@@ -84,11 +84,6 @@ export function HeroMacFrame({ sceneStyle, screenContent }: HeroMacFrameProps) {
             <div className="mac-floppy-slot" />
             <div className="mac-sticker mac-sticker-yellow">1</div>
             <div className="mac-sticker mac-sticker-dark">2</div>
-            <div className="mac-sticker mac-sticker-pill">
-              LIVE
-              <br />
-              OBSERVE
-            </div>
             <div className="mac-vents">
               {Array.from({ length: 8 }).map((_, index) => (
                 <span key={index} />

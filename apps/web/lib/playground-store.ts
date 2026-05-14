@@ -45,6 +45,7 @@ type PlaygroundStore = {
   quota: QuotaStatus | null;
   quotaLoading: boolean;
   runError: string | null;
+  streamMode: "idle" | "sse" | "polling";
   setEndpoint: (value: string) => void;
   setApiKey: (value: string) => void;
   setBenchmark: (value: PlaygroundBenchmark) => void;
@@ -52,6 +53,12 @@ type PlaygroundStore = {
   fetchQuota: () => Promise<void>;
   startRun: () => Promise<void>;
   reset: () => void;
+};
+
+type RunSnapshot = {
+  run: BenchmarkRun;
+  events: RunEvent[];
+  artifacts: Artifact[];
 };
 
 const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
@@ -78,11 +85,13 @@ const initialState = {
   quota: null as QuotaStatus | null,
   quotaLoading: false,
   runError: null as string | null,
+  streamMode: "idle" as const,
 };
 
 let pollInterval: number | null = null;
+let streamSource: EventSource | null = null;
 
-function clearRunPolling() {
+function clearRunSync() {
   if (typeof window === "undefined") {
     return;
   }
@@ -90,6 +99,11 @@ function clearRunPolling() {
   if (pollInterval !== null) {
     window.clearInterval(pollInterval);
     pollInterval = null;
+  }
+
+  if (streamSource) {
+    streamSource.close();
+    streamSource = null;
   }
 }
 
@@ -99,6 +113,10 @@ function formatTime(value: string) {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function isTerminalStatus(status: RunStatus) {
+  return status === "completed" || status === "failed" || status === "cancelled" || status === "timeout";
 }
 
 function eventSummary(event: RunEvent) {
@@ -150,7 +168,13 @@ function mapRunStatus(status: RunStatus): RunPhase {
 
 function mapTimeline(events: RunEvent[]): TimelineEntry[] {
   return events
-    .filter((event) => event.type === "tool.call" || event.type === "tool.result" || event.type === "artifact.created" || event.type === "score.updated")
+    .filter(
+      (event) =>
+        event.type === "tool.call" ||
+        event.type === "tool.result" ||
+        event.type === "artifact.created" ||
+        event.type === "score.updated",
+    )
     .map((event) => {
       const label =
         event.type === "tool.call" || event.type === "tool.result"
@@ -170,7 +194,14 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
       if (event.type === "score.updated" || event.type === "artifact.created") {
         status = "success";
       } else if (event.type === "tool.result") {
-        status = event.payload.status === "success" ? "success" : event.payload.status === "warning" ? "warning" : event.payload.status === "error" ? "error" : "pending";
+        status =
+          event.payload.status === "success"
+            ? "success"
+            : event.payload.status === "warning"
+              ? "warning"
+              : event.payload.status === "error"
+                ? "error"
+                : "pending";
       } else if (String(event.payload.tool ?? "").includes("policy.block")) {
         status = "warning";
       }
@@ -205,6 +236,30 @@ function deriveScore(run: BenchmarkRun, events: RunEvent[]) {
 
   const scoreEvent = [...events].reverse().find((event) => event.type === "score.updated");
   return typeof scoreEvent?.payload.score === "number" ? scoreEvent.payload.score : null;
+}
+
+function applyRunSnapshot(
+  snapshot: RunSnapshot,
+  set: (partial: Partial<PlaygroundStore>) => void,
+) {
+  const { run, events, artifacts } = snapshot;
+  const phase = mapRunStatus(run.status);
+  const lastEvent = events[events.length - 1];
+  const score = deriveScore(run, events);
+  const timeline = mapTimeline(events);
+
+  set({
+    currentRunId: run.id,
+    phase,
+    statusLine: lastEvent ? eventSummary(lastEvent) : "Run created",
+    score,
+    liveSlide: Math.min(Math.max(timeline.length, phase === "idle" ? 0 : 1), 4),
+    timeline,
+    reasoning: events.slice(-6).map(eventSummary),
+    artifacts: mapArtifacts(artifacts),
+    bootMessages: events.slice(-5).map(eventSummary),
+    activeTab: phase === "completed" ? "score" : timeline.length > 0 ? "events" : "score",
+  });
 }
 
 async function requestQuota() {
@@ -243,57 +298,87 @@ async function fetchRunSnapshot(runId: string) {
   };
 }
 
-function applyRunSnapshot(
-  run: BenchmarkRun,
-  events: RunEvent[],
-  artifacts: Artifact[],
-  set: (partial: Partial<PlaygroundStore>) => void,
-) {
-  const phase = mapRunStatus(run.status);
-  const lastEvent = events[events.length - 1];
-  const score = deriveScore(run, events);
-  const timeline = mapTimeline(events);
-
-  set({
-    currentRunId: run.id,
-    phase,
-    statusLine: lastEvent ? eventSummary(lastEvent) : "Run created",
-    score,
-    liveSlide: Math.min(Math.max(timeline.length, phase === "idle" ? 0 : 1), 4),
-    timeline,
-    reasoning: events.slice(-6).map(eventSummary),
-    artifacts: mapArtifacts(artifacts),
-    bootMessages: events.slice(-5).map(eventSummary),
-    activeTab: phase === "completed" ? "score" : timeline.length > 0 ? "events" : "score",
-  });
-}
-
-function startRunPolling(
+function startFallbackPolling(
   runId: string,
   set: (partial: Partial<PlaygroundStore>) => void,
-  fetchQuotaFromStore: () => Promise<void>,
+  getState: () => PlaygroundStore,
 ) {
-  clearRunPolling();
+  if (pollInterval !== null) {
+    return;
+  }
+
+  set({ streamMode: "polling" });
 
   const tick = async () => {
-    const snapshot = await fetchRunSnapshot(runId);
-    applyRunSnapshot(snapshot.run, snapshot.events, snapshot.artifacts, set);
+    const state = getState();
+    if (state.currentRunId !== runId) {
+      clearRunSync();
+      return;
+    }
 
-    if (snapshot.run.status === "completed" || snapshot.run.status === "failed" || snapshot.run.status === "cancelled" || snapshot.run.status === "timeout") {
-      clearRunPolling();
-      await fetchQuotaFromStore();
+    const snapshot = await fetchRunSnapshot(runId);
+    applyRunSnapshot(snapshot, set);
+
+    if (isTerminalStatus(snapshot.run.status)) {
+      clearRunSync();
+      set({ streamMode: "idle" });
+      await state.fetchQuota();
     }
   };
 
   void tick().catch((error) => {
-    console.error("[playground] initial poll failed", error);
+    console.error("[playground] initial polling refresh failed", error);
   });
 
   pollInterval = window.setInterval(() => {
     void tick().catch((error) => {
-      console.error("[playground] poll failed", error);
+      console.error("[playground] polling refresh failed", error);
     });
-  }, 1500);
+  }, 2000);
+}
+
+function startRunStream(
+  runId: string,
+  set: (partial: Partial<PlaygroundStore>) => void,
+  getState: () => PlaygroundStore,
+) {
+  clearRunSync();
+  set({ streamMode: "sse" });
+
+  const source = new EventSource(`/api/runs/${runId}/stream`);
+  streamSource = source;
+
+  source.addEventListener("snapshot", (event) => {
+    const state = getState();
+    if (state.currentRunId !== runId) {
+      source.close();
+      return;
+    }
+
+    const snapshot = JSON.parse((event as MessageEvent<string>).data) as RunSnapshot;
+    applyRunSnapshot(snapshot, set);
+
+    if (isTerminalStatus(snapshot.run.status)) {
+      clearRunSync();
+      set({ streamMode: "idle" });
+      void state.fetchQuota();
+    }
+  });
+
+  source.addEventListener("terminal", () => {
+    source.close();
+  });
+
+  source.addEventListener("error", () => {
+    const state = getState();
+    source.close();
+
+    if (state.currentRunId !== runId || state.phase === "completed" || state.phase === "failed") {
+      return;
+    }
+
+    startFallbackPolling(runId, set, getState);
+  });
 }
 
 export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
@@ -313,7 +398,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
     }
   },
   reset: () => {
-    clearRunPolling();
+    clearRunSync();
     set((state) => ({
       ...initialState,
       quota: state.quota,
@@ -324,7 +409,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       return;
     }
 
-    clearRunPolling();
+    clearRunSync();
     set({
       runError: null,
       quotaLoading: true,
@@ -352,6 +437,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
           runError: result.message ?? "Unable to start run.",
           phase: "idle",
           statusLine: result.message ?? "Unable to start run.",
+          streamMode: "idle",
         });
         return;
       }
@@ -372,7 +458,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       });
 
       if (typeof window !== "undefined") {
-        startRunPolling(result.run.id, set, get().fetchQuota);
+        startRunStream(result.run.id, set, get);
       }
     } catch {
       set({
@@ -380,6 +466,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         runError: "Unable to reach the run API.",
         phase: "idle",
         statusLine: "Unable to reach the run API.",
+        streamMode: "idle",
       });
     }
   },

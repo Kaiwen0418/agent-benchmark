@@ -5,11 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:mcp": "tsx watch src/mcp-server.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/apps/runner/src/index.js",
+    "start:mcp": "node dist/apps/runner/src/mcp-server.js"
   },
   "dependencies": {
-    "@agentbench/protocol": "workspace:*"
+    "@agentbench/mcp-tools": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@agentbench/protocol": "workspace:*",
+    "playwright": "^1.55.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

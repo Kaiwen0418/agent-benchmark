@@ -43,3 +43,4 @@ temp/
 .playwright-mcp/
 screenshots/
 supabase/.temp/
+apps/runner/.runner-artifacts/

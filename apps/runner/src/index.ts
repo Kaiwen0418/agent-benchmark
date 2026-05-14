@@ -1,7 +1,7 @@
-import { appendRunEvent, completeRun, fetchRunnerJob, heartbeatRunner, registerRunner } from "./api";
-import { runnerConfig } from "./config";
-import { buildMockExecutionPlan } from "./mock-execution";
-import type { RunnerJob } from "./types";
+import { appendRunEvent, completeRun, fetchRunnerJob, heartbeatRunner, registerRunner } from "./api.js";
+import { runnerConfig } from "./config.js";
+import { executePlaywrightJob } from "./playwright-execution.js";
+import type { RunnerJob } from "./types.js";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -9,17 +9,14 @@ function sleep(ms: number) {
 
 async function executeJob(job: RunnerJob) {
   console.log(`[runner] accepted job ${job.runId} for case ${job.caseId}`);
-
-  const plan = buildMockExecutionPlan(job);
-  for (const step of plan.steps) {
-    await sleep(step.delayMs);
-    await appendRunEvent(job.runId, step.event);
-    console.log(`[runner] event ${step.event.type} -> run ${job.runId}`);
-  }
-
-  await sleep(plan.completionDelayMs);
-  await completeRun(job.runId, plan.completion);
-  console.log(`[runner] completed run ${job.runId} with score ${plan.score}`);
+  const result = await executePlaywrightJob(job, async (event) => {
+    await appendRunEvent(job.runId, event);
+    console.log(`[runner] event ${event.type} -> run ${job.runId}`);
+  });
+  await completeRun(job.runId, result.completion);
+  console.log(
+    `[runner] completed run ${job.runId} with status ${result.completion.status} and score ${result.completion.score ?? "--"}`,
+  );
 }
 
 async function main() {

@@ -502,52 +502,24 @@ export async function assignRunnerJob(runnerId: string) {
     return mockStore.assignQueuedRun(runnerId);
   }
 
-  const { data: runRow, error: runError } = await supabase
-    .from("benchmark_runs")
-    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
-    .eq("status", "queued")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("claim_next_benchmark_run", {
+    p_runner_id: runnerId,
+  });
 
-  if (runError) {
-    throw runError;
+  if (error) {
+    throw error;
   }
 
-  if (!runRow) {
+  if (!data) {
     return null;
   }
 
-  const startedAt = new Date().toISOString();
-  const { data: updatedRun, error: updateError } = await supabase
-    .from("benchmark_runs")
-    .update({
-      runner_id: runnerId,
-      status: "starting",
-      started_at: startedAt,
-    })
-    .eq("id", runRow.id)
-    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
-    .single();
-
-  if (updateError) {
-    throw updateError;
+  const runRow = Array.isArray(data) ? data[0] : data;
+  if (!runRow || typeof runRow.id !== "string" || typeof runRow.case_id !== "string") {
+    return null;
   }
 
-  await supabase
-    .from("runners")
-    .update({
-      current_load: 1,
-      last_heartbeat: startedAt,
-    })
-    .eq("id", runnerId);
-
-  await supabase.from("run_events").insert([
-    { run_id: runRow.id, type: "run.assigned", payload: { runnerId } },
-    { run_id: runRow.id, type: "run.starting", payload: { runnerId } },
-  ]);
-
-  return mapRunRow(updatedRun);
+  return mapRunRow(runRow);
 }
 
 export async function getQuotaStatus(params: {

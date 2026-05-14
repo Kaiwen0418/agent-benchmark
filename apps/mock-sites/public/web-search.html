@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentBench Search Workspace</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        background: linear-gradient(180deg, #f8f3e8 0%, #f2ede3 100%);
+        color: #151515;
+      }
+
+      .shell {
+        max-width: 980px;
+        margin: 48px auto;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(17, 17, 17, 0.08);
+        border-radius: 28px;
+        overflow: hidden;
+        box-shadow: 0 26px 70px rgba(17, 17, 17, 0.12);
+      }
+
+      .topbar {
+        display: flex;
+        gap: 10px;
+        padding: 16px 20px;
+        border-bottom: 1px solid rgba(17, 17, 17, 0.08);
+        background: #faf6ee;
+      }
+
+      .dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 999px;
+        background: #d7d0c4;
+      }
+
+      main {
+        padding: 30px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 34px;
+        letter-spacing: -0.04em;
+      }
+
+      .subhead {
+        margin-top: 10px;
+        color: #6a655c;
+        line-height: 1.7;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 18px;
+        margin-top: 28px;
+      }
+
+      .card {
+        background: #fcfbf8;
+        border: 1px solid rgba(17, 17, 17, 0.08);
+        border-radius: 20px;
+        padding: 20px;
+      }
+
+      .eyebrow {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: #7d776d;
+      }
+
+      .search-row {
+        display: flex;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      input {
+        flex: 1;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid #d8d1c4;
+        font: inherit;
+        background: white;
+      }
+
+      button {
+        padding: 14px 20px;
+        border-radius: 999px;
+        border: none;
+        background: #111111;
+        color: white;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      #results[hidden] {
+        display: none;
+      }
+
+      .result-box {
+        margin-top: 18px;
+        padding: 18px;
+        border-radius: 18px;
+        background: white;
+        border: 1px solid rgba(17, 17, 17, 0.07);
+      }
+
+      .result-title {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: #7d776d;
+      }
+
+      .result-summary {
+        margin-top: 12px;
+        font-size: 20px;
+        line-height: 1.5;
+      }
+
+      .side-stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #d7ff00;
+        color: #111111;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      .meta {
+        margin-top: 12px;
+        color: #5d574d;
+        line-height: 1.7;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="shell">
+      <div class="topbar">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+      <main>
+        <h1>Search Workspace</h1>
+        <p class="subhead">
+          Look up the benchmark query, inspect the top answer, and save a short summary into the sandbox workspace.
+        </p>
+
+        <div class="grid">
+          <section class="card">
+            <div class="eyebrow">Query</div>
+            <div class="search-row">
+              <input id="query" placeholder="Search for the latest agent benchmarks" />
+              <button id="search">Search</button>
+            </div>
+            <div id="results" hidden>
+              <div class="result-box">
+                <div class="result-title">Top Result</div>
+                <div class="result-summary" data-result="summary">
+                  AgentBench makes autonomous agent runs watchable with live observability, browser traces, and replayable tool workflows.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="side-stack">
+            <section class="card">
+              <span class="pill">Live Arena</span>
+              <div class="meta">
+                Controlled mock site for browser search benchmarks. Deterministic content. No public internet access required.
+              </div>
+            </section>
+            <section class="card">
+              <div class="eyebrow">Goal</div>
+              <div class="meta">
+                Extract the top result and persist it as <code>search-summary.txt</code>.
+              </div>
+            </section>
+          </aside>
+        </div>
+      </main>
+    </section>
+
+    <script>
+      const button = document.getElementById("search");
+      const input = document.getElementById("query");
+      const results = document.getElementById("results");
+
+      button.addEventListener("click", () => {
+        if (input.value.trim()) {
+          results.hidden = false;
+        }
+      });
+    </script>
+  </body>
+</html>

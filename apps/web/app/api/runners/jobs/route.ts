@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
   const run = await assignRunnerJob(runnerId);
 
-  if (!run) {
+  if (!run || !run.id || !run.caseId) {
     return NextResponse.json({ job: null });
   }
 

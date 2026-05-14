@@ -217,8 +217,16 @@ export const mockStore = {
       return null;
     }
 
+    if (runner.currentLoad >= runner.capacity) {
+      return null;
+    }
+
     const run = getStore().runs.find((item) => item.status === "queued");
     if (!run) {
+      return null;
+    }
+
+    if (run.runnerId !== null || run.status !== "queued") {
       return null;
     }
 
@@ -226,6 +234,7 @@ export const mockStore = {
     run.status = "starting";
     run.startedAt = now();
     runner.currentLoad += 1;
+    runner.status = runner.currentLoad >= runner.capacity ? "busy" : "online";
     this.appendEvent(run.id, "run.assigned", { runnerId });
     this.appendEvent(run.id, "run.starting", { runnerId });
     return run;

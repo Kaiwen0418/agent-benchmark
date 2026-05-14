@@ -16,7 +16,9 @@
     "baseUrl": ".",
     "paths": {
       "@agentbench/protocol": ["packages/protocol/src/index.ts"],
-      "@agentbench/protocol/*": ["packages/protocol/src/*"]
+      "@agentbench/protocol/*": ["packages/protocol/src/*"],
+      "@agentbench/mcp-tools": ["packages/mcp-tools/src/index.ts"],
+      "@agentbench/mcp-tools/*": ["packages/mcp-tools/src/*"]
     }
   }
 }

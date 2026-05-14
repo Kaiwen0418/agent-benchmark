@@ -4,16 +4,24 @@ import type {
   RunnerHeartbeatInput,
   RunnerRegisterInput,
 } from "@agentbench/protocol";
-import { runnerConfig } from "./config";
+import { runnerConfig } from "./config.js";
 import type {
   CompleteRunResponse,
   EventResponse,
   HeartbeatRunnerResponse,
   JobResponse,
   RegisterRunnerResponse,
-} from "./types";
+} from "./types.js";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!runnerConfig.webUrl) {
+    throw new Error("AGENTBENCH_WEB_URL is required for runner control-plane API requests.");
+  }
+
+  if (!runnerConfig.sharedSecret) {
+    throw new Error("RUNNER_SHARED_SECRET is required for runner control-plane API requests.");
+  }
+
   const response = await fetch(`${runnerConfig.webUrl}${path}`, {
     ...init,
     headers: {
