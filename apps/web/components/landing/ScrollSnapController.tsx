@@ -54,7 +54,23 @@ export function ScrollSnapController() {
       return idx;
     };
 
+    const isInsideScrollable = (target: EventTarget | null, deltaY: number): boolean => {
+      let node = target as HTMLElement | null;
+      while (node && node !== document.documentElement) {
+        const { overflowY } = window.getComputedStyle(node);
+        if (overflowY === "auto" || overflowY === "scroll") {
+          const canScrollDown = deltaY > 0 && node.scrollTop < node.scrollHeight - node.clientHeight - 1;
+          const canScrollUp = deltaY < 0 && node.scrollTop > 0;
+          if (canScrollDown || canScrollUp) return true;
+        }
+        node = node.parentElement;
+      }
+      return false;
+    };
+
     const handleWheel = (e: WheelEvent) => {
+      if (isInsideScrollable(e.target, e.deltaY)) return;
+
       const sections = getSnapSections();
       if (!sections.length) return;
 

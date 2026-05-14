@@ -3,6 +3,7 @@
 import { ConnectAgentCard } from "./ConnectAgentCard";
 import { LiveMacContainer } from "./LiveMacContainer";
 import { cn } from "@/lib/utils";
+import { usePlaygroundStore } from "@/lib/playground-store";
 
 export function PlaygroundSection({
   showLivePreview = true,
@@ -13,6 +14,9 @@ export function PlaygroundSection({
   embedded?: boolean;
   sectionId?: string;
 }) {
+  const phase = usePlaygroundStore((state) => state.phase);
+  const isIdle = phase === "idle";
+
   return (
     <section
       id={sectionId}
@@ -21,7 +25,7 @@ export function PlaygroundSection({
       )}
     >
       <div className={cn(embedded ? "" : "mx-auto max-w-7xl")}>
-        <div className="mb-10 max-w-2xl">
+        <div className={cn("mb-10 max-w-2xl transition-all duration-300", !isIdle && "hidden")}>
           <div className="text-xs uppercase tracking-[0.24em] text-[#726b5f]">Run Playground</div>
           <h2 className="mt-3 text-4xl font-medium tracking-[-0.05em] text-[#111111] md:text-5xl">
             Connect an agent and immediately watch it work.
@@ -32,7 +36,7 @@ export function PlaygroundSection({
         </div>
 
         <div className={cn("grid gap-6 items-start", showLivePreview && "lg:grid-cols-[0.42fr_0.58fr]")}>
-          <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:max-w-[560px]">
+          <div className="scroll-panel lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:max-w-[560px]">
             <ConnectAgentCard />
           </div>
           {showLivePreview ? (
