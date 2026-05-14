@@ -50,8 +50,10 @@ type PlaygroundStore = {
   setApiKey: (value: string) => void;
   setBenchmark: (value: PlaygroundBenchmark) => void;
   setActiveTab: (value: PanelTab) => void;
+  setLiveSlide: (index: number) => void;
   fetchQuota: () => Promise<void>;
   startRun: () => Promise<void>;
+  stopRun: () => void;
   reset: () => void;
 };
 
@@ -387,6 +389,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   setApiKey: (value) => set({ apiKey: value }),
   setBenchmark: (value) => set({ benchmark: value }),
   setActiveTab: (value) => set({ activeTab: value }),
+  setLiveSlide: (index) => set({ liveSlide: index }),
   fetchQuota: async () => {
     set({ quotaLoading: true });
 
@@ -396,6 +399,10 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
     } catch {
       set({ quotaLoading: false, runError: "Failed to load quota." });
     }
+  },
+  stopRun: () => {
+    clearRunSync();
+    set({ phase: "failed", statusLine: "Stopped", streamMode: "idle" });
   },
   reset: () => {
     clearRunSync();
