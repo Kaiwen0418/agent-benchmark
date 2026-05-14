@@ -11,6 +11,21 @@ body {
   @apply bg-background text-foreground antialiased;
 }
 
+/* Thin scrollbar for dark code blocks */
+.code-block-pre::-webkit-scrollbar {
+  height: 3px;
+}
+.code-block-pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+.code-block-pre::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+.code-block-pre::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
 ::selection {
   background: #d7ff00;
   color: #111111;

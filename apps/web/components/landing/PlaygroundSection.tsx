@@ -1,10 +1,7 @@
 "use client";
 
-import { usePlaygroundStore } from "@/lib/playground-store";
 import { ConnectAgentCard } from "./ConnectAgentCard";
 import { LiveMacContainer } from "./LiveMacContainer";
-import { RunPanels } from "./RunPanels";
-import { ToolCallTimeline } from "./ToolCallTimeline";
 import { cn } from "@/lib/utils";
 
 export function PlaygroundSection({
@@ -16,14 +13,11 @@ export function PlaygroundSection({
   embedded?: boolean;
   sectionId?: string;
 }) {
-  const phase = usePlaygroundStore((state) => state.phase);
-  const hasActiveRun = phase !== "idle";
-
   return (
     <section
       id={sectionId}
       className={cn(
-        embedded ? "min-h-[100svh] py-20" : "px-6 py-24 md:px-10 lg:px-16",
+        embedded ? "min-h-[100svh] flex flex-col justify-center py-20 snap-start" : "min-h-screen px-6 py-24 md:px-10 lg:px-16 snap-start",
       )}
     >
       <div className={cn(embedded ? "" : "mx-auto max-w-7xl")}>
@@ -37,20 +31,16 @@ export function PlaygroundSection({
           </p>
         </div>
 
-        <div className={cn("grid gap-6", showLivePreview && "lg:grid-cols-[0.42fr_0.58fr]")}>
-          <ConnectAgentCard />
-          {showLivePreview ? <LiveMacContainer /> : null}
+        <div className={cn("grid gap-6 items-start", showLivePreview && "lg:grid-cols-[0.42fr_0.58fr]")}>
+          <div className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:max-w-[560px]">
+            <ConnectAgentCard />
+          </div>
+          {showLivePreview ? (
+            <div className="lg:sticky lg:top-6">
+              <LiveMacContainer />
+            </div>
+          ) : null}
         </div>
-        {hasActiveRun ? (
-          <>
-            <div className="mt-6">
-              <ToolCallTimeline />
-            </div>
-            <div className="mt-6">
-              <RunPanels />
-            </div>
-          </>
-        ) : null}
       </div>
     </section>
   );

@@ -8,10 +8,8 @@ function clamp(value: number, min: number, max: number) {
 
 export function TopNav() {
   const items = [
-    { href: "#playground", label: "How it works" },
     { href: "#gallery", label: "Replay Gallery" },
     { href: "#docs", label: "Docs" },
-    { href: "#playground", label: "Start Run" },
   ];
   const [visibleProgress, setVisibleProgress] = useState(0);
 
@@ -61,6 +59,12 @@ export function TopNav() {
               {item.label}
             </a>
           ))}
+          <a
+            href="#playground"
+            className="rounded-full bg-[#111111] px-5 py-2.5 text-sm text-white transition hover:bg-[#d7ff00] hover:text-[#111111]"
+          >
+            Start Run
+          </a>
         </div>
       </div>
     </nav>

@@ -2,7 +2,7 @@ import { replayCards } from "./data";
 
 export function ReplayGallery() {
   return (
-    <section id="gallery" className="px-6 py-24 md:px-10 lg:px-16">
+    <section id="gallery" className="min-h-screen px-6 py-24 md:px-10 lg:px-16 snap-start">
       <div className="mx-auto max-w-7xl">
         <div className="mb-10 max-w-2xl">
           <div className="text-xs uppercase tracking-[0.24em] text-[#726b5f]">Replay Gallery</div>

@@ -23,10 +23,10 @@ export function HeroSection({
     <section
       id={sectionId}
       className={cn(
-        "relative overflow-hidden",
+        "relative overflow-hidden snap-start",
         embedded
-          ? "min-h-[100svh] pb-16 pt-8"
-          : "px-6 pb-16 pt-8 md:px-10 lg:px-16",
+          ? "min-h-[100svh] flex flex-col justify-center pb-16 pt-8"
+          : "min-h-screen px-6 pb-16 pt-8 md:px-10 lg:px-16",
       )}
     >
       <div className={cn(embedded ? "" : "mx-auto max-w-7xl")}>

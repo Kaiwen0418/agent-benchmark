@@ -18,27 +18,23 @@ export function ImmersiveStage() {
   useEffect(() => {
     const update = () => {
       const target = playgroundRef.current;
-      if (!target) {
-        return;
-      }
-
+      if (!target) return;
       const rect = target.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
       const transitionStart = viewportHeight * 0.92;
       const transitionEnd = viewportHeight * 0.26;
-      const next = clamp(
-        (transitionStart - rect.top) / (transitionStart - transitionEnd),
-        0,
-        1,
+      setProgress(
+        clamp(
+          (transitionStart - rect.top) / (transitionStart - transitionEnd),
+          0,
+          1,
+        ),
       );
-
-      setProgress(next);
     };
 
     update();
     window.addEventListener("scroll", update, { passive: true });
     window.addEventListener("resize", update);
-
     return () => {
       window.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
@@ -92,7 +88,7 @@ export function ImmersiveStage() {
                           <div
                             className="absolute inset-0"
                             style={{
-                              opacity: 1 - screenTransitionProgress,
+              opacity: 1 - screenTransitionProgress,
                               transition: "opacity 180ms linear",
                             }}
                           >

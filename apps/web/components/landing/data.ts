@@ -59,8 +59,48 @@ export const docsBlocks = {
 }`,
   rest: `curl -X POST https://agentbench.app/api/runs \\
   -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer <token>" \\
   -d '{
     "endpoint": "https://agent.local/mcp",
     "benchmark": "web-search"
   }'`,
+  response: `{
+  "runId": "run_9f3kx8",
+  "status": "running",
+  "streamUrl": "https://agentbench.app/api/runs/run_9f3kx8/stream",
+  "replayUrl": "https://agentbench.app/replay/run_9f3kx8"
+}`,
+  webhook: `// POST to your endpoint on run completion
+{
+  "event": "run.completed",
+  "runId": "run_9f3kx8",
+  "benchmark": "web-search",
+  "score": 87,
+  "safetyPass": true,
+  "durationMs": 74200,
+  "replayUrl": "https://agentbench.app/replay/run_9f3kx8"
+}`,
 };
+
+export const docsSteps = [
+  {
+    step: "01",
+    title: "Connect your agent",
+    body: "Point AgentBench at any MCP-compatible agent endpoint. No SDK required — just a reachable URL.",
+  },
+  {
+    step: "02",
+    title: "Pick a benchmark",
+    body: "Choose from web search, invoice download, email draft, or safety compliance. Each benchmark is a live browser task.",
+  },
+  {
+    step: "03",
+    title: "Watch it run",
+    body: "Stream the browser session in real time. Every tool call, navigation, and state change is captured.",
+  },
+  {
+    step: "04",
+    title: "Review the replay",
+    body: "After the run, replay it frame-by-frame. Share the link or register a webhook to receive the score.",
+  },
+];

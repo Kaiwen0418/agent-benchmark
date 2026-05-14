@@ -6,20 +6,20 @@ import { RunConnectionCard } from "./RunConnectionCard";
 import { usePlaygroundStore } from "@/lib/playground-store";
 
 export function ConnectAgentCard() {
-  const endpoint = usePlaygroundStore((state) => state.endpoint);
-  const apiKey = usePlaygroundStore((state) => state.apiKey);
   const benchmark = usePlaygroundStore((state) => state.benchmark);
   const phase = usePlaygroundStore((state) => state.phase);
   const quota = usePlaygroundStore((state) => state.quota);
   const quotaLoading = usePlaygroundStore((state) => state.quotaLoading);
   const runError = usePlaygroundStore((state) => state.runError);
-  const setEndpoint = usePlaygroundStore((state) => state.setEndpoint);
-  const setApiKey = usePlaygroundStore((state) => state.setApiKey);
+  const score = usePlaygroundStore((state) => state.score);
+  const timeline = usePlaygroundStore((state) => state.timeline);
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
   const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
   const startRun = usePlaygroundStore((state) => state.startRun);
-  const reset = usePlaygroundStore((state) => state.reset);
+  const stopRun = usePlaygroundStore((state) => state.stopRun);
+
   const isRunning = phase === "booting" || phase === "running";
+  const isDone = phase === "completed" || phase === "failed";
   const isQuotaBlocked = Boolean(quota && quota.remaining <= 0);
 
   useEffect(() => {
@@ -48,31 +48,12 @@ export function ConnectAgentCard() {
 
       <div className="space-y-4">
         <label className="block">
-          <span className="mb-2 block text-[13px] text-[#5d574d]">MCP endpoint</span>
-          <input
-            value={endpoint}
-            onChange={(event) => setEndpoint(event.target.value)}
-            placeholder="https://agent.local/mcp"
-            className="w-full rounded-[1rem] border border-[#d8d1c4] bg-white px-4 py-2.5 text-sm text-[#111111] outline-none transition focus:border-[#111111]"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-2 block text-[13px] text-[#5d574d]">Optional auth token</span>
-          <input
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder="agnt_..."
-            className="w-full rounded-[1rem] border border-[#d8d1c4] bg-white px-4 py-2.5 text-sm text-[#111111] outline-none transition focus:border-[#111111]"
-          />
-        </label>
-
-        <label className="block">
           <span className="mb-2 block text-[13px] text-[#5d574d]">Benchmark</span>
           <select
             value={benchmark}
             onChange={(event) => setBenchmark(event.target.value as typeof benchmark)}
-            className="w-full rounded-[1rem] border border-[#d8d1c4] bg-white px-4 py-2.5 text-sm text-[#111111] outline-none transition focus:border-[#111111]"
+            disabled={isRunning}
+            className="w-full rounded-[1rem] border border-[#d8d1c4] bg-white px-4 py-2.5 text-sm text-[#111111] outline-none transition focus:border-[#111111] disabled:opacity-60"
           >
             {benchmarkOptions.map((item) => (
               <option key={item.value} value={item.value}>
@@ -93,31 +74,85 @@ export function ConnectAgentCard() {
         ) : null}
 
         <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => void startRun()}
-            disabled={isRunning || quotaLoading || isQuotaBlocked}
-            className="flex-1 rounded-full bg-[#111111] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#d7ff00] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isRunning
-              ? "Agent Running"
-              : isQuotaBlocked
+          {isRunning ? (
+            <button
+              type="button"
+              onClick={stopRun}
+              className="flex-1 rounded-full bg-[#ff8f6b] px-5 py-3 text-sm font-medium text-[#111111] transition hover:bg-[#ff6b3d]"
+            >
+              Stop Run
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void startRun()}
+              disabled={isRunning || quotaLoading || isQuotaBlocked}
+              className="flex-1 rounded-full bg-[#111111] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#d7ff00] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isQuotaBlocked
                 ? quota?.mode === "guest"
                   ? "Guest Trial Used"
                   : "Daily Limit Reached"
                 : "Start Free Run"}
-          </button>
-          <button
-            type="button"
-            onClick={reset}
-            className="rounded-full border border-[#d8d1c4] px-5 py-3 text-sm text-[#111111]"
-          >
-            Reset
-          </button>
+            </button>
+          )}
         </div>
       </div>
 
-      <RunConnectionCard />
+      {isDone ? (
+        <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
+          <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Run Complete</div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="rounded-[1rem] bg-[#d7ff00] p-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[#4b5520]">Score</div>
+              <div className="mt-1.5 text-2xl font-medium text-[#111111]">{score ?? "--"}</div>
+            </div>
+            <div className="rounded-[1rem] bg-[#efede6] p-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[#6a655c]">Safety</div>
+              <div className="mt-1.5 text-sm text-[#111111]">
+                {phase === "completed" ? "Respected" : "N/A"}
+              </div>
+            </div>
+            <div className="rounded-[1rem] bg-[#111111] p-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-white/50">Steps</div>
+              <div className="mt-1.5 text-sm text-white">
+                {score ? `${Math.max(1, Math.round(score / 10))}` : "--"}
+              </div>
+            </div>
+          </div>
+
+          {timeline.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-[#8f8a80]">Recent events</div>
+              <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
+              {timeline.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between gap-3 rounded-[0.75rem] bg-[#f6f3ed] px-3 py-2"
+                >
+                  <span className="truncate text-[13px] text-[#111111]">{entry.label}</span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] ${
+                      entry.status === "success"
+                        ? "bg-[#d7ff00] text-[#111111]"
+                        : entry.status === "warning"
+                          ? "bg-[#ffd24f] text-[#111111]"
+                          : entry.status === "error"
+                            ? "bg-[#ff8f6b] text-[#111111]"
+                            : "bg-[#efede6] text-[#5c574d]"
+                    }`}
+                  >
+                    {entry.status}
+                  </span>
+                </div>
+              ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <RunConnectionCard />
+      )}
     </div>
   );
 }
