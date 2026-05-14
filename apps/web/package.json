@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node ./scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

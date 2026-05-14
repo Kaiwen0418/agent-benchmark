@@ -1,11 +1,11 @@
 import type { Page } from "playwright";
 import {
+  agentbenchToolCallSchema,
   browserClickArgsSchema,
   browserDownloadArgsSchema,
   browserExtractTextArgsSchema,
   browserGotoArgsSchema,
   browserScreenshotArgsSchema,
-  browserToolCallSchema,
   browserTypeArgsSchema,
 } from "@agentbench/mcp-tools";
 
@@ -42,5 +42,5 @@ export function parseBrowserDownloadArgs(args: unknown) {
 }
 
 export function validateBrowserToolCall(input: unknown) {
-  return browserToolCallSchema.parse(input);
+  return agentbenchToolCallSchema.parse(input);
 }

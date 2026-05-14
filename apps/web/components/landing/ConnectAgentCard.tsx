@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { benchmarkOptions } from "./data";
+import { RunConnectionCard } from "./RunConnectionCard";
 import { usePlaygroundStore } from "@/lib/playground-store";
 
 export function ConnectAgentCard() {
@@ -115,6 +116,8 @@ export function ConnectAgentCard() {
           </button>
         </div>
       </div>
+
+      <RunConnectionCard />
     </div>
   );
 }

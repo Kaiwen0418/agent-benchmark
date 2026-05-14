@@ -21,32 +21,28 @@ function sanitizeFileName(input: string) {
   return input.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }
 
-export class McpBrowserSession {
+type ToolSessionOptions = {
+  artifactDirFactory?: () => Promise<string>;
+};
+
+export class ToolSession {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
-  private sessionDirPromise: Promise<string> | null = null;
+  private artifactDirPromise: Promise<string> | null = null;
 
-  private async ensureSessionDir() {
-    if (!this.sessionDirPromise) {
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const dir = path.resolve(process.cwd(), runnerConfig.artifactsDir, "mcp", stamp);
-      this.sessionDirPromise = mkdir(dir, { recursive: true }).then(() => dir);
+  constructor(private readonly options: ToolSessionOptions = {}) {}
+
+  private async ensureArtifactDir() {
+    if (!this.options.artifactDirFactory) {
+      throw new Error("Artifact directory is not configured for this tool session.");
     }
 
-    return this.sessionDirPromise;
-  }
+    if (!this.artifactDirPromise) {
+      this.artifactDirPromise = this.options.artifactDirFactory();
+    }
 
-  async writeFile(args: unknown) {
-    const dir = await this.ensureSessionDir();
-    const input = fileWriteArgsSchema.parse(args);
-    const fileName = sanitizeFileName(input.path);
-    const absolutePath = path.join(dir, fileName);
-    await writeFile(absolutePath, input.contents, "utf8");
-    return {
-      path: absolutePath,
-      fileName,
-    };
+    return this.artifactDirPromise;
   }
 
   async ensurePage() {
@@ -105,18 +101,20 @@ export class McpBrowserSession {
   }
 
   async screenshot(args: unknown) {
-    const dir = await this.ensureSessionDir();
-    const fileName = typeof args === "object" && args && "path" in args && typeof args.path === "string"
-      ? sanitizeFileName(args.path)
-      : `screenshot-${Date.now()}.png`;
-    const absolutePath = path.join(dir, fileName);
     const page = await this.ensurePage();
+    const dir = await this.ensureArtifactDir();
+    const fileName =
+      typeof args === "object" && args && "path" in args && typeof args.path === "string"
+        ? sanitizeFileName(args.path)
+        : `screenshot-${Date.now()}.png`;
+    const absolutePath = path.join(dir, fileName);
     await browserScreenshot(page, {
       ...(typeof args === "object" && args ? args : {}),
       path: absolutePath,
     });
     return {
       path: absolutePath,
+      fileName,
       url: page.url(),
     };
   }
@@ -129,6 +127,18 @@ export class McpBrowserSession {
       page.locator(selector).click(),
     ]);
     return this.saveDownload(download);
+  }
+
+  async writeFile(args: unknown) {
+    const dir = await this.ensureArtifactDir();
+    const input = fileWriteArgsSchema.parse(args);
+    const fileName = sanitizeFileName(input.path);
+    const absolutePath = path.join(dir, fileName);
+    await writeFile(absolutePath, input.contents, "utf8");
+    return {
+      path: absolutePath,
+      fileName,
+    };
   }
 
   async openMockEmail(args: unknown) {
@@ -164,8 +174,16 @@ export class McpBrowserSession {
     };
   }
 
+  async close() {
+    await this.context?.close().catch(() => undefined);
+    await this.browser?.close().catch(() => undefined);
+    this.page = null;
+    this.context = null;
+    this.browser = null;
+  }
+
   private async saveDownload(download: Download) {
-    const dir = await this.ensureSessionDir();
+    const dir = await this.ensureArtifactDir();
     const suggestedName = download.suggestedFilename();
     const fileName = sanitizeFileName(suggestedName || `download-${Date.now()}`);
     const absolutePath = path.join(dir, fileName);
@@ -176,12 +194,11 @@ export class McpBrowserSession {
       url: this.page?.url() ?? null,
     };
   }
+}
 
-  async close() {
-    await this.context?.close().catch(() => undefined);
-    await this.browser?.close().catch(() => undefined);
-    this.page = null;
-    this.context = null;
-    this.browser = null;
-  }
+export async function createMcpArtifactDir() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const dir = path.resolve(process.cwd(), runnerConfig.artifactsDir, "mcp", stamp);
+  await mkdir(dir, { recursive: true });
+  return dir;
 }

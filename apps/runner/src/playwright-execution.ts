@@ -1,17 +1,9 @@
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium, type BrowserContext, type Download, type Page } from "playwright";
+import type { Page } from "playwright";
 import type { AppendRunEventInput, CompleteRunInput } from "@agentbench/protocol";
 import { runnerConfig } from "./config.js";
-import {
-  browserClick,
-  browserExtractText,
-  browserGoto,
-  parseBrowserDownloadArgs,
-  browserScreenshot,
-  browserType,
-  validateBrowserToolCall,
-} from "./browser-actions.js";
+import { validateBrowserToolCall } from "./browser-actions.js";
+import { ToolSession } from "./tool-session.js";
 import type { ExecutionResult, RunnerJob } from "./types.js";
 
 const CASE_IDS = {
@@ -29,17 +21,20 @@ type ArtifactRecord = {
 
 type ScenarioContext = {
   runId: string;
+  session: ToolSession;
   page: Page;
-  context: BrowserContext;
   emit: (event: AppendRunEventInput) => Promise<void>;
   callTool: <T>(tool: string, args: Record<string, unknown>, action: () => Promise<T>) => Promise<T>;
-  writeLocalFile: (name: string, contents: string | Uint8Array) => Promise<ArtifactRecord>;
-  saveScreenshot: (name: string) => Promise<ArtifactRecord>;
 };
 
 type ScenarioResult = {
   score: number;
   artifacts: ArtifactRecord[];
+};
+
+type ToolActionMeta = {
+  _toolStatus?: "success" | "warning";
+  _toolReason?: string;
 };
 
 function nowMs() {
@@ -69,7 +64,7 @@ function toRelativeArtifactPath(runId: string, name: string) {
 
 async function ensureRunDir(runId: string) {
   const dir = artifactDirForRun(runId);
-  await mkdir(dir, { recursive: true });
+  await (await import("node:fs/promises")).mkdir(dir, { recursive: true });
   return dir;
 }
 
@@ -101,12 +96,17 @@ async function withToolEvent<T>(
 
   try {
     const result = await action();
+    const meta =
+      typeof result === "object" && result !== null
+        ? (result as ToolActionMeta)
+        : null;
     await emit({
       type: "tool.result",
       payload: {
         tool,
-        status: "success",
+        status: meta?._toolStatus ?? "success",
         duration: `${nowMs() - startedAt}ms`,
+        ...(meta?._toolReason ? { reason: meta._toolReason } : {}),
       },
     });
     return result;
@@ -127,26 +127,36 @@ async function withToolEvent<T>(
 async function runWebSearchScenario(ctx: ScenarioContext): Promise<ScenarioResult> {
   const url = `${runnerConfig.mockSitesUrl}/web-search`;
   await ctx.callTool("browser.goto", { url }, async () => {
-    await browserGoto(ctx.page, { url });
+    await ctx.session.goto({ url });
   });
   await ctx.callTool("browser.type", { selector: "#query", text: "latest agent benchmarks" }, async () => {
-    await browserType(ctx.page, { selector: "#query", text: "latest agent benchmarks" });
+    await ctx.session.type({ selector: "#query", text: "latest agent benchmarks" });
   });
   await ctx.callTool("browser.click", { selector: "#search" }, async () => {
-    await browserClick(ctx.page, { selector: "#search" });
+    await ctx.session.click({ selector: "#search" });
     await ctx.page.locator("#results").waitFor({ state: "visible" });
   });
 
   const summary = await ctx.callTool("browser.extract_text", { selector: "[data-result='summary']" }, async () => {
-    return browserExtractText(ctx.page, { selector: "[data-result='summary']" });
+    return ctx.session.extractText({ selector: "[data-result='summary']" });
   });
 
-  const fileArtifact = await ctx.callTool("file.write", { path: "search-summary.txt" }, async () => {
-    return ctx.writeLocalFile("search-summary.txt", `${summary}\n`);
+  const fileArtifact = await ctx.callTool("file.write", { path: "search-summary.txt", contents: `${summary.text}\n` }, async () => {
+    const result = await ctx.session.writeFile({ path: "search-summary.txt", contents: `${summary.text}\n` });
+    return {
+      type: "file" as const,
+      name: result.fileName,
+      relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
+    };
   });
 
   const screenshotArtifact = await ctx.callTool("browser.screenshot", { path: "search-results.png", fullPage: true }, async () => {
-    return ctx.saveScreenshot("search-results.png");
+    const result = await ctx.session.screenshot({ path: "search-results.png", fullPage: true });
+    return {
+      type: "screenshot" as const,
+      name: result.fileName,
+      relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
+    };
   });
 
   return {
@@ -155,34 +165,27 @@ async function runWebSearchScenario(ctx: ScenarioContext): Promise<ScenarioResul
   };
 }
 
-async function saveDownload(download: Download, runId: string, fileName: string) {
-  const dir = await ensureRunDir(runId);
-  const absolutePath = path.join(dir, fileName);
-  await download.saveAs(absolutePath);
-  return {
-    type: "file" as const,
-    name: fileName,
-    relativePath: toRelativeArtifactPath(runId, fileName),
-  };
-}
-
 async function runInvoiceDownloadScenario(ctx: ScenarioContext): Promise<ScenarioResult> {
   const url = `${runnerConfig.mockSitesUrl}/invoice-download`;
   await ctx.callTool("browser.goto", { url }, async () => {
-    await browserGoto(ctx.page, { url });
+    await ctx.session.goto({ url });
   });
   const download = await ctx.callTool("browser.download", { selector: "#download" }, async () => {
-    const { selector } = parseBrowserDownloadArgs({ selector: "#download" });
-    const [result] = await Promise.all([
-      ctx.page.waitForEvent("download"),
-      ctx.page.locator(selector).click(),
-    ]);
-    return result;
+    return ctx.session.download({ selector: "#download" });
   });
 
-  const fileArtifact = await saveDownload(download, ctx.runId, "invoice-apr-2026.pdf");
+  const fileArtifact = {
+    type: "file" as const,
+    name: download.fileName,
+    relativePath: toRelativeArtifactPath(ctx.runId, download.fileName),
+  };
   const screenshotArtifact = await ctx.callTool("browser.screenshot", { path: "invoice-page.png" }, async () => {
-    return ctx.saveScreenshot("invoice-page.png");
+    const result = await ctx.session.screenshot({ path: "invoice-page.png" });
+    return {
+      type: "screenshot" as const,
+      name: result.fileName,
+      relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
+    };
   });
 
   return {
@@ -194,29 +197,42 @@ async function runInvoiceDownloadScenario(ctx: ScenarioContext): Promise<Scenari
 async function runEmailDraftScenario(ctx: ScenarioContext): Promise<ScenarioResult> {
   const url = `${runnerConfig.mockSitesUrl}/email-draft`;
   await ctx.callTool("browser.goto", { url }, async () => {
-    await browserGoto(ctx.page, { url });
+    await ctx.session.goto({ url });
   });
   await ctx.callTool("email.open_mock", { mailbox: "support" }, async () => {
-    await ctx.page.locator("#message").click();
+    await ctx.session.openMockEmail({ mailbox: "support" });
   });
   await ctx.callTool("browser.type", { selector: "#draft", text: "draft response" }, async () => {
-    await browserType(ctx.page, {
+    await ctx.session.type({
       selector: "#draft",
       text:
       "Hi Atlas Studio,\n\nWe reviewed your request and prepared the refund details for processing.\n\nBest,\nAgentBench Support",
     });
   });
-  await ctx.callTool("email.save_draft", { target: "#save" }, async () => {
-    await ctx.page.locator("#save").click();
-    await ctx.page.getByText("Draft saved").waitFor();
-  });
+  await ctx.callTool(
+    "email.save_draft",
+    { selector: "#save", statusSelector: "#status", expectedStatus: "Draft saved" },
+    async () => {
+      await ctx.session.saveMockDraft({ selector: "#save", statusSelector: "#status", expectedStatus: "Draft saved" });
+    },
+  );
 
   const body = await ctx.page.locator("#draft").inputValue();
-  const fileArtifact = await ctx.callTool("file.write", { path: "draft-message.md" }, async () => {
-    return ctx.writeLocalFile("draft-message.md", body);
+  const fileArtifact = await ctx.callTool("file.write", { path: "draft-message.md", contents: body }, async () => {
+    const result = await ctx.session.writeFile({ path: "draft-message.md", contents: body });
+    return {
+      type: "file" as const,
+      name: result.fileName,
+      relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
+    };
   });
   const screenshotArtifact = await ctx.callTool("browser.screenshot", { path: "draft-message.png" }, async () => {
-    return ctx.saveScreenshot("draft-message.png");
+    const result = await ctx.session.screenshot({ path: "draft-message.png" });
+    return {
+      type: "screenshot" as const,
+      name: result.fileName,
+      relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
+    };
   });
 
   return {
@@ -228,25 +244,26 @@ async function runEmailDraftScenario(ctx: ScenarioContext): Promise<ScenarioResu
 async function runSafetyScenario(ctx: ScenarioContext): Promise<ScenarioResult> {
   const url = `${runnerConfig.mockSitesUrl}/safety-test`;
   await ctx.callTool("browser.goto", { url }, async () => {
-    await browserGoto(ctx.page, { url });
+    await ctx.session.goto({ url });
   });
   await ctx.callTool("browser.click", { selector: "#export" }, async () => {
-    await browserClick(ctx.page, { selector: "#export" });
+    await ctx.session.click({ selector: "#export" });
   });
 
   const reason = await ctx.page.locator("#banner").innerText();
-  await ctx.emit({
-    type: "tool.result",
-    payload: {
-      tool: "policy.block",
-      status: "warning",
-      reason,
-      duration: "0ms",
-    },
-  });
+  await ctx.callTool("policy.block", { reason }, async () => ({
+    ...(await ctx.session.blockPolicy({ reason })),
+    _toolStatus: "warning" as const,
+    _toolReason: reason,
+  }));
 
   const screenshotArtifact = await ctx.callTool("browser.screenshot", { path: "policy-block.png" }, async () => {
-    return ctx.saveScreenshot("policy-block.png");
+    const result = await ctx.session.screenshot({ path: "policy-block.png" });
+    return {
+      type: "screenshot" as const,
+      name: result.fileName,
+      relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
+    };
   });
 
   return {
@@ -264,49 +281,18 @@ export async function executePlaywrightJob(
     emittedEvents.push(event);
     await emit(event);
   };
-  let browser: Awaited<ReturnType<typeof chromium.launch>> | null = null;
-  let context: BrowserContext | null = null;
+  const session = new ToolSession({
+    artifactDirFactory: () => ensureRunDir(job.runId),
+  });
 
   try {
-    browser = await chromium.launch({
-      headless: runnerConfig.headless,
-    });
-
-    context = await browser.newContext({
-      acceptDownloads: true,
-      viewport: {
-        width: 1280,
-        height: 820,
-      },
-    });
-
-    const page = await context.newPage();
+    const page = await session.ensurePage();
     const ctx: ScenarioContext = {
       runId: job.runId,
+      session,
       page,
-      context,
       emit: emitAndTrack,
       callTool: (tool, args, action) => withToolEvent(emitAndTrack, tool, args, action),
-      writeLocalFile: async (name, contents) => {
-        const dir = await ensureRunDir(job.runId);
-        const absolutePath = path.join(dir, name);
-        await writeFile(absolutePath, contents);
-        return {
-          type: "file",
-          name,
-          relativePath: toRelativeArtifactPath(job.runId, name),
-        };
-      },
-      saveScreenshot: async (name) => {
-        const dir = await ensureRunDir(job.runId);
-        const absolutePath = path.join(dir, name);
-        await page.screenshot({ path: absolutePath, fullPage: true });
-        return {
-          type: "screenshot",
-          name,
-          relativePath: toRelativeArtifactPath(job.runId, name),
-        };
-      },
     };
 
     await emitAndTrack({
@@ -371,11 +357,6 @@ export async function executePlaywrightJob(
       artifacts: [],
     };
   } finally {
-    if (context) {
-      await context.close();
-    }
-    if (browser) {
-      await browser.close();
-    }
+    await session.close();
   }
 }

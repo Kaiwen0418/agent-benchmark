@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createRunInputSchema } from "@agentbench/protocol";
-import { getCurrentUser, getOrCreateGuestId, GUEST_COOKIE_NAME } from "@/lib/auth";
+import {
+  getCurrentUser,
+  getOrCreateGuestId,
+  GUEST_COOKIE_NAME,
+  isDevQuotaBypassed,
+} from "@/lib/auth";
 import { createBenchmarkRun, getQuotaStatus } from "@/lib/db";
 
 export async function POST(request: Request) {
@@ -8,10 +13,19 @@ export async function POST(request: Request) {
   const input = createRunInputSchema.parse(json);
   const user = await getCurrentUser();
   const guest = user ? null : await getOrCreateGuestId();
-  const quota = await getQuotaStatus({
-    userId: user?.id ?? null,
-    guestId: guest?.guestId ?? null,
-  });
+  const quota = isDevQuotaBypassed(request)
+    ? {
+        mode: user ? "user" : "guest",
+        isAuthenticated: Boolean(user),
+        used: 0,
+        limit: 999,
+        remaining: 999,
+        resetAt: null,
+      }
+    : await getQuotaStatus({
+        userId: user?.id ?? null,
+        guestId: guest?.guestId ?? null,
+      });
 
   if (quota.remaining <= 0) {
     const response = NextResponse.json(

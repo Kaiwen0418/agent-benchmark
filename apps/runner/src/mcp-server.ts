@@ -11,10 +11,13 @@ import {
   emailOpenMockArgsSchema,
   emailSaveDraftArgsSchema,
   fileWriteArgsSchema,
+  policyBlockArgsSchema,
 } from "@agentbench/mcp-tools";
-import { McpBrowserSession } from "./mcp-browser-session.js";
+import { ToolSession, createMcpArtifactDir } from "./tool-session.js";
 
-const session = new McpBrowserSession();
+const session = new ToolSession({
+  artifactDirFactory: createMcpArtifactDir,
+});
 
 type BrowserGotoArgs = z.infer<typeof browserGotoArgsSchema>;
 type BrowserClickArgs = z.infer<typeof browserClickArgsSchema>;
@@ -25,6 +28,7 @@ type BrowserDownloadArgs = z.infer<typeof browserDownloadArgsSchema>;
 type FileWriteArgs = z.infer<typeof fileWriteArgsSchema>;
 type EmailOpenMockArgs = z.infer<typeof emailOpenMockArgsSchema>;
 type EmailSaveDraftArgs = z.infer<typeof emailSaveDraftArgsSchema>;
+type PolicyBlockArgs = z.infer<typeof policyBlockArgsSchema>;
 
 const server = new McpServer({
   name: "agentbench-runner-browser",
@@ -213,6 +217,27 @@ server.registerTool(
         {
           type: "text",
           text: `Saved draft with status ${result.expectedStatus}`,
+        },
+      ],
+      structuredContent: result,
+    };
+  },
+);
+
+server.registerTool(
+  "policy.block",
+  {
+    title: "Record policy block",
+    description: "Record that an action was blocked by benchmark policy.",
+    inputSchema: policyBlockArgsSchema,
+  },
+  async (args: PolicyBlockArgs) => {
+    const result = await session.blockPolicy(args);
+    return {
+      content: [
+        {
+          type: "text",
+          text: result.reason,
         },
       ],
       structuredContent: result,

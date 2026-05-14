@@ -60,3 +60,27 @@ export function isSupabaseEnabled() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   );
 }
+
+function isLocalHost(host: string | null) {
+  if (!host) {
+    return false;
+  }
+
+  const normalized = host.toLowerCase();
+  return (
+    normalized.startsWith("localhost:") ||
+    normalized === "localhost" ||
+    normalized.startsWith("127.0.0.1:") ||
+    normalized === "127.0.0.1"
+  );
+}
+
+export function isDevQuotaBypassed(request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return false;
+  }
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = request.headers.get("host");
+  return isLocalHost(forwardedHost) || isLocalHost(host);
+}

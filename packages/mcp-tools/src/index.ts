@@ -107,6 +107,44 @@ export const emailSaveDraftArgsSchema = z.object({
 
 export type EmailSaveDraftArgs = z.infer<typeof emailSaveDraftArgsSchema>;
 
+export const policyBlockArgsSchema = z.object({
+  reason: z.string().min(1),
+});
+
+export type PolicyBlockArgs = z.infer<typeof policyBlockArgsSchema>;
+
+export const agentbenchToolNameSchema = z.enum([
+  ...browserToolNameSchema.options,
+  "file.write",
+  "email.open_mock",
+  "email.save_draft",
+  "policy.block",
+]);
+
+export type AgentbenchToolName = z.infer<typeof agentbenchToolNameSchema>;
+
+export const agentbenchToolCallSchema = z.discriminatedUnion("tool", [
+  ...browserToolCallSchema.options,
+  z.object({
+    tool: z.literal("file.write"),
+    args: fileWriteArgsSchema,
+  }),
+  z.object({
+    tool: z.literal("email.open_mock"),
+    args: emailOpenMockArgsSchema,
+  }),
+  z.object({
+    tool: z.literal("email.save_draft"),
+    args: emailSaveDraftArgsSchema,
+  }),
+  z.object({
+    tool: z.literal("policy.block"),
+    args: policyBlockArgsSchema,
+  }),
+]);
+
+export type AgentbenchToolCall = z.infer<typeof agentbenchToolCallSchema>;
+
 export const browserToolDefinitions = [
   {
     name: "browser.goto",
@@ -161,5 +199,11 @@ export const browserToolDefinitions = [
     title: "Save mock email draft",
     description: "Save a draft in the deterministic mock email workspace.",
     inputSchema: emailSaveDraftArgsSchema,
+  },
+  {
+    name: "policy.block",
+    title: "Record policy block",
+    description: "Record that an action was blocked by benchmark policy.",
+    inputSchema: policyBlockArgsSchema,
   },
 ] as const;
