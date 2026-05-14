@@ -90,8 +90,20 @@ export function RunConnectionCard() {
     ].join("\n");
   }, [payload]);
 
-  if (!runId || !payload) {
+  if (!runId) {
     return null;
+  }
+
+  if (!payload) {
+    return (
+      <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
+        <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Run Ready</div>
+        <div className="mt-3 space-y-2">
+          <div className="h-4 w-3/4 animate-pulse rounded-full bg-[#efede6]" />
+          <div className="h-4 w-1/2 animate-pulse rounded-full bg-[#efede6]" />
+        </div>
+      </div>
+    );
   }
 
   const isActive = phase === "booting" || phase === "running";
@@ -106,7 +118,7 @@ export function RunConnectionCard() {
         <div>
           <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Run Ready</div>
           <h3 className="mt-1.5 text-[1.2rem] font-medium text-[#111111]">
-            Connect your agent without exposing raw setup by default.
+            Connect your agent.
           </h3>
         </div>
         <div className="flex items-center gap-2">
@@ -137,9 +149,9 @@ export function RunConnectionCard() {
                   : "border-[#d8d1c4] bg-[#faf7f1] text-[#111111]"
               }`}
             >
-              <div className="font-medium">Copy Agent Link</div>
+              <div className="font-medium">Agent Link</div>
               <div className={`mt-1 text-xs ${method === "link" ? "text-[#d9d9d9]" : "text-[#6a655c]"}`}>
-                Best for most users.
+                Recommended
               </div>
             </button>
             <button
@@ -151,9 +163,9 @@ export function RunConnectionCard() {
                   : "border-[#d8d1c4] bg-[#faf7f1] text-[#111111]"
               }`}
             >
-              <div className="font-medium">Use This Browser</div>
+              <div className="font-medium">This Browser</div>
               <div className={`mt-1 text-xs ${method === "browser" ? "text-[#d9d9d9]" : "text-[#6a655c]"}`}>
-                For an agent already controlling this page.
+                Agent controls page
               </div>
             </button>
             <button
@@ -165,9 +177,9 @@ export function RunConnectionCard() {
                   : "border-[#d8d1c4] bg-[#faf7f1] text-[#111111]"
               }`}
             >
-              <div className="font-medium">Advanced Config</div>
+              <div className="font-medium">Advanced</div>
               <div className={`mt-1 text-xs ${method === "advanced" ? "text-[#d9d9d9]" : "text-[#6a655c]"}`}>
-                Raw JSON and local MCP details.
+                Raw JSON + MCP
               </div>
             </button>
           </div>
@@ -175,9 +187,9 @@ export function RunConnectionCard() {
           <div className="mt-5 rounded-[1.2rem] bg-[#f6f3ed] p-4">
             {method === "link" ? (
               <>
-                <div className="text-sm font-medium text-[#111111]">Send this to your agent</div>
+                <div className="text-sm font-medium text-[#111111]">Send to your agent</div>
                 <p className="mt-2 text-sm leading-7 text-[#585248]">
-                  Share one readable prompt and one URL. The agent can open the page and extract the embedded config itself.
+                  One prompt, one URL. The agent opens the page and self-configures.
                 </p>
                 <pre className="mt-4 whitespace-pre-wrap rounded-[1rem] bg-white p-4 text-sm leading-7 text-[#25221d]">
                   {payload.prompt}
@@ -203,9 +215,9 @@ export function RunConnectionCard() {
 
             {method === "browser" ? (
               <>
-                <div className="text-sm font-medium text-[#111111]">Use the current browser agent</div>
+                <div className="text-sm font-medium text-[#111111]">Browser agent</div>
                 <p className="mt-2 text-sm leading-7 text-[#585248]">
-                  If an agent is already controlling this browser, tell it to open the connection page and follow its instructions.
+                  Tell the agent controlling this browser to open the connection page.
                 </p>
                 <pre className="mt-4 whitespace-pre-wrap rounded-[1rem] bg-white p-4 text-sm leading-7 text-[#25221d]">
                   {browserPrompt}
@@ -233,7 +245,7 @@ export function RunConnectionCard() {
             {method === "advanced" ? (
               <>
                 <div className="text-sm font-medium text-[#111111]">Raw config</div>
-                <p className="mt-2 text-sm leading-7 text-[#585248]">{payload.localDemo.note}</p>
+                <p className="mt-2 text-sm leading-7 text-[#585248]">Full JSON payload for direct MCP wiring.</p>
                 <pre className="mt-4 overflow-x-auto rounded-[1rem] bg-[#111111] p-4 text-xs leading-6 text-[#d7ff00]">
                   {JSON.stringify(payload, null, 2)}
                 </pre>

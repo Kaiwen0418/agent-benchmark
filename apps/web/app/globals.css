@@ -11,6 +11,21 @@ body {
   @apply bg-background text-foreground antialiased;
 }
 
+/* Thin scrollbar for light panels */
+.scroll-panel::-webkit-scrollbar {
+  width: 3px;
+}
+.scroll-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-panel::-webkit-scrollbar-thumb {
+  background: rgba(17, 17, 17, 0.12);
+  border-radius: 999px;
+}
+.scroll-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(17, 17, 17, 0.25);
+}
+
 /* Thin scrollbar for dark code blocks */
 .code-block-pre::-webkit-scrollbar {
   height: 3px;
