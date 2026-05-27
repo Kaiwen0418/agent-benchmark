@@ -1,6 +1,13 @@
 "use client";
 
-import type { Artifact, BenchmarkRun, QuotaStatus, RunEvent, RunStatus } from "@agentbench/protocol";
+import type {
+  Artifact,
+  BenchmarkRun,
+  QuotaStatus,
+  RunEvent,
+  RunExecutionMode,
+  RunStatus,
+} from "@agentbench/protocol";
 import { create } from "zustand";
 
 export type PlaygroundBenchmark =
@@ -33,6 +40,8 @@ type PlaygroundStore = {
   apiKey: string;
   benchmark: PlaygroundBenchmark;
   currentRunId: string | null;
+  currentExecutionMode: RunExecutionMode | null;
+  liveViewUrl: string | null;
   phase: RunPhase;
   statusLine: string;
   score: number | null;
@@ -41,6 +50,7 @@ type PlaygroundStore = {
   timeline: TimelineEntry[];
   reasoning: string[];
   artifacts: ArtifactEntry[];
+  liveFrameUrl: string | null;
   bootMessages: string[];
   quota: QuotaStatus | null;
   quotaLoading: boolean;
@@ -52,7 +62,7 @@ type PlaygroundStore = {
   setActiveTab: (value: PanelTab) => void;
   setLiveSlide: (index: number) => void;
   fetchQuota: () => Promise<void>;
-  startRun: () => Promise<void>;
+  startRun: (mode?: RunExecutionMode) => Promise<void>;
   stopRun: () => void;
   reset: () => void;
 };
@@ -71,10 +81,12 @@ const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
 };
 
 const initialState = {
-  endpoint: "https://agent.local/mcp",
+  endpoint: "",
   apiKey: "",
   benchmark: "web-search" as PlaygroundBenchmark,
   currentRunId: null,
+  currentExecutionMode: null,
+  liveViewUrl: null,
   phase: "idle" as RunPhase,
   statusLine: "Run a benchmark to see your agent in action.",
   score: null,
@@ -83,6 +95,7 @@ const initialState = {
   timeline: [] as TimelineEntry[],
   reasoning: [] as string[],
   artifacts: [] as ArtifactEntry[],
+  liveFrameUrl: null as string | null,
   bootMessages: [] as string[],
   quota: null as QuotaStatus | null,
   quotaLoading: false,
@@ -124,17 +137,27 @@ function isTerminalStatus(status: RunStatus) {
 function eventSummary(event: RunEvent) {
   switch (event.type) {
     case "run.created":
-      return "Run queued";
+      return event.payload.status === "waiting_for_agent" ? "Waiting for agent connection" : "Run queued";
     case "run.assigned":
       return "Runner assigned";
     case "run.starting":
       return "Sandbox starting";
     case "run.running":
-      return "Sandbox ready";
+      return event.payload.source === "mcp" ? "Agent started using tools" : "Sandbox ready";
+    case "agent.connected":
+      return "Agent connected";
+    case "live.frame":
+      return "Live frame updated";
     case "tool.call":
       return `${String(event.payload.tool ?? "tool.call")} invoked`;
     case "tool.result":
       return `${String(event.payload.tool ?? "tool.result")} returned`;
+    case "mcp.request":
+      return `${String(event.payload.tool ?? "mcp.request")} requested`;
+    case "mcp.response":
+      return `${String(event.payload.tool ?? "mcp.response")} responded`;
+    case "mcp.error":
+      return `${String(event.payload.tool ?? "mcp.error")} failed`;
     case "artifact.created":
       return `${String(event.payload.type ?? "artifact")} captured`;
     case "score.updated":
@@ -149,7 +172,7 @@ function eventSummary(event: RunEvent) {
 }
 
 function mapRunStatus(status: RunStatus): RunPhase {
-  if (status === "queued" || status === "starting") {
+  if (status === "queued" || status === "waiting_for_agent" || status === "agent_connected" || status === "starting") {
     return "booting";
   }
 
@@ -174,12 +197,22 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
       (event) =>
         event.type === "tool.call" ||
         event.type === "tool.result" ||
+        event.type === "agent.connected" ||
+        event.type === "mcp.request" ||
+        event.type === "mcp.response" ||
+        event.type === "mcp.error" ||
         event.type === "artifact.created" ||
         event.type === "score.updated",
     )
     .map((event) => {
       const label =
-        event.type === "tool.call" || event.type === "tool.result"
+        event.type === "agent.connected"
+          ? "agent.connected"
+          : event.type === "tool.call" ||
+        event.type === "tool.result" ||
+        event.type === "mcp.request" ||
+        event.type === "mcp.response" ||
+        event.type === "mcp.error"
           ? String(event.payload.tool ?? event.type)
           : event.type === "artifact.created"
             ? `artifact.${String(event.payload.type ?? "created")}`
@@ -193,8 +226,19 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
             : JSON.stringify(event.payload);
 
       let status: TimelineEntry["status"] = "pending";
-      if (event.type === "score.updated" || event.type === "artifact.created") {
+      if (event.type === "score.updated" || event.type === "artifact.created" || event.type === "agent.connected") {
         status = "success";
+      } else if (event.type === "mcp.response") {
+        status =
+          event.payload.status === "success"
+            ? "success"
+            : event.payload.status === "warning"
+              ? "warning"
+              : event.payload.status === "error"
+                ? "error"
+                : "success";
+      } else if (event.type === "mcp.error") {
+        status = "error";
       } else if (event.type === "tool.result") {
         status =
           event.payload.status === "success"
@@ -240,6 +284,22 @@ function deriveScore(run: BenchmarkRun, events: RunEvent[]) {
   return typeof scoreEvent?.payload.score === "number" ? scoreEvent.payload.score : null;
 }
 
+function deriveLiveFrameUrl(events: RunEvent[], artifacts: Artifact[]) {
+  const liveFrameEvent = [...events]
+    .reverse()
+    .find((event) => event.type === "live.frame" && typeof event.payload.url === "string");
+
+  if (liveFrameEvent && typeof liveFrameEvent.payload.url === "string") {
+    return liveFrameEvent.payload.url;
+  }
+
+  const latestScreenshot = [...artifacts]
+    .reverse()
+    .find((artifact) => artifact.type === "screenshot" && typeof artifact.url === "string");
+
+  return latestScreenshot?.url ?? null;
+}
+
 function applyRunSnapshot(
   snapshot: RunSnapshot,
   set: (partial: Partial<PlaygroundStore>) => void,
@@ -249,9 +309,12 @@ function applyRunSnapshot(
   const lastEvent = events[events.length - 1];
   const score = deriveScore(run, events);
   const timeline = mapTimeline(events);
+  const liveFrameUrl = deriveLiveFrameUrl(events, artifacts);
 
   set({
     currentRunId: run.id,
+    currentExecutionMode: run.executionMode,
+    liveViewUrl: run.liveViewUrl,
     phase,
     statusLine: lastEvent ? eventSummary(lastEvent) : "Run created",
     score,
@@ -259,6 +322,7 @@ function applyRunSnapshot(
     timeline,
     reasoning: events.slice(-6).map(eventSummary),
     artifacts: mapArtifacts(artifacts),
+    liveFrameUrl,
     bootMessages: events.slice(-5).map(eventSummary),
     activeTab: phase === "completed" ? "score" : timeline.length > 0 ? "events" : "score",
   });
@@ -411,7 +475,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       quota: state.quota,
     }));
   },
-  startRun: async () => {
+  startRun: async (mode = "external-agent") => {
     if (get().phase === "booting" || get().phase === "running") {
       return;
     }
@@ -432,6 +496,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         credentials: "include",
         body: JSON.stringify({
           caseId: BENCHMARK_CASE_IDS[benchmark],
+          executionMode: mode,
         }),
       });
 
@@ -451,13 +516,21 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
 
       set({
         currentRunId: result.run.id,
+        currentExecutionMode: result.run.executionMode,
+        liveViewUrl: result.run.liveViewUrl,
         phase: "booting",
-        statusLine: "Run queued",
+        statusLine: mode === "external-agent" ? "Waiting for agent connection" : "Run queued",
         score: null,
         timeline: [],
-        reasoning: ["Run queued", "Waiting for runner assignment"],
+        reasoning:
+          mode === "external-agent"
+            ? ["Run created", "Waiting for local agent connection"]
+            : ["Run queued", "Waiting for runner assignment"],
         artifacts: [],
-        bootMessages: ["Run created", "Waiting for runner assignment"],
+        bootMessages:
+          mode === "external-agent"
+            ? ["Run created", "Waiting for local agent connection"]
+            : ["Run created", "Waiting for runner assignment"],
         activeTab: "events",
         liveSlide: 1,
         quota: result.quota ?? get().quota,

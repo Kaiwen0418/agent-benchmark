@@ -57,6 +57,7 @@ export async function POST(request: Request) {
     caseId: input.caseId,
     userId: user?.id ?? null,
     guestId: guest?.guestId ?? null,
+    executionMode: input.executionMode,
   });
   const nextQuota = {
     ...quota,

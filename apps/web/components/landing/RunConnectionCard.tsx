@@ -18,8 +18,10 @@ type RunConnectPayload = {
     note: string;
   };
   mcp: {
+    available: boolean;
     transport: string;
-    command: string;
+    url: string | null;
+    launchCommand: string;
     mockSitesUrl: string;
     status: string;
   };
@@ -31,6 +33,7 @@ async function copyText(value: string) {
 
 export function RunConnectionCard() {
   const runId = usePlaygroundStore((state) => state.currentRunId);
+  const executionMode = usePlaygroundStore((state) => state.currentExecutionMode);
   const phase = usePlaygroundStore((state) => state.phase);
   const [method, setMethod] = useState<ConnectMethod>("link");
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
@@ -90,7 +93,7 @@ export function RunConnectionCard() {
     ].join("\n");
   }, [payload]);
 
-  if (!runId) {
+  if (!runId || executionMode !== "external-agent") {
     return null;
   }
 
@@ -189,7 +192,7 @@ export function RunConnectionCard() {
               <>
                 <div className="text-sm font-medium text-[#111111]">Send to your agent</div>
                 <p className="mt-2 text-sm leading-7 text-[#585248]">
-                  One prompt, one URL. The agent opens the page and self-configures.
+                  One prompt, one URL. The agent opens the page and reads the embedded run context.
                 </p>
                 <pre className="mt-4 whitespace-pre-wrap rounded-[1rem] bg-white p-4 text-sm leading-7 text-[#25221d]">
                   {payload.prompt}
@@ -245,10 +248,19 @@ export function RunConnectionCard() {
             {method === "advanced" ? (
               <>
                 <div className="text-sm font-medium text-[#111111]">Raw config</div>
-                <p className="mt-2 text-sm leading-7 text-[#585248]">Full JSON payload for direct MCP wiring.</p>
+                <p className="mt-2 text-sm leading-7 text-[#585248]">
+                  Full JSON payload for the run context. This local demo does not generate a remote MCP URL.
+                </p>
                 <pre className="mt-4 overflow-x-auto rounded-[1rem] bg-[#111111] p-4 text-xs leading-6 text-[#d7ff00]">
                   {JSON.stringify(payload, null, 2)}
                 </pre>
+                <div className="mt-4 rounded-[1rem] bg-white px-4 py-3 text-sm leading-7 text-[#3f3b34]">
+                  MCP transport: <span className="font-medium">{payload.mcp.transport}</span>
+                  <br />
+                  MCP URL: <span className="font-medium">{payload.mcp.url ?? "not generated in this build"}</span>
+                  <br />
+                  Launch command: <span className="font-medium">{payload.mcp.launchCommand}</span>
+                </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button
                     type="button"

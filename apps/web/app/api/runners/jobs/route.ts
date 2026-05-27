@@ -29,6 +29,7 @@ export async function GET(request: Request) {
     job: {
       runId: run.id,
       caseId: run.caseId,
+      executionMode: run.executionMode,
       liveViewUrl: run.liveViewUrl,
       status: run.status,
     },

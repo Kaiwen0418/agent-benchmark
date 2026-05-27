@@ -3,6 +3,7 @@ import type {
   Artifact,
   BenchmarkCase,
   BenchmarkRun,
+  CreateRunInput,
   RunEvent,
   Runner,
   RunStatus,
@@ -110,14 +111,20 @@ export const mockStore = {
     return getStore().runs.find((item) => item.id === runId) ?? null;
   },
 
-  createRun(caseId: string, userId: string | null, guestId: string | null) {
+  createRun(
+    caseId: string,
+    userId: string | null,
+    guestId: string | null,
+    executionMode: CreateRunInput["executionMode"] = "external-agent",
+  ) {
     const run: BenchmarkRun = {
       id: makeId(),
       userId,
       guestId,
       caseId,
       runnerId: null,
-      status: "queued",
+      executionMode,
+      status: executionMode === "external-agent" ? "waiting_for_agent" : "queued",
       score: null,
       liveViewUrl: null,
       errorMessage: null,
@@ -127,7 +134,7 @@ export const mockStore = {
     };
 
     getStore().runs.push(run);
-    this.appendEvent(run.id, "run.created", { status: "queued" });
+    this.appendEvent(run.id, "run.created", { status: run.status, executionMode: run.executionMode });
     return run;
   },
 
@@ -221,7 +228,7 @@ export const mockStore = {
       return null;
     }
 
-    const run = getStore().runs.find((item) => item.status === "queued");
+    const run = getStore().runs.find((item) => item.status === "queued" && item.executionMode === "internal");
     if (!run) {
       return null;
     }
@@ -250,6 +257,16 @@ export const mockStore = {
     if (status === "completed" || status === "failed" || status === "cancelled" || status === "timeout") {
       run.completedAt = now();
     }
+    return run;
+  },
+
+  setRunLiveViewUrl(runId: string, liveViewUrl: string | null) {
+    const run = this.getRun(runId);
+    if (!run) {
+      return null;
+    }
+
+    run.liveViewUrl = liveViewUrl;
     return run;
   },
 };

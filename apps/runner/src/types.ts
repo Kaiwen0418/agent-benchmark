@@ -8,7 +8,7 @@ import type {
 
 export type RunnerJob = Pick<
   BenchmarkRun,
-  "caseId" | "status" | "liveViewUrl"
+  "caseId" | "status" | "liveViewUrl" | "executionMode"
 > & {
   runId: string;
 };

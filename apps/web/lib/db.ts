@@ -7,6 +7,8 @@ import type {
   QuotaStatus,
   Runner,
 } from "@agentbench/protocol";
+import path from "node:path";
+import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { mockStore } from "./mock-store";
 
@@ -21,12 +23,56 @@ export function isMockMode() {
   return !getSupabase();
 }
 
+function shouldUseLocalExternalAgentStore(executionMode?: BenchmarkRun["executionMode"]) {
+  return process.env.NODE_ENV !== "production" && executionMode === "external-agent";
+}
+
 function startOfUtcDay(date = new Date()) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString();
 }
 
 function nextUtcDay(date = new Date()) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1)).toISOString();
+}
+
+function getLocalArtifactsRoot() {
+  const candidates = [
+    path.resolve(process.cwd(), "apps/runner/.runner-artifacts"),
+    path.resolve(process.cwd(), "../runner/.runner-artifacts"),
+    path.resolve(process.cwd(), ".runner-artifacts"),
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
+}
+
+function toLocalArtifactUrl(runId: string, storagePath: string | null, url: string | null) {
+  if (url) {
+    return url;
+  }
+
+  if (!storagePath) {
+    return null;
+  }
+
+  return `/api/runs/${runId}/artifacts/file?path=${encodeURIComponent(storagePath)}`;
+}
+
+export function resolveLocalArtifactFile(runId: string, storagePath: string) {
+  const normalized = storagePath.replace(/\\/g, "/");
+  const expectedPrefix = `runs/${runId}/`;
+
+  if (!normalized.startsWith(expectedPrefix)) {
+    return null;
+  }
+
+  const root = getLocalArtifactsRoot();
+  const relativeFile = normalized.slice(expectedPrefix.length);
+  const absolute = path.resolve(root, runId, relativeFile);
+  if (!absolute.startsWith(root)) {
+    return null;
+  }
+
+  return absolute;
 }
 
 export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
@@ -109,6 +155,7 @@ function mapRunRow(row: {
   guest_id: string | null;
   case_id: string;
   runner_id: string | null;
+  execution_mode: BenchmarkRun["executionMode"];
   status: BenchmarkRun["status"];
   score: number | null;
   live_view_url: string | null;
@@ -123,6 +170,7 @@ function mapRunRow(row: {
     guestId: row.guest_id,
     caseId: row.case_id,
     runnerId: row.runner_id,
+    executionMode: row.execution_mode,
     status: row.status,
     score: row.score,
     liveViewUrl: row.live_view_url,
@@ -137,11 +185,14 @@ export async function createBenchmarkRun(params: {
   caseId: string;
   userId: string | null;
   guestId: string | null;
+  executionMode: BenchmarkRun["executionMode"];
 }): Promise<BenchmarkRun> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.createRun(params.caseId, params.userId, params.guestId);
+  if (!supabase || shouldUseLocalExternalAgentStore(params.executionMode)) {
+    return mockStore.createRun(params.caseId, params.userId, params.guestId, params.executionMode);
   }
+
+  const initialStatus = params.executionMode === "external-agent" ? "waiting_for_agent" : "queued";
 
   const { data, error } = await supabase
     .from("benchmark_runs")
@@ -149,9 +200,10 @@ export async function createBenchmarkRun(params: {
       case_id: params.caseId,
       user_id: params.userId,
       guest_id: params.guestId,
-      status: "queued",
+      execution_mode: params.executionMode,
+      status: initialStatus,
     })
-    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .select("id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at")
     .single();
 
   if (error || !data) {
@@ -161,7 +213,7 @@ export async function createBenchmarkRun(params: {
   await supabase.from("run_events").insert({
     run_id: data.id,
     type: "run.created",
-    payload: { status: "queued" },
+    payload: { status: initialStatus, executionMode: params.executionMode },
   });
 
   return mapRunRow(data);
@@ -175,7 +227,7 @@ export async function listBenchmarkRuns(): Promise<BenchmarkRun[]> {
 
   const { data, error } = await supabase
     .from("benchmark_runs")
-    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .select("id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at")
     .order("created_at", { ascending: false });
 
   if (error || !data) {
@@ -186,14 +238,19 @@ export async function listBenchmarkRuns(): Promise<BenchmarkRun[]> {
 }
 
 export async function getBenchmarkRun(runId: string): Promise<BenchmarkRun | null> {
+  const localRun = mockStore.getRun(runId);
+  if (localRun) {
+    return localRun;
+  }
+
   const supabase = getSupabase();
   if (!supabase) {
-    return mockStore.getRun(runId);
+    return null;
   }
 
   const { data, error } = await supabase
     .from("benchmark_runs")
-    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .select("id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at")
     .eq("id", runId)
     .maybeSingle();
 
@@ -205,9 +262,14 @@ export async function getBenchmarkRun(runId: string): Promise<BenchmarkRun | nul
 }
 
 export async function listRunEvents(runId: string) {
+  const localRun = mockStore.getRun(runId);
+  if (localRun) {
+    return mockStore.listEvents(runId);
+  }
+
   const supabase = getSupabase();
   if (!supabase) {
-    return mockStore.listEvents(runId);
+    return [];
   }
 
   const { data, error } = await supabase
@@ -230,9 +292,17 @@ export async function listRunEvents(runId: string) {
 }
 
 export async function listArtifacts(runId: string): Promise<Artifact[]> {
+  const localRun = mockStore.getRun(runId);
+  if (localRun) {
+    return mockStore.listArtifacts(runId).map((artifact) => ({
+      ...artifact,
+      url: toLocalArtifactUrl(runId, artifact.storagePath, artifact.url),
+    }));
+  }
+
   const supabase = getSupabase();
   if (!supabase) {
-    return mockStore.listArtifacts(runId);
+    return [];
   }
 
   const { data, error } = await supabase
@@ -250,25 +320,38 @@ export async function listArtifacts(runId: string): Promise<Artifact[]> {
     runId: item.run_id,
     type: item.type,
     storagePath: item.storage_path,
-    url: item.url,
+    url: toLocalArtifactUrl(runId, item.storage_path, item.url),
     createdAt: item.created_at,
   }));
 }
 
 export async function appendRunEvent(runId: string, input: AppendRunEventInput) {
-  const supabase = getSupabase();
-  if (!supabase) {
+  const localRun = mockStore.getRun(runId);
+  if (localRun) {
     const updatedRun =
-      input.type === "run.running"
-        ? mockStore.setRunStatus(runId, "running")
-        : input.type === "run.completed"
-          ? mockStore.setRunStatus(runId, "completed")
-          : input.type === "run.failed"
-            ? mockStore.setRunStatus(runId, "failed")
-            : null;
+      input.type === "agent.connected"
+        ? mockStore.setRunStatus(runId, "agent_connected")
+        : input.type === "run.running"
+          ? (() => {
+              const run = mockStore.setRunStatus(runId, "running");
+              if (run && typeof input.payload.liveViewUrl === "string") {
+                mockStore.setRunLiveViewUrl(runId, input.payload.liveViewUrl);
+              }
+              return run;
+            })()
+          : input.type === "run.completed"
+            ? mockStore.setRunStatus(runId, "completed")
+            : input.type === "run.failed"
+              ? mockStore.setRunStatus(runId, "failed")
+              : null;
 
     const event = mockStore.appendEvent(runId, input.type, input.payload);
     return { event, run: updatedRun };
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { event: mockStore.appendEvent(runId, input.type, input.payload), run: null };
   }
 
   const { data: eventRow, error: eventError } = await supabase
@@ -286,15 +369,25 @@ export async function appendRunEvent(runId: string, input: AppendRunEventInput) 
   }
 
   let run: BenchmarkRun | null = null;
-  if (input.type === "run.running" || input.type === "run.completed" || input.type === "run.failed") {
+  if (
+    input.type === "agent.connected" ||
+    input.type === "run.running" ||
+    input.type === "run.completed" ||
+    input.type === "run.failed"
+  ) {
     const nextStatus =
-      input.type === "run.running"
+      input.type === "agent.connected"
+        ? "agent_connected"
+        : input.type === "run.running"
         ? "running"
         : input.type === "run.completed"
           ? "completed"
           : "failed";
 
     const patch: Record<string, string | null> = { status: nextStatus };
+    if (nextStatus === "running" && typeof input.payload.liveViewUrl === "string") {
+      patch.live_view_url = input.payload.liveViewUrl;
+    }
     if (nextStatus === "completed" || nextStatus === "failed") {
       patch.completed_at = new Date().toISOString();
     }
@@ -303,7 +396,7 @@ export async function appendRunEvent(runId: string, input: AppendRunEventInput) 
       .from("benchmark_runs")
       .update(patch)
       .eq("id", runId)
-      .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+      .select("id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at")
       .single();
 
     if (runError) {
@@ -326,17 +419,12 @@ export async function appendRunEvent(runId: string, input: AppendRunEventInput) 
 }
 
 export async function completeBenchmarkRun(runId: string, input: CompleteRunInput) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    const run = mockStore.getRun(runId);
-    if (!run) {
-      return null;
-    }
-
-    run.status = input.status;
-    run.score = input.score ?? null;
-    run.errorMessage = input.errorMessage ?? null;
-    run.completedAt = new Date().toISOString();
+  const localRun = mockStore.getRun(runId);
+  if (localRun) {
+    localRun.status = input.status;
+    localRun.score = input.score ?? null;
+    localRun.errorMessage = input.errorMessage ?? null;
+    localRun.completedAt = new Date().toISOString();
 
     input.artifacts.forEach((artifact) => {
       mockStore.createArtifact(runId, artifact);
@@ -347,7 +435,12 @@ export async function completeBenchmarkRun(runId: string, input: CompleteRunInpu
       errorMessage: input.errorMessage ?? null,
     });
 
-    return run;
+    return localRun;
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    return null;
   }
 
   const completedAt = new Date().toISOString();
@@ -360,7 +453,7 @@ export async function completeBenchmarkRun(runId: string, input: CompleteRunInpu
       completed_at: completedAt,
     })
     .eq("id", runId)
-    .select("id, user_id, guest_id, case_id, runner_id, status, score, live_view_url, error_message, started_at, completed_at, created_at")
+    .select("id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at")
     .maybeSingle();
 
   if (error) {

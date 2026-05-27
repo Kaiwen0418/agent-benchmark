@@ -13,6 +13,7 @@ export function ConnectAgentCard() {
   const runError = usePlaygroundStore((state) => state.runError);
   const score = usePlaygroundStore((state) => state.score);
   const timeline = usePlaygroundStore((state) => state.timeline);
+  const liveViewUrl = usePlaygroundStore((state) => state.liveViewUrl);
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
   const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
   const startRun = usePlaygroundStore((state) => state.startRun);
@@ -59,6 +60,17 @@ export function ConnectAgentCard() {
           Stop Run
         </button>
 
+        {liveViewUrl ? (
+          <a
+            href={liveViewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 flex w-full items-center justify-center rounded-full border border-[#d8d1c4] bg-white px-5 py-3 text-sm text-[#111111]"
+          >
+            Open Live View
+          </a>
+        ) : null}
+
         <RunConnectionCard />
       </div>
     );
@@ -87,6 +99,17 @@ export function ConnectAgentCard() {
         >
           Start Again
         </button>
+
+        {liveViewUrl ? (
+          <a
+            href={liveViewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 flex w-full items-center justify-center rounded-full border border-[#d8d1c4] bg-white px-5 py-3 text-sm text-[#111111]"
+          >
+            Open Live View
+          </a>
+        ) : null}
 
         {runError ? (
           <div className="mt-3 rounded-[1rem] border border-[#ead2ca] bg-[#fff0eb] p-3 text-[13px] leading-6 text-[#8a4334]">
@@ -146,8 +169,8 @@ export function ConnectAgentCard() {
             <div className="mt-4 space-y-2">
               <div className="text-[11px] uppercase tracking-[0.18em] text-[#8f8a80]">Tips</div>
               {[
-                "Connect a real agent endpoint to see live tool calls and a score.",
-                'Use "Agent Link" to send your agent a self-contained prompt — no manual config needed.',
+                "Use Agent Link to hand the run context to an agent without exposing raw JSON by default.",
+                "This local demo still uses a local stdio MCP runner. A remote MCP URL is not generated yet.",
                 "Each benchmark has a specific goal. The agent is scored on task completion and safety.",
               ].map((tip) => (
                 <div key={tip} className="flex gap-2.5 rounded-[0.85rem] bg-[#f6f3ed] px-3 py-2.5">
@@ -203,7 +226,7 @@ export function ConnectAgentCard() {
 
         <button
           type="button"
-          onClick={() => void startRun()}
+          onClick={() => void startRun("external-agent")}
           disabled={quotaLoading || isQuotaBlocked}
           className="w-full rounded-full bg-[#111111] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#d7ff00] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-70"
         >
@@ -211,8 +234,19 @@ export function ConnectAgentCard() {
             ? quota?.mode === "guest"
               ? "Guest Trial Used"
               : "Daily Limit Reached"
-            : "Start Free Run"}
+            : "Start Agent Session"}
         </button>
+
+        {!isQuotaBlocked ? (
+          <button
+            type="button"
+            onClick={() => void startRun("internal")}
+            disabled={quotaLoading}
+            className="w-full rounded-full border border-[#d8d1c4] bg-white px-5 py-3 text-sm text-[#111111] transition hover:border-[#111111] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            Run Local Demo
+          </button>
+        ) : null}
       </div>
     </div>
   );

@@ -7,9 +7,23 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function buildLiveViewUrl(runId: string) {
+  if (!runnerConfig.webUrl) {
+    return null;
+  }
+
+  return `${runnerConfig.webUrl}/runs/${runId}/live`;
+}
+
 async function executeJob(job: RunnerJob) {
+  const liveViewUrl = buildLiveViewUrl(job.runId);
+  const runJob: RunnerJob = {
+    ...job,
+    liveViewUrl: liveViewUrl ?? job.liveViewUrl,
+  };
+
   console.log(`[runner] accepted job ${job.runId} for case ${job.caseId}`);
-  const result = await executePlaywrightJob(job, async (event) => {
+  const result = await executePlaywrightJob(runJob, async (event) => {
     await appendRunEvent(job.runId, event);
     console.log(`[runner] event ${event.type} -> run ${job.runId}`);
   });

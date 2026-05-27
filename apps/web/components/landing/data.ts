@@ -53,15 +53,15 @@ export const replayCards = [
 
 export const docsBlocks = {
   mcp: `{
-  "name": "agentbench-demo",
-  "transport": "http",
-  "url": "https://agentbench.app/api/mcp"
+  "name": "agentbench-local-demo",
+  "transport": "streamable_http",
+  "url": "http://127.0.0.1:3002/mcp?runId=<run-id>",
+  "launchCommand": "pnpm --filter runner start:mcp:http"
 }`,
   rest: `curl -X POST https://agentbench.app/api/runs \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <token>" \\
   -d '{
-    "endpoint": "https://agent.local/mcp",
     "benchmark": "web-search"
   }'`,
   response: `{
@@ -86,7 +86,7 @@ export const docsSteps = [
   {
     step: "01",
     title: "Connect your agent",
-    body: "Point AgentBench at any MCP-compatible agent endpoint. No SDK required — just a reachable URL.",
+    body: "Create a run, then hand your agent a connection page or raw config. In local development, AgentBench exposes a run-scoped HTTP MCP endpoint.",
   },
   {
     step: "02",

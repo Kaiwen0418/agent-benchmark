@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const runStatusSchema = z.enum([
   "queued",
+  "waiting_for_agent",
+  "agent_connected",
   "starting",
   "running",
   "scoring",
@@ -18,8 +20,13 @@ export const runEventTypeSchema = z.enum([
   "run.assigned",
   "run.starting",
   "run.running",
+  "agent.connected",
+  "live.frame",
   "tool.call",
   "tool.result",
+  "mcp.request",
+  "mcp.response",
+  "mcp.error",
   "artifact.created",
   "score.updated",
   "run.completed",
@@ -53,12 +60,17 @@ export const runnerSchema = z.object({
 
 export type Runner = z.infer<typeof runnerSchema>;
 
+export const runExecutionModeSchema = z.enum(["internal", "external-agent"]);
+
+export type RunExecutionMode = z.infer<typeof runExecutionModeSchema>;
+
 export const benchmarkRunSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid().nullable(),
   guestId: z.string().nullable(),
   caseId: z.string().uuid(),
   runnerId: z.string().uuid().nullable(),
+  executionMode: runExecutionModeSchema,
   status: runStatusSchema,
   score: z.number().nullable(),
   liveViewUrl: z.string().url().nullable(),
@@ -108,6 +120,7 @@ export type Artifact = z.infer<typeof artifactSchema>;
 
 export const createRunInputSchema = z.object({
   caseId: z.string().uuid(),
+  executionMode: runExecutionModeSchema.default("external-agent"),
 });
 
 export type CreateRunInput = z.infer<typeof createRunInputSchema>;

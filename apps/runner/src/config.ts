@@ -45,6 +45,11 @@ function readBoolean(name: string, fallback: boolean) {
 export const runnerConfig = {
   webUrl: readOptional("AGENTBENCH_WEB_URL")?.replace(/\/$/, "") ?? null,
   sharedSecret: readOptional("RUNNER_SHARED_SECRET"),
+  mcpRunId: readOptional("AGENTBENCH_RUN_ID"),
+  mcpSessionId: process.env.AGENTBENCH_MCP_SESSION_ID ?? null,
+  mcpHttpHost: process.env.RUNNER_MCP_HTTP_HOST ?? "127.0.0.1",
+  mcpHttpPort: readNumber("RUNNER_MCP_HTTP_PORT", 3002),
+  mcpPublicBaseUrl: readOptional("RUNNER_MCP_PUBLIC_BASE_URL")?.replace(/\/$/, "") ?? null,
   mockSitesUrl: (process.env.MOCK_SITES_URL ?? "http://localhost:3001").replace(/\/$/, ""),
   name: process.env.RUNNER_NAME ?? "mock-runner-local",
   capacity: readNumber("RUNNER_CAPACITY", 1),

@@ -36,8 +36,8 @@ export function LiveMacScreenContent() {
   const phase = usePlaygroundStore((state) => state.phase);
   const score = usePlaygroundStore((state) => state.score);
   const liveSlide = usePlaygroundStore((state) => state.liveSlide);
-  const statusLine = usePlaygroundStore((state) => state.statusLine);
-  const bootMessages = usePlaygroundStore((state) => state.bootMessages);
+  const liveFrameUrl = usePlaygroundStore((state) => state.liveFrameUrl);
+  const liveViewUrl = usePlaygroundStore((state) => state.liveViewUrl);
 
   const slide = useMemo(() => {
     if (phase === "idle") {
@@ -61,83 +61,67 @@ export function LiveMacScreenContent() {
     }
 
     return browserSlides[Math.min(liveSlide, browserSlides.length - 1)];
-  }, [liveSlide, phase, score]);
+  }, [liveSlide, phase]);
+
+  const embeddedLiveViewUrl = useMemo(() => {
+    if (!liveViewUrl) {
+      return null;
+    }
+
+    try {
+      const base =
+        typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+      const url = new URL(liveViewUrl, base);
+      url.searchParams.set("embed", "1");
+      return url.toString();
+    } catch {
+      return `${liveViewUrl}${liveViewUrl.includes("?") ? "&" : "?"}embed=1`;
+    }
+  }, [liveViewUrl]);
 
   return (
-    <div className="mac-crt-ui">
-      <div className="mac-sidebar">
-        <div className="mac-sidebar-item is-active">Run</div>
-        <div className="mac-sidebar-item">Events</div>
-        <div className="mac-sidebar-item">Files</div>
-        <div className="mac-sidebar-item">Score</div>
-        <div className="mac-sidebar-item">Replay</div>
-      </div>
-      <div className="mac-window-area">
-        <div className="flex items-center justify-between">
-          <div className="mac-os-label">Live Sandbox</div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[8px] uppercase tracking-[0.16em] text-white">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                phase === "completed"
-                  ? "bg-[#d7ff00]"
-                  : phase === "failed"
-                    ? "bg-[#ff8f6b]"
-                    : phase === "idle"
-                      ? "bg-[#8d867b]"
-                      : "bg-[#6df6a4]"
-              }`}
-            />
-            {phase}
-          </div>
-        </div>
-        <div className="mac-window mt-2">
-          <div className="mac-window-header">
-            <span>{slide.accent}</span>
-            <span>stream</span>
-          </div>
-          <div className="rounded-[0.75rem] bg-[#f6f2e8] p-2.5 text-[#141414]">
-            <div className="mb-2 text-[8px] uppercase tracking-[0.16em] text-[#7b7469]">
-              Browser View
-            </div>
-            <div className="rounded-[0.75rem] bg-white p-2.5 shadow-[inset_0_0_0_1px_rgba(17,17,17,0.06)]">
-              <div className="mb-2 flex gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[#ff7d59]" />
-                <span className="h-2 w-2 rounded-full bg-[#ffd84d]" />
-                <span className="h-2 w-2 rounded-full bg-[#4bd776]" />
-              </div>
-              <div className="space-y-2">
-                <div className="h-3.5 w-3/4 rounded-full bg-[#ece6d7]" />
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="h-12 rounded-[0.75rem] bg-[#efe8d5]" />
-                  <div className="h-12 rounded-[0.75rem] bg-[#ddd3be]" />
-                </div>
-                <div className="h-7 rounded-[0.75rem] bg-[#f3efe4]" />
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-[0.8rem] bg-[#0d0d0d] p-2.5 font-mono text-[9px] leading-4 text-[#d7ff00]">
-              <div className="mb-2 text-[8px] uppercase tracking-[0.16em] text-white/50">
-                Status
-              </div>
-              <div>{slide.title}</div>
-              <div className="mt-1 text-white/75">{slide.body}</div>
-              <div className="mt-3 text-[#cbc3b4]">{statusLine}</div>
-            </div>
-            <div className="rounded-[0.8rem] bg-[#0d0d0d] p-2.5 text-white">
-              <div className="mb-2 text-[8px] uppercase tracking-[0.16em] text-white/50">
-                Score
-              </div>
-              <div className="text-[1.6rem] font-medium">{score ?? "--"}</div>
-              <div className="mt-3 space-y-1 font-mono text-[9px] leading-4 text-[#cbc3b4]">
-                {bootMessages.slice(-3).map((message, index) => (
-                  <div key={`${message}-${index}`}>{">"} {message}</div>
-                ))}
-              </div>
-            </div>
-          </div>
+    <div className="relative h-full overflow-hidden rounded-[1.05rem] bg-[#080808] text-white">
+      {embeddedLiveViewUrl ? (
+        <iframe
+          src={embeddedLiveViewUrl}
+          title="Embedded live run viewer"
+          className="absolute inset-0 h-full w-full border-0 bg-[#111111]"
+        />
+      ) : liveFrameUrl ? (
+        <img
+          src={liveFrameUrl}
+          alt="Live browser frame"
+          className="absolute inset-0 h-full w-full bg-[#111111] object-contain"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(215,255,0,0.12),transparent_42%),linear-gradient(180deg,#141414_0%,#090909_100%)]" />
+      )}
+
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-end p-3">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[8px] uppercase tracking-[0.16em] text-white">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              phase === "completed"
+                ? "bg-[#d7ff00]"
+                : phase === "failed"
+                  ? "bg-[#ff8f6b]"
+                  : phase === "idle"
+                    ? "bg-[#8d867b]"
+                    : "bg-[#6df6a4]"
+            }`}
+          />
+          {phase}
         </div>
       </div>
+
+      {!(embeddedLiveViewUrl || liveFrameUrl) ? (
+        <div className="absolute inset-x-0 top-1/2 z-10 -translate-y-1/2 px-4 text-center">
+          <div className="mx-auto max-w-[11rem] rounded-[1rem] border border-white/10 bg-black/45 px-4 py-3">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[#d7ff00]">{slide.title}</div>
+            <div className="mt-2 text-[10px] leading-4 text-[#d0c8ba]">{slide.body}</div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -58,7 +58,9 @@ export default async function RunConnectPage({
               <div className="mt-5 rounded-[1rem] bg-[#111111] px-4 py-3 text-sm text-white">
                 MCP: <span className="font-medium">{payload.mcp.transport}</span>
                 <br />
-                Command: <span className="font-medium">{payload.mcp.command}</span>
+                MCP URL: <span className="font-medium">{payload.mcp.url ?? "not generated in this build"}</span>
+                <br />
+                Command: <span className="font-medium">{payload.mcp.launchCommand}</span>
               </div>
             </section>
           </div>

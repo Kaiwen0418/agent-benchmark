@@ -15,6 +15,24 @@ function getGoal(benchmarkCase: BenchmarkCase | null) {
   return benchmarkGoals[benchmarkCase.slug] ?? benchmarkCase.description;
 }
 
+function getMcpBaseUrl(origin: string) {
+  const configured = process.env.AGENTBENCH_MCP_BASE_URL?.replace(/\/$/, "");
+  if (configured) {
+    return configured;
+  }
+
+  try {
+    const url = new URL(origin);
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+      return "http://127.0.0.1:3002/mcp";
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export function buildRunConnectPayload(params: {
   run: BenchmarkRun;
   benchmarkCase: BenchmarkCase | null;
@@ -23,15 +41,31 @@ export function buildRunConnectPayload(params: {
   const { run, benchmarkCase, origin } = params;
   const connectUrl = `${origin}/runs/${run.id}/connect`;
   const configUrl = `${origin}/api/runs/${run.id}/connect`;
+  const mcpBaseUrl = getMcpBaseUrl(origin);
+  const mcpUrl = mcpBaseUrl ? `${mcpBaseUrl}?runId=${encodeURIComponent(run.id)}` : null;
+  const launchCommand = [
+    `AGENTBENCH_RUN_ID=${run.id}`,
+    `AGENTBENCH_WEB_URL=${origin}`,
+    'RUNNER_SHARED_SECRET="<your-local-runner-secret>"',
+    "pnpm --filter runner start:mcp:http",
+  ].join(" ");
   const goal = getGoal(benchmarkCase);
   const title = benchmarkCase?.title ?? "AgentBench Run";
-  const prompt = [
-    "Open the AgentBench run link below and follow the instructions on that page.",
-    "Use only the tools provided for this run.",
-    "Complete the benchmark objective and stop when finished.",
-    "",
-    connectUrl,
-  ].join("\n");
+  const prompt = mcpUrl
+    ? [
+        "Open the AgentBench run link below and follow the instructions on that page.",
+        "A local HTTP MCP endpoint has been prepared for this run.",
+        "Use only the tools provided for this run and stop when finished.",
+        "",
+        connectUrl,
+      ].join("\n")
+    : [
+        "Open the AgentBench run link below and follow the instructions on that page.",
+        "This local demo does not issue a remote MCP URL yet. It only shows the run context and the local MCP launch command.",
+        "Use only the tools provided for this run and stop when finished.",
+        "",
+        connectUrl,
+      ].join("\n");
 
   return {
     runId: run.id,
@@ -43,24 +77,37 @@ export function buildRunConnectPayload(params: {
       description: benchmarkCase?.description ?? null,
       goal,
     },
-    instructions: [
-      `Open the connection page for run ${run.id}.`,
-      "Read the benchmark objective and available connection details.",
-      "Use only the tools exposed for this run.",
-      "Stop after the objective is completed or clearly blocked by policy.",
-    ],
+    instructions: mcpUrl
+      ? [
+          `Open the connection page for run ${run.id}.`,
+          "Read the benchmark objective and the generated MCP endpoint details.",
+          "Connect to the provided MCP URL for this run.",
+          "Use only the tools exposed for this run.",
+          "Stop after the objective is completed or clearly blocked by policy.",
+        ]
+      : [
+          `Open the connection page for run ${run.id}.`,
+          "Read the benchmark objective and the local MCP launch details.",
+          "Do not expect a remote MCP server URL in this build.",
+          "Use only the tools exposed for this run.",
+          "Stop after the objective is completed or clearly blocked by policy.",
+        ],
     prompt,
     connectUrl,
     configUrl,
     localDemo: {
       enabled: true,
-      note: "This build still exposes MCP through a local stdio runner. Remote HTTP MCP is not enabled yet.",
+      note: mcpUrl
+        ? "This build exposes a local HTTP MCP endpoint for development. Use the generated MCP URL from the config below."
+        : "This build does not have a reachable MCP URL configured yet. The generated URLs below are instruction/config pages.",
     },
     mcp: {
-      transport: "stdio",
-      command: "pnpm --filter runner start:mcp",
+      available: Boolean(mcpUrl),
+      transport: mcpUrl ? "streamable_http" : "stdio",
+      url: mcpUrl,
+      launchCommand,
       mockSitesUrl: "http://localhost:3001",
-      status: "local-demo-only",
+      status: mcpUrl ? "local-http-demo" : "local-demo-only",
     },
   };
 }

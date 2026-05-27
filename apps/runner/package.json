@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:mcp": "tsx watch src/mcp-server.ts",
+    "dev:mcp:http": "tsx watch src/mcp-http-server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/apps/runner/src/index.js",
-    "start:mcp": "node dist/apps/runner/src/mcp-server.js"
+    "start:mcp": "node dist/apps/runner/src/mcp-server.js",
+    "start:mcp:http": "node dist/apps/runner/src/mcp-http-server.js"
   },
   "dependencies": {
     "@agentbench/mcp-tools": "workspace:*",

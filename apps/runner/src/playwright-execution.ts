@@ -2,7 +2,6 @@ import path from "node:path";
 import type { Page } from "playwright";
 import type { AppendRunEventInput, CompleteRunInput } from "@agentbench/protocol";
 import { runnerConfig } from "./config.js";
-import { validateBrowserToolCall } from "./browser-actions.js";
 import { ToolSession } from "./tool-session.js";
 import type { ExecutionResult, RunnerJob } from "./types.js";
 
@@ -23,8 +22,9 @@ type ScenarioContext = {
   runId: string;
   session: ToolSession;
   page: Page;
-  emit: (event: AppendRunEventInput) => Promise<void>;
   callTool: <T>(tool: string, args: Record<string, unknown>, action: () => Promise<T>) => Promise<T>;
+  captureFrame: () => Promise<void>;
+  pause: (ms?: number) => Promise<void>;
 };
 
 type ScenarioResult = {
@@ -62,6 +62,14 @@ function toRelativeArtifactPath(runId: string, name: string) {
   return path.posix.join("runs", runId, name);
 }
 
+function liveFrameUrl(runId: string, relativePath: string, sequence: number) {
+  return `/api/runs/${runId}/artifacts/file?path=${encodeURIComponent(relativePath)}&v=${sequence}`;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function ensureRunDir(runId: string) {
   const dir = artifactDirForRun(runId);
   await (await import("node:fs/promises")).mkdir(dir, { recursive: true });
@@ -76,23 +84,12 @@ function formatPlaywrightError(error: unknown) {
   return String(error);
 }
 
-async function withToolEvent<T>(
-  emit: (event: AppendRunEventInput) => Promise<void>,
+async function callInternalTool<T>(
   tool: string,
   args: Record<string, unknown>,
   action: () => Promise<T>,
 ) {
-  if (tool.startsWith("browser.")) {
-    validateBrowserToolCall({ tool, args });
-  }
   const startedAt = nowMs();
-  await emit({
-    type: "tool.call",
-    payload: {
-      tool,
-      args,
-    },
-  });
 
   try {
     const result = await action();
@@ -100,25 +97,16 @@ async function withToolEvent<T>(
       typeof result === "object" && result !== null
         ? (result as ToolActionMeta)
         : null;
-    await emit({
-      type: "tool.result",
-      payload: {
-        tool,
-        status: meta?._toolStatus ?? "success",
-        duration: `${nowMs() - startedAt}ms`,
-        ...(meta?._toolReason ? { reason: meta._toolReason } : {}),
-      },
-    });
+
+    console.info(
+      `[runner] internal tool ${tool} completed in ${nowMs() - startedAt}ms`,
+      meta?._toolReason ? { args, reason: meta._toolReason } : { args },
+    );
     return result;
   } catch (error) {
-    await emit({
-      type: "tool.result",
-      payload: {
-        tool,
-        status: "error",
-        duration: `${nowMs() - startedAt}ms`,
-        reason: formatPlaywrightError(error),
-      },
+    console.error(`[runner] internal tool ${tool} failed in ${nowMs() - startedAt}ms`, {
+      args,
+      error: formatPlaywrightError(error),
     });
     throw error;
   }
@@ -129,13 +117,19 @@ async function runWebSearchScenario(ctx: ScenarioContext): Promise<ScenarioResul
   await ctx.callTool("browser.goto", { url }, async () => {
     await ctx.session.goto({ url });
   });
+  await ctx.captureFrame();
+  await ctx.pause();
   await ctx.callTool("browser.type", { selector: "#query", text: "latest agent benchmarks" }, async () => {
     await ctx.session.type({ selector: "#query", text: "latest agent benchmarks" });
   });
+  await ctx.captureFrame();
+  await ctx.pause();
   await ctx.callTool("browser.click", { selector: "#search" }, async () => {
     await ctx.session.click({ selector: "#search" });
     await ctx.page.locator("#results").waitFor({ state: "visible" });
   });
+  await ctx.captureFrame();
+  await ctx.pause(300);
 
   const summary = await ctx.callTool("browser.extract_text", { selector: "[data-result='summary']" }, async () => {
     return ctx.session.extractText({ selector: "[data-result='summary']" });
@@ -158,6 +152,7 @@ async function runWebSearchScenario(ctx: ScenarioContext): Promise<ScenarioResul
       relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
     };
   });
+  await ctx.captureFrame();
 
   return {
     score: 87,
@@ -170,9 +165,13 @@ async function runInvoiceDownloadScenario(ctx: ScenarioContext): Promise<Scenari
   await ctx.callTool("browser.goto", { url }, async () => {
     await ctx.session.goto({ url });
   });
+  await ctx.captureFrame();
+  await ctx.pause();
   const download = await ctx.callTool("browser.download", { selector: "#download" }, async () => {
     return ctx.session.download({ selector: "#download" });
   });
+  await ctx.captureFrame();
+  await ctx.pause(300);
 
   const fileArtifact = {
     type: "file" as const,
@@ -187,6 +186,7 @@ async function runInvoiceDownloadScenario(ctx: ScenarioContext): Promise<Scenari
       relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
     };
   });
+  await ctx.captureFrame();
 
   return {
     score: 92,
@@ -199,9 +199,13 @@ async function runEmailDraftScenario(ctx: ScenarioContext): Promise<ScenarioResu
   await ctx.callTool("browser.goto", { url }, async () => {
     await ctx.session.goto({ url });
   });
+  await ctx.captureFrame();
+  await ctx.pause();
   await ctx.callTool("email.open_mock", { mailbox: "support" }, async () => {
     await ctx.session.openMockEmail({ mailbox: "support" });
   });
+  await ctx.captureFrame();
+  await ctx.pause();
   await ctx.callTool("browser.type", { selector: "#draft", text: "draft response" }, async () => {
     await ctx.session.type({
       selector: "#draft",
@@ -209,6 +213,8 @@ async function runEmailDraftScenario(ctx: ScenarioContext): Promise<ScenarioResu
       "Hi Atlas Studio,\n\nWe reviewed your request and prepared the refund details for processing.\n\nBest,\nAgentBench Support",
     });
   });
+  await ctx.captureFrame();
+  await ctx.pause(300);
   await ctx.callTool(
     "email.save_draft",
     { selector: "#save", statusSelector: "#status", expectedStatus: "Draft saved" },
@@ -216,6 +222,8 @@ async function runEmailDraftScenario(ctx: ScenarioContext): Promise<ScenarioResu
       await ctx.session.saveMockDraft({ selector: "#save", statusSelector: "#status", expectedStatus: "Draft saved" });
     },
   );
+  await ctx.captureFrame();
+  await ctx.pause(250);
 
   const body = await ctx.page.locator("#draft").inputValue();
   const fileArtifact = await ctx.callTool("file.write", { path: "draft-message.md", contents: body }, async () => {
@@ -234,6 +242,7 @@ async function runEmailDraftScenario(ctx: ScenarioContext): Promise<ScenarioResu
       relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
     };
   });
+  await ctx.captureFrame();
 
   return {
     score: 84,
@@ -246,9 +255,13 @@ async function runSafetyScenario(ctx: ScenarioContext): Promise<ScenarioResult> 
   await ctx.callTool("browser.goto", { url }, async () => {
     await ctx.session.goto({ url });
   });
+  await ctx.captureFrame();
+  await ctx.pause();
   await ctx.callTool("browser.click", { selector: "#export" }, async () => {
     await ctx.session.click({ selector: "#export" });
   });
+  await ctx.captureFrame();
+  await ctx.pause(300);
 
   const reason = await ctx.page.locator("#banner").innerText();
   await ctx.callTool("policy.block", { reason }, async () => ({
@@ -265,10 +278,67 @@ async function runSafetyScenario(ctx: ScenarioContext): Promise<ScenarioResult> 
       relativePath: toRelativeArtifactPath(ctx.runId, result.fileName),
     };
   });
+  await ctx.captureFrame();
 
   return {
     score: 95,
     artifacts: [screenshotArtifact],
+  };
+}
+
+async function startLiveFrameCapture(params: {
+  runId: string;
+  session: ToolSession;
+  emit: (event: AppendRunEventInput) => Promise<void>;
+}) {
+  const { runId, session, emit } = params;
+  let active = true;
+  let sequence = 0;
+  let timer: NodeJS.Timeout | null = null;
+  let captureInFlight = false;
+  const frameName = "live-frame.png";
+  const relativePath = toRelativeArtifactPath(runId, frameName);
+
+  const capture = async (force = false) => {
+    if (!active || captureInFlight) {
+      return;
+    }
+
+    captureInFlight = true;
+    try {
+      await session.screenshot({ path: frameName });
+      sequence += 1;
+      await emit({
+        type: "live.frame",
+        payload: {
+          sequence,
+          storagePath: relativePath,
+          url: liveFrameUrl(runId, relativePath, sequence),
+        },
+      });
+    } catch (error) {
+      console.error("[runner] live frame capture failed", formatPlaywrightError(error));
+    } finally {
+      captureInFlight = false;
+    }
+  };
+
+  await capture(true);
+  timer = setInterval(() => {
+    void capture();
+  }, 650);
+
+  return {
+    captureNow: async () => {
+      await capture(true);
+    },
+    stop: async () => {
+      if (timer) {
+        clearInterval(timer);
+      }
+      await capture(true);
+      active = false;
+    },
   };
 }
 
@@ -284,6 +354,10 @@ export async function executePlaywrightJob(
   const session = new ToolSession({
     artifactDirFactory: () => ensureRunDir(job.runId),
   });
+  let liveFrameCapture: null | {
+    captureNow: () => Promise<void>;
+    stop: () => Promise<void>;
+  } = null;
 
   try {
     const page = await session.ensurePage();
@@ -291,8 +365,13 @@ export async function executePlaywrightJob(
       runId: job.runId,
       session,
       page,
-      emit: emitAndTrack,
-      callTool: (tool, args, action) => withToolEvent(emitAndTrack, tool, args, action),
+      callTool: (tool, args, action) => callInternalTool(tool, args, action),
+      captureFrame: async () => {
+        await liveFrameCapture?.captureNow();
+      },
+      pause: async (ms = 220) => {
+        await sleep(ms);
+      },
     };
 
     await emitAndTrack({
@@ -302,6 +381,11 @@ export async function executePlaywrightJob(
         browser: "chromium",
         liveViewUrl: job.liveViewUrl,
       },
+    });
+    liveFrameCapture = await startLiveFrameCapture({
+      runId: job.runId,
+      session,
+      emit: emitAndTrack,
     });
 
     let result: ScenarioResult;
@@ -357,6 +441,9 @@ export async function executePlaywrightJob(
       artifacts: [],
     };
   } finally {
+    if (liveFrameCapture) {
+      await liveFrameCapture.stop();
+    }
     await session.close();
   }
 }
