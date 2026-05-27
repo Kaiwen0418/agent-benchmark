@@ -42,13 +42,15 @@ function getRunId(req: McpRequest) {
 }
 
 app.post("/mcp", async (req: McpRequest, res: McpResponse) => {
+  const runId = getRunId(req);
   const traceReporter = new McpTraceReporter({
-    runId: getRunId(req),
+    runId,
     sessionId: req.header("x-agentbench-mcp-session-id") ?? randomUUID(),
   });
   const server = createRunnerMcpServer({
     session,
     traceReporter,
+    runId,
   });
 
   try {

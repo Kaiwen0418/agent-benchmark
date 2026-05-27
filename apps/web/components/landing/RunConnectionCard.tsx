@@ -21,8 +21,10 @@ type RunConnectPayload = {
     available: boolean;
     transport: string;
     url: string | null;
+    headers: Record<string, string> | null;
     launchCommand: string;
     mockSitesUrl: string;
+    upstreamUrl: string | null;
     status: string;
   };
 };
@@ -258,6 +260,8 @@ export function RunConnectionCard() {
                   MCP transport: <span className="font-medium">{payload.mcp.transport}</span>
                   <br />
                   MCP URL: <span className="font-medium">{payload.mcp.url ?? "not generated in this build"}</span>
+                  <br />
+                  Auth: <span className="font-medium">{payload.mcp.headers ? "Bearer token included" : "none"}</span>
                   <br />
                   Launch command: <span className="font-medium">{payload.mcp.launchCommand}</span>
                 </div>

@@ -113,12 +113,20 @@ export const policyBlockArgsSchema = z.object({
 
 export type PolicyBlockArgs = z.infer<typeof policyBlockArgsSchema>;
 
+export const runCompleteArgsSchema = z.object({
+  score: z.number().nullable().optional(),
+  summary: z.string().nullable().optional(),
+});
+
+export type RunCompleteArgs = z.infer<typeof runCompleteArgsSchema>;
+
 export const agentbenchToolNameSchema = z.enum([
   ...browserToolNameSchema.options,
   "file.write",
   "email.open_mock",
   "email.save_draft",
   "policy.block",
+  "run.complete",
 ]);
 
 export type AgentbenchToolName = z.infer<typeof agentbenchToolNameSchema>;
@@ -140,6 +148,10 @@ export const agentbenchToolCallSchema = z.discriminatedUnion("tool", [
   z.object({
     tool: z.literal("policy.block"),
     args: policyBlockArgsSchema,
+  }),
+  z.object({
+    tool: z.literal("run.complete"),
+    args: runCompleteArgsSchema,
   }),
 ]);
 
@@ -205,5 +217,11 @@ export const browserToolDefinitions = [
     title: "Record policy block",
     description: "Record that an action was blocked by benchmark policy.",
     inputSchema: policyBlockArgsSchema,
+  },
+  {
+    name: "run.complete",
+    title: "Complete benchmark run",
+    description: "Mark the current AgentBench run as completed after the task objective is satisfied.",
+    inputSchema: runCompleteArgsSchema,
   },
 ] as const;

@@ -12,6 +12,7 @@ const traceReporter = new McpTraceReporter();
 const server = createRunnerMcpServer({
   session,
   traceReporter,
+  runId: runnerConfig.mcpRunId,
 });
 
 async function main() {

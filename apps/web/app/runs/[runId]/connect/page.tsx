@@ -60,6 +60,8 @@ export default async function RunConnectPage({
                 <br />
                 MCP URL: <span className="font-medium">{payload.mcp.url ?? "not generated in this build"}</span>
                 <br />
+                Auth: <span className="font-medium">{payload.mcp.headers ? "Bearer token included in config" : "none"}</span>
+                <br />
                 Command: <span className="font-medium">{payload.mcp.launchCommand}</span>
               </div>
             </section>

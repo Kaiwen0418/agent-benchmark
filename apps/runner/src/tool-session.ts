@@ -25,11 +25,18 @@ type ToolSessionOptions = {
   artifactDirFactory?: () => Promise<string>;
 };
 
+type RecordedArtifact = {
+  type: "file" | "screenshot";
+  storagePath: string | null;
+  url: string | null;
+};
+
 export class ToolSession {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private artifactDirPromise: Promise<string> | null = null;
+  private recordedArtifacts: RecordedArtifact[] = [];
 
   constructor(private readonly options: ToolSessionOptions = {}) {}
 
@@ -112,6 +119,11 @@ export class ToolSession {
       ...(typeof args === "object" && args ? args : {}),
       path: absolutePath,
     });
+    this.recordedArtifacts.push({
+      type: "screenshot",
+      storagePath: null,
+      url: null,
+    });
     return {
       path: absolutePath,
       fileName,
@@ -135,6 +147,11 @@ export class ToolSession {
     const fileName = sanitizeFileName(input.path);
     const absolutePath = path.join(dir, fileName);
     await writeFile(absolutePath, input.contents, "utf8");
+    this.recordedArtifacts.push({
+      type: "file",
+      storagePath: null,
+      url: null,
+    });
     return {
       path: absolutePath,
       fileName,
@@ -182,12 +199,21 @@ export class ToolSession {
     this.browser = null;
   }
 
+  getRecordedArtifacts() {
+    return [...this.recordedArtifacts];
+  }
+
   private async saveDownload(download: Download) {
     const dir = await this.ensureArtifactDir();
     const suggestedName = download.suggestedFilename();
     const fileName = sanitizeFileName(suggestedName || `download-${Date.now()}`);
     const absolutePath = path.join(dir, fileName);
     await download.saveAs(absolutePath);
+    this.recordedArtifacts.push({
+      type: "file",
+      storagePath: null,
+      url: null,
+    });
     return {
       path: absolutePath,
       fileName,

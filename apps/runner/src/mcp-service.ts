@@ -11,9 +11,12 @@ import {
   emailSaveDraftArgsSchema,
   fileWriteArgsSchema,
   policyBlockArgsSchema,
+  runCompleteArgsSchema,
 } from "@agentbench/mcp-tools";
 import { ToolSession } from "./tool-session.js";
 import { McpTraceReporter } from "./mcp-trace.js";
+import { completeRun } from "./api.js";
+import { runnerConfig } from "./config.js";
 
 type BrowserGotoArgs = z.infer<typeof browserGotoArgsSchema>;
 type BrowserClickArgs = z.infer<typeof browserClickArgsSchema>;
@@ -25,12 +28,14 @@ type FileWriteArgs = z.infer<typeof fileWriteArgsSchema>;
 type EmailOpenMockArgs = z.infer<typeof emailOpenMockArgsSchema>;
 type EmailSaveDraftArgs = z.infer<typeof emailSaveDraftArgsSchema>;
 type PolicyBlockArgs = z.infer<typeof policyBlockArgsSchema>;
+type RunCompleteArgs = z.infer<typeof runCompleteArgsSchema>;
 
 export function createRunnerMcpServer(params: {
   session: ToolSession;
   traceReporter?: McpTraceReporter;
+  runId?: string | null;
 }) {
-  const { session, traceReporter } = params;
+  const { session, traceReporter, runId } = params;
   const server = new McpServer({
     name: "agentbench-runner-browser",
     version: "0.1.0",
@@ -282,6 +287,45 @@ export function createRunnerMcpServer(params: {
     },
     {
       responseStatus: "warning",
+    },
+  );
+
+  registerTracedTool(
+    "run.complete",
+    {
+      title: "Complete benchmark run",
+      description: "Mark the current AgentBench run as completed after the objective is satisfied.",
+      inputSchema: runCompleteArgsSchema,
+    },
+    async (args: RunCompleteArgs) => {
+      const activeRunId = runId ?? runnerConfig.mcpRunId ?? null;
+      if (!activeRunId) {
+        throw new Error("AGENTBENCH_RUN_ID is required to complete a benchmark run.");
+      }
+
+      await completeRun(activeRunId, {
+        status: "completed",
+        score: args.score ?? null,
+        errorMessage: null,
+        artifacts: session.getRecordedArtifacts(),
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: args.summary
+              ? `Run marked complete. ${args.summary}`
+              : "Run marked complete.",
+          },
+        ],
+        structuredContent: {
+          runId: activeRunId,
+          status: "completed",
+          score: args.score ?? null,
+          summary: args.summary ?? null,
+        },
+      };
     },
   );
 
