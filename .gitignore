@@ -9,6 +9,7 @@ dist/
 build/
 coverage/
 out/
+packages/*/src/*.js
 
 # turborepo
 .turbo/

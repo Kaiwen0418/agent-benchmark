@@ -31,7 +31,7 @@ services:
   gateway:
     image: caddy:2
     ports:
-      - "8080:80"
+      - "${GATEWAY_HTTP_PORT:-8080}:80"
     volumes:
       - ./infra/caddy/Caddyfile.mcp-gateway:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
