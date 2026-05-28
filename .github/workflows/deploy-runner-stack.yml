@@ -66,6 +66,7 @@ jobs:
     runs-on:
       - self-hosted
       - linux
+      - agentbench-prod
     needs:
       - build-and-push-images
     steps:
