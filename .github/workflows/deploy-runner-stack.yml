@@ -1,6 +1,7 @@
 name: Deploy Runner Stack
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -23,7 +24,7 @@ jobs:
       mock_image: ${{ steps.meta.outputs.mock_image }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set metadata
         id: meta
@@ -40,8 +41,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and push runner image
         uses: docker/build-push-action@v6
@@ -71,7 +72,7 @@ jobs:
       - build-and-push-images
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Deploy on self-hosted runner
         env:

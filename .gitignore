@@ -16,11 +16,13 @@ out/
 # env files
 .env
 .env.local
+.env.server
 .env.development.local
 .env.test.local
 .env.production.local
 apps/*/.env
 apps/*/.env.local
+apps/*/.env.server
 apps/*/.env.development.local
 apps/*/.env.test.local
 apps/*/.env.production.local
