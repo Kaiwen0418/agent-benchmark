@@ -1,0 +1,114 @@
+name: Deploy Runner Stack
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  RUNNER_IMAGE_NAME: ${{ github.repository_owner }}/agentbench-runner-mcp
+  MOCK_IMAGE_NAME: ${{ github.repository_owner }}/agentbench-mock-sites
+
+jobs:
+  build-and-push-images:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      runner_image: ${{ steps.meta.outputs.runner_image }}
+      mock_image: ${{ steps.meta.outputs.mock_image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set metadata
+        id: meta
+        run: |
+          IMAGE_TAG="${GITHUB_SHA::12}"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "runner_image=${REGISTRY}/${RUNNER_IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "mock_image=${REGISTRY}/${MOCK_IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push runner image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/runner-mcp.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.runner_image }}:${{ steps.meta.outputs.image_tag }}
+            ${{ steps.meta.outputs.runner_image }}:latest-main
+
+      - name: Build and push mock-sites image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/mock-sites.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.mock_image }}:${{ steps.meta.outputs.image_tag }}
+            ${{ steps.meta.outputs.mock_image }}:latest-main
+
+  deploy-server:
+    runs-on: ubuntu-latest
+    needs:
+      - build-and-push-images
+    steps:
+      - name: Deploy to private Linux server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push-images.outputs.image_tag }}
+          RUNNER_IMAGE: ${{ needs.build-and-push-images.outputs.runner_image }}
+          MOCK_IMAGE: ${{ needs.build-and-push-images.outputs.mock_image }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          AGENTBENCH_WEB_URL: ${{ secrets.AGENTBENCH_WEB_URL }}
+          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
+          RUNNER_MCP_PUBLIC_BASE_URL: ${{ secrets.RUNNER_MCP_PUBLIC_BASE_URL }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          envs: IMAGE_TAG,RUNNER_IMAGE,MOCK_IMAGE,GHCR_USERNAME,GHCR_PAT,AGENTBENCH_WEB_URL,RUNNER_SHARED_SECRET,RUNNER_MCP_PUBLIC_BASE_URL,DEPLOY_PATH
+          script: |
+            set -euo pipefail
+
+            if [ -z "${DEPLOY_PATH:-}" ]; then
+              echo "DEPLOY_PATH is required (absolute path to checked-out repo on server)."
+              exit 1
+            fi
+
+            cd "$DEPLOY_PATH"
+
+            cat > .env.server <<EOF
+            RUNNER_MCP_IMAGE=${RUNNER_IMAGE}
+            MOCK_SITES_IMAGE=${MOCK_IMAGE}
+            IMAGE_TAG=${IMAGE_TAG}
+            AGENTBENCH_WEB_URL=${AGENTBENCH_WEB_URL}
+            RUNNER_SHARED_SECRET=${RUNNER_SHARED_SECRET}
+            RUNNER_MCP_PUBLIC_BASE_URL=${RUNNER_MCP_PUBLIC_BASE_URL}
+            EOF
+
+            docker login ghcr.io -u "${GHCR_USERNAME}" -p "${GHCR_PAT}"
+            docker-compose --env-file .env.server -f infra/docker/docker-compose.server.yml pull
+            docker-compose --env-file .env.server -f infra/docker/docker-compose.server.yml up -d
+
+            # Basic smoke checks
+            curl -fsS http://localhost:8080/healthz > /dev/null
+            curl -fsS -o /dev/null -w "%{http_code}" http://localhost:8080/mcp | grep -E "^(405|400)$" > /dev/null

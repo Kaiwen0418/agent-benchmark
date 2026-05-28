@@ -33,10 +33,16 @@ The MCP tool server:
 - is intended for agents running in the user's local environment
 - can activate an `external-agent` run without going through runner queue claim
 
-Current local MCP endpoint:
+Current local agent-facing MCP endpoint (via web proxy):
 
 ```text
-http://127.0.0.1:3002/mcp?runId=<run-id>
+http://localhost:3000/api/mcp/runs/<run-id>
+```
+
+Current local runner upstream endpoint:
+
+```text
+http://127.0.0.1:8080/mcp?runId=<run-id>  (or container-internal runner service)
 ```
 
 Current local MCP transport:
@@ -58,6 +64,20 @@ Planned later additions:
 - noVNC for live viewing
 - stronger remote session auth
 - per-run sandbox isolation
+
+## Default Local Runtime
+
+Default local startup mode is Docker Compose with:
+
+- `mock-sites`
+- `runner mcp:http`
+- `caddy gateway`
+
+In this mode, Cloudflare Tunnel can point at:
+
+```text
+http://localhost:8080
+```
 
 ## Execution Flow
 

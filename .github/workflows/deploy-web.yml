@@ -1,0 +1,21 @@
+name: Deploy Web
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel deploy hook (optional)
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$VERCEL_DEPLOY_HOOK_URL" ]; then
+            echo "VERCEL_DEPLOY_HOOK_URL not set. Assuming Vercel Git integration handles deployment."
+            exit 0
+          fi
+
+          curl -fsS -X POST "$VERCEL_DEPLOY_HOOK_URL"

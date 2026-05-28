@@ -30,12 +30,29 @@ The homepage now supports two local development paths:
 - the UI exposes a run-specific connect page and JSON config
 - in local development the payload includes:
   - `transport: streamable_http`
-  - `url: http://127.0.0.1:3002/mcp?runId=<run-id>`
-- the user's local agent connects to that MCP endpoint
+  - `url: http://localhost:3000/api/mcp/runs/<run-id>`
+  - `Authorization: Bearer <run-scoped-token>`
+- the web MCP route proxies to the runner MCP HTTP server
+- the user's local agent connects to the web MCP endpoint
 - the first MCP request moves the run to `running`
 - the agent ends the run with `run.complete`
 
 `Run Local Demo` keeps the older internal Playwright benchmark path for regression testing.
+
+## Local Startup Notes
+
+Default startup uses Docker runtime for backend services:
+
+- `docker-compose up -d --build` (from repository root)
+- this boots `mock-sites + runner mcp:http + caddy gateway`
+- web app is still started with `pnpm dev:web`
+
+`apps/mock-sites` and `runner dev:mcp:http` are separate by design:
+
+- `mock-sites` serves deterministic benchmark pages
+- `mcp:http` serves MCP tools and request/response tracing
+
+`pnpm dev:runner` is optional unless you need internal queued run execution. For normal `Start Agent Session` testing, `web + mock-sites + mcp:http` is usually enough.
 
 ## Next Recommended Steps
 

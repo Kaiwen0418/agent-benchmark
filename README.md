@@ -107,13 +107,13 @@ agentbench/
 
 ## Quick Start
 
-### Install
+### 1) Install
 
 ```bash
 pnpm install
 ```
 
-### Configure Supabase
+### 2) Configure Supabase
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local
@@ -134,29 +134,134 @@ supabase db push
 supabase db seed
 ```
 
-### Run web
+### 3) Start Local Runtime (Default: Docker)
+
+Use Docker as the default startup mode for `mock-sites + runner mcp:http + gateway`.
+
+```bash
+cp .env.docker.example .env
+docker-compose up -d --build
+```
+
+Default local endpoints:
+
+- `http://localhost:8080/mcp` -> MCP gateway endpoint
+- `http://localhost:8080/healthz` -> gateway health
+
+### 4) Start web app
 
 ```bash
 pnpm dev:web
 ```
 
-### Run runner
+### 5) Dev-mode startup (no Docker, optional)
+
+If you want process-level debugging, run services directly:
+
+```bash
+pnpm dev:mock
+pnpm --filter runner dev:mcp:http
+```
+
+Optional internal demo worker:
 
 ```bash
 pnpm dev:runner
 ```
 
-### Run local HTTP MCP server
+## Local Process Roles
+
+Why `mock-sites` and MCP are started separately:
+
+- `mock-sites` is the benchmark target website layer (deterministic pages like `/web-search`).
+- `mcp:http` is the tool gateway layer (agent-facing MCP server exposing browser/file/email tools).
+
+They are intentionally decoupled so you can:
+
+- evolve benchmark UI/content without changing MCP transport
+- run MCP integration tests without booting full internal runner loops
+- swap target sites later (real fixtures, remote mocks) without rewriting MCP tool contracts
+
+Why `dev:runner` is optional in day-to-day external-agent testing:
+
+- `dev:runner` is mainly for `internal` queued run execution and control-plane polling.
+- `external-agent` runs are primarily driven by `web + mcp:http (+ mock-sites)`.
+- start `dev:runner` when you want local demo scenarios, job-queue regression coverage, or internal execution fallback.
+
+Recommended startup sets:
+
+- External-agent path (common): `dev:web` + `dev:mock` + `runner dev:mcp:http`
+- Internal demo path: add `dev:runner`
+
+## Docker Gateway Bundle (mock + MCP + gateway)
+
+This is the default local runtime path.
+
+Files:
+
+- [docker-compose.yml](/Users/blueberryncherry/Proj/agent-benchmark/docker-compose.yml)
+- [Caddyfile.mcp-gateway](/Users/blueberryncherry/Proj/agent-benchmark/infra/caddy/Caddyfile.mcp-gateway)
+- [`.env.docker.example`](/Users/blueberryncherry/Proj/agent-benchmark/.env.docker.example)
+
+Prepare env:
 
 ```bash
-pnpm --filter runner dev:mcp:http
+cp .env.docker.example .env
 ```
 
-### Run mock sites
+Start:
 
 ```bash
-pnpm dev:mock
+docker-compose up -d --build
 ```
+
+Stop:
+
+```bash
+docker-compose down
+```
+
+Gateway endpoint on host:
+
+- `http://localhost:8080/mcp` -> runner MCP HTTP server
+- `http://localhost:8080/healthz` -> gateway health
+
+Legacy path remains available at `infra/docker/docker-compose.mcp-gateway.yml`.
+
+## CI/CD (Vercel + Private Linux)
+
+This repository now includes a split deployment pipeline:
+
+- web: Vercel (automatic via Git integration, or deploy hook)
+- runner stack: GitHub Actions -> GHCR images -> SSH deploy on private Linux server
+
+Workflows:
+
+- [ci.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/ci.yml)
+- [deploy-web.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/deploy-web.yml)
+- [deploy-runner-stack.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/deploy-runner-stack.yml)
+
+Server compose template:
+
+- [docker-compose.server.yml](/Users/blueberryncherry/Proj/agent-benchmark/infra/docker/docker-compose.server.yml)
+- [`.env.server.example`](/Users/blueberryncherry/Proj/agent-benchmark/infra/docker/.env.server.example)
+
+Required GitHub secrets for runner-stack deploy:
+
+- `SSH_HOST`
+- `SSH_USER`
+- `SSH_PORT`
+- `SSH_PRIVATE_KEY`
+- `DEPLOY_PATH` (absolute path of repo checkout on the server)
+- `GHCR_USERNAME`
+- `GHCR_PAT`
+- `AGENTBENCH_WEB_URL`
+- `RUNNER_SHARED_SECRET`
+- `RUNNER_MCP_PUBLIC_BASE_URL`
+
+Optional web deploy hook secret:
+
+- `VERCEL_DEPLOY_HOOK_URL`
 
 ## Security
 

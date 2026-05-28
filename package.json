@@ -8,6 +8,9 @@
     "dev:web": "pnpm --filter web dev",
     "dev:runner": "pnpm --filter runner dev",
     "dev:mock": "pnpm --filter mock-sites dev",
+    "infra:up": "docker-compose up -d --build",
+    "infra:down": "docker-compose down",
+    "infra:logs": "docker-compose logs -f --tail=200",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test"
