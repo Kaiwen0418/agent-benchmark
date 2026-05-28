@@ -86,6 +86,14 @@ jobs:
             OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
             RUNNER_IMAGE="ghcr.io/${OWNER}/agentbench-runner-mcp"
             MOCK_IMAGE="ghcr.io/${OWNER}/agentbench-mock-sites"
+            if docker compose version >/dev/null 2>&1; then
+              COMPOSE="docker compose"
+            elif command -v docker-compose >/dev/null 2>&1; then
+              COMPOSE="docker-compose"
+            else
+              echo "docker compose plugin or docker-compose is required on the self-hosted runner." >&2
+              exit 127
+            fi
 
             cat > .env.server <<EOF
             RUNNER_MCP_IMAGE=${RUNNER_IMAGE}
@@ -96,9 +104,9 @@ jobs:
             RUNNER_MCP_PUBLIC_BASE_URL=${RUNNER_MCP_PUBLIC_BASE_URL}
             EOF
 
-            docker login ghcr.io -u "${GHCR_USERNAME}" -p "${GHCR_PAT}"
-            docker-compose --env-file .env.server -f infra/docker/docker-compose.server.yml pull
-            docker-compose --env-file .env.server -f infra/docker/docker-compose.server.yml up -d
+            printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+            ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml pull
+            ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d
 
             # Basic smoke checks
             curl -fsS http://localhost:8080/healthz > /dev/null
