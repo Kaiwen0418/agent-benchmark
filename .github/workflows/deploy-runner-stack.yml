@@ -12,16 +12,13 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  RUNNER_IMAGE_NAME: ${{ github.repository_owner }}/agentbench-runner-mcp
-  MOCK_IMAGE_NAME: ${{ github.repository_owner }}/agentbench-mock-sites
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push-images:
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
-      runner_image: ${{ steps.meta.outputs.runner_image }}
-      mock_image: ${{ steps.meta.outputs.mock_image }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -30,9 +27,10 @@ jobs:
         id: meta
         run: |
           IMAGE_TAG="${GITHUB_SHA::12}"
+          OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "runner_image=${REGISTRY}/${RUNNER_IMAGE_NAME}" >> "$GITHUB_OUTPUT"
-          echo "mock_image=${REGISTRY}/${MOCK_IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "runner_image=${REGISTRY}/${OWNER}/agentbench-runner-mcp" >> "$GITHUB_OUTPUT"
+          echo "mock_image=${REGISTRY}/${OWNER}/agentbench-mock-sites" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -77,8 +75,6 @@ jobs:
       - name: Deploy on self-hosted runner
         env:
           IMAGE_TAG: ${{ needs.build-and-push-images.outputs.image_tag }}
-          RUNNER_IMAGE: ${{ needs.build-and-push-images.outputs.runner_image }}
-          MOCK_IMAGE: ${{ needs.build-and-push-images.outputs.mock_image }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           AGENTBENCH_WEB_URL: ${{ secrets.AGENTBENCH_WEB_URL }}
@@ -86,6 +82,10 @@ jobs:
           RUNNER_MCP_PUBLIC_BASE_URL: ${{ secrets.RUNNER_MCP_PUBLIC_BASE_URL }}
         run: |
             set -euo pipefail
+            OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+            RUNNER_IMAGE="ghcr.io/${OWNER}/agentbench-runner-mcp"
+            MOCK_IMAGE="ghcr.io/${OWNER}/agentbench-mock-sites"
+
             cat > .env.server <<EOF
             RUNNER_MCP_IMAGE=${RUNNER_IMAGE}
             MOCK_SITES_IMAGE=${MOCK_IMAGE}
