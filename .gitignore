@@ -43,6 +43,7 @@ Thumbs.db
 # local runtime data
 tmp/
 temp/
+.claude/
 .playwright-mcp/
 screenshots/
 supabase/.temp/
