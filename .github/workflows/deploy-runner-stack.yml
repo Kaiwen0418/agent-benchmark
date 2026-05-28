@@ -121,7 +121,7 @@ jobs:
 
             smoke_check() {
               curl -fsS "http://localhost:${GATEWAY_HTTP_PORT}/healthz" > /dev/null
-              curl -fsS -o /dev/null -w "%{http_code}" "http://localhost:${GATEWAY_HTTP_PORT}/mcp" | grep -E "^(405|400)$" > /dev/null
+              curl -sS -o /dev/null -w "%{http_code}" "http://localhost:${GATEWAY_HTTP_PORT}/mcp" | grep -E "^(405|400)$" > /dev/null
             }
 
             for attempt in $(seq 1 30); do
