@@ -248,11 +248,13 @@ Server compose template:
 
 Required GitHub secrets for runner-stack deploy:
 
-- `GHCR_USERNAME`
-- `GHCR_PAT`
+- `GHCR_USERNAME` - used by the self-hosted deploy job when pulling private GHCR images
+- `GHCR_PAT` - must belong to `GHCR_USERNAME` and include `read:packages`
 - `AGENTBENCH_WEB_URL`
 - `RUNNER_SHARED_SECRET`
 - `RUNNER_MCP_PUBLIC_BASE_URL`
+
+Image publishing uses the workflow `GITHUB_TOKEN` with `packages: write`; no PAT is needed for the build-and-push job.
 
 Self-hosted runner requirement:
 
