@@ -114,6 +114,23 @@ jobs:
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml pull
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d
 
-            # Basic smoke checks
-            curl -fsS "http://localhost:${GATEWAY_HTTP_PORT}/healthz" > /dev/null
-            curl -fsS -o /dev/null -w "%{http_code}" "http://localhost:${GATEWAY_HTTP_PORT}/mcp" | grep -E "^(405|400)$" > /dev/null
+            dump_deploy_logs() {
+              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml ps || true
+              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml logs --tail=120 gateway runner-mcp mock-sites || true
+            }
+
+            smoke_check() {
+              curl -fsS "http://localhost:${GATEWAY_HTTP_PORT}/healthz" > /dev/null
+              curl -fsS -o /dev/null -w "%{http_code}" "http://localhost:${GATEWAY_HTTP_PORT}/mcp" | grep -E "^(405|400)$" > /dev/null
+            }
+
+            for attempt in $(seq 1 30); do
+              if smoke_check; then
+                exit 0
+              fi
+              echo "Smoke check failed; retrying (${attempt}/30)."
+              sleep 2
+            done
+
+            dump_deploy_logs
+            exit 1
