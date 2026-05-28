@@ -64,12 +64,16 @@ jobs:
             ${{ steps.meta.outputs.mock_image }}:latest-main
 
   deploy-server:
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
     needs:
       - build-and-push-images
     steps:
-      - name: Deploy to private Linux server via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy on self-hosted runner
         env:
           IMAGE_TAG: ${{ needs.build-and-push-images.outputs.image_tag }}
           RUNNER_IMAGE: ${{ needs.build-and-push-images.outputs.runner_image }}
@@ -79,23 +83,8 @@ jobs:
           AGENTBENCH_WEB_URL: ${{ secrets.AGENTBENCH_WEB_URL }}
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
           RUNNER_MCP_PUBLIC_BASE_URL: ${{ secrets.RUNNER_MCP_PUBLIC_BASE_URL }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          envs: IMAGE_TAG,RUNNER_IMAGE,MOCK_IMAGE,GHCR_USERNAME,GHCR_PAT,AGENTBENCH_WEB_URL,RUNNER_SHARED_SECRET,RUNNER_MCP_PUBLIC_BASE_URL,DEPLOY_PATH
-          script: |
+        run: |
             set -euo pipefail
-
-            if [ -z "${DEPLOY_PATH:-}" ]; then
-              echo "DEPLOY_PATH is required (absolute path to checked-out repo on server)."
-              exit 1
-            fi
-
-            cd "$DEPLOY_PATH"
-
             cat > .env.server <<EOF
             RUNNER_MCP_IMAGE=${RUNNER_IMAGE}
             MOCK_SITES_IMAGE=${MOCK_IMAGE}

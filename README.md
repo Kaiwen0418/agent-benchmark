@@ -233,7 +233,7 @@ Legacy path remains available at `infra/docker/docker-compose.mcp-gateway.yml`.
 This repository now includes a split deployment pipeline:
 
 - web: Vercel (automatic via Git integration, or deploy hook)
-- runner stack: GitHub Actions -> GHCR images -> SSH deploy on private Linux server
+- runner stack: GitHub Actions -> GHCR images -> deploy on self-hosted Linux runner
 
 Workflows:
 
@@ -248,16 +248,17 @@ Server compose template:
 
 Required GitHub secrets for runner-stack deploy:
 
-- `SSH_HOST`
-- `SSH_USER`
-- `SSH_PORT`
-- `SSH_PRIVATE_KEY`
-- `DEPLOY_PATH` (absolute path of repo checkout on the server)
 - `GHCR_USERNAME`
 - `GHCR_PAT`
 - `AGENTBENCH_WEB_URL`
 - `RUNNER_SHARED_SECRET`
 - `RUNNER_MCP_PUBLIC_BASE_URL`
+
+Self-hosted runner requirement:
+
+- register a GitHub Actions self-hosted runner on your private Linux host
+- runner labels must include `self-hosted` and `linux`
+- `docker` and `docker-compose` must be available on that host
 
 Optional web deploy hook secret:
 
