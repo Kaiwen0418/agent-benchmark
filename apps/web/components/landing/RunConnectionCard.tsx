@@ -17,6 +17,13 @@ type RunConnectPayload = {
   localDemo: {
     note: string;
   };
+  hostedWeb: {
+    available: boolean;
+    sessionId: string | null;
+    taskSlug: string | null;
+    startUrl: string | null;
+    goal: string | null;
+  };
   mcp: {
     available: boolean;
     transport: string;
@@ -87,6 +94,13 @@ export function RunConnectionCard() {
   const browserPrompt = useMemo(() => {
     if (!payload) {
       return "";
+    }
+
+    if (payload.hostedWeb.available && payload.hostedWeb.startUrl) {
+      return [
+        "Open the hosted AgentBench benchmark site and complete the objective.",
+        payload.hostedWeb.startUrl,
+      ].join("\n");
     }
 
     return [
@@ -184,7 +198,7 @@ export function RunConnectionCard() {
             >
               <div className="font-medium">Advanced</div>
               <div className={`mt-1 text-xs ${method === "advanced" ? "text-[#d9d9d9]" : "text-[#6a655c]"}`}>
-                Raw JSON + MCP
+                Raw hosted config
               </div>
             </button>
           </div>
@@ -229,7 +243,7 @@ export function RunConnectionCard() {
                 </pre>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <a
-                    href={payload.connectUrl}
+                    href={payload.hostedWeb.startUrl ?? payload.connectUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
@@ -251,19 +265,17 @@ export function RunConnectionCard() {
               <>
                 <div className="text-sm font-medium text-[#111111]">Raw config</div>
                 <p className="mt-2 text-sm leading-7 text-[#585248]">
-                  Full JSON payload for the run context. This local demo does not generate a remote MCP URL.
+                  Full JSON payload for the run context. Hosted-web runs use the hosted URL as the primary agent target; MCP is legacy optional context.
                 </p>
                 <pre className="mt-4 overflow-x-auto rounded-[1rem] bg-[#111111] p-4 text-xs leading-6 text-[#d7ff00]">
                   {JSON.stringify(payload, null, 2)}
                 </pre>
                 <div className="mt-4 rounded-[1rem] bg-white px-4 py-3 text-sm leading-7 text-[#3f3b34]">
-                  MCP transport: <span className="font-medium">{payload.mcp.transport}</span>
+                  Hosted-web URL: <span className="font-medium">{payload.hostedWeb.startUrl ?? "not available"}</span>
                   <br />
-                  MCP URL: <span className="font-medium">{payload.mcp.url ?? "not generated in this build"}</span>
+                  Session id: <span className="font-medium">{payload.hostedWeb.sessionId ?? "not allocated"}</span>
                   <br />
-                  Auth: <span className="font-medium">{payload.mcp.headers ? "Bearer token included" : "none"}</span>
-                  <br />
-                  Launch command: <span className="font-medium">{payload.mcp.launchCommand}</span>
+                  Legacy MCP: <span className="font-medium">{payload.mcp.available ? "available" : "not required"}</span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button

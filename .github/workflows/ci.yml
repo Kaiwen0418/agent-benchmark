@@ -33,8 +33,8 @@ jobs:
       - name: Build web
         run: pnpm --filter web build
 
-      - name: Build runner
-        run: pnpm --filter runner build
+      - name: Build scoring
+        run: pnpm --filter @agentbench/scoring build
 
-      - name: Build mock-sites
-        run: pnpm --filter mock-sites build
+      - name: Build hosted-sites
+        run: pnpm --filter hosted-sites build

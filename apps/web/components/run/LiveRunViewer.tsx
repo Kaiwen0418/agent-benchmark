@@ -27,6 +27,8 @@ type StreamPayload = {
   }>;
 };
 
+type StreamEvent = StreamPayload["events"][number];
+
 function deriveLiveFrameUrl(payload: StreamPayload) {
   const liveEvent = [...payload.events]
     .reverse()
@@ -43,6 +45,42 @@ function deriveLiveFrameUrl(payload: StreamPayload) {
   return latestScreenshot?.url ?? null;
 }
 
+function deriveScore(payload: StreamPayload, fallback: number | null) {
+  if (typeof payload.run?.score === "number") {
+    return payload.run.score;
+  }
+
+  const hostedScore = [...payload.events]
+    .reverse()
+    .find((event) => event.type === "hosted.score" && typeof event.payload.score === "number");
+
+  return typeof hostedScore?.payload.score === "number" ? hostedScore.payload.score : fallback;
+}
+
+function hostedEventLabel(event: StreamEvent) {
+  if (event.type === "hosted.session.created") {
+    return "Hosted session created";
+  }
+
+  if (event.type === "hosted.page.load") {
+    return `Page loaded${typeof event.payload.title === "string" ? `: ${event.payload.title}` : ""}`;
+  }
+
+  if (event.type === "hosted.task_signal") {
+    return `Task signal: ${String(event.payload.name ?? "unknown")}`;
+  }
+
+  if (event.type === "hosted.score") {
+    return `Score ${String(event.payload.score ?? "--")}`;
+  }
+
+  if (event.type === "hosted.action") {
+    return `Action: ${String(event.payload.type ?? "unknown")}`;
+  }
+
+  return event.type;
+}
+
 export function LiveRunViewer(props: LiveRunViewerProps) {
   const {
     runId,
@@ -55,6 +93,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   const [status, setStatus] = useState(initialStatus);
   const [score, setScore] = useState<number | null>(initialScore);
   const [frameUrl, setFrameUrl] = useState<string | null>(initialFrameUrl);
+  const [hostedEvents, setHostedEvents] = useState<StreamEvent[]>([]);
 
   useEffect(() => {
     const source = new EventSource(`/api/runs/${runId}/stream`);
@@ -62,8 +101,9 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
     source.addEventListener("snapshot", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as StreamPayload;
       setStatus(payload.run?.status ?? initialStatus);
-      setScore(payload.run?.score ?? initialScore);
+      setScore(deriveScore(payload, initialScore));
       setFrameUrl(deriveLiveFrameUrl(payload));
+      setHostedEvents(payload.events.filter((item) => item.type.startsWith("hosted.")).slice(-8));
     });
 
     source.addEventListener("terminal", () => {
@@ -95,9 +135,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
                 className="h-full w-full object-contain"
               />
             ) : (
-              <div className="flex h-full items-center justify-center text-[11px] text-[#8f897e]">
-                Waiting for first live frame...
-              </div>
+              <HostedEventFallback events={hostedEvents} compact />
             )}
             <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between rounded-full bg-black/55 px-3 py-1.5 text-[9px] uppercase tracking-[0.15em] text-[#f1ebde]">
               <span className="truncate">{initialTitle}</span>
@@ -142,13 +180,39 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
                 className="h-full w-full object-contain"
               />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-[#8f897e]">
-                Waiting for first live frame...
-              </div>
+              <HostedEventFallback events={hostedEvents} />
             )}
           </div>
         </div>
       </div>
     </main>
+  );
+}
+
+function HostedEventFallback({ events, compact = false }: { events: StreamEvent[]; compact?: boolean }) {
+  if (events.length === 0) {
+    return (
+      <div className={`flex h-full items-center justify-center ${compact ? "text-[11px]" : "text-sm"} text-[#8f897e]`}>
+        Waiting for hosted site activity...
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col justify-end gap-2 p-4">
+      {events.map((event, index) => (
+        <div
+          key={`${event.type}-${index}`}
+          className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-left"
+        >
+          <div className={`${compact ? "text-[9px]" : "text-xs"} uppercase tracking-[0.16em] text-[#8f897e]`}>
+            {event.type}
+          </div>
+          <div className={`${compact ? "text-[11px]" : "text-sm"} mt-1 text-[#f7f2e7]`}>
+            {hostedEventLabel(event)}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

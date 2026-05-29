@@ -14,7 +14,7 @@ export async function GET(
   }
 
   const benchmarkCase = await getBenchmarkCase(run.caseId);
-  const payload = buildRunConnectPayload({
+  const payload = await buildRunConnectPayload({
     run,
     benchmarkCase,
     origin: new URL(request.url).origin,

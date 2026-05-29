@@ -1,27 +1,15 @@
-name: agentbench-mcp-gateway
+name: agentbench-hosted-sites
 
 services:
-  mock-sites:
-    image: ${MOCK_SITES_IMAGE}:${IMAGE_TAG}
+  hosted-sites:
+    image: ${HOSTED_SITES_IMAGE}:${IMAGE_TAG}
     environment:
-      MOCK_SITES_PORT: 3001
-    restart: unless-stopped
-
-  runner-mcp:
-    image: ${RUNNER_MCP_IMAGE}:${IMAGE_TAG}
-    environment:
-      RUNNER_MCP_HTTP_HOST: 0.0.0.0
-      RUNNER_MCP_HTTP_PORT: 8080
-      RUNNER_MCP_PUBLIC_BASE_URL: ${RUNNER_MCP_PUBLIC_BASE_URL}
-      MOCK_SITES_URL: http://mock-sites:3001
+      HOSTED_SITES_PORT: 3003
+      HOSTED_SITES_PUBLIC_URL: ${HOSTED_SITES_PUBLIC_URL}
       AGENTBENCH_WEB_URL: ${AGENTBENCH_WEB_URL}
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET}
-      RUNNER_ARTIFACTS_DIR: /var/agentbench/artifacts
-      RUNNER_HEADLESS: "true"
-    volumes:
-      - runner-artifacts:/var/agentbench/artifacts
-    depends_on:
-      - mock-sites
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
     restart: unless-stopped
 
   gateway:
@@ -29,15 +17,13 @@ services:
     ports:
       - "${GATEWAY_HTTP_PORT:-8080}:80"
     volumes:
-      - ../caddy/Caddyfile.mcp-gateway:/etc/caddy/Caddyfile:ro
+      - ../caddy/Caddyfile.hosted-sites:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - runner-mcp
-      - mock-sites
+      - hosted-sites
     restart: unless-stopped
 
 volumes:
-  runner-artifacts:
   caddy-data:
   caddy-config:

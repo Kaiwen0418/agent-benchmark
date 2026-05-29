@@ -45,6 +45,34 @@ set
   difficulty = excluded.difficulty,
   is_public = excluded.is_public;
 
+insert into public.benchmark_cases (id, slug, title, description, category, difficulty, provider, metadata, is_public)
+values
+  (
+    '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
+    'shopping-constrained-checkout',
+    'Shopping Checkout',
+    'Use a hosted shopping site to submit a constrained checkout order.',
+    'browser',
+    'easy',
+    'hosted-web',
+    '{
+      "app": "shopping-lite",
+      "taskSlug": "shopping-constrained-checkout",
+      "seedVersion": "shopping-lite-v1"
+    }'::jsonb,
+    true
+  )
+on conflict (id) do update
+set
+  slug = excluded.slug,
+  title = excluded.title,
+  description = excluded.description,
+  category = excluded.category,
+  difficulty = excluded.difficulty,
+  provider = excluded.provider,
+  metadata = excluded.metadata,
+  is_public = excluded.is_public;
+
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)
 values (
   '7e8a6df3-17c3-4ddb-9877-d0bd8a0f1001',

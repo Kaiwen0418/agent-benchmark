@@ -12,6 +12,25 @@ importers:
         specifier: ^2.0.0
         version: 2.9.12
 
+  apps/hosted-sites:
+    dependencies:
+      '@agentbench/scoring':
+        specifier: workspace:*
+        version: link:../../packages/scoring
+      '@supabase/supabase-js':
+        specifier: ^2.49.1
+        version: 2.105.4
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.7
+        version: 22.19.19
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   apps/mock-sites:
     devDependencies:
       '@types/node':
@@ -124,6 +143,19 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+
+  packages/scoring:
+    dependencies:
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.7
+        version: 22.19.19
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
 
 packages:
 
