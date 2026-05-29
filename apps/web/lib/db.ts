@@ -14,6 +14,7 @@ import { mockStore } from "./mock-store";
 
 const GUEST_RUN_LIMIT = 1;
 const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
+const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, metadata, is_public, created_at";
 
 function getSupabase() {
   return createSupabaseAdminClient();
@@ -83,7 +84,7 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
 
   const { data, error } = await supabase
     .from("benchmark_cases")
-    .select("id, slug, title, description, category, difficulty, is_public, created_at")
+    .select(benchmarkCaseSelect)
     .order("created_at", { ascending: false });
 
   if (error || !data) {
@@ -97,20 +98,27 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
     description: item.description,
     category: item.category,
     difficulty: item.difficulty,
+    provider: item.provider ?? "native",
+    metadata: item.metadata ?? {},
     isPublic: item.is_public,
     createdAt: item.created_at,
   }));
 }
 
 export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {
+  const localCase = mockStore.getCase(caseId);
+  if (localCase) {
+    return localCase;
+  }
+
   const supabase = getSupabase();
   if (!supabase) {
-    return mockStore.getCase(caseId);
+    return null;
   }
 
   const byId = await supabase
     .from("benchmark_cases")
-    .select("id, slug, title, description, category, difficulty, is_public, created_at")
+    .select(benchmarkCaseSelect)
     .eq("id", caseId)
     .maybeSingle();
 
@@ -122,6 +130,8 @@ export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | 
       description: byId.data.description,
       category: byId.data.category,
       difficulty: byId.data.difficulty,
+      provider: byId.data.provider ?? "native",
+      metadata: byId.data.metadata ?? {},
       isPublic: byId.data.is_public,
       createdAt: byId.data.created_at,
     };
@@ -129,7 +139,7 @@ export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | 
 
   const bySlug = await supabase
     .from("benchmark_cases")
-    .select("id, slug, title, description, category, difficulty, is_public, created_at")
+    .select(benchmarkCaseSelect)
     .eq("slug", caseId)
     .maybeSingle();
 
@@ -144,6 +154,8 @@ export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | 
     description: bySlug.data.description,
     category: bySlug.data.category,
     difficulty: bySlug.data.difficulty,
+    provider: bySlug.data.provider ?? "native",
+    metadata: bySlug.data.metadata ?? {},
     isPublic: bySlug.data.is_public,
     createdAt: bySlug.data.created_at,
   };

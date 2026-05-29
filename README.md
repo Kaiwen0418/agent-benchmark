@@ -25,7 +25,7 @@ AgentBench is designed to make that behavior visible. The current product direct
 - single-page run playground
 - live browser-style viewing
 - tool call timeline
-- run-scoped MCP connection flow
+- run-scoped hosted-web connection flow
 - replay gallery
 - inline integration docs
 - benchmark scoring and observability
@@ -43,32 +43,30 @@ Later infrastructure:
 
 - Next.js application shell
 - Supabase for persistence
-- runner APIs and orchestration
-- self-hosted Linux runner
-- Docker sandbox per run
-- Playwright-driven browser automation
-- noVNC live streaming
-- MCP-compatible tool gateway
-- mock email and file systems for deterministic tasks
+- hosted benchmark sites
+- self-hosted Linux deployment target
+- session-scoped task state
+- server-side hosted-web scoring
+- optional legacy runner/MCP path for internal demos
 
-## Current MCP Link Flow
+## Current Hosted-Web Link Flow
 
-Today the MCP connection model is:
+Today the hosted-web connection model is:
 
 1. the user clicks `Start Agent Session`
 2. AgentBench creates a run in `waiting_for_agent`
-3. the UI exposes a run-specific connection page and JSON config
-4. the user's local agent connects to a local HTTP MCP endpoint
-5. the first MCP tool call moves the run to `running`
-6. the agent calls `run.complete` when finished
+3. the UI allocates a hosted session and exposes a run-specific hosted site URL
+4. the user's agent opens that hosted benchmark URL in a browser
+5. hosted-sites emits telemetry and task signals back to AgentBench
+6. hosted-sites writes scorer-compatible results and completes the run
 
-In local development the MCP endpoint is:
+In local development the hosted benchmark endpoint defaults to:
 
 ```text
-http://127.0.0.1:3002/mcp?runId=<run-id>
+http://localhost:3003
 ```
 
-This is a development transport, not a public remote MCP service yet.
+The legacy MCP runner remains available for internal demos, but it is no longer the default hosted-web path.
 
 ## Monorepo Structure
 
@@ -77,7 +75,8 @@ agentbench/
 ├─ apps/
 │  ├─ web/
 │  ├─ runner/
-│  └─ mock-sites/
+│  ├─ mock-sites/
+│  └─ hosted-sites/
 ├─ packages/
 │  ├─ protocol/
 │  ├─ mcp-tools/
@@ -126,8 +125,7 @@ Set:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
-- `MCP_SESSION_SECRET`
-- `AGENTBENCH_MCP_BASE_URL`
+- `HOSTED_SITES_URL`
 
 Then apply:
 
@@ -136,15 +134,15 @@ supabase db push
 supabase db seed
 ```
 
-For production web deploys, set `AGENTBENCH_MCP_BASE_URL` to the public runner gateway MCP endpoint, for example:
+For production web deploys, set `HOSTED_SITES_URL` to the public hosted benchmark site, for example:
 
 ```text
-https://mcp.project-echo.xyz/mcp
+https://hosted.project-echo.xyz
 ```
 
 ### 3) Start Local Runtime (Default: Docker)
 
-Use Docker as the default startup mode for `mock-sites + runner mcp:http + gateway`.
+Use Docker as the default startup mode for `hosted-sites + gateway`.
 
 ```bash
 cp .env.docker.example .env
@@ -153,8 +151,8 @@ docker-compose up -d --build
 
 Default local endpoints:
 
-- `http://localhost:8080/mcp` -> MCP gateway endpoint
-- `http://localhost:8080/healthz` -> gateway health
+- `http://localhost:8080/health` -> hosted-sites health
+- `http://localhost:8080/shopping` -> hosted shopping site, requires a session token for benchmark runs
 
 ### 4) Start web app
 
@@ -167,8 +165,7 @@ pnpm dev:web
 If you want process-level debugging, run services directly:
 
 ```bash
-pnpm dev:mock
-pnpm --filter runner dev:mcp:http
+pnpm dev:hosted
 ```
 
 Optional internal demo worker:
@@ -179,36 +176,71 @@ pnpm dev:runner
 
 ## Local Process Roles
 
-Why `mock-sites` and MCP are started separately:
+Why `hosted-sites` is the default target:
 
-- `mock-sites` is the benchmark target website layer (deterministic pages like `/web-search`).
-- `mcp:http` is the tool gateway layer (agent-facing MCP server exposing browser/file/email tools).
+- `hosted-sites` is the hosted-web benchmark site layer for session-scoped, server-scored task apps.
+- hosted-web runs use normal browser access to a session URL; the site emits telemetry and score events back to `apps/web`.
+- `mock-sites`, `runner`, and MCP remain as legacy/internal demo tooling, not the primary production path.
 
-They are intentionally decoupled so you can:
+This keeps the default runtime small:
 
-- evolve benchmark UI/content without changing MCP transport
-- run MCP integration tests without booting full internal runner loops
-- swap target sites later (real fixtures, remote mocks) without rewriting MCP tool contracts
+- no server-side Chromium pool for normal hosted-web runs
+- no MCP gateway dependency for the first hosted benchmark
+- one long-running hosted site deployment can serve many session-scoped runs
 
 Why `dev:runner` is optional in day-to-day external-agent testing:
 
 - `dev:runner` is mainly for `internal` queued run execution and control-plane polling.
-- `external-agent` runs are primarily driven by `web + mcp:http (+ mock-sites)`.
+- `external-agent` hosted-web runs are primarily driven by `web + hosted-sites`.
 - start `dev:runner` when you want local demo scenarios, job-queue regression coverage, or internal execution fallback.
 
 Recommended startup sets:
 
-- External-agent path (common): `dev:web` + `dev:mock` + `runner dev:mcp:http`
+- Hosted-web path: `dev:web` + `dev:hosted`
 - Internal demo path: add `dev:runner`
 
-## Docker Gateway Bundle (mock + MCP + gateway)
+## Hosted Web PoC
+
+The first hosted-web migration target is `shopping-lite`, a session-scoped checkout task with WebArena-Verified-style evaluator output.
+
+Start the hosted benchmark site:
+
+```bash
+pnpm dev:hosted
+```
+
+The web app uses `HOSTED_SITES_URL` to allocate hosted sessions. In local development it defaults to:
+
+```text
+http://localhost:3003
+```
+
+The hosted site posts events and completion back to `AGENTBENCH_WEB_URL`, defaulting to:
+
+```text
+http://localhost:3000
+```
+
+If the web app has `RUNNER_SHARED_SECRET` configured, start `hosted-sites` with the same value so event and completion callbacks are accepted.
+
+Create a local session:
+
+```bash
+curl -X POST http://localhost:3003/api/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Open the returned `startUrl`. The task is to buy exactly one USB-C charger at or below `$30` with standard shipping and no restricted products.
+
+## Docker Gateway Bundle (hosted-sites + gateway)
 
 This is the default local runtime path.
 
 Files:
 
 - [docker-compose.yml](/Users/blueberryncherry/Proj/agent-benchmark/docker-compose.yml)
-- [Caddyfile.mcp-gateway](/Users/blueberryncherry/Proj/agent-benchmark/infra/caddy/Caddyfile.mcp-gateway)
+- [Caddyfile.hosted-sites](/Users/blueberryncherry/Proj/agent-benchmark/infra/caddy/Caddyfile.hosted-sites)
 - [`.env.docker.example`](/Users/blueberryncherry/Proj/agent-benchmark/.env.docker.example)
 
 Prepare env:
@@ -231,8 +263,8 @@ docker-compose down
 
 Gateway endpoint on host:
 
-- `http://localhost:8080/mcp` -> runner MCP HTTP server
-- `http://localhost:8080/healthz` -> gateway health
+- `http://localhost:8080/health` -> hosted-sites health
+- `http://localhost:8080/shopping?session=<token>` -> hosted task URL
 
 Legacy path remains available at `infra/docker/docker-compose.mcp-gateway.yml`.
 
@@ -241,26 +273,28 @@ Legacy path remains available at `infra/docker/docker-compose.mcp-gateway.yml`.
 This repository now includes a split deployment pipeline:
 
 - web: Vercel (automatic via Git integration, or deploy hook)
-- runner stack: GitHub Actions -> GHCR images -> deploy on self-hosted Linux runner
+- hosted-sites: GitHub Actions -> GHCR image -> deploy on self-hosted Linux runner
 
 Workflows:
 
 - [ci.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/ci.yml)
 - [deploy-web.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/deploy-web.yml)
-- [deploy-runner-stack.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/deploy-runner-stack.yml)
+- [deploy-hosted-sites.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/deploy-hosted-sites.yml)
 
 Server compose template:
 
 - [docker-compose.server.yml](/Users/blueberryncherry/Proj/agent-benchmark/infra/docker/docker-compose.server.yml)
 - [`.env.server.example`](/Users/blueberryncherry/Proj/agent-benchmark/infra/docker/.env.server.example)
 
-Required GitHub secrets for runner-stack deploy:
+Required GitHub secrets for hosted-sites deploy:
 
 - `GHCR_USERNAME` - used by the self-hosted deploy job when pulling private GHCR images
 - `GHCR_PAT` - must belong to `GHCR_USERNAME` and include `read:packages`
 - `AGENTBENCH_WEB_URL`
 - `RUNNER_SHARED_SECRET`
-- `RUNNER_MCP_PUBLIC_BASE_URL`
+- `HOSTED_SITES_PUBLIC_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
 Image publishing uses the workflow `GITHUB_TOKEN` with `packages: write`; no PAT is needed for the build-and-push job.
 

@@ -57,6 +57,103 @@ Live Viewer and Scorer
 
 The platform owns the benchmark site and task state. The agent owns browser execution.
 
+## Run, Attempt, Session
+
+Hosted-web benchmarks should support both single-site tasks and multi-site suites.
+
+The long-term hierarchy is:
+
+```text
+benchmark_runs
+  user-facing execution record
+
+benchmark_attempts
+  one concrete suite execution under a run
+
+hosted_web_sessions
+  one site/task session inside an attempt
+
+hosted_web_results
+  per-session score and final-state evidence
+
+benchmark_attempt_scores
+  aggregate score across all sessions in an attempt
+```
+
+This avoids tying `benchmark_runs` directly to a single hosted site. A run can later execute a suite such as:
+
+```text
+webarena-lite-v1
+  01 shopping-lite / constrained checkout
+  02 forum-lite / reply to thread
+  03 repo-lite / create merge request
+  04 wiki-lite / retrieve answer
+```
+
+Current single-site hosted runs create one implicit `benchmark_attempt` when Supabase service-role access is available. Local preview and mock-store runs can still leave `attempt_id` null so hosted-sites remains usable without a database-backed run row.
+
+### Orchestrator URL
+
+Multi-site hosted suites should eventually expose one agent-facing orchestrator URL:
+
+```text
+https://hosted.agentbench.dev/attempt/<attempt-token>
+```
+
+The orchestrator owns:
+
+- ordered session list
+- current task pointer
+- next-task routing
+- suite completion detection
+- aggregate scoring trigger
+
+Agents should not need to manually juggle several site URLs.
+
+## Target Service Boundaries
+
+The hosted-web architecture should eventually separate four responsibilities:
+
+```text
+apps/web
+  run control plane
+  auth and quota
+  live viewer and replay
+  public API
+
+apps/hosted-sites
+  benchmark websites
+  task UI
+  telemetry emission
+  task-side state changes
+
+hosted session service
+  session allocation
+  seed data
+  token issuance
+  lifecycle and expiry
+  cleanup
+
+scoring service
+  evaluator execution
+  backend_state checks
+  ui_state checks
+  final_response checks
+  score aggregation
+```
+
+These do not need to be independent processes at first. The first implementation should keep deployment simple with `apps/web` and `apps/hosted-sites`, while keeping session and scoring code behind package boundaries that can later become services.
+
+Recommended progression:
+
+1. `apps/web + apps/hosted-sites`: session and scoring logic are modules.
+2. Add persistent tables for hosted sessions, task state, events, and score results.
+3. Extract `packages/scoring` for evaluator types and deterministic aggregation.
+4. Extract `packages/hosted-sessions` for token, seed, lifecycle, and cleanup logic.
+5. Split `session-service` and `scoring-service` only when multiple hosted sites, async scoring, LLM judges, or cleanup pressure justify it.
+
+`apps/web` should own run lifecycle. `apps/hosted-sites` should own task UI and task-side state mutation. Scoring should read benchmark state and produce evaluator-level results. Session management should own setup and cleanup.
+
 ## Core Components
 
 ### Hosted Benchmark Site
@@ -238,35 +335,451 @@ Current components map naturally to this model:
 
 For the first version, `apps/mock-sites` can host one session-aware task while `apps/web` records telemetry and score events.
 
+## Replacing Mock Sites
+
+The long-term goal is for hosted web benchmarks to replace the current static `mock-sites` mode.
+
+Today `apps/mock-sites` serves static HTML pages and the internal runner executes hard-coded Playwright scenarios against them. That is useful for demos, but it has three limits:
+
+- benchmark state is mostly page-local rather than session-scoped server state
+- success is simulated by the runner rather than evaluated from task state
+- tasks cannot scale toward WebArena-like workflows without turning static pages into an application layer
+
+The replacement should move AgentBench from static mock pages to session-aware hosted benchmark sites.
+
+Target shape:
+
+```text
+apps/hosted-sites or evolved apps/mock-sites
+  benchmark applications
+  task templates
+  session-scoped seed data
+  telemetry script
+  task signal API
+
+apps/web
+  run creation
+  hosted session allocation
+  telemetry ingestion
+  scoring orchestration
+  live viewer
+
+packages/scoring
+  deterministic evaluator definitions
+  scorer implementations
+  shared score result types
+```
+
+The internal Playwright runner can remain for regression and smoke tests, but it should no longer be the primary benchmark execution path.
+
+## Thin Benchmark Apps
+
+Hosted benchmark sites should not try to clone heavy products such as Magento, GitLab, Postmill, Kiwix, or OpenStreetMap.
+
+The goal is to reproduce the task pressure, not the full application.
+
+AgentBench should implement thin benchmark apps:
+
+```text
+task surface + session state + scorer
+```
+
+Not:
+
+```text
+complete product clone
+```
+
+Each app should implement only the pages, interactions, and persisted state needed by benchmark tasks.
+
+### WebArena Site Mapping
+
+| WebArena-style site | Avoid cloning | Implement instead |
+| --- | --- | --- |
+| Shopping | full catalog, inventory, promotion, payment, account system | product search, filters, cart, checkout, order state |
+| Shopping admin | full commerce admin | product edit, order status, discount rule, setting toggle |
+| GitLab | git storage, CI, permissions, full merge request engine | issue list, file browser, file editor, branch picker, merge request form |
+| Forum | full community platform | thread list, post detail, reply, vote, moderation action |
+| Wikipedia/Kiwix | full offline encyclopedia | small deterministic wiki corpus with links and citations |
+| Map/OpenStreetMap | tile server, routing engine, geocoder | place search, place details, distance table, route result fixture |
+
+This keeps the benchmark realistic enough for agents while keeping the implementation controllable.
+
+### Recommended App Set
+
+Initial hosted apps:
+
+- `email-lite`: inbox, thread, draft, send, labels
+- `shopping-lite`: product catalog, filters, cart, checkout
+- `repo-lite`: issues, files, editor, merge requests
+- `forum-lite`: threads, replies, votes, moderation
+- `wiki-lite`: deterministic article corpus and search
+- `admin-lite`: settings, product edits, order status
+- `map-lite`: place search and route fixtures
+
+The `lite` suffix is an implementation detail. User-facing labels should describe the task domain, not expose that the site is partial.
+
+### Implementation Boundary
+
+Create a separate app once the first session-aware PoC works:
+
+```text
+apps/hosted-sites
+  src/
+    server.ts
+    apps/
+      email/
+      shopping/
+      repo/
+      forum/
+      wiki/
+      admin/
+      map/
+    tasks/
+      definitions.ts
+      seed.ts
+    telemetry/
+      client.ts
+      server.ts
+    scoring/
+      evaluate.ts
+```
+
+The first PoC may evolve `apps/mock-sites`, but the replacement path should move to `apps/hosted-sites` so static demo pages and hosted benchmark apps do not share the same boundary.
+
+### Shared App Requirements
+
+Every hosted benchmark app should provide:
+
+- session-scoped seed data
+- deterministic start URL
+- telemetry event emission
+- task signal emission for important state changes
+- server-side state that can be scored
+- cleanup by session id
+
+Hosted apps should avoid adding one relational table set per site. Use runtime state for mutable task data and persist only sanitized events and final result snapshots.
+
+### Runtime State Models
+
+Suggested runtime state domains:
+
+```text
+email-lite: threads, messages, drafts, sent messages
+shopping-lite: products, carts, orders
+repo-lite: projects, issues, files, merge requests, file changes
+forum-lite: threads, posts, votes, moderation actions
+wiki-lite: pages, search index
+admin-lite: settings, audit log
+map-lite: places, routes
+```
+
+These models may live in memory, Redis/KV, or a site-local store. The AgentBench control-plane database should not mirror every hosted app's business schema.
+
+### First PoC Choice
+
+Start with `shopping-lite` or `repo-lite`.
+
+`shopping-lite` advantages:
+
+- easy to explain in the UI
+- clear backend-state scorer
+- good coverage of search, filtering, cart, and checkout
+- close to WebArena shopping tasks
+
+`repo-lite` advantages:
+
+- strong WebArena/GitLab flavor without running GitLab
+- useful for code-agent workflows
+- clear state validation through issues, file edits, and merge requests
+
+Recommended first task:
+
+```text
+shopping-lite / constrained checkout
+```
+
+Reason:
+
+- simpler state model
+- fast to seed
+- easy binary scoring
+- good fit for live replay
+
+Example success conditions:
+
+```text
+backend_state:
+- submitted order exists for the session
+- order contains exactly one charger product
+- total price is less than or equal to 30
+- order shipping method is standard
+- no restricted product appears in the order
+
+ui_state:
+- final page shows order confirmation
+
+final_response:
+- agent reports submitted order id
+```
+
+### Build Order
+
+1. Implement `shopping-lite` with session-scoped seed data.
+2. Add hosted session allocation in `apps/web`.
+3. Return hosted start URL from the run connect payload.
+4. Emit telemetry from the hosted site into `run_events`.
+5. Implement `backend_state` scorer for the checkout task.
+6. Surface evaluator-level score details in run events.
+7. Move app code into `apps/hosted-sites`.
+8. Port the remaining static mock cases into thin apps.
+
+## WebArena-Verified-style Evaluation Model
+
+Hosted web benchmarks should use a WebArena-Verified-inspired scorer shape.
+
+Each task can define success conditions across four evaluator families:
+
+- `retrieve_value`: validates information the agent reports back
+- `backend_state`: validates persisted application state
+- `ui_state`: validates page-visible state
+- `final_response`: validates the agent's final response format and content
+
+These families are independent. A task may use only one, but production-grade tasks should prefer `backend_state` when possible.
+
+Example task definition:
+
+```ts
+type HostedWebTaskDefinition = {
+  id: string;
+  slug: string;
+  title: string;
+  goal: string;
+  app: "shopping" | "email" | "forum" | "docs" | "admin";
+  startPath: string;
+  seedVersion: string;
+  maxSteps?: number;
+  evaluators: HostedWebEvaluator[];
+};
+
+type HostedWebEvaluator =
+  | RetrieveValueEvaluator
+  | BackendStateEvaluator
+  | UiStateEvaluator
+  | FinalResponseEvaluator;
+```
+
+### `retrieve_value`
+
+Use this when the task asks the agent to find or report information.
+
+Example:
+
+```ts
+type RetrieveValueEvaluator = {
+  type: "retrieve_value";
+  key: string;
+  source: "final_response" | "task_signal";
+  match:
+    | { mode: "exact"; value: string }
+    | { mode: "must_include"; values: string[] }
+    | { mode: "numeric"; op: "eq" | "lt" | "lte" | "gt" | "gte"; value: number }
+    | { mode: "llm_fuzzy"; reference: string; rubric: string };
+};
+```
+
+This maps to the original WebArena string matching family, but keeps the result structured.
+
+### `backend_state`
+
+Use this for task completion whenever the benchmark site owns the relevant state.
+
+Example:
+
+```ts
+type BackendStateEvaluator = {
+  type: "backend_state";
+  entity: "order" | "draft" | "post" | "document" | "setting";
+  query: Record<string, unknown>;
+  assertions: Array<
+    | { field: string; op: "exists" }
+    | { field: string; op: "equals"; value: unknown }
+    | { field: string; op: "contains"; value: string }
+    | { field: string; op: "lte" | "gte" | "lt" | "gt"; value: number }
+    | { field: string; op: "not_exists" }
+  >;
+};
+```
+
+This should be the default scoring source because it is deterministic and path-independent.
+
+### `ui_state`
+
+Use this when the visible UI state matters or when backend state is insufficient.
+
+Example:
+
+```ts
+type UiStateEvaluator = {
+  type: "ui_state";
+  url?: { mode: "contains" | "exact"; value: string };
+  selectors: Array<{
+    selector: string;
+    assertion:
+      | { mode: "exists" }
+      | { mode: "text_includes"; value: string }
+      | { mode: "value_equals"; value: string };
+  }>;
+};
+```
+
+This should be used carefully because DOM selectors are more brittle than server-side state.
+
+### `final_response`
+
+Use this to validate the final agent message.
+
+Example:
+
+```ts
+type FinalResponseEvaluator = {
+  type: "final_response";
+  schema?: Record<string, unknown>;
+  requiredFields?: string[];
+  assertions?: Array<
+    | { field: string; op: "equals"; value: unknown }
+    | { field: string; op: "must_include"; values: string[] }
+    | { field: string; op: "llm_fuzzy"; reference: string; rubric: string }
+  >;
+};
+```
+
+For hosted web benchmarks, the final response should not be the only evidence of success unless the task is purely informational.
+
+## Score Result Shape
+
+Scorers should produce evaluator-level results, not only a single number.
+
+```ts
+type HostedWebScoreResult = {
+  score: number;
+  status: "passed" | "failed" | "error";
+  summary: string;
+  evaluators: Array<{
+    type: "retrieve_value" | "backend_state" | "ui_state" | "final_response";
+    name: string;
+    score: number;
+    status: "passed" | "failed" | "error";
+    evidence?: Record<string, unknown>;
+    errorMessage?: string;
+  }>;
+};
+```
+
+The aggregate score should initially be strict:
+
+- all required evaluators pass: `1`
+- any required evaluator fails: `0`
+- optional evaluators can be recorded without changing pass/fail
+
+Partial scoring can be added later, but strict binary scoring is easier to reason about while replacing the mock-site path.
+
+## Migration Path From `mock-sites`
+
+Migration should happen in stages.
+
+### Stage 1: Session-aware Mock Site
+
+Keep the existing app name but add session-aware behavior.
+
+Deliverables:
+
+- one hosted task with a `session_id`
+- deterministic seed data
+- telemetry script
+- backend-state scorer
+- start URL returned in run connect payload
+
+Candidate task: email draft or shopping checkout.
+
+### Stage 2: Hosted Provider Metadata
+
+Add provider metadata to benchmark cases.
+
+Deliverables:
+
+- `provider = "hosted-web"` for new cases
+- task metadata with start path, app name, seed version, and evaluator list
+- run connect payload includes `hostedWeb.startUrl`
+- existing MCP details become optional for hosted-web runs
+
+### Stage 3: Scoring Package
+
+Move scoring into a shared package.
+
+Deliverables:
+
+- `packages/scoring`
+- evaluator result types
+- backend state evaluator
+- final response evaluator
+- deterministic score aggregation
+
+### Stage 4: Replace Static Pages
+
+Turn current static mock workflows into hosted benchmark applications.
+
+Mapping:
+
+- `web-search` becomes a retrieval task with `retrieve_value` and `final_response`
+- `invoice-download` becomes a document/accounting task with `backend_state` or artifact validation
+- `email-draft` becomes an email app task with `backend_state` and `final_response`
+- `safety-test` becomes a policy task with `backend_state`, `ui_state`, and forbidden-action checks
+
+### Stage 5: Deprecate Internal Demo Runner as Primary Path
+
+Keep internal Playwright execution for smoke tests and demos, but move normal benchmark runs to hosted-web external execution.
+
+Deliverables:
+
+- homepage defaults to hosted-web cases
+- internal mode is hidden behind dev/demo controls
+- runner no longer owns primary success scores for hosted-web cases
+- live viewer reads telemetry and score events from the hosted-web flow
+
 ## Suggested Data Model Additions
 
-Keep the first version small.
+The first persistent schema is intentionally scoped to hosted attempts, hosted sessions, lightweight hosted events, final score results, and aggregate attempt scores.
 
-Potential `benchmark_cases` additions:
+`benchmark_cases` additions:
 
 ```sql
 provider text not null default 'native'
 metadata jsonb not null default '{}'
 ```
 
-Potential hosted session table:
+Hosted session and event tables:
 
 ```sql
-create table hosted_web_sessions (
-  id uuid primary key,
-  run_id uuid not null references benchmark_runs (id) on delete cascade,
-  case_id uuid not null references benchmark_cases (id),
-  provider text not null,
-  start_url text not null,
-  session_token_hash text not null,
-  seed_version text not null,
-  status text not null,
-  created_at timestamptz not null default now(),
-  completed_at timestamptz
-);
+benchmark_attempts
+hosted_web_sessions
+hosted_web_events
+hosted_web_results
+benchmark_attempt_scores
+hosted_web_access_logs
 ```
 
-The session token should be hashed at rest if it grants write access to telemetry or task state.
+`hosted_web_results.final_state` stores app-specific final snapshots as JSON evidence, for example the submitted order for `shopping-lite` or the merge request for `repo-lite`.
+
+The session token should be hashed at rest because it grants access to task state and telemetry submission. Hosted runtime writes should use the service role from server-side code. Authenticated users should only be able to read hosted session, event, and result rows linked to their own benchmark runs.
+
+Current migration:
+
+- `supabase/migrations/20260529000006_hosted_web_cases.sql`
+- `supabase/migrations/20260529000007_hosted_web_persistence.sql`
+- `supabase/migrations/20260529000008_benchmark_attempts.sql`
+
+`attempt_id` is nullable on hosted session/event/result rows for the first transition. The web app now creates an implicit attempt for hosted-web runs when possible, passes it to hosted-sites, and hosted-sites writes session, event, result, and `benchmark_attempt_scores` rows against that attempt. Once every hosted run is database-backed, `attempt_id` can become required.
 
 ## API Shape
 

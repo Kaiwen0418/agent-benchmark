@@ -17,6 +17,8 @@
     "paths": {
       "@agentbench/protocol": ["packages/protocol/src/index.ts"],
       "@agentbench/protocol/*": ["packages/protocol/src/*"],
+      "@agentbench/scoring": ["packages/scoring/src/index.ts"],
+      "@agentbench/scoring/*": ["packages/scoring/src/*"],
       "@agentbench/mcp-tools": ["packages/mcp-tools/src/index.ts"],
       "@agentbench/mcp-tools/*": ["packages/mcp-tools/src/*"]
     }

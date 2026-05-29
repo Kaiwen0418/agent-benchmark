@@ -1,4 +1,4 @@
-name: Deploy Runner Stack
+name: Deploy Hosted Sites
 
 on:
   workflow_dispatch:
@@ -29,8 +29,7 @@ jobs:
           IMAGE_TAG="${GITHUB_SHA::12}"
           OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "runner_image=${REGISTRY}/${OWNER}/agentbench-runner-mcp" >> "$GITHUB_OUTPUT"
-          echo "mock_image=${REGISTRY}/${OWNER}/agentbench-mock-sites" >> "$GITHUB_OUTPUT"
+          echo "hosted_image=${REGISTRY}/${OWNER}/agentbench-hosted-sites" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -42,25 +41,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push runner image
+      - name: Build and push hosted-sites image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: infra/docker/runner-mcp.Dockerfile
+          file: infra/docker/hosted-sites.Dockerfile
           push: true
           tags: |
-            ${{ steps.meta.outputs.runner_image }}:${{ steps.meta.outputs.image_tag }}
-            ${{ steps.meta.outputs.runner_image }}:latest-main
-
-      - name: Build and push mock-sites image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: infra/docker/mock-sites.Dockerfile
-          push: true
-          tags: |
-            ${{ steps.meta.outputs.mock_image }}:${{ steps.meta.outputs.image_tag }}
-            ${{ steps.meta.outputs.mock_image }}:latest-main
+            ${{ steps.meta.outputs.hosted_image }}:${{ steps.meta.outputs.image_tag }}
+            ${{ steps.meta.outputs.hosted_image }}:latest-main
 
   deploy-server:
     runs-on:
@@ -80,13 +69,14 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           AGENTBENCH_WEB_URL: ${{ secrets.AGENTBENCH_WEB_URL }}
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
-          RUNNER_MCP_PUBLIC_BASE_URL: ${{ secrets.RUNNER_MCP_PUBLIC_BASE_URL }}
+          HOSTED_SITES_PUBLIC_URL: ${{ secrets.HOSTED_SITES_PUBLIC_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8080' }}
         run: |
             set -euo pipefail
             OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-            RUNNER_IMAGE="ghcr.io/${OWNER}/agentbench-runner-mcp"
-            MOCK_IMAGE="ghcr.io/${OWNER}/agentbench-mock-sites"
+            HOSTED_IMAGE="ghcr.io/${OWNER}/agentbench-hosted-sites"
             if docker compose version >/dev/null 2>&1; then
               COMPOSE="docker compose"
             elif command -v docker-compose >/dev/null 2>&1; then
@@ -97,18 +87,19 @@ jobs:
             fi
 
             cat > .env.server <<EOF
-            RUNNER_MCP_IMAGE=${RUNNER_IMAGE}
-            MOCK_SITES_IMAGE=${MOCK_IMAGE}
+            HOSTED_SITES_IMAGE=${HOSTED_IMAGE}
             IMAGE_TAG=${IMAGE_TAG}
             AGENTBENCH_WEB_URL=${AGENTBENCH_WEB_URL}
             RUNNER_SHARED_SECRET=${RUNNER_SHARED_SECRET}
-            RUNNER_MCP_PUBLIC_BASE_URL=${RUNNER_MCP_PUBLIC_BASE_URL}
+            HOSTED_SITES_PUBLIC_URL=${HOSTED_SITES_PUBLIC_URL}
+            NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+            SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
             GATEWAY_HTTP_PORT=${GATEWAY_HTTP_PORT}
             EOF
 
-            test -f infra/caddy/Caddyfile.mcp-gateway
+            test -f infra/caddy/Caddyfile.hosted-sites
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml config >/tmp/agentbench-compose.yml
-            grep -F "infra/caddy/Caddyfile.mcp-gateway" /tmp/agentbench-compose.yml >/dev/null
+            grep -F "infra/caddy/Caddyfile.hosted-sites" /tmp/agentbench-compose.yml >/dev/null
 
             printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml pull
@@ -116,12 +107,11 @@ jobs:
 
             dump_deploy_logs() {
               ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml ps || true
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml logs --tail=120 gateway runner-mcp mock-sites || true
+              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml logs --tail=120 gateway hosted-sites || true
             }
 
             smoke_check() {
-              curl -fsS "http://localhost:${GATEWAY_HTTP_PORT}/healthz" > /dev/null
-              curl -sS -o /dev/null -w "%{http_code}" "http://localhost:${GATEWAY_HTTP_PORT}/mcp" | grep -E "^(405|400)$" > /dev/null
+              curl -fsS "http://localhost:${GATEWAY_HTTP_PORT}/health" > /dev/null
             }
 
             for attempt in $(seq 1 30); do

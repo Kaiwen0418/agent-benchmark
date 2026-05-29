@@ -14,7 +14,8 @@ export type PlaygroundBenchmark =
   | "web-search"
   | "invoice-download"
   | "email-draft"
-  | "safety-test";
+  | "safety-test"
+  | "shopping-constrained-checkout";
 
 export type RunPhase = "idle" | "booting" | "running" | "completed" | "failed";
 export type PanelTab = "events" | "files" | "screenshots" | "score";
@@ -78,12 +79,13 @@ const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
   "invoice-download": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0002",
   "email-draft": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0003",
   "safety-test": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0004",
+  "shopping-constrained-checkout": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
 };
 
 const initialState = {
   endpoint: "",
   apiKey: "",
-  benchmark: "web-search" as PlaygroundBenchmark,
+  benchmark: "shopping-constrained-checkout" as PlaygroundBenchmark,
   currentRunId: null,
   currentExecutionMode: null,
   liveViewUrl: null,
@@ -158,6 +160,16 @@ function eventSummary(event: RunEvent) {
       return `${String(event.payload.tool ?? "mcp.response")} responded`;
     case "mcp.error":
       return `${String(event.payload.tool ?? "mcp.error")} failed`;
+    case "hosted.session.created":
+      return "Hosted session created";
+    case "hosted.page.load":
+      return `Hosted page loaded${typeof event.payload.title === "string" ? `: ${event.payload.title}` : ""}`;
+    case "hosted.action":
+      return `Hosted ${String(event.payload.type ?? "action")}`;
+    case "hosted.task_signal":
+      return `Hosted signal: ${String(event.payload.name ?? "task signal")}`;
+    case "hosted.score":
+      return `Hosted score updated to ${String(event.payload.score ?? "--")}`;
     case "artifact.created":
       return `${String(event.payload.type ?? "artifact")} captured`;
     case "score.updated":
@@ -169,6 +181,26 @@ function eventSummary(event: RunEvent) {
     default:
       return event.type;
   }
+}
+
+function hostedTimelineLabel(event: RunEvent) {
+  if (event.type === "hosted.session.created") {
+    return "hosted.session";
+  }
+
+  if (event.type === "hosted.page.load") {
+    return "hosted.page.load";
+  }
+
+  if (event.type === "hosted.task_signal") {
+    return `hosted.${String(event.payload.name ?? "task_signal")}`;
+  }
+
+  if (event.type === "hosted.score") {
+    return "hosted.score";
+  }
+
+  return `hosted.${String(event.payload.type ?? "action")}`;
 }
 
 function mapRunStatus(status: RunStatus): RunPhase {
@@ -201,6 +233,11 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
         event.type === "mcp.request" ||
         event.type === "mcp.response" ||
         event.type === "mcp.error" ||
+        event.type === "hosted.session.created" ||
+        event.type === "hosted.page.load" ||
+        event.type === "hosted.action" ||
+        event.type === "hosted.task_signal" ||
+        event.type === "hosted.score" ||
         event.type === "artifact.created" ||
         event.type === "score.updated",
     )
@@ -214,6 +251,8 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
         event.type === "mcp.response" ||
         event.type === "mcp.error"
           ? String(event.payload.tool ?? event.type)
+          : event.type.startsWith("hosted.")
+            ? hostedTimelineLabel(event)
           : event.type === "artifact.created"
             ? `artifact.${String(event.payload.type ?? "created")}`
             : "score.updated";
@@ -226,7 +265,15 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
             : JSON.stringify(event.payload);
 
       let status: TimelineEntry["status"] = "pending";
-      if (event.type === "score.updated" || event.type === "artifact.created" || event.type === "agent.connected") {
+      if (
+        event.type === "score.updated" ||
+        event.type === "hosted.score" ||
+        event.type === "hosted.session.created" ||
+        event.type === "hosted.page.load" ||
+        event.type === "hosted.task_signal" ||
+        event.type === "artifact.created" ||
+        event.type === "agent.connected"
+      ) {
         status = "success";
       } else if (event.type === "mcp.response") {
         status =
@@ -280,7 +327,7 @@ function deriveScore(run: BenchmarkRun, events: RunEvent[]) {
     return run.score;
   }
 
-  const scoreEvent = [...events].reverse().find((event) => event.type === "score.updated");
+  const scoreEvent = [...events].reverse().find((event) => event.type === "score.updated" || event.type === "hosted.score");
   return typeof scoreEvent?.payload.score === "number" ? scoreEvent.payload.score : null;
 }
 

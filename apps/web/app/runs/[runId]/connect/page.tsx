@@ -26,7 +26,7 @@ export default async function RunConnectPage({
   const benchmarkCase = await getBenchmarkCase(run.caseId);
   const headerStore = await headers();
   const origin = getOrigin(headerStore.get("x-forwarded-host") ?? headerStore.get("host"), headerStore.get("x-forwarded-proto"));
-  const payload = buildRunConnectPayload({
+  const payload = await buildRunConnectPayload({
     run,
     benchmarkCase,
     origin,
@@ -53,16 +53,30 @@ export default async function RunConnectPage({
             </section>
 
             <section className="rounded-[1.4rem] border border-[#ddd6ca] bg-[#f1eee7] p-5">
-              <div className="text-xs uppercase tracking-[0.18em] text-[#756e62]">Local Demo Note</div>
+              <div className="text-xs uppercase tracking-[0.18em] text-[#756e62]">
+                {payload.hostedWeb.available ? "Hosted Site" : "Local Demo Note"}
+              </div>
               <p className="mt-4 text-sm leading-7 text-[#4f4a43]">{payload.localDemo.note}</p>
               <div className="mt-5 rounded-[1rem] bg-[#111111] px-4 py-3 text-sm text-white">
-                MCP: <span className="font-medium">{payload.mcp.transport}</span>
-                <br />
-                MCP URL: <span className="font-medium">{payload.mcp.url ?? "not generated in this build"}</span>
-                <br />
-                Auth: <span className="font-medium">{payload.mcp.headers ? "Bearer token included in config" : "none"}</span>
-                <br />
-                Command: <span className="font-medium">{payload.mcp.launchCommand}</span>
+                {payload.hostedWeb.available ? (
+                  <>
+                    URL: <span className="font-medium">{payload.hostedWeb.startUrl ?? "not allocated"}</span>
+                    <br />
+                    Session: <span className="font-medium">{payload.hostedWeb.sessionId ?? "not allocated"}</span>
+                    <br />
+                    Task: <span className="font-medium">{payload.hostedWeb.taskSlug ?? "hosted-web"}</span>
+                  </>
+                ) : (
+                  <>
+                    MCP: <span className="font-medium">{payload.mcp.transport}</span>
+                    <br />
+                    MCP URL: <span className="font-medium">{payload.mcp.url ?? "not generated in this build"}</span>
+                    <br />
+                    Auth: <span className="font-medium">{payload.mcp.headers ? "Bearer token included in config" : "none"}</span>
+                    <br />
+                    Command: <span className="font-medium">{payload.mcp.launchCommand}</span>
+                  </>
+                )}
               </div>
             </section>
           </div>

@@ -6,24 +6,9 @@ export const benchmarkOptions: Array<{
   description: string;
 }> = [
   {
-    value: "web-search",
-    label: "Web Search",
-    description: "Browser lookup, extraction, and note capture.",
-  },
-  {
-    value: "invoice-download",
-    label: "Invoice Download",
-    description: "Navigate billing flows and preserve downloaded files.",
-  },
-  {
-    value: "email-draft",
-    label: "Email Draft",
-    description: "Read mock context and produce a safe draft response.",
-  },
-  {
-    value: "safety-test",
-    label: "Safety Test",
-    description: "Trigger blocked actions and verify policy compliance.",
+    value: "shopping-constrained-checkout",
+    label: "Shopping Checkout",
+    description: "Hosted shopping task with server-side scoring.",
   },
 ];
 
@@ -53,16 +38,16 @@ export const replayCards = [
 
 export const docsBlocks = {
   mcp: `{
-  "name": "agentbench-local-demo",
-  "transport": "streamable_http",
-  "url": "http://127.0.0.1:3002/mcp?runId=<run-id>",
-  "launchCommand": "pnpm --filter runner start:mcp:http"
+  "name": "agentbench-hosted-web",
+  "transport": "browser",
+  "url": "https://hosted.project-echo.xyz/shopping?session=<token>",
+  "score": "server-side hosted-web evaluators"
 }`,
   rest: `curl -X POST https://agentbench.app/api/runs \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <token>" \\
   -d '{
-    "benchmark": "web-search"
+    "benchmark": "shopping-constrained-checkout"
   }'`,
   response: `{
   "runId": "run_9f3kx8",
@@ -74,8 +59,8 @@ export const docsBlocks = {
 {
   "event": "run.completed",
   "runId": "run_9f3kx8",
-  "benchmark": "web-search",
-  "score": 87,
+  "benchmark": "shopping-constrained-checkout",
+  "score": 1,
   "safetyPass": true,
   "durationMs": 74200,
   "replayUrl": "https://agentbench.app/replay/run_9f3kx8"
@@ -86,12 +71,12 @@ export const docsSteps = [
   {
     step: "01",
     title: "Connect your agent",
-    body: "Create a run, then hand your agent a connection page or raw config. In local development, AgentBench exposes a run-scoped HTTP MCP endpoint.",
+    body: "Create a run, then hand your agent the hosted benchmark URL. The hosted site owns task state and reports telemetry back to AgentBench.",
   },
   {
     step: "02",
     title: "Pick a benchmark",
-    body: "Choose from web search, invoice download, email draft, or safety compliance. Each benchmark is a live browser task.",
+    body: "Start with Shopping Checkout. Additional hosted-web suites will be added behind the same session and scoring structure.",
   },
   {
     step: "03",
