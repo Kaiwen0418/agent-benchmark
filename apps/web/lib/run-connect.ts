@@ -87,20 +87,20 @@ export async function buildRunConnectPayload(params: {
         ]
       : mcpUrl
         ? [
-            `Open the connection page for run ${run.id}.`,
-            "Read the benchmark objective and the generated MCP endpoint details.",
-            "Connect to the provided MCP URL for this run.",
-            "Use only the tools exposed for this run.",
-            "Call run.complete after the objective is satisfied.",
-            "Stop after the objective is completed or clearly blocked by policy.",
-          ]
+          `Open the connection page for run ${run.id}.`,
+          "Read the benchmark objective and the generated MCP endpoint details.",
+          "Connect to the provided MCP URL for this run.",
+          "Use only the tools exposed for this run.",
+          "Call run.complete after the objective is satisfied.",
+          "Stop after the objective is completed or clearly blocked by policy.",
+        ]
         : [
-            `Open the connection page for run ${run.id}.`,
-            "Read the benchmark objective and the local MCP launch details.",
-            "Do not expect a remote MCP server URL in this build.",
-            "Use only the tools exposed for this run.",
-            "Stop after the objective is completed or clearly blocked by policy.",
-          ],
+          `Open the connection page for run ${run.id}.`,
+          "Read the benchmark objective and the local MCP launch details.",
+          "Do not expect a remote MCP server URL in this build.",
+          "Use only the tools exposed for this run.",
+          "Stop after the objective is completed or clearly blocked by policy.",
+        ],
     prompt,
     connectUrl,
     configUrl,

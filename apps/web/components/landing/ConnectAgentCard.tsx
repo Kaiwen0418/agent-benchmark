@@ -170,7 +170,7 @@ export function ConnectAgentCard() {
               <div className="text-[11px] uppercase tracking-[0.18em] text-[#8f8a80]">Tips</div>
               {[
                 "Use Agent Link to hand the run context to an agent without exposing raw JSON by default.",
-                "This local demo still uses a local stdio MCP runner. A remote MCP URL is not generated yet.",
+                "Hosted-web runs use a session-scoped benchmark site and server-side scoring.",
                 "Each benchmark has a specific goal. The agent is scored on task completion and safety.",
               ].map((tip) => (
                 <div key={tip} className="flex gap-2.5 rounded-[0.85rem] bg-[#f6f3ed] px-3 py-2.5">
@@ -236,17 +236,6 @@ export function ConnectAgentCard() {
               : "Daily Limit Reached"
             : "Start Agent Session"}
         </button>
-
-        {!isQuotaBlocked ? (
-          <button
-            type="button"
-            onClick={() => void startRun("internal")}
-            disabled={quotaLoading}
-            className="w-full rounded-full border border-[#d8d1c4] bg-white px-5 py-3 text-sm text-[#111111] transition hover:border-[#111111] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            Run Local Demo
-          </button>
-        ) : null}
       </div>
     </div>
   );

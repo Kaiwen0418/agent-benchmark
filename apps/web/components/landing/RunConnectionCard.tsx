@@ -36,6 +36,13 @@ type RunConnectPayload = {
   };
 };
 
+type RunConnectError = {
+  error: string;
+  message: string;
+  retryable?: boolean;
+  hostedSitesUrl?: string;
+};
+
 async function copyText(value: string) {
   await navigator.clipboard.writeText(value);
 }
@@ -46,8 +53,10 @@ export function RunConnectionCard() {
   const phase = usePlaygroundStore((state) => state.phase);
   const [method, setMethod] = useState<ConnectMethod>("link");
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
+  const [connectError, setConnectError] = useState<RunConnectError | null>(null);
   const [copyState, setCopyState] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     if (phase === "booting" || phase === "running") {
@@ -60,36 +69,50 @@ export function RunConnectionCard() {
   useEffect(() => {
     if (!runId) {
       setPayload(null);
+      setConnectError(null);
       return;
     }
 
     let cancelled = false;
 
     const load = async () => {
+      setConnectError(null);
       const response = await fetch(`/api/runs/${runId}/connect`, {
         cache: "no-store",
       });
 
       if (!response.ok) {
-        throw new Error("Failed to load run connection info.");
+        const errorPayload = (await response.json().catch(() => null)) as RunConnectError | null;
+        throw errorPayload ?? {
+          error: "run_connect_failed",
+          message: "Failed to load run connection info.",
+          retryable: true,
+        };
       }
 
       const nextPayload = (await response.json()) as RunConnectPayload;
       if (!cancelled) {
         setPayload(nextPayload);
+        setConnectError(null);
       }
     };
 
-    void load().catch(() => {
+    void load().catch((error: RunConnectError | Error) => {
       if (!cancelled) {
         setPayload(null);
+        setConnectError({
+          error: "error" in error ? error.error : "run_connect_failed",
+          message: error.message || "Failed to load run connection info.",
+          retryable: "retryable" in error ? error.retryable : true,
+          hostedSitesUrl: "hostedSitesUrl" in error ? error.hostedSitesUrl : undefined,
+        });
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [runId]);
+  }, [runId, retryNonce]);
 
   const browserPrompt = useMemo(() => {
     if (!payload) {
@@ -115,12 +138,36 @@ export function RunConnectionCard() {
 
   if (!payload) {
     return (
-      <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
+      <div className={`mt-4 rounded-[1.6rem] border p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)] ${
+        connectError ? "border-[#d7a39a] bg-[#fff7f5]" : "border-[#d7d0c4] bg-white"
+      }`}>
         <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Run Ready</div>
-        <div className="mt-3 space-y-2">
-          <div className="h-4 w-3/4 animate-pulse rounded-full bg-[#efede6]" />
-          <div className="h-4 w-1/2 animate-pulse rounded-full bg-[#efede6]" />
-        </div>
+        {connectError ? (
+          <div className="mt-3">
+            <h3 className="text-[1.05rem] font-medium text-[#7d241b]">Hosted site connection failed.</h3>
+            <p className="mt-2 text-sm leading-7 text-[#5b3d37]">{connectError.message}</p>
+            {connectError.hostedSitesUrl ? (
+              <p className="mt-2 text-xs text-[#80534b]">
+                Hosted URL: <span className="font-medium">{connectError.hostedSitesUrl}</span>
+              </p>
+            ) : null}
+            <p className="mt-3 text-xs leading-6 text-[#80534b]">
+              Check that `HOSTED_SITES_URL` is configured in Vercel and that the hosted-sites `/health` endpoint is reachable.
+            </p>
+            <button
+              type="button"
+              onClick={() => setRetryNonce((value) => value + 1)}
+              className="mt-4 rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
+            >
+              Retry connection
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            <div className="h-4 w-3/4 animate-pulse rounded-full bg-[#efede6]" />
+            <div className="h-4 w-1/2 animate-pulse rounded-full bg-[#efede6]" />
+          </div>
+        )}
       </div>
     );
   }

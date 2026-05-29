@@ -21,6 +21,26 @@ type HostedWebStore = {
   attemptsByRunId: Map<string, HostedWebAttempt | null>;
 };
 
+export class HostedWebSessionError extends Error {
+  code = "hosted_session_create_failed" as const;
+  status: number;
+  hostedSitesUrl: string;
+  retryable: boolean;
+
+  constructor(params: {
+    message: string;
+    status?: number;
+    hostedSitesUrl: string;
+    retryable?: boolean;
+    cause?: unknown;
+  }) {
+    super(params.message, { cause: params.cause });
+    this.name = "HostedWebSessionError";
+    this.status = params.status ?? 502;
+    this.hostedSitesUrl = params.hostedSitesUrl;
+    this.retryable = params.retryable ?? true;
+  }
+}
 declare global {
   var __agentbenchHostedWebStore: HostedWebStore | undefined;
 }
@@ -40,11 +60,7 @@ function getHostedSitesBaseUrl() {
   return process.env.HOSTED_SITES_URL ?? "http://localhost:3003";
 }
 
-function metadataString(
-  metadata: Record<string, unknown>,
-  key: string,
-  fallback: string,
-) {
+function metadataString(metadata: Record<string, unknown>, key: string, fallback: string) {
   return typeof metadata[key] === "string" ? metadata[key] : fallback;
 }
 
@@ -120,31 +136,45 @@ export async function getOrCreateHostedWebSession(params: {
   const metadata = params.benchmarkCase.metadata;
   const attempt = await getOrCreateHostedWebAttempt(params);
   const baseUrl = getHostedSitesBaseUrl();
-  const response = await fetch(`${baseUrl}/api/sessions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      runId: params.run.id,
-      caseId: params.benchmarkCase.id,
-      attemptId: attempt?.id ?? null,
-      callbackSecret: process.env.RUNNER_SHARED_SECRET ?? null,
-      taskSlug:
-        typeof metadata.taskSlug === "string"
-          ? metadata.taskSlug
-          : params.benchmarkCase.slug,
-      taskVersion: metadataString(metadata, "taskVersion", "v1"),
-      suiteSlug: attempt?.suiteSlug ?? metadataString(metadata, "suiteSlug", params.benchmarkCase.slug),
-      suiteVersion: attempt?.suiteVersion ?? metadataString(metadata, "suiteVersion", "v1"),
-      weight: 1,
-      required: true,
-    }),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/sessions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        runId: params.run.id,
+        caseId: params.benchmarkCase.id,
+        attemptId: attempt?.id ?? null,
+        callbackSecret: process.env.RUNNER_SHARED_SECRET ?? null,
+        taskSlug:
+          typeof metadata.taskSlug === "string"
+            ? metadata.taskSlug
+            : params.benchmarkCase.slug,
+        taskVersion: metadataString(metadata, "taskVersion", "v1"),
+        suiteSlug: attempt?.suiteSlug ?? metadataString(metadata, "suiteSlug", params.benchmarkCase.slug),
+        suiteVersion: attempt?.suiteVersion ?? metadataString(metadata, "suiteVersion", "v1"),
+        weight: 1,
+        required: true,
+      }),
+      cache: "no-store",
+    });
+  } catch (error) {
+    throw new HostedWebSessionError({
+      message: "Hosted benchmark site is not reachable. Check HOSTED_SITES_URL and the hosted-sites deployment.",
+      hostedSitesUrl: baseUrl,
+      cause: error,
+    });
+  }
 
   if (!response.ok) {
-    throw new Error(`Failed to create hosted-web session at ${baseUrl}: ${response.status}`);
+    throw new HostedWebSessionError({
+      message: `Hosted benchmark site rejected session creation with HTTP ${response.status}.`,
+      status: response.status >= 500 ? 502 : 400,
+      hostedSitesUrl: baseUrl,
+      retryable: response.status >= 500,
+    });
   }
 
   const session = (await response.json()) as HostedWebSession;

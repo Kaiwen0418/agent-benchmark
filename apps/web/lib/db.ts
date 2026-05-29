@@ -24,8 +24,15 @@ export function isMockMode() {
   return !getSupabase();
 }
 
-function shouldUseLocalExternalAgentStore(executionMode?: BenchmarkRun["executionMode"]) {
-  return process.env.NODE_ENV !== "production" && executionMode === "external-agent";
+function shouldUseLocalExternalAgentStore(params: {
+  executionMode?: BenchmarkRun["executionMode"];
+  benchmarkCase?: BenchmarkCase | null;
+}) {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    params.executionMode === "external-agent" &&
+    params.benchmarkCase?.provider !== "hosted-web"
+  );
 }
 
 function startOfUtcDay(date = new Date()) {
@@ -200,7 +207,12 @@ export async function createBenchmarkRun(params: {
   executionMode: BenchmarkRun["executionMode"];
 }): Promise<BenchmarkRun> {
   const supabase = getSupabase();
-  if (!supabase || shouldUseLocalExternalAgentStore(params.executionMode)) {
+  if (!supabase) {
+    return mockStore.createRun(params.caseId, params.userId, params.guestId, params.executionMode);
+  }
+
+  const benchmarkCase = await getBenchmarkCase(params.caseId);
+  if (shouldUseLocalExternalAgentStore({ executionMode: params.executionMode, benchmarkCase })) {
     return mockStore.createRun(params.caseId, params.userId, params.guestId, params.executionMode);
   }
 
