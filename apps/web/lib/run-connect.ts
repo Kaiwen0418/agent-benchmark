@@ -91,7 +91,7 @@ export function buildRunConnectPayload(params: {
       available: Boolean(mcpUrl),
       transport: mcpUrl ? "streamable_http" : "stdio",
       url: mcpUrl,
-      headers: mcpSessionToken
+      headers: mcpUrl && mcpSessionToken
         ? {
             Authorization: `Bearer ${mcpSessionToken}`,
           }

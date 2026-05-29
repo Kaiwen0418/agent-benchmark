@@ -96,7 +96,8 @@ agentbench/
 │  ├─ security.md
 │  ├─ runner.md
 │  ├─ protocol.md
-│  └─ benchmark-spec.md
+│  ├─ benchmark-spec.md
+│  └─ hosted-web-benchmark.md
 ├─ plan.md
 ├─ agent.md
 ├─ package.json
@@ -126,12 +127,19 @@ Set:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `MCP_SESSION_SECRET`
+- `AGENTBENCH_MCP_BASE_URL`
 
 Then apply:
 
 ```bash
 supabase db push
 supabase db seed
+```
+
+For production web deploys, set `AGENTBENCH_MCP_BASE_URL` to the public runner gateway MCP endpoint, for example:
+
+```text
+https://mcp.project-echo.xyz/mcp
 ```
 
 ### 3) Start Local Runtime (Default: Docker)

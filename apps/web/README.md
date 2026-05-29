@@ -28,9 +28,9 @@ The homepage now supports two local development paths:
 
 - run status starts at `waiting_for_agent`
 - the UI exposes a run-specific connect page and JSON config
-- in local development the payload includes:
+- when `AGENTBENCH_MCP_BASE_URL` and `MCP_SESSION_SECRET` are configured, the payload includes:
   - `transport: streamable_http`
-  - `url: http://localhost:3000/api/mcp/runs/<run-id>`
+  - `url: <web-origin>/api/mcp/runs/<run-id>`
   - `Authorization: Bearer <run-scoped-token>`
 - the web MCP route proxies to the runner MCP HTTP server
 - the user's local agent connects to the web MCP endpoint
@@ -57,6 +57,5 @@ Default startup uses Docker runtime for backend services:
 ## Next Recommended Steps
 
 1. Add real scoring for `external-agent` completion.
-2. Replace the local-only MCP URL with an authenticated remote session endpoint.
-3. Reuse the live Mac container for a stronger live browser stream or noVNC bridge.
-4. Tighten per-run auth and isolation before public rollout.
+2. Reuse the live Mac container for a stronger live browser stream or noVNC bridge.
+3. Tighten per-run auth and isolation before public rollout.

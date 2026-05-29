@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM mcr.microsoft.com/playwright:v1.60.0-noble AS build
 
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
@@ -11,7 +11,7 @@ COPY packages/protocol ./packages/protocol
 RUN pnpm install --filter runner... --frozen-lockfile
 RUN pnpm --filter runner build
 
-FROM node:22-alpine AS runtime
+FROM mcr.microsoft.com/playwright:v1.60.0-noble AS runtime
 
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
