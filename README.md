@@ -128,6 +128,7 @@ Set:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
+- `HOSTED_ORCHESTRATOR_URL`
 
 Then apply:
 
@@ -142,9 +143,15 @@ For production web deploys, set `HOSTED_SITES_URL` to the public hosted benchmar
 https://hosted.project-echo.xyz
 ```
 
+Set `HOSTED_ORCHESTRATOR_URL` to the public orchestrator path on the same domain, for example:
+
+```text
+https://hosted.project-echo.xyz/orchestrator
+```
+
 ### 3) Start Local Runtime (Default: Docker)
 
-Use Docker as the default startup mode for `hosted-sites + gateway`.
+Use Docker as the default startup mode for `hosted-sites + hosted-orchestrator + gateway`.
 
 ```bash
 cp .env.docker.example .env
@@ -169,20 +176,16 @@ pnpm dev:web
 If you want process-level debugging, run services directly:
 
 ```bash
+pnpm dev:orchestrator
 pnpm dev:hosted
-```
-
-Optional internal demo worker:
-
-```bash
-pnpm dev:runner
 ```
 
 ## Local Process Roles
 
-Why `hosted-sites` is the default target:
+Why `hosted-sites + hosted-orchestrator` is the default target:
 
-- `hosted-sites` is the hosted-web benchmark site layer for session-scoped, server-scored task apps.
+- `hosted-sites` is the hosted-web benchmark site layer for session-scoped task apps.
+- `hosted-orchestrator` is the control plane for attempt init/state/commands, scoring aggregation, timeout handling, and cleanup.
 - hosted-web runs use normal browser access to a session URL; the site emits telemetry and score events back to `apps/web`.
 - `mock-sites`, `runner`, and MCP remain as legacy/internal demo tooling, not the primary production path.
 
@@ -192,15 +195,9 @@ This keeps the default runtime small:
 - no MCP gateway dependency for the first hosted benchmark
 - one long-running hosted site deployment can serve many session-scoped runs
 
-Why `dev:runner` is optional in day-to-day external-agent testing:
-
-- `dev:runner` is mainly for `internal` queued run execution and control-plane polling.
-- `external-agent` hosted-web runs are primarily driven by `web + hosted-sites`.
-- start `dev:runner` when you want local demo scenarios, job-queue regression coverage, or internal execution fallback.
-
 Recommended startup sets:
 
-- Hosted-web path: `dev:web` + `dev:hosted`
+- Hosted-web path: `dev:web` + `dev:orchestrator` + `dev:hosted`
 - Internal demo path: add `dev:runner`
 
 ## Hosted Web PoC
@@ -215,13 +212,20 @@ The suite is stored as one benchmark case with ordered hosted sessions and weigh
 Start the hosted benchmark site:
 
 ```bash
+pnpm dev:orchestrator
 pnpm dev:hosted
 ```
 
-The web app uses `HOSTED_SITES_URL` to allocate hosted sessions. In local development it defaults to:
+The web app uses `HOSTED_SITES_URL` to open hosted task URLs. In local development it defaults to:
 
 ```text
 http://localhost:3003
+```
+
+The web app uses `HOSTED_ORCHESTRATOR_URL` for hosted attempt init/state/command APIs. In local development it typically points to:
+
+```text
+http://localhost:3004
 ```
 
 The hosted site posts events and completion back to `AGENTBENCH_WEB_URL`, defaulting to:
@@ -307,6 +311,7 @@ Required GitHub secrets for hosted-sites deploy:
 - `AGENTBENCH_WEB_URL`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_PUBLIC_URL`
+- `HOSTED_ORCHESTRATOR_PUBLIC_URL` - public orchestrator path, for example `https://hosted.project-echo.xyz/orchestrator`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 

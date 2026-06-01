@@ -1,5 +1,9 @@
 :80 {
   encode zstd gzip
 
+  handle_path /orchestrator/* {
+    reverse_proxy hosted-orchestrator:3004
+  }
+
   reverse_proxy hosted-sites:3003
 }

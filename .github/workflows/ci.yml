@@ -38,3 +38,6 @@ jobs:
 
       - name: Build hosted-sites
         run: pnpm --filter hosted-sites build
+
+      - name: Build hosted-orchestrator
+        run: pnpm --filter hosted-orchestrator build

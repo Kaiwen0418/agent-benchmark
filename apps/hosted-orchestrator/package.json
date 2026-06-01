@@ -1,0 +1,22 @@
+{
+  "name": "hosted-orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "start": "node dist/apps/hosted-orchestrator/src/server.js"
+  },
+  "dependencies": {
+    "@agentbench/scoring": "workspace:*",
+    "@agentbench/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.49.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

@@ -863,24 +863,91 @@ Latest local smoke:
   - `benchmark_attempt_scores` received a timeout-shaped `error` row with `aggregation = "timeout"`
   - a fresh `GET /api/runs/:runId/connect` returned `activeSessionId = null` and no orchestrator URL, instead of falling back to session `0`
 - lifecycle extraction progress:
-  - attempt transition logic is now extracted into `apps/hosted-sites/src/attempt-lifecycle.ts`
-  - `server.ts` now calls a dedicated `attemptLifecycle` service object for:
-    - session finalization
-    - attempt advance resolution
-    - timeout from expired sessions
-  - route handlers now issue explicit lifecycle commands such as:
-    - `complete-session`
-    - `resolve-advance`
-    - `timeout-attempt`
-  - this is still an in-process command boundary, not a separate deployable service, but it removes lifecycle rules from the route handlers and makes the next service split straightforward
+  - attempt transition logic is now extracted into `apps/hosted-orchestrator/src/attempt-lifecycle.ts`
+  - attempt read projection is now shared in `packages/shared/src/index.ts`
+  - `apps/web` and `apps/hosted-orchestrator` both consume the same hosted attempt read model builder
+  - `apps/hosted-orchestrator/src/attempt-handlers.ts` now acts as an internal handler layer over lifecycle commands
+  - hosted-orchestrator exposes the protected internal attempt APIs:
+    - `POST /api/attempts/init`
+    - `GET /api/attempts/:attemptId/state`
+    - `POST /api/attempts/:attemptId/commands/resolve-advance`
+    - `POST /api/attempts/:attemptId/commands/complete-session`
+    - `POST /api/attempts/:attemptId/commands/timeout`
+  - `apps/web/lib/hosted-web.ts` now prefers orchestrator-owned state and initialization:
+    - new attempts are initialized through hosted-orchestrator instead of web inserting `benchmark_attempts` directly
+    - existing attempts are read from hosted-orchestrator `state` first, with Supabase fallback kept only as a recovery path
+  - this is now a physically split control-plane service, with `hosted-sites` reduced to task runtime and telemetry
 
 Current limitations:
 
 - the attempt overview is still a lightweight helper page, not a stateful orchestrator UI
 - UI only shows basic suite progress and active session context
-- lifecycle is now a dedicated module boundary, but not yet a separately deployed service or queue-backed command processor
+- lifecycle is now a dedicated deployable service, but not yet a queue-backed command processor
 - wiki article-view proof still depends on hosted telemetry rather than a persisted server-side read model
-- there is no external scheduler yet; cleanup currently runs inside each hosted-sites process with interval-based best-effort semantics
+- there is no external scheduler yet; cleanup currently runs inside the hosted-orchestrator process with interval-based best-effort semantics
+
+## Physical Split Checklist
+
+Before moving orchestrator into a separate deployable service, the remaining work should follow this order:
+
+1. API parity
+- standard orchestrator APIs should cover:
+  - `POST /api/attempts/init`
+  - `GET /api/attempts/:attemptId/state`
+  - `POST /api/attempts/:attemptId/commands/resolve-advance`
+  - `POST /api/attempts/:attemptId/commands/complete-session`
+  - `POST /api/attempts/:attemptId/commands/timeout`
+- public helper routes such as `/api/attempts/:attemptId/advance` can remain as agent-facing compatibility wrappers
+
+2. Ownership cleanup
+- `apps/web` should treat orchestrator as the authoritative attempt owner for both read and write paths
+- legacy direct session creation via `POST /api/sessions` should be downgraded to fallback-only
+- timeout and cleanup paths should go through command handlers instead of touching lifecycle internals directly
+
+3. Runtime separation
+- hosted task rendering should remain in hosted-sites
+- attempt lifecycle, timeout propagation, and cleanup sweep should become orchestrator-owned processes
+- the eventual split target is:
+  - hosted-sites: task app/runtime
+  - hosted-orchestrator: attempt state, commands, cleanup, completion callbacks
+
+4. Operational readiness
+- add dedicated health/readiness for orchestrator APIs
+- add integration smoke for `init -> state -> complete-session -> resolve-advance -> timeout`
+- confirm service-to-service auth boundary only depends on `RUNNER_SHARED_SECRET`
+
+Current status:
+
+- a new deployable `apps/hosted-orchestrator` now owns:
+  - attempt init
+  - attempt state
+  - resolve-advance
+  - complete-session
+  - timeout
+  - cleanup sweep
+- `init` and `state` are already exposed as protected internal APIs
+- `resolve-advance`, `complete-session`, and `timeout` now also have explicit internal command routes
+- cleanup timeout propagation now goes through the same handler/command layer instead of calling lifecycle internals directly
+- `apps/web` now exposes matching orchestrator client helpers for:
+  - `state`
+  - `resolve-advance`
+  - `complete-session`
+  - `timeout`
+- DB-backed hosted runs now treat orchestrator init/read as authoritative; legacy direct session creation is only kept for local non-DB fallback
+- `POST /api/sessions` still exists, but only as a legacy fallback path for non-orchestrated/local flows
+- `apps/hosted-sites` now treats `HOSTED_ORCHESTRATOR_URL` as required for attempt control-plane actions
+- hosted-sites no longer exposes internal attempt init/state/command APIs; only the orchestrator owns those routes
+- attempt lifecycle source files now live under `apps/hosted-orchestrator/src`, not `apps/hosted-sites/src`
+
+Smoke coverage:
+
+- `apps/hosted-sites/scripts/orchestrator-smoke.sh` now exercises the internal orchestrator API sequence end-to-end:
+  - `init`
+  - `state`
+  - `resolve-advance`
+  - `complete-session`
+  - `timeout`
+  - the split-mode smoke now boots both `hosted-sites` and `hosted-orchestrator`
 
 ## Operational Guidance
 

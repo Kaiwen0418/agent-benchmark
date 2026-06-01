@@ -1,6 +1,20 @@
 name: agentbench-hosted-sites
 
 services:
+  hosted-orchestrator:
+    build:
+      context: .
+      dockerfile: infra/docker/hosted-orchestrator.Dockerfile
+    environment:
+      HOSTED_ORCHESTRATOR_PORT: 3004
+      HOSTED_ORCHESTRATOR_PUBLIC_URL: http://hosted-orchestrator:3004
+      HOSTED_SITES_URL: http://hosted-sites:3003
+      AGENTBENCH_WEB_URL: ${AGENTBENCH_WEB_URL:-}
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+    restart: unless-stopped
+
   hosted-sites:
     build:
       context: .
@@ -8,6 +22,7 @@ services:
     environment:
       HOSTED_SITES_PORT: 3003
       HOSTED_SITES_PUBLIC_URL: ${HOSTED_SITES_PUBLIC_URL:-http://localhost:8080}
+      HOSTED_ORCHESTRATOR_URL: http://hosted-orchestrator:3004
       AGENTBENCH_WEB_URL: ${AGENTBENCH_WEB_URL:-}
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
@@ -23,6 +38,7 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
+      - hosted-orchestrator
       - hosted-sites
     restart: unless-stopped
 

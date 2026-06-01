@@ -128,6 +128,7 @@ cp apps/web/.env.example apps/web/.env.local
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
+- `HOSTED_ORCHESTRATOR_URL`
 
 然后应用：
 
@@ -142,9 +143,15 @@ supabase db seed
 https://hosted.project-echo.xyz
 ```
 
+将 `HOSTED_ORCHESTRATOR_URL` 设置为同域名下的公共 orchestrator 路径，例如：
+
+```text
+https://hosted.project-echo.xyz/orchestrator
+```
+
 ### 3) 启动本地运行时（默认：Docker）
 
-使用 Docker 作为 `hosted-sites + gateway` 的默认启动模式。
+使用 Docker 作为 `hosted-sites + hosted-orchestrator + gateway` 的默认启动模式。
 
 ```bash
 cp .env.docker.example .env
@@ -169,20 +176,16 @@ pnpm dev:web
 如果您需要进程级调试，直接运行服务：
 
 ```bash
+pnpm dev:orchestrator
 pnpm dev:hosted
-```
-
-可选的内部演示 worker：
-
-```bash
-pnpm dev:runner
 ```
 
 ## 本地进程角色
 
-为什么 `hosted-sites` 是默认目标：
+为什么 `hosted-sites + hosted-orchestrator` 是默认目标：
 
-- `hosted-sites` 是用于会话级、服务器评分的任务应用的托管 Web 基准站点层。
+- `hosted-sites` 是用于会话级任务应用的托管 Web 基准站点层。
+- `hosted-orchestrator` 是 attempt init/state/command、评分聚合、timeout 处理和 cleanup 的控制面。
 - 托管 Web 运行使用正常的浏览器访问会话 URL；站点将遥测和评分事件发送回 `apps/web`。
 - `mock-sites`、`runner` 和 MCP 仍作为传统/内部演示工具存在，不是主要生产路径。
 
@@ -192,15 +195,9 @@ pnpm dev:runner
 - 第一个托管基准测试无需 MCP 网关依赖
 - 一个长期运行的托管站点部署可以服务多个会话级运行
 
-为什么日常外部代理测试时 `dev:runner` 是可选的：
-
-- `dev:runner` 主要用于 `internal` 队列运行执行和控制平面轮询。
-- `external-agent` 托管 Web 运行主要由 `web + hosted-sites` 驱动。
-- 当您需要本地演示场景、作业队列回归覆盖或内部执行回退时，启动 `dev:runner`。
-
 推荐的启动组合：
 
-- 托管 Web 路径：`dev:web` + `dev:hosted`
+- 托管 Web 路径：`dev:web` + `dev:orchestrator` + `dev:hosted`
 - 内部演示路径：添加 `dev:runner`
 
 ## 托管 Web PoC
@@ -215,13 +212,20 @@ pnpm dev:runner
 启动托管基准站点：
 
 ```bash
+pnpm dev:orchestrator
 pnpm dev:hosted
 ```
 
-Web 应用使用 `HOSTED_SITES_URL` 来分配托管会话。在本地开发中，它默认为：
+Web 应用使用 `HOSTED_SITES_URL` 打开托管任务 URL。在本地开发中，它默认为：
 
 ```text
 http://localhost:3003
+```
+
+Web 应用使用 `HOSTED_ORCHESTRATOR_URL` 调用 hosted attempt 的 init/state/command API。本地开发通常指向：
+
+```text
+http://localhost:3004
 ```
 
 托管站点将事件和完成信息发送回 `AGENTBENCH_WEB_URL`，默认为：
@@ -307,6 +311,7 @@ hosted-sites 部署所需的 GitHub Secrets：
 - `AGENTBENCH_WEB_URL`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_PUBLIC_URL`
+- `HOSTED_ORCHESTRATOR_PUBLIC_URL` - 公网 orchestrator 路径，例如 `https://hosted.project-echo.xyz/orchestrator`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
