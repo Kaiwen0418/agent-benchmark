@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateCheckout, evaluateWiki, type HostedEvaluationSession } from "./evaluation";
+import { evaluateCheckout, evaluateWiki, type HostedEvaluationSession } from "./evaluation.js";
 
 function makeShoppingSession(overrides?: Partial<HostedEvaluationSession>): HostedEvaluationSession {
   return {

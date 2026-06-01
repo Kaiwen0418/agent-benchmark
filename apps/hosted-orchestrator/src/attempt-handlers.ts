@@ -5,7 +5,7 @@ import type {
   CompleteSessionCommandResult,
   ResolveAdvanceCommandResult,
   TimeoutAttemptCommandResult,
-} from "./attempt-lifecycle";
+} from "./attempt-lifecycle.js";
 import type { HostedWebScoreResult, HostedWebSuiteScoreResult } from "@agentbench/scoring";
 
 type AttemptHandlersDeps<TReadModel extends HostedAttemptReadModel> = {

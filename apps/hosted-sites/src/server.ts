@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import type { HostedAttemptReadModel } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { evaluateSession } from "./evaluation";
+import { evaluateSession } from "./evaluation.js";
 
 const port = Number(process.env.HOSTED_SITES_PORT ?? 3003);
 const publicBaseUrl = process.env.HOSTED_SITES_PUBLIC_URL ?? `http://localhost:${port}`;

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildHostedAttemptReadModel } from "@agentbench/shared";
-import { createAttemptLifecycle, type AttemptLifecycleAdvanceSession, type AttemptLifecycleSession } from "./attempt-lifecycle";
+import { createAttemptLifecycle, type AttemptLifecycleAdvanceSession, type AttemptLifecycleSession } from "./attempt-lifecycle.js";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 
 function createLifecycle(overrides?: {

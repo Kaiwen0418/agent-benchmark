@@ -3,13 +3,13 @@ import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buildHostedAttemptReadModel, type HostedAttemptReadModel } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
-import { createAttemptHandlers } from "./attempt-handlers";
+import { createAttemptHandlers } from "./attempt-handlers.js";
 import {
   createAttemptLifecycle,
   type AttemptLifecycleAdvanceSession,
   type AttemptLifecycleSession,
   type HostedSessionStatus,
-} from "./attempt-lifecycle";
+} from "./attempt-lifecycle.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
