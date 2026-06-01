@@ -1,5 +1,7 @@
 # Benchmark Spec
 
+> [中文](./benchmark-spec.zh-CN.md) | English
+
 ## Purpose
 
 Benchmark cases define what an agent must do, what tools it may use, and how success is evaluated.

@@ -1,5 +1,7 @@
 # Protocol
 
+> [中文](./protocol.zh-CN.md) | English
+
 ## Goal
 
 The protocol defines the contract between the cloud platform and execution runners.

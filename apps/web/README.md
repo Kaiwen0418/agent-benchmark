@@ -1,5 +1,7 @@
 # Web Playground
 
+> [中文](./README.zh-CN.md) | English
+
 This app is now oriented around a single-page interactive AI playground.
 
 ## Product Shape

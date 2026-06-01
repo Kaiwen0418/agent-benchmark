@@ -1,5 +1,7 @@
 # AgentBench
 
+> [中文](./README.zh-CN.md) | English
+
 AgentBench is an interactive playground for watching tool-using AI agents work inside benchmark environments.
 
 It focuses on a simple idea: agent evaluation should be watchable, not just scored. Users should be able to connect their own agents, start a run, and watch what the agent does in real time.

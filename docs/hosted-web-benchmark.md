@@ -1,5 +1,7 @@
 # Hosted Web Benchmarks
 
+> [中文](./hosted-web-benchmark.zh-CN.md) | English
+
 ## Purpose
 
 Hosted web benchmarks are public, AgentBench-controlled websites that simulate real web applications while keeping execution in the user's agent environment.

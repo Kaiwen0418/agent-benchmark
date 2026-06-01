@@ -1,5 +1,7 @@
 # Architecture
 
+> [中文](./architecture.zh-CN.md) | English
+
 ## Summary
 
 AgentBench is now split into a cloud control plane, a hosted-web benchmark layer, and a legacy isolated runner layer.

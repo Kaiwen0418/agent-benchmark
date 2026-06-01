@@ -1,5 +1,7 @@
 # Security
 
+> [中文](./security.zh-CN.md) | English
+
 ## Security Model
 
 AgentBench evaluates autonomous systems that may make unsafe or unexpected tool calls. The platform must therefore assume agents are untrusted by default.

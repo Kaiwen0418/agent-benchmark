@@ -1,5 +1,7 @@
 # Runner
 
+> [中文](./runner.zh-CN.md) | English
+
 ## Purpose
 
 The runner is the legacy execution engine of AgentBench. It remains self-hosted and is used for internal queued runs, MCP tooling, and regression scenarios that still require an isolated sandbox.
