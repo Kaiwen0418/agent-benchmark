@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test hosted-orchestrator
+        run: pnpm --filter hosted-orchestrator test
+
+      - name: Test hosted-sites
+        run: pnpm --filter hosted-sites test
+
       - name: Build web
         run: pnpm --filter web build
 

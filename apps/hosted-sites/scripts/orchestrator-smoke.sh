@@ -8,6 +8,7 @@ ORCHESTRATOR_PORT="${HOSTED_ORCHESTRATOR_PORT:-$((4100 + (RANDOM % 1000)))}"
 HOSTED_BASE_URL="${HOSTED_SITES_PUBLIC_URL:-http://127.0.0.1:${HOSTED_PORT}}"
 ORCHESTRATOR_BASE_URL="${HOSTED_ORCHESTRATOR_PUBLIC_URL:-http://127.0.0.1:${ORCHESTRATOR_PORT}}"
 WEB_URL="${AGENTBENCH_WEB_URL:-http://127.0.0.1:3999}"
+SMOKE_MODE="${SMOKE_MODE:-timeout}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "Missing env file: ${ENV_FILE}" >&2
@@ -228,6 +229,53 @@ if (payload.complete !== false || !payload.nextStartUrl || !payload.nextStartUrl
 }
 '
 
+if [[ "${SMOKE_MODE}" == "full-pass" ]]; then
+  curl -fsS "${HOSTED_BASE_URL}/wiki/article/agentbench-release-history?session=${SECOND_TOKEN}" >/dev/null
+  curl -fsS -X POST "${HOSTED_BASE_URL}/api/telemetry" \
+    -H "Content-Type: application/json" \
+    -d "{\"session\":\"${SECOND_TOKEN}\",\"type\":\"page.load\",\"url\":\"/wiki/article/agentbench-release-history?session=${SECOND_TOKEN}\",\"title\":\"AgentBench Release History\"}" >/dev/null
+  curl -fsS -X POST "${HOSTED_BASE_URL}/wiki/answer?session=${SECOND_TOKEN}" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "answer=June 1, 2026" >/dev/null
+
+  SECOND_SCORE_JSON="$(curl -fsS "${HOSTED_BASE_URL}/api/sessions/${SECOND_TOKEN}/score")"
+
+  printf '%s' "${SECOND_SCORE_JSON}" | node -e '
+  const payload = JSON.parse(require("fs").readFileSync(0, "utf8"));
+  if (payload.status !== "passed" || payload.score !== 1) {
+    throw new Error("wiki score should pass in full-pass smoke");
+  }
+  '
+
+  FINAL_STATE_JSON="$(curl -fsS "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/state" \
+    -H "x-runner-secret: ${RUNNER_SHARED_SECRET}")"
+
+  printf '%s' "${FINAL_STATE_JSON}" | node -e '
+  const state = JSON.parse(require("fs").readFileSync(0, "utf8"));
+  if (state.activeSessionId !== null) {
+    throw new Error("completed attempt should not retain an active session");
+  }
+  if (!Array.isArray(state.completedSessionIds) || state.completedSessionIds.length !== 2) {
+    throw new Error("completed attempt should contain both completed session ids");
+  }
+  '
+
+  FINAL_ADVANCE_JSON="$(curl -fsS -X POST "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/commands/resolve-advance" \
+    -H "Content-Type: application/json" \
+    -H "x-runner-secret: ${RUNNER_SHARED_SECRET}" \
+    -d "{\"currentSessionId\":\"${SECOND_SESSION_ID}\"}")"
+
+  printf '%s' "${FINAL_ADVANCE_JSON}" | node -e '
+  const payload = JSON.parse(require("fs").readFileSync(0, "utf8"));
+  if (payload.complete !== true || payload.nextSessionId !== null || payload.nextStartUrl !== null) {
+    throw new Error("resolve-advance should report suite completion after full pass");
+  }
+  '
+
+  echo "orchestrator smoke (full-pass) passed: run=${RUN_ID} attempt=${ATTEMPT_ID}"
+  exit 0
+fi
+
 TIMEOUT_JSON="$(curl -fsS -X POST "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/commands/timeout" \
   -H "Content-Type: application/json" \
   -H "x-runner-secret: ${RUNNER_SHARED_SECRET}" \
@@ -250,4 +298,4 @@ if (state.activeSessionId !== null) {
 }
 '
 
-echo "orchestrator smoke passed: run=${RUN_ID} attempt=${ATTEMPT_ID}"
+echo "orchestrator smoke (timeout) passed: run=${RUN_ID} attempt=${ATTEMPT_ID}"
