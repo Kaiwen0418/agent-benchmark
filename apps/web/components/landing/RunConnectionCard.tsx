@@ -194,7 +194,7 @@ export function RunConnectionCard() {
               </p>
             ) : null}
             <p className="mt-3 text-xs leading-6 text-[#80534b]">
-              Check that `HOSTED_SITES_URL` is configured in Vercel and that the hosted-sites `/health` endpoint is reachable.
+              Check that `HOSTED_ORCHESTRATOR_URL` is configured in Vercel and that the orchestrator API path is reachable.
             </p>
             <button
               type="button"

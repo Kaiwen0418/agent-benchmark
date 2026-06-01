@@ -591,12 +591,12 @@ async function initializeHostedWebAttempt(params: {
   benchmarkCase: BenchmarkCase;
   attempt: HostedWebAttempt;
 }) {
-  const baseUrl = getHostedSitesBaseUrl();
+  const baseUrl = getHostedOrchestratorBaseUrl();
   const runnerSecret = runnerSecretOrThrow();
 
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/api/attempts/init`, {
+    response = await fetch(resolveHostedUrl(baseUrl, "/api/attempts/init"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -626,7 +626,8 @@ async function initializeHostedWebAttempt(params: {
     });
   } catch (error) {
     throw new HostedWebSessionError({
-      message: "Hosted benchmark site is not reachable. Check HOSTED_SITES_URL and the hosted-sites deployment.",
+      message:
+        "Hosted orchestrator is not reachable. Check HOSTED_ORCHESTRATOR_URL and the hosted-orchestrator deployment.",
       hostedSitesUrl: baseUrl,
       cause: error,
     });
@@ -634,7 +635,7 @@ async function initializeHostedWebAttempt(params: {
 
   if (!response.ok) {
     throw new HostedWebSessionError({
-      message: `Hosted benchmark site rejected attempt initialization with HTTP ${response.status}.`,
+      message: `Hosted orchestrator rejected attempt initialization with HTTP ${response.status}.`,
       status: response.status >= 500 ? 502 : 400,
       hostedSitesUrl: baseUrl,
       retryable: response.status >= 500,
