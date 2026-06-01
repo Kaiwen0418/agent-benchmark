@@ -860,12 +860,23 @@ Latest local smoke:
   - `benchmark_runs.status` moved to `timeout`, `score = 0`, and `error_message` was filled from the hosted timeout summary
   - `benchmark_attempt_scores` received a timeout-shaped `error` row with `aggregation = "timeout"`
   - a fresh `GET /api/runs/:runId/connect` returned `activeSessionId = null` and no orchestrator URL, instead of falling back to session `0`
+- lifecycle extraction progress:
+  - attempt transition logic is now extracted into `apps/hosted-sites/src/attempt-lifecycle.ts`
+  - `server.ts` now calls a dedicated `attemptLifecycle` service object for:
+    - session finalization
+    - attempt advance resolution
+    - timeout from expired sessions
+  - route handlers now issue explicit lifecycle commands such as:
+    - `complete-session`
+    - `resolve-advance`
+    - `timeout-attempt`
+  - this is still an in-process command boundary, not a separate deployable service, but it removes lifecycle rules from the route handlers and makes the next service split straightforward
 
 Current limitations:
 
-- the attempt overview is still a lightweight helper page, not a stateful orchestrator with server-owned active-session transitions
+- the attempt overview is still a lightweight helper page, not a stateful orchestrator UI
 - UI only shows basic suite progress and active session context
-- attempt advance is still helper-style and does not yet enforce transitions through a dedicated orchestrator service boundary
+- lifecycle is now a dedicated module boundary, but not yet a separately deployed service or queue-backed command processor
 - wiki article-view proof still depends on hosted telemetry rather than a persisted server-side read model
 - there is no external scheduler yet; cleanup currently runs inside each hosted-sites process with interval-based best-effort semantics
 

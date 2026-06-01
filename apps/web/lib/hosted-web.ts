@@ -4,6 +4,7 @@ import type {
   HostedWebSuiteMetadata,
   HostedWebSuiteSession,
 } from "@agentbench/protocol";
+import { buildHostedAttemptReadModel } from "@agentbench/shared";
 import { hostedWebSuiteMetadataSchema } from "@agentbench/protocol";
 import { createSupabaseAdminClient } from "./supabase/admin";
 
@@ -50,12 +51,6 @@ type HostedWebAttempt = {
 
 type HostedWebStore = {
   attemptsByRunId: Map<string, HostedWebAttempt | null>;
-};
-
-type AttemptState = {
-  activeSessionId: string | null;
-  activeSequenceIndex: number | null;
-  completedSessionIds: string[];
 };
 
 export class HostedWebSessionError extends Error {
@@ -174,56 +169,25 @@ function normalizeSessionDefinitions(benchmarkCase: BenchmarkCase) {
   };
 }
 
-function deriveAttemptState(
-  metadata: Record<string, unknown>,
-  sessions: HostedWebSessionConnection[],
-): AttemptState {
-  const activeSessionId =
-    typeof metadata.activeSessionId === "string" ? metadata.activeSessionId : null;
-  const activeSequenceIndex =
-    typeof metadata.activeSequenceIndex === "number" ? metadata.activeSequenceIndex : null;
-  const completedSessionIds = Array.isArray(metadata.completedSessionIds)
-    ? metadata.completedSessionIds.filter((value): value is string => typeof value === "string")
-    : sessions
-        .filter((session) => session.status === "completed")
-        .map((session) => session.sessionId);
-
-  if (activeSessionId || activeSequenceIndex !== null) {
-    return { activeSessionId, activeSequenceIndex, completedSessionIds };
-  }
-
-  const nextQueued = sessions.find(
-    (session) =>
-      session.status !== "completed" &&
-      session.status !== "failed" &&
-      session.status !== "expired",
-  );
-  return {
-    activeSessionId: nextQueued?.sessionId ?? null,
-    activeSequenceIndex: nextQueued?.sequenceIndex ?? null,
-    completedSessionIds,
-  };
-}
-
 function toAttemptConnection(params: {
   attempt: HostedWebAttempt;
   sessions: HostedWebSessionConnection[];
 }) {
   const baseUrl = getHostedSitesBaseUrl();
-  const attemptState = deriveAttemptState(params.attempt.metadata, params.sessions);
-  const fallbackActiveSession = params.sessions.find(
-    (session) =>
-      session.status !== "completed" &&
-      session.status !== "failed" &&
-      session.status !== "expired",
-  );
+  const readModel = buildHostedAttemptReadModel({
+    attemptId: params.attempt.id ?? "pending-attempt",
+    metadata: params.attempt.metadata,
+    sessions: params.sessions.map((session) => ({
+      id: session.sessionId,
+      sequenceIndex: session.sequenceIndex,
+      status: session.status,
+      session,
+    })),
+  });
   const activeSession =
-    params.sessions.find((session) => session.sessionId === attemptState.activeSessionId) ??
-    (attemptState.activeSequenceIndex !== null
-      ? params.sessions.find((session) => session.sequenceIndex === attemptState.activeSequenceIndex)
-      : null) ??
-    fallbackActiveSession ??
-    null;
+    readModel.activeSessionId === null
+      ? null
+      : readModel.sessions.find((candidate) => candidate.id === readModel.activeSessionId)?.session ?? null;
 
   return {
     attemptId: params.attempt.id ?? null,
@@ -241,7 +205,7 @@ function toAttemptConnection(params: {
     progress: {
       currentIndex: activeSession?.sequenceIndex ?? null,
       total: params.sessions.length,
-      completed: attemptState.completedSessionIds.length,
+      completed: readModel.progress.completed,
     },
     sessions: params.sessions.map((session) => ({
       ...session,

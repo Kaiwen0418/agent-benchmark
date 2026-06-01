@@ -1,16 +1,15 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
+import { buildHostedAttemptReadModel, type HostedAttemptReadModel } from "@agentbench/shared";
 import {
-  aggregateSuiteScore,
   aggregateStrictScore,
   failedEvaluator,
   passedEvaluator,
   type HostedWebEvaluatorResult,
   type HostedWebScoreResult,
-  type HostedWebSuiteScoreResult,
-  type HostedWebSuiteSessionScore,
 } from "@agentbench/scoring";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createAttemptLifecycle, type AttemptStatus, type HostedSessionStatus } from "./attempt-lifecycle";
 
 const port = Number(process.env.HOSTED_SITES_PORT ?? 3003);
 const publicBaseUrl = process.env.HOSTED_SITES_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -66,9 +65,6 @@ type WikiAnswerSubmission = {
   submittedAt: string;
 };
 
-type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
-type AttemptStatus = "created" | "running" | "scoring" | "completed" | "failed" | "cancelled" | "timeout";
-
 type HostedSession = {
   id: string;
   token: string;
@@ -110,7 +106,6 @@ type HostedSession = {
 const sessions = new Map<string, HostedSession>();
 let supabaseAdmin: SupabaseClient | null | undefined;
 let cleanupSweepInFlight = false;
-const terminalAttemptStatuses = new Set<AttemptStatus>(["completed", "failed", "cancelled", "timeout"]);
 
 const seedProducts: Product[] = [
   {
@@ -593,7 +588,8 @@ async function sweepExpiredSessions() {
   }
 
   for (const [attemptId, timeoutSeed] of attemptsToTimeout) {
-    await timeoutAttemptFromExpiredSession({
+    await attemptLifecycle.executeTimeoutAttemptCommand({
+      type: "timeout-attempt",
       attemptId,
       runId: timeoutSeed.runId,
       expiredSessionId: timeoutSeed.sessionId,
@@ -649,148 +645,14 @@ async function forwardTimeoutCompletion(params: {
   }).catch(() => undefined);
 }
 
-async function timeoutAttemptFromExpiredSession(params: {
-  attemptId: string;
-  runId: string | null;
-  expiredSessionId: string;
-  expiredTaskSlug: string;
-}) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
-    return false;
-  }
-
-  const { data: attemptRow, error: attemptError } = await supabase
-    .from("benchmark_attempts")
-    .select("status, suite_slug, metadata")
-    .eq("id", params.attemptId)
-    .maybeSingle();
-
-  if (attemptError || !attemptRow) {
-    if (attemptError) {
-      console.error("[hosted-sites] failed to load attempt for timeout", attemptError);
-    }
-    return false;
-  }
-
-  if (terminalAttemptStatuses.has(attemptRow.status as AttemptStatus)) {
-    return false;
-  }
-
-  const existingMetadata =
-    attemptRow.metadata && typeof attemptRow.metadata === "object" && !Array.isArray(attemptRow.metadata)
-      ? (attemptRow.metadata as Record<string, unknown>)
-      : {};
-
-  const { data: sessionRows, error: sessionsError } = await supabase
-    .from("hosted_web_sessions")
-    .select("id, run_id, app, task_slug, sequence_index, status")
-    .eq("attempt_id", params.attemptId)
-    .order("sequence_index", { ascending: true });
-
-  if (sessionsError || !sessionRows) {
-    console.error("[hosted-sites] failed to load attempt sessions for timeout", sessionsError);
-    return false;
-  }
-
-  const timeoutAt = now();
-  const siblingSessionIds = sessionRows
-    .filter((row) => row.status === "created" || row.status === "active" || row.status === "scoring")
-    .map((row) => row.id);
-
-  if (siblingSessionIds.length > 0) {
-    const { error: sessionTimeoutError } = await supabase
-      .from("hosted_web_sessions")
-      .update({
-        status: "expired",
-        completed_at: timeoutAt,
-      })
-      .in("id", siblingSessionIds);
-
-    if (sessionTimeoutError) {
-      console.error("[hosted-sites] failed to expire sibling sessions during timeout", sessionTimeoutError);
-    }
-  }
-
-  const expiredIds = new Set(siblingSessionIds);
+function evictInMemorySessions(sessionIds: string[]) {
+  const targetIds = new Set(sessionIds);
   for (const [token, session] of sessions) {
-    if (expiredIds.has(session.id)) {
+    if (targetIds.has(session.id)) {
       session.status = "expired";
       sessions.delete(token);
     }
   }
-
-  const summary = `Hosted suite timed out after session ${params.expiredTaskSlug} expired before completion.`;
-  const scoringSummary = {
-    summary,
-    status: "timeout",
-    breakdown: {
-      aggregation: "timeout",
-      timedOutSessionId: params.expiredSessionId,
-      timedOutSessionIds: siblingSessionIds,
-      sessions: sessionRows.map((row) => ({
-        sessionId: row.id,
-        app: row.app,
-        taskSlug: row.task_slug,
-        sequenceIndex: row.sequence_index,
-        status: expiredIds.has(row.id) ? "expired" : row.status,
-      })),
-    },
-  };
-
-  const { error: attemptUpdateError } = await supabase
-    .from("benchmark_attempts")
-    .update({
-      status: "timeout",
-      aggregate_score: 0,
-      metadata: {
-        ...existingMetadata,
-        activeSessionId: null,
-        activeSequenceIndex: null,
-        timedOutSessionId: params.expiredSessionId,
-        timedOutAt: timeoutAt,
-      },
-      scoring_summary: scoringSummary,
-      completed_at: timeoutAt,
-    })
-    .eq("id", params.attemptId);
-
-  if (attemptUpdateError) {
-    console.error("[hosted-sites] failed to update timed out attempt", attemptUpdateError);
-    return false;
-  }
-
-  const { data: existingAttemptScore } = await supabase
-    .from("benchmark_attempt_scores")
-    .select("id")
-    .eq("attempt_id", params.attemptId)
-    .limit(1)
-    .maybeSingle();
-
-  if (!existingAttemptScore) {
-    const { error: attemptScoreError } = await supabase.from("benchmark_attempt_scores").insert({
-      run_id: params.runId,
-      attempt_id: params.attemptId,
-      status: "error",
-      score: 0,
-      summary,
-      breakdown: scoringSummary.breakdown,
-    });
-
-    if (attemptScoreError) {
-      console.error("[hosted-sites] failed to persist timeout attempt score", attemptScoreError);
-    }
-  }
-
-  if (params.runId) {
-    await forwardTimeoutCompletion({
-      runId: params.runId,
-      summary,
-      score: 0,
-    });
-  }
-
-  return true;
 }
 
 async function runCleanupSweep(trigger: "startup" | "interval") {
@@ -1116,231 +978,6 @@ async function loadLatestSessionResult(sessionId: string) {
     summary: data.summary,
     evaluators: Array.isArray(data.evaluators) ? data.evaluators : [],
   } as HostedWebScoreResult;
-}
-
-async function promoteNextAttemptSession(attemptId: string, completedSessionId: string) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
-    return;
-  }
-
-  const metadata = await loadAttemptMetadata(attemptId);
-  const completedSessionIds = Array.isArray(metadata.completedSessionIds)
-    ? metadata.completedSessionIds.filter((value): value is string => typeof value === "string")
-    : [];
-  const nextSessions = await loadAttemptSessions(attemptId);
-  const nextActive = nextSessions.find(
-    (candidate) => !completedSessionIds.includes(candidate.id) && candidate.id !== completedSessionId,
-  );
-
-  if (nextActive && nextActive.status === "created") {
-    nextActive.status = "active";
-    await supabase
-      .from("hosted_web_sessions")
-      .update({ status: "active" })
-      .eq("id", nextActive.id);
-  }
-}
-
-async function finalizeSession(
-  session: HostedSession,
-  result: HostedWebScoreResult,
-) {
-  if (session.status === "completed" || session.status === "failed") {
-    const existingResult = await loadLatestSessionResult(session.id);
-    return {
-      result: existingResult ?? result,
-      attemptResult: { complete: false, aggregate: null as HostedWebSuiteScoreResult | null },
-      duplicate: true,
-    };
-  }
-
-  if (session.attemptId) {
-    const metadata = await loadAttemptMetadata(session.attemptId);
-    const activeSessionId = typeof metadata.activeSessionId === "string" ? metadata.activeSessionId : null;
-    if (activeSessionId && activeSessionId !== session.id) {
-      throw new Error(`Session ${session.id} is not the active session for attempt ${session.attemptId}.`);
-    }
-  }
-
-  await persistScoreResult(session, result);
-  session.status = result.status === "passed" ? "completed" : "failed";
-  const attemptResult = await persistAttemptScore(session, result);
-
-  if (!attemptResult.complete && session.attemptId) {
-    await promoteNextAttemptSession(session.attemptId, session.id);
-  }
-
-  return {
-    result,
-    attemptResult,
-    duplicate: false,
-  };
-}
-
-async function persistAttemptScore(session: HostedSession, result: HostedWebScoreResult): Promise<{
-  complete: boolean;
-  aggregate: HostedWebSuiteScoreResult | null;
-}> {
-  if (!session.persisted || !session.runId || !session.attemptId) {
-    return { complete: false, aggregate: null };
-  }
-
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
-    return { complete: false, aggregate: null };
-  }
-
-  const { data: attemptRow } = await supabase
-    .from("benchmark_attempts")
-    .select("metadata")
-    .eq("id", session.attemptId)
-    .maybeSingle();
-  const existingAttemptMetadata =
-    attemptRow?.metadata && typeof attemptRow.metadata === "object" && !Array.isArray(attemptRow.metadata)
-      ? (attemptRow.metadata as Record<string, unknown>)
-      : {};
-
-  const { data: resultRows, error: resultsError } = await supabase
-    .from("hosted_web_results")
-    .select("session_id, app, task_slug, score, status, weight")
-    .eq("attempt_id", session.attemptId)
-    .order("created_at", { ascending: true });
-
-  if (resultsError || !resultRows) {
-    console.error("[hosted-sites] failed to load attempt results for aggregation", resultsError);
-    return { complete: false, aggregate: null };
-  }
-
-  const { data: sessionRows, error: sessionsError } = await supabase
-    .from("hosted_web_sessions")
-    .select("id, app, task_slug, weight, required, sequence_index")
-    .eq("attempt_id", session.attemptId)
-    .order("sequence_index", { ascending: true });
-
-  if (sessionsError || !sessionRows) {
-    console.error("[hosted-sites] failed to load attempt sessions for aggregation", sessionsError);
-    return { complete: false, aggregate: null };
-  }
-
-  const latestResultBySessionId = new Map<string, (typeof resultRows)[number]>();
-  for (const row of resultRows) {
-    latestResultBySessionId.set(row.session_id, row);
-  }
-
-  const completedSessionIds = new Set(latestResultBySessionId.keys());
-
-  const suiteSessions: HostedWebSuiteSessionScore[] = sessionRows.map((row) => {
-    const latestResult = latestResultBySessionId.get(row.id);
-    return {
-      sessionId: row.id,
-      app: row.app,
-      taskSlug: row.task_slug,
-      score: latestResult?.score ?? 0,
-      status: latestResult?.status ?? "failed",
-      weight: row.weight,
-      required: row.required,
-    };
-  });
-
-  const pendingSessionIds = sessionRows
-    .filter((row) => !completedSessionIds.has(row.id))
-    .map((row) => row.id);
-  const nextPendingSession = sessionRows.find((row) => !completedSessionIds.has(row.id) && row.id !== session.id)
-    ?? sessionRows.find((row) => !completedSessionIds.has(row.id));
-
-  const { error: sessionError } = await supabase
-    .from("hosted_web_sessions")
-    .update({
-      status: result.status === "passed" ? "completed" : "failed",
-      completed_at: now(),
-    })
-    .eq("id", session.id);
-
-  if (sessionError) {
-    console.error("[hosted-sites] failed to update hosted session status", sessionError);
-  }
-
-  if (pendingSessionIds.length > 0) {
-    const completedIds = sessionRows
-      .filter((row) => completedSessionIds.has(row.id))
-      .map((row) => row.id);
-    const { error: attemptProgressError } = await supabase
-      .from("benchmark_attempts")
-      .update({
-        status: "running",
-        metadata: {
-          ...existingAttemptMetadata,
-          activeSessionId: nextPendingSession?.id ?? null,
-          activeSequenceIndex: nextPendingSession?.sequence_index ?? null,
-          completedSessionIds: completedIds,
-        },
-        scoring_summary: {
-          summary: `Completed ${completedSessionIds.size} of ${sessionRows.length} hosted sessions.`,
-          status: "running",
-          breakdown: {
-            aggregation: "weighted-required-suite",
-            sessions: suiteSessions,
-            pendingSessionIds,
-          },
-        },
-      })
-      .eq("id", session.attemptId);
-
-    if (attemptProgressError) {
-      console.error("[hosted-sites] failed to update attempt progress", attemptProgressError);
-    }
-
-    return { complete: false, aggregate: null };
-  }
-
-  const aggregate = aggregateSuiteScore({
-    sessions: suiteSessions,
-    passSummary: `All required hosted sessions for ${session.suiteSlug} passed.`,
-    failSummary: `One or more required hosted sessions for ${session.suiteSlug} failed.`,
-  });
-  const breakdown = aggregate.breakdown;
-  const status = aggregate.status === "passed" ? "completed" : "failed";
-  const completedAt = now();
-
-  const { error: scoreError } = await supabase.from("benchmark_attempt_scores").insert({
-    run_id: session.runId,
-    attempt_id: session.attemptId,
-    status: aggregate.status,
-    score: aggregate.score,
-    summary: aggregate.summary,
-    breakdown,
-  });
-
-  if (scoreError) {
-    console.error("[hosted-sites] failed to persist attempt score", scoreError);
-  }
-
-  const { error: attemptError } = await supabase
-    .from("benchmark_attempts")
-    .update({
-      status,
-      aggregate_score: aggregate.score,
-      metadata: {
-        ...existingAttemptMetadata,
-        activeSessionId: null,
-        activeSequenceIndex: null,
-        completedSessionIds: sessionRows.map((row) => row.id),
-      },
-      scoring_summary: {
-        summary: aggregate.summary,
-        status: aggregate.status,
-        breakdown,
-      },
-      completed_at: completedAt,
-    })
-    .eq("id", session.attemptId);
-
-  if (attemptError) {
-    console.error("[hosted-sites] failed to update attempt", attemptError);
-  }
-
-  return { complete: true, aggregate };
 }
 
 function buildFinalState(session: HostedSession) {
@@ -2055,25 +1692,58 @@ async function loadAttemptSessions(attemptId: string) {
   return hydrated.sort((left, right) => left.sequenceIndex - right.sequenceIndex);
 }
 
-function getSessionProgress(session: HostedSession) {
-  if (session.app === "wiki-lite") {
-    return session.wikiAnswerSubmissions.length > 0;
-  }
+type HostedAttemptOverviewSession = HostedAttemptReadModel["sessions"][number] & {
+  token: string;
+  app: string;
+  taskSlug: string;
+  title: string | null;
+  goal: string;
+  startPath: string | null;
+};
 
-  return session.orders.length > 0;
+async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptReadModel<HostedAttemptOverviewSession>> {
+  const [metadata, attemptSessions] = await Promise.all([
+    loadAttemptMetadata(attemptId),
+    loadAttemptSessions(attemptId),
+  ]);
+
+  return buildHostedAttemptReadModel({
+    attemptId,
+    metadata,
+    sessions: attemptSessions.map((session) => ({
+      id: session.id,
+      token: session.token,
+      app: session.app,
+      taskSlug: session.taskSlug,
+      title: session.title,
+      goal: session.goal,
+      sequenceIndex: session.sequenceIndex,
+      status: session.status,
+      startPath: session.startPath,
+    })),
+  });
 }
 
+const attemptLifecycle = createAttemptLifecycle({
+  now,
+  getSupabaseAdmin,
+  loadAttemptMetadata,
+  loadAttemptSessions,
+  loadAttemptReadModel,
+  loadLatestSessionResult,
+  persistScoreResult: async (session, result) => persistScoreResult(session as HostedSession, result),
+  forwardTimeoutCompletion,
+  evictInMemorySessions,
+});
+
 function renderAttemptOverview(
-  attemptId: string,
+  readModel: HostedAttemptReadModel<HostedAttemptOverviewSession>,
   currentSession: HostedSession,
-  attemptSessions: HostedSession[],
   response: ServerResponse,
 ) {
-  const currentIndex = attemptSessions.findIndex((session) => session.token === currentSession.token);
-  const cards = attemptSessions
+  const cards = readModel.sessions
     .map((session, index) => {
-      const complete = getSessionProgress(session);
-      const state = complete ? "completed" : index === currentIndex ? "active" : "queued";
+      const state = session.id === readModel.activeSessionId ? "active" : session.status;
       return `<article class="card">
         <div class="muted">Session ${index + 1}</div>
         <h2>${escapeHtml(session.title ?? session.taskSlug)}</h2>
@@ -2091,8 +1761,8 @@ function renderAttemptOverview(
       title: "Hosted Suite Overview",
       session: currentSession,
       body: `<section class="panel">
-        <h2>Attempt ${escapeHtml(attemptId)}</h2>
-        <p>${attemptSessions.filter((session) => getSessionProgress(session)).length} of ${attemptSessions.length} sessions have submitted results.</p>
+        <h2>Attempt ${escapeHtml(readModel.attemptId)}</h2>
+        <p>${readModel.progress.completed} of ${readModel.progress.total} sessions have submitted results.</p>
       </section>
       <section class="grid" style="margin-top:16px;">${cards}</section>`,
     }),
@@ -2232,7 +1902,11 @@ const server = createServer(async (request, response) => {
         return;
       }
       const result = evaluateSession(session);
-      const finalization = await finalizeSession(session, result);
+      const finalization = await attemptLifecycle.executeCompleteSessionCommand({
+        type: "complete-session",
+        session,
+        result,
+      });
       await forwardRunEvent(session, "hosted.score", finalization.result);
       if (finalization.attemptResult.complete && finalization.attemptResult.aggregate) {
         await forwardCompletion(session, finalization.attemptResult.aggregate);
@@ -2253,7 +1927,7 @@ const server = createServer(async (request, response) => {
         badRequest(response, "Session does not belong to this attempt");
         return;
       }
-      renderAttemptOverview(attemptId, session, await loadAttemptSessions(attemptId), response);
+      renderAttemptOverview(await loadAttemptReadModel(attemptId), session, response);
       return;
     }
 
@@ -2265,27 +1939,23 @@ const server = createServer(async (request, response) => {
         return;
       }
       const attemptId = decodeURIComponent(advanceMatch[1]);
-      const attemptSessions = await loadAttemptSessions(attemptId);
-      if (!attemptSessions.some((candidate) => candidate.id === session.id)) {
+      const advance = await attemptLifecycle.executeResolveAdvanceCommand({
+        type: "resolve-advance",
+        attemptId,
+        currentSessionId: session.id,
+      });
+      if (!advance.ok) {
         badRequest(response, "Session does not belong to this attempt");
         return;
       }
-      const attemptMetadata = await loadAttemptMetadata(attemptId);
-      const activeSessionId =
-        typeof attemptMetadata.activeSessionId === "string" ? attemptMetadata.activeSessionId : null;
-      const activeSession =
-        attemptSessions.find((candidate) => candidate.id === activeSessionId) ??
-        attemptSessions.find((candidate) => candidate.status === "active") ??
-        attemptSessions.find((candidate) => candidate.status === "created") ??
-        null;
       sendJson(response, 200, {
         attemptId,
         currentSessionId: session.id,
-        complete: activeSession === null,
-        nextSessionId: activeSession?.id ?? null,
+        complete: advance.complete,
+        nextSessionId: advance.nextSession?.id ?? null,
         nextStartUrl:
-          activeSession
-            ? `${publicBaseUrl}${activeSession.startPath ?? defaultStartPathForApp(activeSession.app)}?session=${encodeURIComponent(activeSession.token)}`
+          advance.nextSession
+            ? `${publicBaseUrl}${advance.nextSession.startPath ?? defaultStartPathForApp(advance.nextSession.app)}?session=${encodeURIComponent(advance.nextSession.token)}`
             : null,
       });
       return;
@@ -2373,7 +2043,11 @@ const server = createServer(async (request, response) => {
         orderId: order.id,
       });
       const result = evaluateSession(session);
-      const finalization = await finalizeSession(session, result);
+      const finalization = await attemptLifecycle.executeCompleteSessionCommand({
+        type: "complete-session",
+        session,
+        result,
+      });
       await forwardRunEvent(session, "hosted.score", finalization.result);
       if (finalization.attemptResult.complete && finalization.attemptResult.aggregate) {
         await forwardCompletion(session, finalization.attemptResult.aggregate);
@@ -2461,7 +2135,11 @@ const server = createServer(async (request, response) => {
         answer: answer.trim(),
       });
       const result = evaluateSession(session);
-      const finalization = await finalizeSession(session, result);
+      const finalization = await attemptLifecycle.executeCompleteSessionCommand({
+        type: "complete-session",
+        session,
+        result,
+      });
       await forwardRunEvent(session, "hosted.score", finalization.result);
       if (finalization.attemptResult.complete && finalization.attemptResult.aggregate) {
         await forwardCompletion(session, finalization.attemptResult.aggregate);

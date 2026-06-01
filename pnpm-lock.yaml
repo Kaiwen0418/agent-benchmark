@@ -17,6 +17,9 @@ importers:
       '@agentbench/scoring':
         specifier: workspace:*
         version: link:../../packages/scoring
+      '@agentbench/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@supabase/supabase-js':
         specifier: ^2.49.1
         version: 2.105.4
@@ -76,6 +79,9 @@ importers:
       '@agentbench/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@agentbench/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@supabase/ssr':
         specifier: ^0.5.2
         version: 0.5.2(@supabase/supabase-js@2.105.4)
@@ -156,6 +162,8 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
+
+  packages/shared: {}
 
 packages:
 
