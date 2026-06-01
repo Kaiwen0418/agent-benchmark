@@ -19,43 +19,43 @@ The core interaction is:
 
 ## Current Mode
 
-The homepage now supports two local development paths:
+The homepage is now centered on one primary path:
 
 - `Start Agent Session`
-- `Run Local Demo`
 
 `Start Agent Session` creates an `external-agent` run:
 
 - run status starts at `waiting_for_agent`
-- the UI exposes a run-specific connect page and JSON config
+- the UI allocates a hosted attempt with one or more ordered hosted sessions
+- the connect page and JSON config expose an attempt-level hosted suite URL plus per-session details
+- the default benchmark case is a two-step hosted suite:
+  - `shopping-lite`
+  - `wiki-lite`
 - when `AGENTBENCH_MCP_BASE_URL` and `MCP_SESSION_SECRET` are configured, the payload includes:
   - `transport: streamable_http`
   - `url: <web-origin>/api/mcp/runs/<run-id>`
   - `Authorization: Bearer <run-scoped-token>`
-- the web MCP route proxies to the runner MCP HTTP server
-- the user's local agent connects to the web MCP endpoint
-- the first MCP request moves the run to `running`
-- the agent ends the run with `run.complete`
-
-`Run Local Demo` keeps the older internal Playwright benchmark path for regression testing.
+- the legacy web MCP route can still proxy to the runner MCP HTTP server
+- for hosted-web runs, the agent primarily uses the hosted suite URL instead of MCP as the main task surface
+- hosted-sites writes per-session results and the aggregated attempt score
 
 ## Local Startup Notes
 
 Default startup uses Docker runtime for backend services:
 
 - `docker-compose up -d --build` (from repository root)
-- this boots `mock-sites + runner mcp:http + caddy gateway`
+- this boots `hosted-sites + gateway`
 - web app is still started with `pnpm dev:web`
 
-`apps/mock-sites` and `runner dev:mcp:http` are separate by design:
+`apps/hosted-sites` and the legacy runner/MCP stack are separate by design:
 
-- `mock-sites` serves deterministic benchmark pages
-- `mcp:http` serves MCP tools and request/response tracing
+- `hosted-sites` serves session-scoped benchmark apps and writes hosted scoring data
+- `mcp:http` serves MCP tools and request/response tracing when you still need the legacy tool path
 
-`pnpm dev:runner` is optional unless you need internal queued run execution. For normal `Start Agent Session` testing, `web + mock-sites + mcp:http` is usually enough.
+`pnpm dev:runner` is optional unless you need internal queued run execution or MCP regression testing. For normal `Start Agent Session` testing, `web + hosted-sites` is the default path.
 
 ## Next Recommended Steps
 
-1. Add real scoring for `external-agent` completion.
-2. Reuse the live Mac container for a stronger live browser stream or noVNC bridge.
+1. Replace the lightweight attempt overview with a server-owned orchestrator state machine.
+2. Persist richer session progress so `advance` no longer depends on in-memory state.
 3. Tighten per-run auth and isolation before public rollout.

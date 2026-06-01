@@ -7,6 +7,8 @@ type ConnectMethod = "link" | "browser" | "advanced";
 
 type RunConnectPayload = {
   runId: string;
+  status: string;
+  errorMessage: string | null;
   prompt: string;
   connectUrl: string;
   configUrl: string;
@@ -19,10 +21,30 @@ type RunConnectPayload = {
   };
   hostedWeb: {
     available: boolean;
-    sessionId: string | null;
-    taskSlug: string | null;
-    startUrl: string | null;
-    goal: string | null;
+    attemptId: string | null;
+    suiteSlug: string | null;
+    suiteVersion: string | null;
+    orchestratorUrl: string | null;
+    advanceUrl: string | null;
+    activeSessionId: string | null;
+    progress: {
+      currentIndex: number | null;
+      total: number;
+      completed: number;
+    };
+    sessions: Array<{
+      sessionId: string;
+      app: string;
+      taskSlug: string;
+      taskVersion: string;
+      sequenceIndex: number;
+      weight: number;
+      required: boolean;
+      startUrl: string;
+      goal: string;
+      title: string | null;
+      status: string;
+    }>;
   };
   mcp: {
     available: boolean;
@@ -35,6 +57,26 @@ type RunConnectPayload = {
     status: string;
   };
 };
+
+function statusBadgeTone(status: string) {
+  if (status === "completed") {
+    return "bg-[#e8f7ec] text-[#1f6b35]";
+  }
+
+  if (status === "failed" || status === "timeout" || status === "expired") {
+    return "bg-[#fff1ed] text-[#8a2d1f]";
+  }
+
+  if (status === "active" || status === "running") {
+    return "bg-[#eef6ff] text-[#245a8a]";
+  }
+
+  return "bg-[#efede6] text-[#4d483f]";
+}
+
+function statusLabel(status: string) {
+  return status.replaceAll("-", " ");
+}
 
 type RunConnectError = {
   error: string;
@@ -119,10 +161,10 @@ export function RunConnectionCard() {
       return "";
     }
 
-    if (payload.hostedWeb.available && payload.hostedWeb.startUrl) {
+    if (payload.hostedWeb.available && payload.hostedWeb.orchestratorUrl) {
       return [
-        "Open the hosted AgentBench benchmark site and complete the objective.",
-        payload.hostedWeb.startUrl,
+        "Open the hosted AgentBench benchmark suite and complete the current objective.",
+        payload.hostedWeb.orchestratorUrl,
       ].join("\n");
     }
 
@@ -173,6 +215,22 @@ export function RunConnectionCard() {
   }
 
   const isActive = phase === "booting" || phase === "running";
+  const activeHostedSession = payload.hostedWeb.sessions.find(
+    (session) => session.sessionId === payload.hostedWeb.activeSessionId,
+  );
+  const isTerminalRun =
+    payload.status === "completed" ||
+    payload.status === "failed" ||
+    payload.status === "cancelled" ||
+    payload.status === "timeout";
+  const terminalSummary =
+    payload.status === "timeout"
+      ? payload.errorMessage ?? "This hosted suite timed out before the active session was completed."
+      : payload.status === "failed"
+        ? payload.errorMessage ?? "This run ended in a failed state."
+        : payload.status === "completed"
+          ? "This run has already completed."
+          : null;
 
   return (
     <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
@@ -188,8 +246,8 @@ export function RunConnectionCard() {
           </h3>
         </div>
         <div className="flex items-center gap-2">
-          <div className="rounded-full bg-[#efede6] px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-[#4d483f]">
-            {isActive ? "Run active" : "Run created"}
+          <div className={`rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] ${statusBadgeTone(payload.status)}`}>
+            {isTerminalRun ? statusLabel(payload.status) : isActive ? "Run active" : "Run created"}
           </div>
           <svg
             width="12"
@@ -205,6 +263,15 @@ export function RunConnectionCard() {
 
       {!collapsed && (
         <>
+          {terminalSummary ? (
+            <div className="mt-5 rounded-[1.2rem] border border-[#e6b3a9] bg-[#fff7f4] px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-[#8a2d1f]">
+                {payload.status === "timeout" ? "Run timed out" : "Run ended"}
+              </div>
+              <p className="mt-2 text-sm leading-7 text-[#5b3d37]">{terminalSummary}</p>
+            </div>
+          ) : null}
+
           <div className="mt-5 grid gap-2 sm:grid-cols-3">
             <button
               type="button"
@@ -276,6 +343,11 @@ export function RunConnectionCard() {
                     Copy Agent Link
                   </button>
                 </div>
+                {!payload.hostedWeb.orchestratorUrl && payload.hostedWeb.available ? (
+                  <p className="mt-3 text-xs leading-6 text-[#80534b]">
+                    This hosted suite no longer has an active session URL. Review the run status and summary above.
+                  </p>
+                ) : null}
               </>
             ) : null}
 
@@ -283,14 +355,14 @@ export function RunConnectionCard() {
               <>
                 <div className="text-sm font-medium text-[#111111]">Browser agent</div>
                 <p className="mt-2 text-sm leading-7 text-[#585248]">
-                  Tell the agent controlling this browser to open the connection page.
+                  Tell the agent controlling this browser to open the active hosted session for this suite.
                 </p>
                 <pre className="mt-4 whitespace-pre-wrap rounded-[1rem] bg-white p-4 text-sm leading-7 text-[#25221d]">
                   {browserPrompt}
                 </pre>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <a
-                    href={payload.hostedWeb.startUrl ?? payload.connectUrl}
+                    href={payload.hostedWeb.orchestratorUrl ?? payload.connectUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
@@ -305,6 +377,11 @@ export function RunConnectionCard() {
                     Copy Browser Prompt
                   </button>
                 </div>
+                {!payload.hostedWeb.orchestratorUrl && payload.hostedWeb.available ? (
+                  <p className="mt-3 text-xs leading-6 text-[#80534b]">
+                    There is no active hosted session to open for this run.
+                  </p>
+                ) : null}
               </>
             ) : null}
 
@@ -318,9 +395,13 @@ export function RunConnectionCard() {
                   {JSON.stringify(payload, null, 2)}
                 </pre>
                 <div className="mt-4 rounded-[1rem] bg-white px-4 py-3 text-sm leading-7 text-[#3f3b34]">
-                  Hosted-web URL: <span className="font-medium">{payload.hostedWeb.startUrl ?? "not available"}</span>
+                  Suite: <span className="font-medium">{payload.hostedWeb.suiteSlug ?? "not available"}</span>
                   <br />
-                  Session id: <span className="font-medium">{payload.hostedWeb.sessionId ?? "not allocated"}</span>
+                  Attempt id: <span className="font-medium">{payload.hostedWeb.attemptId ?? "not allocated"}</span>
+                  <br />
+                  Active session: <span className="font-medium">{payload.hostedWeb.activeSessionId ?? "not allocated"}</span>
+                  <br />
+                  Hosted-web URL: <span className="font-medium">{payload.hostedWeb.orchestratorUrl ?? "not available"}</span>
                   <br />
                   Legacy MCP: <span className="font-medium">{payload.mcp.available ? "available" : "not required"}</span>
                 </div>
@@ -345,6 +426,43 @@ export function RunConnectionCard() {
           </div>
 
           {copyState ? <div className="mt-3 text-xs uppercase tracking-[0.18em] text-[#6f695f]">{copyState}</div> : null}
+          {payload.hostedWeb.available ? (
+            <div className="mt-4 rounded-[1.2rem] border border-[#dfd8cb] bg-[#fbf8f3] p-4 text-sm text-[#3f3b34]">
+              <div className="text-xs uppercase tracking-[0.18em] text-[#70695e]">Hosted Suite</div>
+              <div className="mt-2 font-medium text-[#111111]">
+                {activeHostedSession && payload.hostedWeb.progress.currentIndex !== null
+                  ? `Session ${payload.hostedWeb.progress.currentIndex + 1} / ${payload.hostedWeb.progress.total}`
+                  : isTerminalRun
+                    ? "No active hosted session"
+                    : "Hosted sessions allocated"}
+              </div>
+              <p className="mt-2 leading-7">
+                {activeHostedSession
+                  ? `${activeHostedSession.title ?? activeHostedSession.taskSlug} · ${activeHostedSession.goal}`
+                  : terminalSummary ?? "This run does not currently expose an active hosted objective."}
+              </p>
+              <div className="mt-4 grid gap-2">
+                {payload.hostedWeb.sessions.map((session) => (
+                  <div
+                    key={session.sessionId}
+                    className="flex items-start justify-between gap-3 rounded-[1rem] border border-[#e1dbd0] bg-white px-3 py-3"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-[#111111]">
+                        {session.title ?? session.taskSlug}
+                      </div>
+                      <div className="mt-1 text-xs text-[#6a655c]">
+                        Session {session.sequenceIndex + 1} · {session.app}
+                      </div>
+                    </div>
+                    <div className={`rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] ${statusBadgeTone(session.status)}`}>
+                      {statusLabel(session.status)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </div>

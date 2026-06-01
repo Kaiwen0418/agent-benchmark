@@ -2,9 +2,9 @@
 
 ## Summary
 
-AgentBench is split into a cloud control plane and an isolated execution layer.
+AgentBench is now split into a cloud control plane, a hosted-web benchmark layer, and a legacy isolated runner layer.
 
-The cloud layer manages users, runs, metadata, scores, and replay access. The runner executes benchmark tasks inside controlled sandboxes and streams state back to the platform.
+The cloud layer manages users, runs, metadata, scores, and replay access. `apps/hosted-sites` serves the primary benchmark surfaces for external-agent runs. The runner remains available for internal demos, MCP tooling, and queued execution.
 
 ## High-level Layout
 
@@ -16,7 +16,12 @@ Cloud SaaS Layer
   Run management
   Auth
         ↓
-Runner Control Plane
+Hosted Benchmark Layer
+  hosted-sites
+  session-scoped task apps
+  telemetry + scoring callbacks
+        ↓
+Legacy Runner Control Plane
         ↓
 Self-hosted Linux Runner
   Docker
@@ -47,9 +52,24 @@ Self-hosted execution service responsible for:
 - running benchmark tasks
 - streaming status, traces, and artifacts
 
-### `apps/mock-sites`
+This is no longer the default path for hosted-web external-agent runs.
 
-Deterministic target websites used by benchmark cases. These reduce dependence on public internet behavior and make runs reproducible.
+### `apps/hosted-sites`
+
+Session-scoped hosted benchmark applications used by the primary hosted-web path.
+
+Current real apps:
+
+- `shopping-lite`
+- `wiki-lite`
+
+Current suite model:
+
+- one `benchmark_run`
+- one `benchmark_attempt`
+- multiple ordered `hosted_web_sessions`
+- per-session `hosted_web_results`
+- one aggregated `benchmark_attempt_scores` row
 
 ### `packages/protocol`
 
@@ -69,6 +89,7 @@ Run evaluation logic and result aggregation.
 
 ## Architectural Priorities
 
+- hosted-web suite orchestration
 - runner isolation
 - deterministic execution
 - typed contracts

@@ -1,11 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import {
+  aggregateSuiteScore,
   aggregateStrictScore,
   failedEvaluator,
   passedEvaluator,
   type HostedWebEvaluatorResult,
   type HostedWebScoreResult,
+  type HostedWebSuiteScoreResult,
+  type HostedWebSuiteSessionScore,
 } from "@agentbench/scoring";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -15,6 +18,20 @@ const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:300
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+function envNumber(name: string, fallback: number) {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallback;
+  }
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const cleanupSweepIntervalMs = envNumber("HOSTED_SESSION_SWEEP_INTERVAL_MS", 60_000);
+const terminalSessionRetentionMs = envNumber("HOSTED_SESSION_TERMINAL_RETENTION_MS", 30 * 60 * 1000);
+const accessLogRetentionMs = envNumber("HOSTED_ACCESS_LOG_RETENTION_MS", 14 * 24 * 60 * 60 * 1000);
 
 type Product = {
   id: string;
@@ -37,6 +54,21 @@ type Order = {
   submittedAt: string;
 };
 
+type WikiArticle = {
+  slug: string;
+  title: string;
+  summary: string;
+  body: string;
+};
+
+type WikiAnswerSubmission = {
+  answer: string;
+  submittedAt: string;
+};
+
+type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
+type AttemptStatus = "created" | "running" | "scoring" | "completed" | "failed" | "cancelled" | "timeout";
+
 type HostedSession = {
   id: string;
   token: string;
@@ -44,20 +76,41 @@ type HostedSession = {
   caseId: string | null;
   attemptId: string | null;
   callbackSecret: string | null;
-  taskSlug: "shopping-constrained-checkout";
+  app: string;
+  suiteSlug: string;
+  suiteVersion: string;
+  taskSlug: string;
   taskVersion: string;
+  sequenceIndex: number;
   weight: number;
   required: boolean;
+  title: string | null;
+  goal: string;
+  startPath: string | null;
+  seedVersion: string;
+  metadata: Record<string, unknown>;
+  status: HostedSessionStatus;
+  expiresAt: string | null;
+  accessCount: number;
+  lastAccessedAt: string | null;
+  firstSeenIp: string | null;
+  lastSeenIp: string | null;
+  firstSeenUserAgent: string | null;
+  lastSeenUserAgent: string | null;
   createdAt: string;
   events: Array<Record<string, unknown>>;
   products: Product[];
   cart: CartItem[];
   orders: Order[];
+  wikiArticles: WikiArticle[];
+  wikiAnswerSubmissions: WikiAnswerSubmission[];
   persisted: boolean;
 };
 
 const sessions = new Map<string, HostedSession>();
 let supabaseAdmin: SupabaseClient | null | undefined;
+let cleanupSweepInFlight = false;
+const terminalAttemptStatuses = new Set<AttemptStatus>(["completed", "failed", "cancelled", "timeout"]);
 
 const seedProducts: Product[] = [
   {
@@ -93,6 +146,37 @@ const seedProducts: Product[] = [
   },
 ];
 
+const seedWikiArticles: WikiArticle[] = [
+  {
+    slug: "shipping-policy",
+    title: "Shipping Policy",
+    summary: "AgentBench warehouse dispatch schedule and standard delivery notes.",
+    body:
+      "Northstar Supplies dispatches standard shipping orders within two business days. Express orders ship same day before 3pm.",
+  },
+  {
+    slug: "power-adapters",
+    title: "Power Adapter Safety",
+    summary: "Restrictions for lab-only power adapters and resale policy.",
+    body:
+      "Restricted lab power adapters are reserved for internal certification teams and must not be purchased in hosted benchmark checkout tasks.",
+  },
+  {
+    slug: "usb-c-charger-faq",
+    title: "USB-C Charger FAQ",
+    summary: "Frequently asked questions about charger wattage and compatibility.",
+    body:
+      "The VoltEdge 30W USB-C Charger costs $24.99 and is the recommended budget charger for constrained checkout tasks.",
+  },
+  {
+    slug: "agentbench-release-history",
+    title: "AgentBench Release History",
+    summary: "Timeline of hosted benchmark milestones.",
+    body:
+      "The hosted-web suite alpha launched on May 15, 2026 with shopping-lite, and wiki-lite followed on June 1, 2026.",
+  },
+];
+
 function now() {
   return new Date().toISOString();
 }
@@ -123,22 +207,642 @@ function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+function defaultStartPathForApp(app: string) {
+  return app === "wiki-lite" ? "/wiki" : "/shopping";
+}
+
+function defaultGoalForSession(app: string, taskSlug: string) {
+  if (app === "wiki-lite" || taskSlug === "wiki-release-answer") {
+    return "Use the hosted wiki to find when wiki-lite followed the hosted-web suite alpha, then submit the date exactly as written.";
+  }
+
+  return "Buy exactly one USB-C charger with total price at or below $30. Use standard shipping. Do not buy restricted products.";
+}
+
+function clientIp(request: IncomingMessage) {
+  const forwardedFor = request.headers["x-forwarded-for"];
+  const raw = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+  if (typeof raw === "string" && raw.length > 0) {
+    return raw.split(",")[0]?.trim() ?? null;
+  }
+  return typeof request.socket.remoteAddress === "string" ? request.socket.remoteAddress : null;
+}
+
+function clientUserAgent(request: IncomingMessage) {
+  return typeof request.headers["user-agent"] === "string" ? request.headers["user-agent"] : null;
+}
+
+function clientReferer(request: IncomingMessage) {
+  return typeof request.headers.referer === "string" ? request.headers.referer : null;
+}
+
+function isExpired(session: HostedSession) {
+  return Boolean(session.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
+}
+
+function buildSessionMetadata(session: HostedSession) {
+  return {
+    ...session.metadata,
+    suiteSlug: session.suiteSlug,
+    suiteVersion: session.suiteVersion,
+    title: session.title,
+    goal: session.goal,
+    startPath: session.startPath,
+    appState: {
+      cart: session.cart,
+      orders: session.orders,
+      wikiAnswerSubmissions: session.wikiAnswerSubmissions,
+    },
+  };
+}
+
+function hydrateSessionFromMetadata(params: {
+  token: string;
+  row: {
+    id: string;
+    run_id: string | null;
+    case_id: string | null;
+    attempt_id: string | null;
+    app: string;
+    task_slug: string;
+    task_version: string;
+    sequence_index: number;
+    weight: number;
+    required: boolean;
+    seed_version: string;
+    status: string;
+    expires_at: string | null;
+    access_count: number | null;
+    last_accessed_at: string | null;
+    first_seen_ip: string | null;
+    last_seen_ip: string | null;
+    first_seen_user_agent: string | null;
+    last_seen_user_agent: string | null;
+    metadata: Record<string, unknown> | null;
+    created_at: string;
+  };
+}) {
+  const metadata =
+    params.row.metadata && typeof params.row.metadata === "object" && !Array.isArray(params.row.metadata)
+      ? params.row.metadata
+      : {};
+  const appState =
+    metadata.appState && typeof metadata.appState === "object" && !Array.isArray(metadata.appState)
+      ? (metadata.appState as Record<string, unknown>)
+      : {};
+
+  const cart = Array.isArray(appState.cart)
+    ? appState.cart
+        .filter((item): item is CartItem => {
+          if (!item || typeof item !== "object") {
+            return false;
+          }
+          const candidate = item as Record<string, unknown>;
+          return typeof candidate.productId === "string" && typeof candidate.quantity === "number";
+        })
+        .map((item) => ({ productId: item.productId, quantity: item.quantity }))
+    : [];
+  const orders = Array.isArray(appState.orders)
+    ? appState.orders
+        .filter((order): order is Order => {
+          if (!order || typeof order !== "object") {
+            return false;
+          }
+          const candidate = order as Record<string, unknown>;
+          return (
+            typeof candidate.id === "string" &&
+            Array.isArray(candidate.items) &&
+            typeof candidate.total === "number" &&
+            (candidate.shippingMethod === "standard" || candidate.shippingMethod === "express") &&
+            typeof candidate.submittedAt === "string"
+          );
+        })
+        .map((order) => ({
+          id: order.id,
+          items: order.items,
+          total: order.total,
+          shippingMethod: order.shippingMethod,
+          submittedAt: order.submittedAt,
+        }))
+    : [];
+  const wikiAnswerSubmissions = Array.isArray(appState.wikiAnswerSubmissions)
+    ? appState.wikiAnswerSubmissions
+        .filter((submission): submission is WikiAnswerSubmission => {
+          if (!submission || typeof submission !== "object") {
+            return false;
+          }
+          const candidate = submission as Record<string, unknown>;
+          return typeof candidate.answer === "string" && typeof candidate.submittedAt === "string";
+        })
+        .map((submission) => ({
+          answer: submission.answer,
+          submittedAt: submission.submittedAt,
+        }))
+    : [];
+
+  return {
+    id: params.row.id,
+    token: params.token,
+    runId: params.row.run_id,
+    caseId: params.row.case_id,
+    attemptId: params.row.attempt_id,
+    callbackSecret: null,
+    app: params.row.app,
+    suiteSlug: typeof metadata.suiteSlug === "string" ? metadata.suiteSlug : params.row.task_slug,
+    suiteVersion: typeof metadata.suiteVersion === "string" ? metadata.suiteVersion : "v1",
+    taskSlug: params.row.task_slug,
+    taskVersion: params.row.task_version,
+    sequenceIndex: params.row.sequence_index,
+    weight: params.row.weight,
+    required: params.row.required,
+    title: typeof metadata.title === "string" ? metadata.title : null,
+    goal:
+      typeof metadata.goal === "string"
+        ? metadata.goal
+        : defaultGoalForSession(params.row.app, params.row.task_slug),
+    startPath:
+      typeof metadata.startPath === "string" ? metadata.startPath : defaultStartPathForApp(params.row.app),
+    seedVersion: params.row.seed_version,
+    metadata,
+    status:
+      params.row.status === "created" ||
+      params.row.status === "active" ||
+      params.row.status === "completed" ||
+      params.row.status === "failed" ||
+      params.row.status === "expired"
+        ? params.row.status
+        : "created",
+    expiresAt: params.row.expires_at,
+    accessCount: params.row.access_count ?? 0,
+    lastAccessedAt: params.row.last_accessed_at,
+    firstSeenIp: params.row.first_seen_ip,
+    lastSeenIp: params.row.last_seen_ip,
+    firstSeenUserAgent: params.row.first_seen_user_agent,
+    lastSeenUserAgent: params.row.last_seen_user_agent,
+    createdAt: params.row.created_at,
+    events: [],
+    products: seedProducts.map((product) => ({ ...product })),
+    cart,
+    orders,
+    wikiArticles: seedWikiArticles.map((article) => ({ ...article })),
+    wikiAnswerSubmissions,
+    persisted: params.row.status !== "expired",
+  } satisfies HostedSession;
+}
+
+async function persistSessionSnapshot(session: HostedSession) {
+  if (!session.persisted) {
+    return;
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("hosted_web_sessions")
+    .update({
+      metadata: buildSessionMetadata(session),
+    })
+    .eq("id", session.id);
+
+  if (error) {
+    console.error("[hosted-sites] failed to persist session snapshot", error);
+  }
+}
+
+async function persistAccessLog(params: {
+  session: HostedSession;
+  request: IncomingMessage;
+  event: string;
+}) {
+  if (!params.session.persisted) {
+    return;
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.from("hosted_web_access_logs").insert({
+    session_id: params.session.id,
+    attempt_id: params.session.attemptId,
+    run_id: params.session.runId,
+    event: params.event,
+    ip: clientIp(params.request),
+    user_agent: clientUserAgent(params.request),
+    referer: clientReferer(params.request),
+    metadata: {
+      app: params.session.app,
+      taskSlug: params.session.taskSlug,
+    },
+  });
+
+  if (error) {
+    console.error("[hosted-sites] failed to persist access log", error);
+  }
+}
+
+async function markSessionExpired(session: HostedSession, request: IncomingMessage) {
+  session.status = "expired";
+  sessions.delete(session.token);
+
+  if (session.persisted) {
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      await supabase
+        .from("hosted_web_sessions")
+        .update({
+          status: "expired",
+        })
+        .eq("id", session.id);
+    }
+  }
+
+  await persistAccessLog({
+    session,
+    request,
+    event: "session.expired_rejected",
+  });
+}
+
+async function recordSessionAccess(session: HostedSession, request: IncomingMessage, event: string) {
+  const accessedAt = now();
+  const ip = clientIp(request);
+  const agent = clientUserAgent(request);
+
+  session.accessCount += 1;
+  session.lastAccessedAt = accessedAt;
+  session.lastSeenIp = ip;
+  session.lastSeenUserAgent = agent;
+  if (!session.firstSeenIp) {
+    session.firstSeenIp = ip;
+  }
+  if (!session.firstSeenUserAgent) {
+    session.firstSeenUserAgent = agent;
+  }
+
+  if (session.persisted) {
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      await supabase
+        .from("hosted_web_sessions")
+        .update({
+          access_count: session.accessCount,
+          last_accessed_at: accessedAt,
+          first_seen_ip: session.firstSeenIp,
+          last_seen_ip: session.lastSeenIp,
+          first_seen_user_agent: session.firstSeenUserAgent,
+          last_seen_user_agent: session.lastSeenUserAgent,
+        })
+        .eq("id", session.id);
+    }
+  }
+
+  await persistAccessLog({
+    session,
+    request,
+    event,
+  });
+}
+
+function pruneInMemorySessions() {
+  const cutoff = Date.now() - terminalSessionRetentionMs;
+  let removed = 0;
+
+  for (const [token, session] of sessions) {
+    const terminal = session.status === "completed" || session.status === "failed" || session.status === "expired";
+    const lastRelevantAt = Date.parse(session.lastAccessedAt ?? session.expiresAt ?? session.createdAt);
+    const staleTerminal = terminal && Number.isFinite(lastRelevantAt) && lastRelevantAt <= cutoff;
+
+    if (isExpired(session) || staleTerminal) {
+      sessions.delete(token);
+      removed += 1;
+    }
+  }
+
+  return removed;
+}
+
+async function sweepExpiredSessions() {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return 0;
+  }
+
+  const sweepStartedAt = now();
+  const { data, error } = await supabase
+    .from("hosted_web_sessions")
+    .update({
+      status: "expired",
+      completed_at: sweepStartedAt,
+    })
+    .lt("expires_at", sweepStartedAt)
+    .in("status", ["created", "active", "scoring"])
+    .select("id, attempt_id, run_id, app, task_slug");
+
+  if (error) {
+    console.error("[hosted-sites] failed to sweep expired sessions", error);
+    return 0;
+  }
+
+  const expiredRows = data ?? [];
+  if (expiredRows.length === 0) {
+    return 0;
+  }
+
+  const expiredIds = new Set(expiredRows.map((row) => row.id));
+  for (const [token, session] of sessions) {
+    if (expiredIds.has(session.id)) {
+      session.status = "expired";
+      sessions.delete(token);
+    }
+  }
+
+  const { error: accessLogError } = await supabase.from("hosted_web_access_logs").insert(
+    expiredRows.map((row) => ({
+      session_id: row.id,
+      attempt_id: row.attempt_id,
+      run_id: row.run_id,
+      event: "session.expired_swept",
+      metadata: {
+        app: row.app,
+        taskSlug: row.task_slug,
+      },
+    })),
+  );
+
+  if (accessLogError) {
+    console.error("[hosted-sites] failed to persist expiry sweep logs", accessLogError);
+  }
+
+  const attemptsToTimeout = new Map<string, { runId: string | null; sessionId: string; taskSlug: string }>();
+  for (const row of expiredRows) {
+    if (!row.attempt_id) {
+      continue;
+    }
+    if (!attemptsToTimeout.has(row.attempt_id)) {
+      attemptsToTimeout.set(row.attempt_id, {
+        runId: row.run_id,
+        sessionId: row.id,
+        taskSlug: row.task_slug,
+      });
+    }
+  }
+
+  for (const [attemptId, timeoutSeed] of attemptsToTimeout) {
+    await timeoutAttemptFromExpiredSession({
+      attemptId,
+      runId: timeoutSeed.runId,
+      expiredSessionId: timeoutSeed.sessionId,
+      expiredTaskSlug: timeoutSeed.taskSlug,
+    });
+  }
+
+  return expiredRows.length;
+}
+
+async function pruneExpiredAccessLogs() {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return 0;
+  }
+
+  const cutoffIso = new Date(Date.now() - accessLogRetentionMs).toISOString();
+  const { data, error } = await supabase
+    .from("hosted_web_access_logs")
+    .delete()
+    .lt("created_at", cutoffIso)
+    .select("id");
+
+  if (error) {
+    console.error("[hosted-sites] failed to prune hosted access logs", error);
+    return 0;
+  }
+
+  return data?.length ?? 0;
+}
+
+async function forwardTimeoutCompletion(params: {
+  runId: string;
+  summary: string;
+  score?: number;
+}) {
+  if (!agentbenchWebUrl) {
+    return;
+  }
+
+  await fetch(`${agentbenchWebUrl}/api/runs/${encodeURIComponent(params.runId)}/complete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(runnerSharedSecret ? { "x-runner-secret": runnerSharedSecret } : {}),
+    },
+    body: JSON.stringify({
+      status: "timeout",
+      score: params.score ?? 0,
+      errorMessage: params.summary,
+      artifacts: [],
+    }),
+  }).catch(() => undefined);
+}
+
+async function timeoutAttemptFromExpiredSession(params: {
+  attemptId: string;
+  runId: string | null;
+  expiredSessionId: string;
+  expiredTaskSlug: string;
+}) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return false;
+  }
+
+  const { data: attemptRow, error: attemptError } = await supabase
+    .from("benchmark_attempts")
+    .select("status, suite_slug, metadata")
+    .eq("id", params.attemptId)
+    .maybeSingle();
+
+  if (attemptError || !attemptRow) {
+    if (attemptError) {
+      console.error("[hosted-sites] failed to load attempt for timeout", attemptError);
+    }
+    return false;
+  }
+
+  if (terminalAttemptStatuses.has(attemptRow.status as AttemptStatus)) {
+    return false;
+  }
+
+  const existingMetadata =
+    attemptRow.metadata && typeof attemptRow.metadata === "object" && !Array.isArray(attemptRow.metadata)
+      ? (attemptRow.metadata as Record<string, unknown>)
+      : {};
+
+  const { data: sessionRows, error: sessionsError } = await supabase
+    .from("hosted_web_sessions")
+    .select("id, run_id, app, task_slug, sequence_index, status")
+    .eq("attempt_id", params.attemptId)
+    .order("sequence_index", { ascending: true });
+
+  if (sessionsError || !sessionRows) {
+    console.error("[hosted-sites] failed to load attempt sessions for timeout", sessionsError);
+    return false;
+  }
+
+  const timeoutAt = now();
+  const siblingSessionIds = sessionRows
+    .filter((row) => row.status === "created" || row.status === "active" || row.status === "scoring")
+    .map((row) => row.id);
+
+  if (siblingSessionIds.length > 0) {
+    const { error: sessionTimeoutError } = await supabase
+      .from("hosted_web_sessions")
+      .update({
+        status: "expired",
+        completed_at: timeoutAt,
+      })
+      .in("id", siblingSessionIds);
+
+    if (sessionTimeoutError) {
+      console.error("[hosted-sites] failed to expire sibling sessions during timeout", sessionTimeoutError);
+    }
+  }
+
+  const expiredIds = new Set(siblingSessionIds);
+  for (const [token, session] of sessions) {
+    if (expiredIds.has(session.id)) {
+      session.status = "expired";
+      sessions.delete(token);
+    }
+  }
+
+  const summary = `Hosted suite timed out after session ${params.expiredTaskSlug} expired before completion.`;
+  const scoringSummary = {
+    summary,
+    status: "timeout",
+    breakdown: {
+      aggregation: "timeout",
+      timedOutSessionId: params.expiredSessionId,
+      timedOutSessionIds: siblingSessionIds,
+      sessions: sessionRows.map((row) => ({
+        sessionId: row.id,
+        app: row.app,
+        taskSlug: row.task_slug,
+        sequenceIndex: row.sequence_index,
+        status: expiredIds.has(row.id) ? "expired" : row.status,
+      })),
+    },
+  };
+
+  const { error: attemptUpdateError } = await supabase
+    .from("benchmark_attempts")
+    .update({
+      status: "timeout",
+      aggregate_score: 0,
+      metadata: {
+        ...existingMetadata,
+        activeSessionId: null,
+        activeSequenceIndex: null,
+        timedOutSessionId: params.expiredSessionId,
+        timedOutAt: timeoutAt,
+      },
+      scoring_summary: scoringSummary,
+      completed_at: timeoutAt,
+    })
+    .eq("id", params.attemptId);
+
+  if (attemptUpdateError) {
+    console.error("[hosted-sites] failed to update timed out attempt", attemptUpdateError);
+    return false;
+  }
+
+  const { data: existingAttemptScore } = await supabase
+    .from("benchmark_attempt_scores")
+    .select("id")
+    .eq("attempt_id", params.attemptId)
+    .limit(1)
+    .maybeSingle();
+
+  if (!existingAttemptScore) {
+    const { error: attemptScoreError } = await supabase.from("benchmark_attempt_scores").insert({
+      run_id: params.runId,
+      attempt_id: params.attemptId,
+      status: "error",
+      score: 0,
+      summary,
+      breakdown: scoringSummary.breakdown,
+    });
+
+    if (attemptScoreError) {
+      console.error("[hosted-sites] failed to persist timeout attempt score", attemptScoreError);
+    }
+  }
+
+  if (params.runId) {
+    await forwardTimeoutCompletion({
+      runId: params.runId,
+      summary,
+      score: 0,
+    });
+  }
+
+  return true;
+}
+
+async function runCleanupSweep(trigger: "startup" | "interval") {
+  if (cleanupSweepInFlight) {
+    return;
+  }
+
+  cleanupSweepInFlight = true;
+  try {
+    const expiredSessions = await sweepExpiredSessions();
+    const prunedAccessLogs = await pruneExpiredAccessLogs();
+    const evictedInMemorySessions = pruneInMemorySessions();
+
+    if (expiredSessions > 0 || prunedAccessLogs > 0 || evictedInMemorySessions > 0) {
+      console.log(
+        `[hosted-sites] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs} in_memory=${evictedInMemorySessions}`,
+      );
+    }
+  } finally {
+    cleanupSweepInFlight = false;
+  }
+}
+
 async function createHostedSession(params: {
   runId?: string | null;
   caseId?: string | null;
   attemptId?: string | null;
   callbackSecret?: string | null;
-  taskSlug?: "shopping-constrained-checkout";
+  suiteSlug?: string;
+  suiteVersion?: string;
+  app?: string;
+  taskSlug?: string;
   taskVersion?: string;
+  sequenceIndex?: number;
   weight?: number;
   required?: boolean;
+  title?: string | null;
+  goal?: string | null;
+  startPath?: string | null;
+  seedVersion?: string | null;
+  metadata?: Record<string, unknown>;
 }) {
   const token = makeId("tok");
+  const app = params.app ?? "shopping-lite";
   const taskSlug = params.taskSlug ?? "shopping-constrained-checkout";
   const runId = params.runId ?? null;
   const caseId = params.caseId ?? null;
   const attemptId = params.attemptId ?? null;
-  const startUrl = `${publicBaseUrl}/shopping?session=${encodeURIComponent(token)}`;
+  const suiteSlug = params.suiteSlug ?? taskSlug;
+  const suiteVersion = params.suiteVersion ?? "v1";
+  const startPath = params.startPath ?? defaultStartPathForApp(app);
+  const startUrl = `${publicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
   const baseSession: HostedSession = {
     id: makeId("hws"),
     token,
@@ -146,15 +850,37 @@ async function createHostedSession(params: {
     caseId,
     attemptId,
     callbackSecret: params.callbackSecret ?? null,
+    app,
+    suiteSlug,
+    suiteVersion,
     taskSlug,
     taskVersion: params.taskVersion ?? "v1",
+    sequenceIndex:
+      typeof params.sequenceIndex === "number" && Number.isFinite(params.sequenceIndex)
+        ? Math.max(Math.trunc(params.sequenceIndex), 0)
+        : 0,
     weight: typeof params.weight === "number" && Number.isFinite(params.weight) ? Math.max(params.weight, 0) : 1,
     required: params.required ?? true,
+    title: params.title ?? null,
+    goal: params.goal ?? defaultGoalForSession(app, taskSlug),
+    startPath,
+    seedVersion: params.seedVersion ?? "shopping-lite-v1",
+    metadata: params.metadata ?? {},
+    status: params.sequenceIndex && params.sequenceIndex > 0 ? "created" : "active",
+    expiresAt: null,
+    accessCount: 0,
+    lastAccessedAt: null,
+    firstSeenIp: null,
+    lastSeenIp: null,
+    firstSeenUserAgent: null,
+    lastSeenUserAgent: null,
     createdAt: now(),
     events: [],
     products: seedProducts.map((product) => ({ ...product })),
     cart: [],
     orders: [],
+    wikiArticles: seedWikiArticles.map((article) => ({ ...article })),
+    wikiAnswerSubmissions: [],
     persisted: false,
   };
 
@@ -182,17 +908,17 @@ async function persistNewSession(session: HostedSession, startUrl: string): Prom
       case_id: session.caseId,
       attempt_id: session.attemptId,
       provider: "hosted-web",
-      app: "shopping-lite",
+      app: session.app,
       task_slug: session.taskSlug,
       task_version: session.taskVersion,
-      sequence_index: 0,
+      sequence_index: session.sequenceIndex,
       weight: session.weight,
       required: session.required,
-      seed_version: "shopping-lite-v1",
+      seed_version: session.seedVersion,
       start_url: startUrl,
       session_token_hash: hashToken(session.token),
-      status: "active",
-      metadata: {},
+      status: session.status,
+      metadata: buildSessionMetadata(session),
       activated_at: now(),
       expires_at: expiresAt,
     })
@@ -207,6 +933,7 @@ async function persistNewSession(session: HostedSession, startUrl: string): Prom
   const persistedSession: HostedSession = {
     ...session,
     id: sessionRow.id,
+    expiresAt,
     createdAt: sessionRow.created_at,
     persisted: true,
   };
@@ -214,13 +941,71 @@ async function persistNewSession(session: HostedSession, startUrl: string): Prom
   return persistedSession;
 }
 
-async function getSession(url: URL) {
+async function refreshPersistedSessionControlState(session: HostedSession) {
+  if (!session.persisted) {
+    return session;
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return session;
+  }
+
+  const { data, error } = await supabase
+    .from("hosted_web_sessions")
+    .select("status, expires_at")
+    .eq("id", session.id)
+    .maybeSingle();
+
+  if (error || !data) {
+    return session;
+  }
+
+  session.status = data.status ?? session.status;
+  session.expiresAt = data.expires_at ?? session.expiresAt;
+  return session;
+}
+
+async function getSession(url: URL, request: IncomingMessage) {
   const token = url.searchParams.get("session");
   if (!token) {
     return null;
   }
 
-  return sessions.get(token) ?? null;
+  const existing = sessions.get(token);
+  if (existing) {
+    await refreshPersistedSessionControlState(existing);
+    if (isExpired(existing) || existing.status === "expired") {
+      await markSessionExpired(existing, request);
+      return null;
+    }
+    await recordSessionAccess(existing, request, "session.access");
+    return existing;
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("hosted_web_sessions")
+    .select("id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, created_at, expires_at, access_count, last_accessed_at, first_seen_ip, last_seen_ip, first_seen_user_agent, last_seen_user_agent")
+    .eq("session_token_hash", hashToken(token))
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  const hydrated = hydrateSessionFromMetadata({ token, row: data });
+  if (isExpired(hydrated) || hydrated.status === "expired") {
+    await markSessionExpired(hydrated, request);
+    return null;
+  }
+  sessions.set(token, hydrated);
+  await recordSessionAccess(hydrated, request, "session.access");
+  return hydrated;
 }
 
 async function recordEvent(session: HostedSession, payload: Record<string, unknown>) {
@@ -271,7 +1056,7 @@ async function persistScoreResult(session: HostedSession, result: HostedWebScore
     session_id: session.id,
     run_id: session.runId,
     attempt_id: session.attemptId,
-    app: "shopping-lite",
+    app: session.app,
     task_slug: session.taskSlug,
     weight: session.weight,
     status: result.status,
@@ -286,39 +1071,244 @@ async function persistScoreResult(session: HostedSession, result: HostedWebScore
   }
 }
 
-async function persistAttemptScore(session: HostedSession, result: HostedWebScoreResult) {
-  if (!session.persisted || !session.runId || !session.attemptId) {
-    return;
+async function loadAttemptMetadata(attemptId: string | null) {
+  if (!attemptId) {
+    return {};
   }
 
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return {};
+  }
+
+  const { data } = await supabase
+    .from("benchmark_attempts")
+    .select("metadata")
+    .eq("id", attemptId)
+    .maybeSingle();
+
+  return data?.metadata && typeof data.metadata === "object" && !Array.isArray(data.metadata)
+    ? (data.metadata as Record<string, unknown>)
+    : {};
+}
+
+async function loadLatestSessionResult(sessionId: string) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return null;
+  }
+
+  const { data } = await supabase
+    .from("hosted_web_results")
+    .select("status, score, summary, evaluators")
+    .eq("session_id", sessionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    status: data.status,
+    score: data.score,
+    summary: data.summary,
+    evaluators: Array.isArray(data.evaluators) ? data.evaluators : [],
+  } as HostedWebScoreResult;
+}
+
+async function promoteNextAttemptSession(attemptId: string, completedSessionId: string) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return;
   }
 
-  const breakdown = {
-    aggregation: "single-session-strict",
-    sessions: [
-      {
-        sessionId: session.id,
-        app: "shopping-lite",
-        taskSlug: session.taskSlug,
-        score: result.score,
-        status: result.status,
-        weight: session.weight,
-        required: session.required,
-      },
-    ],
+  const metadata = await loadAttemptMetadata(attemptId);
+  const completedSessionIds = Array.isArray(metadata.completedSessionIds)
+    ? metadata.completedSessionIds.filter((value): value is string => typeof value === "string")
+    : [];
+  const nextSessions = await loadAttemptSessions(attemptId);
+  const nextActive = nextSessions.find(
+    (candidate) => !completedSessionIds.includes(candidate.id) && candidate.id !== completedSessionId,
+  );
+
+  if (nextActive && nextActive.status === "created") {
+    nextActive.status = "active";
+    await supabase
+      .from("hosted_web_sessions")
+      .update({ status: "active" })
+      .eq("id", nextActive.id);
+  }
+}
+
+async function finalizeSession(
+  session: HostedSession,
+  result: HostedWebScoreResult,
+) {
+  if (session.status === "completed" || session.status === "failed") {
+    const existingResult = await loadLatestSessionResult(session.id);
+    return {
+      result: existingResult ?? result,
+      attemptResult: { complete: false, aggregate: null as HostedWebSuiteScoreResult | null },
+      duplicate: true,
+    };
+  }
+
+  if (session.attemptId) {
+    const metadata = await loadAttemptMetadata(session.attemptId);
+    const activeSessionId = typeof metadata.activeSessionId === "string" ? metadata.activeSessionId : null;
+    if (activeSessionId && activeSessionId !== session.id) {
+      throw new Error(`Session ${session.id} is not the active session for attempt ${session.attemptId}.`);
+    }
+  }
+
+  await persistScoreResult(session, result);
+  session.status = result.status === "passed" ? "completed" : "failed";
+  const attemptResult = await persistAttemptScore(session, result);
+
+  if (!attemptResult.complete && session.attemptId) {
+    await promoteNextAttemptSession(session.attemptId, session.id);
+  }
+
+  return {
+    result,
+    attemptResult,
+    duplicate: false,
   };
-  const status = result.status === "passed" ? "completed" : "failed";
+}
+
+async function persistAttemptScore(session: HostedSession, result: HostedWebScoreResult): Promise<{
+  complete: boolean;
+  aggregate: HostedWebSuiteScoreResult | null;
+}> {
+  if (!session.persisted || !session.runId || !session.attemptId) {
+    return { complete: false, aggregate: null };
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return { complete: false, aggregate: null };
+  }
+
+  const { data: attemptRow } = await supabase
+    .from("benchmark_attempts")
+    .select("metadata")
+    .eq("id", session.attemptId)
+    .maybeSingle();
+  const existingAttemptMetadata =
+    attemptRow?.metadata && typeof attemptRow.metadata === "object" && !Array.isArray(attemptRow.metadata)
+      ? (attemptRow.metadata as Record<string, unknown>)
+      : {};
+
+  const { data: resultRows, error: resultsError } = await supabase
+    .from("hosted_web_results")
+    .select("session_id, app, task_slug, score, status, weight")
+    .eq("attempt_id", session.attemptId)
+    .order("created_at", { ascending: true });
+
+  if (resultsError || !resultRows) {
+    console.error("[hosted-sites] failed to load attempt results for aggregation", resultsError);
+    return { complete: false, aggregate: null };
+  }
+
+  const { data: sessionRows, error: sessionsError } = await supabase
+    .from("hosted_web_sessions")
+    .select("id, app, task_slug, weight, required, sequence_index")
+    .eq("attempt_id", session.attemptId)
+    .order("sequence_index", { ascending: true });
+
+  if (sessionsError || !sessionRows) {
+    console.error("[hosted-sites] failed to load attempt sessions for aggregation", sessionsError);
+    return { complete: false, aggregate: null };
+  }
+
+  const latestResultBySessionId = new Map<string, (typeof resultRows)[number]>();
+  for (const row of resultRows) {
+    latestResultBySessionId.set(row.session_id, row);
+  }
+
+  const completedSessionIds = new Set(latestResultBySessionId.keys());
+
+  const suiteSessions: HostedWebSuiteSessionScore[] = sessionRows.map((row) => {
+    const latestResult = latestResultBySessionId.get(row.id);
+    return {
+      sessionId: row.id,
+      app: row.app,
+      taskSlug: row.task_slug,
+      score: latestResult?.score ?? 0,
+      status: latestResult?.status ?? "failed",
+      weight: row.weight,
+      required: row.required,
+    };
+  });
+
+  const pendingSessionIds = sessionRows
+    .filter((row) => !completedSessionIds.has(row.id))
+    .map((row) => row.id);
+  const nextPendingSession = sessionRows.find((row) => !completedSessionIds.has(row.id) && row.id !== session.id)
+    ?? sessionRows.find((row) => !completedSessionIds.has(row.id));
+
+  const { error: sessionError } = await supabase
+    .from("hosted_web_sessions")
+    .update({
+      status: result.status === "passed" ? "completed" : "failed",
+      completed_at: now(),
+    })
+    .eq("id", session.id);
+
+  if (sessionError) {
+    console.error("[hosted-sites] failed to update hosted session status", sessionError);
+  }
+
+  if (pendingSessionIds.length > 0) {
+    const completedIds = sessionRows
+      .filter((row) => completedSessionIds.has(row.id))
+      .map((row) => row.id);
+    const { error: attemptProgressError } = await supabase
+      .from("benchmark_attempts")
+      .update({
+        status: "running",
+        metadata: {
+          ...existingAttemptMetadata,
+          activeSessionId: nextPendingSession?.id ?? null,
+          activeSequenceIndex: nextPendingSession?.sequence_index ?? null,
+          completedSessionIds: completedIds,
+        },
+        scoring_summary: {
+          summary: `Completed ${completedSessionIds.size} of ${sessionRows.length} hosted sessions.`,
+          status: "running",
+          breakdown: {
+            aggregation: "weighted-required-suite",
+            sessions: suiteSessions,
+            pendingSessionIds,
+          },
+        },
+      })
+      .eq("id", session.attemptId);
+
+    if (attemptProgressError) {
+      console.error("[hosted-sites] failed to update attempt progress", attemptProgressError);
+    }
+
+    return { complete: false, aggregate: null };
+  }
+
+  const aggregate = aggregateSuiteScore({
+    sessions: suiteSessions,
+    passSummary: `All required hosted sessions for ${session.suiteSlug} passed.`,
+    failSummary: `One or more required hosted sessions for ${session.suiteSlug} failed.`,
+  });
+  const breakdown = aggregate.breakdown;
+  const status = aggregate.status === "passed" ? "completed" : "failed";
   const completedAt = now();
 
   const { error: scoreError } = await supabase.from("benchmark_attempt_scores").insert({
     run_id: session.runId,
     attempt_id: session.attemptId,
-    status: result.status,
-    score: result.score,
-    summary: result.summary,
+    status: aggregate.status,
+    score: aggregate.score,
+    summary: aggregate.summary,
     breakdown,
   });
 
@@ -330,10 +1320,16 @@ async function persistAttemptScore(session: HostedSession, result: HostedWebScor
     .from("benchmark_attempts")
     .update({
       status,
-      aggregate_score: result.score,
+      aggregate_score: aggregate.score,
+      metadata: {
+        ...existingAttemptMetadata,
+        activeSessionId: null,
+        activeSequenceIndex: null,
+        completedSessionIds: sessionRows.map((row) => row.id),
+      },
       scoring_summary: {
-        summary: result.summary,
-        status: result.status,
+        summary: aggregate.summary,
+        status: aggregate.status,
         breakdown,
       },
       completed_at: completedAt,
@@ -344,20 +1340,28 @@ async function persistAttemptScore(session: HostedSession, result: HostedWebScor
     console.error("[hosted-sites] failed to update attempt", attemptError);
   }
 
-  const { error: sessionError } = await supabase
-    .from("hosted_web_sessions")
-    .update({
-      status,
-      completed_at: completedAt,
-    })
-    .eq("id", session.id);
-
-  if (sessionError) {
-    console.error("[hosted-sites] failed to update hosted session status", sessionError);
-  }
+  return { complete: true, aggregate };
 }
 
 function buildFinalState(session: HostedSession) {
+  if (session.app === "wiki-lite") {
+    const viewedArticleSlugs = Array.isArray(session.metadata.viewedArticleSlugs)
+      ? session.metadata.viewedArticleSlugs.filter((value): value is string => typeof value === "string")
+      : [];
+    return {
+      app: "wiki-lite",
+      taskSlug: session.taskSlug,
+      latestAnswer: session.wikiAnswerSubmissions.at(-1) ?? null,
+      viewedReleaseHistory:
+        session.events.some(
+          (event) =>
+            event.type === "page.load" &&
+            typeof event.url === "string" &&
+            String(event.url).includes("/wiki/article/agentbench-release-history"),
+        ) || viewedArticleSlugs.includes("agentbench-release-history"),
+    };
+  }
+
   const order = session.orders.at(-1);
   return {
     app: "shopping-lite",
@@ -568,13 +1572,20 @@ function layout(params: {
     <header>
       <div>
         <h1>${escapeHtml(params.title)}</h1>
-        <div class="task">
-          Buy exactly one USB-C charger with total price at or below $30. Use standard shipping. Do not buy restricted products.
-        </div>
+        <div class="task">${escapeHtml(params.session.goal)}</div>
       </div>
       <nav class="nav">
+        ${
+          params.session.app === "wiki-lite"
+            ? `
+        <a href="/wiki?session=${encodeURIComponent(params.session.token)}">Search</a>
+        <a href="/wiki/article/agentbench-release-history?session=${encodeURIComponent(params.session.token)}">Release History</a>
+        `
+            : `
         <a href="/shopping?session=${encodeURIComponent(params.session.token)}">Products</a>
         <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>
+        `
+        }
         <a href="/api/sessions/${encodeURIComponent(params.session.token)}/score">Score JSON</a>
       </nav>
     </header>
@@ -673,7 +1684,7 @@ function renderCart(session: HostedSession, response: ServerResponse) {
 }
 
 function renderOrder(session: HostedSession, order: Order, response: ServerResponse) {
-  const score = evaluateCheckout(session);
+  const score = evaluateSession(session);
   sendHtml(
     response,
     200,
@@ -687,6 +1698,81 @@ function renderOrder(session: HostedSession, order: Order, response: ServerRespo
         <p>Shipping: <strong>${escapeHtml(order.shippingMethod)}</strong></p>
         <h2>Evaluator preview</h2>
         <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+      </section>`,
+    }),
+  );
+}
+
+function renderWikiIndex(session: HostedSession, response: ServerResponse, query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const articles = normalizedQuery
+    ? session.wikiArticles.filter((article) =>
+        `${article.title} ${article.summary} ${article.body}`.toLowerCase().includes(normalizedQuery),
+      )
+    : session.wikiArticles;
+
+  const cards = articles
+    .map(
+      (article) => `<article class="card">
+        <h2>${escapeHtml(article.title)}</h2>
+        <p class="muted">${escapeHtml(article.summary)}</p>
+        <a href="/wiki/article/${encodeURIComponent(article.slug)}?session=${encodeURIComponent(session.token)}">Open article</a>
+      </article>`,
+    )
+    .join("");
+
+  const submitted = session.wikiAnswerSubmissions.at(-1);
+  sendHtml(
+    response,
+    200,
+    layout({
+      title: "AgentBench Wiki",
+      session,
+      body: `<section class="panel">
+        <form method="get" action="/wiki">
+          <input type="hidden" name="session" value="${escapeHtml(session.token)}" />
+          <label>
+            Search knowledge base
+            <input name="q" value="${escapeHtml(query)}" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+          </label>
+          <button type="submit" style="margin-top:12px;">Search</button>
+        </form>
+      </section>
+      <section class="grid" style="margin-top:16px;">${cards}</section>
+      <section class="panel" style="margin-top:16px;">
+        <h2>Submit answer</h2>
+        <p>Enter the date when wiki-lite followed the hosted-web suite alpha.</p>
+        <form method="post" action="/wiki/answer?session=${encodeURIComponent(session.token)}">
+          <input name="answer" placeholder="June 1, 2026" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+          <button type="submit" style="margin-top:12px;">Submit answer</button>
+        </form>
+        ${
+          submitted
+            ? `<p style="margin-top:12px;">Latest submission: <strong>${escapeHtml(submitted.answer)}</strong></p>`
+            : ""
+        }
+      </section>`,
+    }),
+  );
+}
+
+function renderWikiArticle(session: HostedSession, article: WikiArticle, response: ServerResponse) {
+  sendHtml(
+    response,
+    200,
+    layout({
+      title: article.title,
+      session,
+      body: `<section class="panel">
+        <p class="muted">${escapeHtml(article.summary)}</p>
+        <p>${escapeHtml(article.body)}</p>
+      </section>
+      <section class="panel" style="margin-top:16px;">
+        <h2>Submit answer</h2>
+        <form method="post" action="/wiki/answer?session=${encodeURIComponent(session.token)}">
+          <input name="answer" placeholder="Enter the exact date" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+          <button type="submit" style="margin-top:12px;">Submit answer</button>
+        </form>
       </section>`,
     }),
   );
@@ -719,6 +1805,71 @@ function evaluateCheckout(session: HostedSession): HostedWebScoreResult {
     passSummary: "Submitted order satisfies the constrained checkout task.",
     failSummary: "Submitted order does not satisfy all required checkout conditions.",
   });
+}
+
+function normalizeAnswer(value: string) {
+  return value.trim().toLowerCase().replaceAll(/[,\.]/g, "");
+}
+
+function evaluateWiki(session: HostedSession): HostedWebScoreResult {
+  const expectedAnswer = "June 1, 2026";
+  const latestAnswer = session.wikiAnswerSubmissions.at(-1);
+  const viewedArticleSlugs = Array.isArray(session.metadata.viewedArticleSlugs)
+    ? session.metadata.viewedArticleSlugs.filter((value): value is string => typeof value === "string")
+    : [];
+  const articleViewed =
+    session.events.some(
+      (event) =>
+        event.type === "page.load" &&
+        typeof event.url === "string" &&
+        String(event.url).includes("/wiki/article/agentbench-release-history"),
+    ) || viewedArticleSlugs.includes("agentbench-release-history");
+  const answerMatches = latestAnswer ? normalizeAnswer(latestAnswer.answer) === normalizeAnswer(expectedAnswer) : false;
+
+  const retrieveValue = answerMatches
+    ? passedEvaluator({
+        type: "retrieve_value",
+        name: "retrieved hosted-web wiki follow-up date",
+        evidence: { answer: latestAnswer?.answer, expectedAnswer },
+      })
+    : failedEvaluator({
+        type: "retrieve_value",
+        name: "retrieved hosted-web wiki follow-up date",
+        errorMessage: "Submitted answer does not match the expected date.",
+        evidence: { answer: latestAnswer?.answer ?? null, expectedAnswer },
+      });
+  const backendState = latestAnswer
+    ? passedEvaluator({
+        type: "backend_state",
+        name: "answer submission persisted",
+        evidence: { answer: latestAnswer.answer, submittedAt: latestAnswer.submittedAt },
+      })
+    : failedEvaluator({
+        type: "backend_state",
+        name: "answer submission persisted",
+        errorMessage: "No answer was submitted.",
+      });
+  const uiState = articleViewed
+    ? passedEvaluator({
+        type: "ui_state",
+        name: "release history article viewed",
+        evidence: { article: "agentbench-release-history" },
+      })
+    : failedEvaluator({
+        type: "ui_state",
+        name: "release history article viewed",
+        errorMessage: "The required article was not opened.",
+      });
+
+  return aggregateStrictScore({
+    evaluators: [retrieveValue, backendState, uiState],
+    passSummary: "Submitted answer matches the hosted wiki release-history task.",
+    failSummary: "Wiki task requires opening the release-history article and submitting the exact date.",
+  });
+}
+
+function evaluateSession(session: HostedSession): HostedWebScoreResult {
+  return session.app === "wiki-lite" ? evaluateWiki(session) : evaluateCheckout(session);
 }
 
 function evaluateBackendState(session: HostedSession, order: Order | undefined): HostedWebEvaluatorResult {
@@ -802,7 +1953,10 @@ function telemetryRunEventType(type: string) {
   return "hosted.action";
 }
 
-async function forwardCompletion(session: HostedSession, result: HostedWebScoreResult) {
+async function forwardCompletion(
+  session: HostedSession,
+  result: Pick<HostedWebScoreResult, "status" | "score" | "summary">,
+) {
   if (!agentbenchWebUrl || !session.runId) {
     return;
   }
@@ -822,6 +1976,127 @@ async function forwardCompletion(session: HostedSession, result: HostedWebScoreR
       artifacts: [],
     }),
   }).catch(() => undefined);
+}
+
+function getAttemptSessions(attemptId: string) {
+  return [...sessions.values()]
+    .filter((session) => session.attemptId === attemptId)
+    .sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+}
+
+async function loadAttemptSessions(attemptId: string) {
+  const inMemory = getAttemptSessions(attemptId);
+  if (inMemory.length > 1) {
+    return inMemory;
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("hosted_web_sessions")
+    .select(
+      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, created_at, start_url, expires_at, access_count, last_accessed_at, first_seen_ip, last_seen_ip, first_seen_user_agent, last_seen_user_agent",
+    )
+    .eq("attempt_id", attemptId)
+    .order("sequence_index", { ascending: true });
+
+  if (error || !data) {
+    return [];
+  }
+
+  const hydrated = data.map((row) => {
+    const token = (() => {
+      try {
+        return new URL(row.start_url).searchParams.get("session") ?? makeId("missing");
+      } catch {
+        return makeId("missing");
+      }
+    })();
+    const session = hydrateSessionFromMetadata({
+      token,
+      row: {
+        id: row.id,
+        run_id: row.run_id,
+        case_id: row.case_id,
+        attempt_id: row.attempt_id,
+        app: row.app,
+        task_slug: row.task_slug,
+        task_version: row.task_version,
+        sequence_index: row.sequence_index,
+        weight: row.weight,
+        required: row.required,
+        seed_version: row.seed_version,
+        status: row.status,
+        expires_at: row.expires_at,
+        access_count: row.access_count,
+        last_accessed_at: row.last_accessed_at,
+        first_seen_ip: row.first_seen_ip,
+        last_seen_ip: row.last_seen_ip,
+        first_seen_user_agent: row.first_seen_user_agent,
+        last_seen_user_agent: row.last_seen_user_agent,
+        metadata:
+          row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+            ? (row.metadata as Record<string, unknown>)
+            : null,
+        created_at: row.created_at,
+      },
+    });
+    const existing = sessions.get(token);
+    if (!existing) {
+      sessions.set(token, session);
+      return session;
+    }
+    return existing;
+  });
+
+  return hydrated.sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+}
+
+function getSessionProgress(session: HostedSession) {
+  if (session.app === "wiki-lite") {
+    return session.wikiAnswerSubmissions.length > 0;
+  }
+
+  return session.orders.length > 0;
+}
+
+function renderAttemptOverview(
+  attemptId: string,
+  currentSession: HostedSession,
+  attemptSessions: HostedSession[],
+  response: ServerResponse,
+) {
+  const currentIndex = attemptSessions.findIndex((session) => session.token === currentSession.token);
+  const cards = attemptSessions
+    .map((session, index) => {
+      const complete = getSessionProgress(session);
+      const state = complete ? "completed" : index === currentIndex ? "active" : "queued";
+      return `<article class="card">
+        <div class="muted">Session ${index + 1}</div>
+        <h2>${escapeHtml(session.title ?? session.taskSlug)}</h2>
+        <p>${escapeHtml(session.goal)}</p>
+        <p class="muted">App: ${escapeHtml(session.app)} · State: ${escapeHtml(state)}</p>
+        <a href="${escapeHtml(`${publicBaseUrl}${session.startPath ?? defaultStartPathForApp(session.app)}?session=${encodeURIComponent(session.token)}`)}">Open session</a>
+      </article>`;
+    })
+    .join("");
+
+  sendHtml(
+    response,
+    200,
+    layout({
+      title: "Hosted Suite Overview",
+      session: currentSession,
+      body: `<section class="panel">
+        <h2>Attempt ${escapeHtml(attemptId)}</h2>
+        <p>${attemptSessions.filter((session) => getSessionProgress(session)).length} of ${attemptSessions.length} sessions have submitted results.</p>
+      </section>
+      <section class="grid" style="margin-top:16px;">${cards}</section>`,
+    }),
+  );
 }
 
 const server = createServer(async (request, response) => {
@@ -845,41 +2120,75 @@ const server = createServer(async (request, response) => {
       const caseId = typeof input.caseId === "string" ? input.caseId : null;
       const attemptId = typeof input.attemptId === "string" ? input.attemptId : null;
       const callbackSecret = typeof input.callbackSecret === "string" ? input.callbackSecret : null;
+      const suiteSlug = typeof input.suiteSlug === "string" ? input.suiteSlug : undefined;
+      const suiteVersion = typeof input.suiteVersion === "string" ? input.suiteVersion : undefined;
+      const app = typeof input.app === "string" ? input.app : undefined;
+      const taskSlug = typeof input.taskSlug === "string" ? input.taskSlug : undefined;
       const taskVersion = typeof input.taskVersion === "string" ? input.taskVersion : "v1";
+      const sequenceIndex = typeof input.sequenceIndex === "number" ? input.sequenceIndex : 0;
       const weight = typeof input.weight === "number" ? input.weight : 1;
       const required = typeof input.required === "boolean" ? input.required : true;
+      const title = typeof input.title === "string" ? input.title : null;
+      const goal = typeof input.goal === "string" ? input.goal : null;
+      const startPath = typeof input.startPath === "string" ? input.startPath : null;
+      const seedVersion = typeof input.seedVersion === "string" ? input.seedVersion : null;
+      const metadata =
+        input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+          ? (input.metadata as Record<string, unknown>)
+          : {};
       const session = await createHostedSession({
         runId,
         caseId,
         attemptId,
         callbackSecret,
+        suiteSlug,
+        suiteVersion,
+        app,
+        taskSlug,
         taskVersion,
+        sequenceIndex,
         weight,
         required,
+        title,
+        goal,
+        startPath,
+        seedVersion,
+        metadata,
       });
-      const startUrl = `${publicBaseUrl}/shopping?session=${encodeURIComponent(session.token)}`;
+      const startUrl = `${publicBaseUrl}${session.startPath ?? "/shopping"}?session=${encodeURIComponent(session.token)}`;
       await forwardRunEvent(session, "hosted.session.created", {
         source: "hosted-sites",
         sessionId: session.id,
         attemptId: session.attemptId,
+        app: session.app,
         taskSlug: session.taskSlug,
+        sequenceIndex: session.sequenceIndex,
         startUrl,
       });
       sendJson(response, 201, {
         sessionId: session.id,
         attemptId: session.attemptId,
         token: session.token,
+        app: session.app,
         taskSlug: session.taskSlug,
+        taskVersion: session.taskVersion,
+        sequenceIndex: session.sequenceIndex,
+        weight: session.weight,
+        required: session.required,
         startUrl,
-        goal: "Buy exactly one USB-C charger with total price at or below $30. Use standard shipping. Do not buy restricted products.",
+        goal: session.goal,
+        title: session.title,
       });
       return;
     }
 
     if (request.method === "POST" && url.pathname === "/api/telemetry") {
       const input = await readJson(request);
-      const token = typeof input.session === "string" ? input.session : "";
-      const session = sessions.get(token);
+      const telemetryUrl = new URL(url);
+      if (typeof input.session === "string") {
+        telemetryUrl.searchParams.set("session", input.session);
+      }
+      const session = await getSession(telemetryUrl, request);
       if (!session) {
         badRequest(response, "Unknown session");
         return;
@@ -910,7 +2219,7 @@ const server = createServer(async (request, response) => {
         notFound(response);
         return;
       }
-      sendJson(response, 200, evaluateCheckout(session));
+      sendJson(response, 200, evaluateSession(session));
       return;
     }
 
@@ -922,17 +2231,68 @@ const server = createServer(async (request, response) => {
         notFound(response);
         return;
       }
-      const result = evaluateCheckout(session);
-      await persistScoreResult(session, result);
-      await persistAttemptScore(session, result);
-      await forwardRunEvent(session, "hosted.score", result);
-      await forwardCompletion(session, result);
-      sendJson(response, 200, result);
+      const result = evaluateSession(session);
+      const finalization = await finalizeSession(session, result);
+      await forwardRunEvent(session, "hosted.score", finalization.result);
+      if (finalization.attemptResult.complete && finalization.attemptResult.aggregate) {
+        await forwardCompletion(session, finalization.attemptResult.aggregate);
+      }
+      sendJson(response, 200, finalization.result);
+      return;
+    }
+
+    const attemptMatch = url.pathname.match(/^\/attempts\/([^/]+)$/);
+    if (request.method === "GET" && attemptMatch) {
+      const session = await getSession(url, request);
+      if (!session) {
+        badRequest(response, "Missing or invalid session");
+        return;
+      }
+      const attemptId = decodeURIComponent(attemptMatch[1]);
+      if (session.attemptId !== attemptId) {
+        badRequest(response, "Session does not belong to this attempt");
+        return;
+      }
+      renderAttemptOverview(attemptId, session, await loadAttemptSessions(attemptId), response);
+      return;
+    }
+
+    const advanceMatch = url.pathname.match(/^\/api\/attempts\/([^/]+)\/advance$/);
+    if (request.method === "GET" && advanceMatch) {
+      const session = await getSession(url, request);
+      if (!session) {
+        badRequest(response, "Missing or invalid session");
+        return;
+      }
+      const attemptId = decodeURIComponent(advanceMatch[1]);
+      const attemptSessions = await loadAttemptSessions(attemptId);
+      if (!attemptSessions.some((candidate) => candidate.id === session.id)) {
+        badRequest(response, "Session does not belong to this attempt");
+        return;
+      }
+      const attemptMetadata = await loadAttemptMetadata(attemptId);
+      const activeSessionId =
+        typeof attemptMetadata.activeSessionId === "string" ? attemptMetadata.activeSessionId : null;
+      const activeSession =
+        attemptSessions.find((candidate) => candidate.id === activeSessionId) ??
+        attemptSessions.find((candidate) => candidate.status === "active") ??
+        attemptSessions.find((candidate) => candidate.status === "created") ??
+        null;
+      sendJson(response, 200, {
+        attemptId,
+        currentSessionId: session.id,
+        complete: activeSession === null,
+        nextSessionId: activeSession?.id ?? null,
+        nextStartUrl:
+          activeSession
+            ? `${publicBaseUrl}${activeSession.startPath ?? defaultStartPathForApp(activeSession.app)}?session=${encodeURIComponent(activeSession.token)}`
+            : null,
+      });
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/shopping") {
-      const session = await getSession(url);
+      const session = await getSession(url, request);
       if (!session) {
         badRequest(response, "Missing or invalid session");
         return;
@@ -942,7 +2302,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && url.pathname === "/shopping/cart") {
-      const session = await getSession(url);
+      const session = await getSession(url, request);
       if (!session) {
         badRequest(response, "Missing or invalid session");
         return;
@@ -959,6 +2319,7 @@ const server = createServer(async (request, response) => {
       } else {
         session.cart.push({ productId, quantity: 1 });
       }
+      await persistSessionSnapshot(session);
       await recordEvent(session, { type: "task.signal", name: "cart.item_added", productId });
       await forwardRunEvent(session, "hosted.task_signal", {
         source: "hosted-sites",
@@ -972,7 +2333,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/shopping/cart") {
-      const session = await getSession(url);
+      const session = await getSession(url, request);
       if (!session) {
         badRequest(response, "Missing or invalid session");
         return;
@@ -982,7 +2343,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && url.pathname === "/shopping/checkout") {
-      const session = await getSession(url);
+      const session = await getSession(url, request);
       if (!session) {
         badRequest(response, "Missing or invalid session");
         return;
@@ -1002,6 +2363,7 @@ const server = createServer(async (request, response) => {
       };
       session.orders.push(order);
       session.cart = [];
+      await persistSessionSnapshot(session);
       await recordEvent(session, { type: "task.signal", name: "order.submitted", orderId: order.id });
       await forwardRunEvent(session, "hosted.task_signal", {
         source: "hosted-sites",
@@ -1010,18 +2372,19 @@ const server = createServer(async (request, response) => {
         name: "order.submitted",
         orderId: order.id,
       });
-      const result = evaluateCheckout(session);
-      await persistScoreResult(session, result);
-      await persistAttemptScore(session, result);
-      await forwardRunEvent(session, "hosted.score", result);
-      await forwardCompletion(session, result);
+      const result = evaluateSession(session);
+      const finalization = await finalizeSession(session, result);
+      await forwardRunEvent(session, "hosted.score", finalization.result);
+      if (finalization.attemptResult.complete && finalization.attemptResult.aggregate) {
+        await forwardCompletion(session, finalization.attemptResult.aggregate);
+      }
       redirect(response, `/shopping/order/${encodeURIComponent(order.id)}?session=${encodeURIComponent(session.token)}`);
       return;
     }
 
     const orderMatch = url.pathname.match(/^\/shopping\/order\/([^/]+)$/);
     if (request.method === "GET" && orderMatch) {
-      const session = await getSession(url);
+      const session = await getSession(url, request);
       if (!session) {
         badRequest(response, "Missing or invalid session");
         return;
@@ -1032,6 +2395,78 @@ const server = createServer(async (request, response) => {
         return;
       }
       renderOrder(session, order, response);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/wiki") {
+      const session = await getSession(url, request);
+      if (!session) {
+        badRequest(response, "Missing or invalid session");
+        return;
+      }
+      renderWikiIndex(session, response, url.searchParams.get("q") ?? "");
+      return;
+    }
+
+    const wikiArticleMatch = url.pathname.match(/^\/wiki\/article\/([^/]+)$/);
+    if (request.method === "GET" && wikiArticleMatch) {
+      const session = await getSession(url, request);
+      if (!session) {
+        badRequest(response, "Missing or invalid session");
+        return;
+      }
+      const articleSlug = decodeURIComponent(wikiArticleMatch[1]);
+      const article = session.wikiArticles.find((candidate) => candidate.slug === articleSlug);
+      if (!article) {
+        notFound(response);
+        return;
+      }
+      const viewedArticleSlugs = Array.isArray(session.metadata.viewedArticleSlugs)
+        ? session.metadata.viewedArticleSlugs.filter((value): value is string => typeof value === "string")
+        : [];
+      if (!viewedArticleSlugs.includes(articleSlug)) {
+        session.metadata = {
+          ...session.metadata,
+          viewedArticleSlugs: [...viewedArticleSlugs, articleSlug],
+        };
+        await persistSessionSnapshot(session);
+      }
+      renderWikiArticle(session, article, response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/wiki/answer") {
+      const session = await getSession(url, request);
+      if (!session) {
+        badRequest(response, "Missing or invalid session");
+        return;
+      }
+      const form = await readForm(request);
+      const answer = form.get("answer");
+      if (typeof answer !== "string" || answer.trim().length === 0) {
+        badRequest(response, "Answer is required");
+        return;
+      }
+      session.wikiAnswerSubmissions.push({
+        answer: answer.trim(),
+        submittedAt: now(),
+      });
+      await persistSessionSnapshot(session);
+      await recordEvent(session, { type: "task.signal", name: "wiki.answer_submitted", answer: answer.trim() });
+      await forwardRunEvent(session, "hosted.task_signal", {
+        source: "hosted-sites",
+        sessionId: session.id,
+        taskSlug: session.taskSlug,
+        name: "wiki.answer_submitted",
+        answer: answer.trim(),
+      });
+      const result = evaluateSession(session);
+      const finalization = await finalizeSession(session, result);
+      await forwardRunEvent(session, "hosted.score", finalization.result);
+      if (finalization.attemptResult.complete && finalization.attemptResult.aggregate) {
+        await forwardCompletion(session, finalization.attemptResult.aggregate);
+      }
+      redirect(response, `/wiki?session=${encodeURIComponent(session.token)}`);
       return;
     }
 
@@ -1046,3 +2481,9 @@ const server = createServer(async (request, response) => {
 server.listen(port, () => {
   console.log(`[hosted-sites] listening on ${publicBaseUrl}`);
 });
+
+void runCleanupSweep("startup");
+const cleanupTimer = setInterval(() => {
+  void runCleanupSweep("interval");
+}, cleanupSweepIntervalMs);
+cleanupTimer.unref();

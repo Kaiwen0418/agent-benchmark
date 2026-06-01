@@ -55,10 +55,11 @@ Today the hosted-web connection model is:
 
 1. the user clicks `Start Agent Session`
 2. AgentBench creates a run in `waiting_for_agent`
-3. the UI allocates a hosted session and exposes a run-specific hosted site URL
-4. the user's agent opens that hosted benchmark URL in a browser
-5. hosted-sites emits telemetry and task signals back to AgentBench
-6. hosted-sites writes scorer-compatible results and completes the run
+3. the UI allocates a hosted attempt with ordered hosted sessions
+4. the UI exposes an attempt-level hosted suite URL plus per-session URLs
+5. the user's agent opens the hosted suite in a browser and works through the current task
+6. hosted-sites emits telemetry and task signals back to AgentBench
+7. hosted-sites writes per-session results, aggregates the attempt score, and completes the run
 
 In local development the hosted benchmark endpoint defaults to:
 
@@ -75,7 +76,6 @@ agentbench/
 ├─ apps/
 │  ├─ web/
 │  ├─ runner/
-│  ├─ mock-sites/
 │  └─ hosted-sites/
 ├─ packages/
 │  ├─ protocol/
@@ -152,7 +152,9 @@ docker-compose up -d --build
 Default local endpoints:
 
 - `http://localhost:8080/health` -> hosted-sites health
-- `http://localhost:8080/shopping` -> hosted shopping site, requires a session token for benchmark runs
+- `http://localhost:8080/attempts/<attempt-id>?session=<token>` -> hosted suite overview
+- `http://localhost:8080/shopping?session=<token>` -> shopping-lite task
+- `http://localhost:8080/wiki?session=<token>` -> wiki-lite task
 
 ### 4) Start web app
 
@@ -201,7 +203,12 @@ Recommended startup sets:
 
 ## Hosted Web PoC
 
-The first hosted-web migration target is `shopping-lite`, a session-scoped checkout task with WebArena-Verified-style evaluator output.
+The current hosted-web demo benchmark is a two-step suite:
+
+- `shopping-lite`: constrained checkout
+- `wiki-lite`: retrieve and submit the release-history date
+
+The suite is stored as one benchmark case with ordered hosted sessions and weighted required-session aggregation.
 
 Start the hosted benchmark site:
 
@@ -231,7 +238,10 @@ curl -X POST http://localhost:3003/api/sessions \
   -d '{}'
 ```
 
-Open the returned `startUrl`. The task is to buy exactly one USB-C charger at or below `$30` with standard shipping and no restricted products.
+Open the returned `startUrl` or use `/api/runs/:runId/connect` from the web app to allocate a real attempt. For the default benchmark case, the agent should:
+
+1. buy exactly one USB-C charger at or below `$30` with standard shipping and no restricted products
+2. use the hosted wiki to find when `wiki-lite` followed the hosted-web suite alpha and submit the exact date
 
 ## Docker Gateway Bundle (hosted-sites + gateway)
 
@@ -264,7 +274,9 @@ docker-compose down
 Gateway endpoint on host:
 
 - `http://localhost:8080/health` -> hosted-sites health
-- `http://localhost:8080/shopping?session=<token>` -> hosted task URL
+- `http://localhost:8080/attempts/<attempt-id>?session=<token>` -> hosted suite overview
+- `http://localhost:8080/shopping?session=<token>` -> hosted shopping task URL
+- `http://localhost:8080/wiki?session=<token>` -> hosted wiki task URL
 
 Legacy path remains available at `infra/docker/docker-compose.mcp-gateway.yml`.
 

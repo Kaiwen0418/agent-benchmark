@@ -50,15 +50,39 @@ values
   (
     '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
     'shopping-constrained-checkout',
-    'Shopping Checkout',
-    'Use a hosted shopping site to submit a constrained checkout order.',
+    'Hosted Web Suite',
+    'Run a two-step hosted suite across shopping-lite and wiki-lite.',
     'browser',
     'easy',
     'hosted-web',
     '{
-      "app": "shopping-lite",
-      "taskSlug": "shopping-constrained-checkout",
-      "seedVersion": "shopping-lite-v1"
+      "suiteSlug": "hosted-web-suite-v1",
+      "suiteVersion": "v1",
+      "sessions": [
+        {
+          "app": "shopping-lite",
+          "taskSlug": "shopping-constrained-checkout",
+          "title": "Shopping Checkout",
+          "goal": "Buy exactly one USB-C charger at or below $30 with standard shipping, and avoid restricted products.",
+          "taskVersion": "v1",
+          "seedVersion": "shopping-lite-v1",
+          "sequenceIndex": 0,
+          "weight": 1,
+          "required": true
+        },
+        {
+          "app": "wiki-lite",
+          "taskSlug": "wiki-release-answer",
+          "title": "Wiki Release Lookup",
+          "goal": "Use the hosted wiki to find when wiki-lite followed the hosted-web suite alpha, then submit the date exactly as written.",
+          "startPath": "/wiki",
+          "taskVersion": "v1",
+          "seedVersion": "wiki-lite-v1",
+          "sequenceIndex": 1,
+          "weight": 1,
+          "required": true
+        }
+      ]
     }'::jsonb,
     true
   )

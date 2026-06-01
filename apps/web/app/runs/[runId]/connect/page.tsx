@@ -41,6 +41,16 @@ export default async function RunConnectPage({
             {payload.benchmark.title}
           </h1>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-[#66625a]">{payload.benchmark.goal}</p>
+          {payload.status === "timeout" || payload.status === "failed" ? (
+            <div className="mt-6 rounded-[1.4rem] border border-[#e3b4aa] bg-[#fff7f4] p-5">
+              <div className="text-xs uppercase tracking-[0.18em] text-[#8a2d1f]">
+                {payload.status === "timeout" ? "Run timed out" : "Run failed"}
+              </div>
+              <p className="mt-2 text-sm leading-7 text-[#5b3d37]">
+                {payload.errorMessage ?? "This run no longer has an active hosted session."}
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-8 grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
             <section className="rounded-[1.4rem] border border-[#ddd6ca] bg-white p-5">
@@ -54,17 +64,25 @@ export default async function RunConnectPage({
 
             <section className="rounded-[1.4rem] border border-[#ddd6ca] bg-[#f1eee7] p-5">
               <div className="text-xs uppercase tracking-[0.18em] text-[#756e62]">
-                {payload.hostedWeb.available ? "Hosted Site" : "Local Demo Note"}
+                {payload.hostedWeb.available ? "Hosted Suite" : "Local Demo Note"}
               </div>
               <p className="mt-4 text-sm leading-7 text-[#4f4a43]">{payload.localDemo.note}</p>
               <div className="mt-5 rounded-[1rem] bg-[#111111] px-4 py-3 text-sm text-white">
                 {payload.hostedWeb.available ? (
                   <>
-                    URL: <span className="font-medium">{payload.hostedWeb.startUrl ?? "not allocated"}</span>
+                    Suite: <span className="font-medium">{payload.hostedWeb.suiteSlug ?? "hosted-web"}</span>
                     <br />
-                    Session: <span className="font-medium">{payload.hostedWeb.sessionId ?? "not allocated"}</span>
+                    URL: <span className="font-medium">{payload.hostedWeb.orchestratorUrl ?? "not allocated"}</span>
                     <br />
-                    Task: <span className="font-medium">{payload.hostedWeb.taskSlug ?? "hosted-web"}</span>
+                    Attempt: <span className="font-medium">{payload.hostedWeb.attemptId ?? "not allocated"}</span>
+                    <br />
+                    Active Session: <span className="font-medium">{payload.hostedWeb.activeSessionId ?? "not allocated"}</span>
+                    <br />
+                    Progress: <span className="font-medium">
+                      {payload.hostedWeb.progress.total > 0 && payload.hostedWeb.progress.currentIndex !== null
+                        ? `${payload.hostedWeb.progress.currentIndex + 1} / ${payload.hostedWeb.progress.total}`
+                        : `${payload.hostedWeb.progress.completed} / ${payload.hostedWeb.progress.total}`}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -82,6 +100,37 @@ export default async function RunConnectPage({
           </div>
 
           <section className="mt-6 rounded-[1.4rem] border border-[#ddd6ca] bg-white p-5">
+            {payload.hostedWeb.available ? (
+              <div className="mb-5 grid gap-3">
+                {payload.hostedWeb.sessions.map((session) => (
+                  <div
+                    key={session.sessionId}
+                    className="flex items-start justify-between gap-3 rounded-[1rem] border border-[#e4ddd1] bg-[#faf7f1] px-4 py-3"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-[#111111]">
+                        {session.title ?? session.taskSlug}
+                      </div>
+                      <div className="mt-1 text-xs text-[#6b655b]">
+                        Session {session.sequenceIndex + 1} · {session.app}
+                      </div>
+                      <div className="mt-2 text-sm leading-7 text-[#4f4a43]">{session.goal}</div>
+                    </div>
+                    <div className={`rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.16em] ${
+                      session.status === "completed"
+                        ? "bg-[#e8f7ec] text-[#1f6b35]"
+                        : session.status === "failed" || session.status === "expired"
+                          ? "bg-[#fff1ed] text-[#8a2d1f]"
+                          : session.status === "active"
+                            ? "bg-[#eef6ff] text-[#245a8a]"
+                            : "bg-[#efede6] text-[#4d483f]"
+                    }`}>
+                      {session.status.replaceAll("-", " ")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className="text-xs uppercase tracking-[0.18em] text-[#756e62]">Prompt</div>
             <pre className="mt-4 overflow-x-auto whitespace-pre-wrap rounded-[1rem] bg-[#f6f3ed] p-4 text-sm leading-7 text-[#25221d]">
               {payload.prompt}

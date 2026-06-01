@@ -709,8 +709,8 @@ Add provider metadata to benchmark cases.
 Deliverables:
 
 - `provider = "hosted-web"` for new cases
-- task metadata with start path, app name, seed version, and evaluator list
-- run connect payload includes `hostedWeb.startUrl`
+- task metadata with suite/session shape, start path, app name, seed version, and evaluator list
+- run connect payload includes `hostedWeb.attemptId`, ordered `sessions[]`, and an orchestrator URL placeholder
 - existing MCP details become optional for hosted-web runs
 
 ### Stage 3: Scoring Package
@@ -808,6 +808,67 @@ The scoring endpoint should be callable by a trusted scorer service or server-si
 7. Show telemetry events in the existing live run viewer.
 8. Add cleanup for completed or expired sessions.
 
+## Current Progress
+
+Implemented in the current migration track:
+
+- hosted benchmark metadata now supports suite-style `sessions[]` definitions with `app`, `taskSlug`, `sequenceIndex`, `weight`, and `required`
+- web-side orchestration creates one hosted `benchmark_attempt` plus an ordered list of hosted sessions per run
+- connect payload is now attempt-scoped instead of single-session scoped
+- hosted-sites session creation accepts suite/session metadata and persists `app`, `sequence_index`, `goal`, and `title`
+- attempt aggregation now reads all hosted results for the attempt and writes a weighted required-session breakdown
+- `wiki-lite` is now available as a second real hosted app alongside `shopping-lite`
+- hosted-sites now exposes an attempt overview page and a minimal `GET /api/attempts/:attemptId/advance` helper
+- attempt progress is now persisted in `benchmark_attempts.metadata` with `activeSessionId`, `activeSequenceIndex`, and `completedSessionIds`
+- web connect payload now rebuilds hosted suite state from `benchmark_attempts + hosted_web_sessions` instead of relying on in-memory allocation only
+
+Latest local smoke:
+
+- created one local attempt with `shopping-lite` session `0` and `wiki-lite` session `1`
+- completed shopping checkout and verified `advance` returned the wiki session URL instead of closing the suite
+- opened wiki release-history content, submitted `June 1, 2026`, and verified `wiki-lite` score `= 1`
+- DB-backed external-agent run `065fac39-7c5b-438e-ba2a-2a7c6d5546d9` completed with:
+  - `benchmark_runs.status = completed`, `score = 1`
+  - one `benchmark_attempt` with `status = completed`, `aggregate_score = 1`
+  - two `hosted_web_sessions` with sequence `0/1`, both `completed`
+  - two `hosted_web_results` (`shopping-lite`, `wiki-lite`) with `score = 1`
+  - one `benchmark_attempt_scores` row with `aggregation = weighted-required-suite`
+- reconnect smoke on run `d21ec807-c135-42e0-abff-c13fe471fd36` showed:
+  - after session `0` completed, `benchmark_attempts.metadata.activeSessionId` advanced to the wiki session
+  - a fresh `GET /api/runs/:runId/connect` returned the wiki session as `activeSessionId`
+  - connect payload progress changed from `0 / 2` to `1 / 2`
+- hosted-sites restart smoke on run `38a7e188-c0e9-41ce-b286-dcbef55f89bc` showed:
+  - shopping cart state was persisted into `hosted_web_sessions.metadata.appState`
+  - after restarting hosted-sites, `/shopping/cart?session=...` still showed the saved cart row and total
+  - `/attempts/:attemptId` and `/api/attempts/:attemptId/advance` both recovered sibling sessions from the database
+- idempotency / transition smoke on run `c6a6f5c7-f80e-4492-ae07-f9c86e387553` showed:
+  - completing shopping once promoted wiki session `1` from `created` to `active`
+  - `advance` called with the first session token returned the wiki session URL from persisted attempt state
+  - repeating `POST /api/sessions/:token/complete` for the already completed shopping session did not insert a second `hosted_web_results` row
+- access / expiry smoke on run `38f8f98f-8ebe-4b6f-9a7d-864a5fa21273` showed:
+  - two hosted page requests incremented `hosted_web_sessions.access_count` and recorded `first_seen_*`, `last_seen_*`, and `last_accessed_at`
+  - `hosted_web_access_logs` wrote one `session.access` row per request with IP and user-agent metadata
+  - forcing `expires_at` into the past caused the next hosted request to return `400 {"error":"Missing or invalid session"}`
+  - the same request marked the session row as `expired` and inserted a `session.expired_rejected` access-log row
+- cleanup sweeper smoke on runs `9f6f04fa-6b81-4e33-ba05-05f7a1f1d253` and `31b86c0d-0665-40cd-a016-f9b6bba82d33` showed:
+  - with `HOSTED_SESSION_SWEEP_INTERVAL_MS=1000`, one `session.access` row was automatically pruned after aging past the configured retention window
+  - forcing a second session's `expires_at` into the past caused the background sweep to mark the row `expired` without waiting for another request
+  - the sweep wrote a `session.expired_swept` access-log row and removed the expired session from in-memory runtime
+- timeout policy smoke on run `70fc317d-2c83-4799-b45c-5ac5dd67444b` showed:
+  - expiring the active shopping session caused the sweeper to mark the entire hosted attempt `timeout`
+  - sibling hosted sessions were also moved to `expired` so the suite could not be resumed from a stale second session
+  - `benchmark_runs.status` moved to `timeout`, `score = 0`, and `error_message` was filled from the hosted timeout summary
+  - `benchmark_attempt_scores` received a timeout-shaped `error` row with `aggregation = "timeout"`
+  - a fresh `GET /api/runs/:runId/connect` returned `activeSessionId = null` and no orchestrator URL, instead of falling back to session `0`
+
+Current limitations:
+
+- the attempt overview is still a lightweight helper page, not a stateful orchestrator with server-owned active-session transitions
+- UI only shows basic suite progress and active session context
+- attempt advance is still helper-style and does not yet enforce transitions through a dedicated orchestrator service boundary
+- wiki article-view proof still depends on hosted telemetry rather than a persisted server-side read model
+- there is no external scheduler yet; cleanup currently runs inside each hosted-sites process with interval-based best-effort semantics
+
 ## Operational Guidance
 
 Start with low telemetry volume.
@@ -820,6 +881,12 @@ Recommended defaults:
 - action-level telemetry only
 - screenshot on navigation, task signal, completion, and failure
 - session cleanup after a fixed retention period
+
+Relevant hosted-sites cleanup knobs:
+
+- `HOSTED_SESSION_SWEEP_INTERVAL_MS`
+- `HOSTED_SESSION_TERMINAL_RETENTION_MS`
+- `HOSTED_ACCESS_LOG_RETENTION_MS`
 
 This makes hosted web benchmarks closer to normal web application hosting than browser cloud infrastructure.
 

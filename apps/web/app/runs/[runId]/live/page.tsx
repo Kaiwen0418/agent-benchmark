@@ -48,6 +48,7 @@ export default async function RunLivePage({
       initialTitle={benchmarkCase?.title ?? "AgentBench Live Run"}
       initialStatus={run.status}
       initialScore={run.score}
+      initialErrorMessage={run.errorMessage}
       initialFrameUrl={deriveInitialFrameUrl(events, artifacts)}
       embedded={resolvedSearchParams?.embed === "1"}
     />

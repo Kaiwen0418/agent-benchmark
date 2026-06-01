@@ -7,8 +7,8 @@ export const benchmarkOptions: Array<{
 }> = [
   {
     value: "shopping-constrained-checkout",
-    label: "Shopping Checkout",
-    description: "Hosted shopping task with server-side scoring.",
+    label: "Hosted Web Suite",
+    description: "Two-step hosted suite across shopping-lite and wiki-lite with server-side scoring.",
   },
 ];
 
@@ -40,7 +40,7 @@ export const docsBlocks = {
   mcp: `{
   "name": "agentbench-hosted-web",
   "transport": "browser",
-  "url": "https://hosted.project-echo.xyz/shopping?session=<token>",
+  "url": "https://hosted.project-echo.xyz/attempts/<attempt-id>?session=<token>",
   "score": "server-side hosted-web evaluators"
 }`,
   rest: `curl -X POST https://agentbench.app/api/runs \\
@@ -76,7 +76,7 @@ export const docsSteps = [
   {
     step: "02",
     title: "Pick a benchmark",
-    body: "Start with Shopping Checkout. Additional hosted-web suites will be added behind the same session and scoring structure.",
+    body: "Start with the hosted suite demo. It now spans shopping-lite and wiki-lite behind one attempt-level session model.",
   },
   {
     step: "03",

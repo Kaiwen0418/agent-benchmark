@@ -7,6 +7,7 @@ type LiveRunViewerProps = {
   initialTitle: string;
   initialStatus: string;
   initialScore: number | null;
+  initialErrorMessage: string | null;
   initialFrameUrl: string | null;
   embedded?: boolean;
 };
@@ -16,6 +17,7 @@ type StreamPayload = {
     id: string;
     status: string;
     score: number | null;
+    errorMessage?: string | null;
   } | null;
   events: Array<{
     type: string;
@@ -28,6 +30,13 @@ type StreamPayload = {
 };
 
 type StreamEvent = StreamPayload["events"][number];
+type HostedSuiteSession = {
+  sessionId: string;
+  app: string;
+  taskSlug: string;
+  sequenceIndex: number;
+  startUrl: string | null;
+};
 
 function deriveLiveFrameUrl(payload: StreamPayload) {
   const liveEvent = [...payload.events]
@@ -81,19 +90,45 @@ function hostedEventLabel(event: StreamEvent) {
   return event.type;
 }
 
+function deriveHostedSuiteSessions(events: StreamEvent[]) {
+  const sessions = new Map<string, HostedSuiteSession>();
+
+  for (const event of events) {
+    if (event.type !== "hosted.session.created" || typeof event.payload.sessionId !== "string") {
+      continue;
+    }
+
+    sessions.set(event.payload.sessionId, {
+      sessionId: event.payload.sessionId,
+      app: typeof event.payload.app === "string" ? event.payload.app : "hosted-app",
+      taskSlug: typeof event.payload.taskSlug === "string" ? event.payload.taskSlug : "hosted-task",
+      sequenceIndex:
+        typeof event.payload.sequenceIndex === "number" && Number.isFinite(event.payload.sequenceIndex)
+          ? event.payload.sequenceIndex
+          : sessions.size,
+      startUrl: typeof event.payload.startUrl === "string" ? event.payload.startUrl : null,
+    });
+  }
+
+  return [...sessions.values()].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+}
+
 export function LiveRunViewer(props: LiveRunViewerProps) {
   const {
     runId,
     initialTitle,
     initialStatus,
     initialScore,
+    initialErrorMessage,
     initialFrameUrl,
     embedded = false,
   } = props;
   const [status, setStatus] = useState(initialStatus);
   const [score, setScore] = useState<number | null>(initialScore);
+  const [errorMessage, setErrorMessage] = useState<string | null>(initialErrorMessage);
   const [frameUrl, setFrameUrl] = useState<string | null>(initialFrameUrl);
   const [hostedEvents, setHostedEvents] = useState<StreamEvent[]>([]);
+  const [suiteSessions, setSuiteSessions] = useState<HostedSuiteSession[]>([]);
 
   useEffect(() => {
     const source = new EventSource(`/api/runs/${runId}/stream`);
@@ -102,8 +137,11 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       const payload = JSON.parse((event as MessageEvent<string>).data) as StreamPayload;
       setStatus(payload.run?.status ?? initialStatus);
       setScore(deriveScore(payload, initialScore));
+      setErrorMessage(payload.run?.errorMessage ?? initialErrorMessage);
       setFrameUrl(deriveLiveFrameUrl(payload));
-      setHostedEvents(payload.events.filter((item) => item.type.startsWith("hosted.")).slice(-8));
+      const nextHostedEvents = payload.events.filter((item) => item.type.startsWith("hosted."));
+      setHostedEvents(nextHostedEvents.slice(-8));
+      setSuiteSessions(deriveHostedSuiteSessions(nextHostedEvents));
     });
 
     source.addEventListener("terminal", () => {
@@ -118,6 +156,13 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       source.close();
     };
   }, [initialScore, initialStatus, runId]);
+
+  const terminalSummary =
+    status === "timeout"
+      ? errorMessage ?? "This hosted suite timed out."
+      : status === "failed"
+        ? errorMessage ?? "This run failed."
+        : null;
 
   if (embedded) {
     return (
@@ -167,6 +212,15 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
           </div>
         </div>
 
+        {terminalSummary ? (
+          <section className="mb-6 rounded-[1.4rem] border border-[#6b2d22] bg-[#201311] p-5">
+            <div className="text-xs uppercase tracking-[0.18em] text-[#ffb7aa]">
+              {status === "timeout" ? "Run timed out" : "Run failed"}
+            </div>
+            <p className="mt-2 text-sm leading-7 text-[#ffd8d1]">{terminalSummary}</p>
+          </section>
+        ) : null}
+
         <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#181714] shadow-[0_30px_120px_rgba(0,0,0,0.55)]">
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 text-[11px] uppercase tracking-[0.18em] text-[#8f897e]">
             <span>browser-session.live</span>
@@ -184,6 +238,30 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
             )}
           </div>
         </div>
+
+        {suiteSessions.length > 0 ? (
+          <section className="mt-6 rounded-[1.6rem] border border-white/10 bg-white/[0.04] p-5">
+            <div className="text-xs uppercase tracking-[0.18em] text-[#8f897e]">Hosted Suite Progress</div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {suiteSessions.map((session, index) => (
+                <div
+                  key={session.sessionId}
+                  className={`rounded-[1rem] border px-4 py-3 ${
+                    status === "timeout" || status === "failed"
+                      ? "border-[#6b2d22] bg-[#1b1312]"
+                      : "border-white/10 bg-black/20"
+                  }`}
+                >
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-[#8f897e]">
+                    Session {index + 1}
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-white">{session.taskSlug}</div>
+                  <div className="mt-1 text-xs text-[#c8c2b5]">{session.app}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </main>
   );

@@ -34,6 +34,30 @@ export const hostedWebScoreResultSchema = z.object({
 
 export type HostedWebScoreResult = z.infer<typeof hostedWebScoreResultSchema>;
 
+export const hostedWebSuiteSessionScoreSchema = z.object({
+  sessionId: z.string(),
+  app: z.string(),
+  taskSlug: z.string(),
+  status: hostedWebEvaluatorStatusSchema,
+  score: z.number().min(0).max(1),
+  weight: z.number().nonnegative().default(1),
+  required: z.boolean().default(true),
+});
+
+export type HostedWebSuiteSessionScore = z.infer<typeof hostedWebSuiteSessionScoreSchema>;
+
+export const hostedWebSuiteScoreResultSchema = z.object({
+  score: z.number().min(0).max(1),
+  status: hostedWebEvaluatorStatusSchema,
+  summary: z.string(),
+  breakdown: z.object({
+    aggregation: z.literal("weighted-required-suite"),
+    sessions: z.array(hostedWebSuiteSessionScoreSchema),
+  }),
+});
+
+export type HostedWebSuiteScoreResult = z.infer<typeof hostedWebSuiteScoreResultSchema>;
+
 export function aggregateStrictScore(params: {
   evaluators: HostedWebEvaluatorResult[];
   passSummary: string;
@@ -82,5 +106,37 @@ export function failedEvaluator(params: {
     required: params.required ?? true,
     evidence: params.evidence,
     errorMessage: params.errorMessage,
+  };
+}
+
+export function aggregateSuiteScore(params: {
+  sessions: HostedWebSuiteSessionScore[];
+  passSummary?: string;
+  failSummary?: string;
+}): HostedWebSuiteScoreResult {
+  const sessions = params.sessions;
+  const required = sessions.filter((session) => session.required !== false);
+  const requiredStatus = required.map((session) => session.status);
+  const hasError = requiredStatus.some((status) => status === "error");
+  const requiredPassed = required.every((session) => session.status === "passed");
+  const totalWeight = sessions.reduce((sum, session) => sum + Math.max(session.weight, 0), 0);
+  const weightedScore =
+    totalWeight > 0
+      ? sessions.reduce((sum, session) => sum + session.score * Math.max(session.weight, 0), 0) / totalWeight
+      : 0;
+  const normalizedScore = requiredPassed ? Number(weightedScore.toFixed(4)) : 0;
+  const status = hasError ? "error" : requiredPassed ? "passed" : "failed";
+
+  return {
+    score: normalizedScore,
+    status,
+    summary:
+      status === "passed"
+        ? params.passSummary ?? "All required hosted-web sessions passed."
+        : params.failSummary ?? "One or more required hosted-web sessions failed.",
+    breakdown: {
+      aggregation: "weighted-required-suite",
+      sessions,
+    },
   };
 }

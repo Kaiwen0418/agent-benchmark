@@ -23,14 +23,15 @@ function toSseChunk(event: string, data: unknown) {
 
 function makeFingerprint(payload: RunStreamPayload) {
   return JSON.stringify({
-    run: payload.run
-      ? {
-          id: payload.run.id,
-          status: payload.run.status,
-          score: payload.run.score,
-          completedAt: payload.run.completedAt,
-          startedAt: payload.run.startedAt,
-          runnerId: payload.run.runnerId,
+        run: payload.run
+          ? {
+              id: payload.run.id,
+              status: payload.run.status,
+              score: payload.run.score,
+              errorMessage: payload.run.errorMessage,
+              completedAt: payload.run.completedAt,
+              startedAt: payload.run.startedAt,
+              runnerId: payload.run.runnerId,
         }
       : null,
     lastEventId: payload.events[payload.events.length - 1]?.id ?? null,

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The runner is the execution engine of AgentBench. It is self-hosted and responsible for running benchmark tasks inside isolated sandboxes.
+The runner is the legacy execution engine of AgentBench. It remains self-hosted and is used for internal queued runs, MCP tooling, and regression scenarios that still require an isolated sandbox.
 
 ## Responsibilities
 
@@ -32,6 +32,8 @@ The MCP tool server:
 - exposes browser/file/email/policy tools over MCP
 - is intended for agents running in the user's local environment
 - can activate an `external-agent` run without going through runner queue claim
+
+For the current hosted-web path, external-agent runs primarily use `apps/hosted-sites` instead of the runner as the main task surface.
 
 Current local agent-facing MCP endpoint (via web proxy):
 
@@ -67,11 +69,16 @@ Planned later additions:
 
 ## Default Local Runtime
 
-Default local startup mode is Docker Compose with:
+Default production-facing local startup is no longer the runner stack. The main hosted-web runtime is:
 
-- `mock-sites`
-- `runner mcp:http`
-- `caddy gateway`
+- `hosted-sites`
+- `gateway`
+
+Use the runner stack when you specifically need:
+
+- `internal` queued run execution
+- MCP transport regression coverage
+- legacy local tool demos
 
 In this mode, Cloudflare Tunnel can point at:
 

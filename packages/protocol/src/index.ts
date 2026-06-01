@@ -55,6 +55,38 @@ export const benchmarkCaseSchema = z.object({
 
 export type BenchmarkCase = z.infer<typeof benchmarkCaseSchema>;
 
+export const hostedWebSuiteSessionSchema = z.object({
+  app: z.string().min(1),
+  taskSlug: z.string().min(1),
+  title: z.string().optional(),
+  goal: z.string().optional(),
+  startPath: z.string().optional(),
+  taskVersion: z.string().default("v1"),
+  seedVersion: z.string().optional(),
+  sequenceIndex: z.number().int().nonnegative().default(0),
+  weight: z.number().nonnegative().default(1),
+  required: z.boolean().default(true),
+  metadata: z.record(z.any()).default({}),
+});
+
+export type HostedWebSuiteSession = z.infer<typeof hostedWebSuiteSessionSchema>;
+
+export const hostedWebSuiteMetadataSchema = z.object({
+  suiteSlug: z.string().min(1).default("hosted-web-suite"),
+  suiteVersion: z.string().min(1).default("v1"),
+  app: z.string().min(1).optional(),
+  taskSlug: z.string().min(1).optional(),
+  title: z.string().optional(),
+  goal: z.string().optional(),
+  startPath: z.string().optional(),
+  taskVersion: z.string().default("v1"),
+  seedVersion: z.string().optional(),
+  sessions: z.array(hostedWebSuiteSessionSchema).default([]),
+  metadata: z.record(z.any()).default({}),
+});
+
+export type HostedWebSuiteMetadata = z.infer<typeof hostedWebSuiteMetadataSchema>;
+
 export const runnerSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
