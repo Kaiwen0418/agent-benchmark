@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateForum, type ForumEvaluationSession } from "./apps/forum-lite/evaluate.js";
+import { evaluateRepo, type RepoEvaluationSession } from "./apps/repo-lite/evaluate.js";
 import { evaluateShopping, type ShoppingEvaluationSession } from "./apps/shopping-lite/evaluate.js";
 import { evaluateWiki, type WikiEvaluationSession } from "./apps/wiki-lite/evaluate.js";
 
@@ -191,6 +192,93 @@ test("evaluateForum fails when agent reply is missing recall link", () => {
         },
       ],
       moderationActions: [{ id: "mod_1", threadId: "thr-battery", action: "lock", reason: "safety escalation" }],
+    }),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+function makeRepoSession(overrides?: Partial<RepoEvaluationSession>): RepoEvaluationSession {
+  return {
+    app: "repo-lite",
+    taskSlug: "repo-readme-fix",
+    files: [
+      {
+        path: "README.md",
+        content: "# Demo Project\n\nRun `npm install` to install dependencies.\n",
+      },
+    ],
+    mergeRequests: [],
+    ...overrides,
+  };
+}
+
+test("evaluateRepo passes when README uses pnpm and correct MR is created", () => {
+  const result = evaluateRepo(
+    makeRepoSession({
+      files: [
+        {
+          path: "README.md",
+          content: "# Demo Project\n\nRun `pnpm install` to install dependencies.\n",
+        },
+      ],
+      mergeRequests: [
+        {
+          id: "mr_1",
+          title: "Fix install instructions",
+          changedFiles: [],
+          targetBranch: "main",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateRepo fails when README still contains npm install", () => {
+  const result = evaluateRepo(
+    makeRepoSession({
+      files: [
+        {
+          path: "README.md",
+          content: "# Demo Project\n\nRun `npm install` to install dependencies.\n",
+        },
+      ],
+      mergeRequests: [
+        {
+          id: "mr_1",
+          title: "Fix install instructions",
+          changedFiles: [],
+          targetBranch: "main",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateRepo fails when MR title does not match", () => {
+  const result = evaluateRepo(
+    makeRepoSession({
+      files: [
+        {
+          path: "README.md",
+          content: "# Demo Project\n\nRun `pnpm install` to install dependencies.\n",
+        },
+      ],
+      mergeRequests: [
+        {
+          id: "mr_1",
+          title: "Wrong title",
+          changedFiles: [],
+          targetBranch: "main",
+        },
+      ],
     }),
   );
 

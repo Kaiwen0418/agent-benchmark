@@ -1,4 +1,5 @@
 import { forumLiteDefinition } from "../apps/forum-lite/definition.js";
+import { repoLiteDefinition } from "../apps/repo-lite/definition.js";
 import { shoppingLiteDefinition } from "../apps/shopping-lite/definition.js";
 import { wikiLiteDefinition } from "../apps/wiki-lite/definition.js";
 import type { HostedAppDefinition, HostedAppRouteDeps, HostedAppSessionState } from "./app-definition.js";
@@ -12,12 +13,16 @@ const emptyInitialSessionState: HostedAppSessionState = {
   wikiAnswerSubmissions: [],
   threads: [],
   moderationActions: [],
+  files: [],
+  issues: [],
+  mergeRequests: [],
 };
 
 const appDefinitions: HostedAppDefinition[] = [
   shoppingLiteDefinition,
   wikiLiteDefinition,
   forumLiteDefinition,
+  repoLiteDefinition,
 ];
 
 const hostedApps = new Map<string, HostedAppDefinition>(

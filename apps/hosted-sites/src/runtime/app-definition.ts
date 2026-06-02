@@ -5,7 +5,16 @@ import type { HostedSession } from "./types.js";
 
 export type HostedAppSessionState = Pick<
   HostedSession,
-  "products" | "cart" | "orders" | "wikiArticles" | "wikiAnswerSubmissions" | "threads" | "moderationActions"
+  | "products"
+  | "cart"
+  | "orders"
+  | "wikiArticles"
+  | "wikiAnswerSubmissions"
+  | "threads"
+  | "moderationActions"
+  | "files"
+  | "issues"
+  | "mergeRequests"
 >;
 
 export type HostedAppRouteDeps = {

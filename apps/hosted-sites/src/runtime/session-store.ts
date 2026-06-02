@@ -184,6 +184,9 @@ export function createSessionStore(deps: SessionStoreDeps) {
       wikiAnswerSubmissions,
       threads: initialState.threads,
       moderationActions: initialState.moderationActions,
+      files: initialState.files,
+      issues: initialState.issues,
+      mergeRequests: initialState.mergeRequests,
       persisted: params.row.status !== "expired",
     } satisfies HostedSession;
   }
@@ -450,6 +453,9 @@ export function createSessionStore(deps: SessionStoreDeps) {
       wikiAnswerSubmissions: initialState.wikiAnswerSubmissions,
       threads: initialState.threads,
       moderationActions: initialState.moderationActions,
+      files: initialState.files,
+      issues: initialState.issues,
+      mergeRequests: initialState.mergeRequests,
       persisted: false,
     };
 

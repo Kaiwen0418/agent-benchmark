@@ -1,5 +1,6 @@
 import type { CartItem, Order, Product } from "../apps/shopping-lite/types.js";
 import type { ForumThread, ModerationAction } from "../apps/forum-lite/types.js";
+import type { RepoFile, RepoIssue, RepoMergeRequest } from "../apps/repo-lite/types.js";
 import type { WikiAnswerSubmission, WikiArticle } from "../apps/wiki-lite/types.js";
 
 export type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
@@ -41,6 +42,9 @@ export type HostedSession = {
   wikiAnswerSubmissions: WikiAnswerSubmission[];
   threads: ForumThread[];
   moderationActions: ModerationAction[];
+  files: RepoFile[];
+  issues: RepoIssue[];
+  mergeRequests: RepoMergeRequest[];
   persisted: boolean;
 };
 

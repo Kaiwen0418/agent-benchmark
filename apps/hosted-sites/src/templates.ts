@@ -161,6 +161,11 @@ export function layout(params: {
         <a href="/forum?session=${encodeURIComponent(params.session.token)}">Threads</a>
         <a href="/forum/thread/thr-battery?session=${encodeURIComponent(params.session.token)}">Battery Thread</a>
         `
+            : params.session.app === "repo-lite"
+            ? `
+        <a href="/repo?session=${encodeURIComponent(params.session.token)}">Repository</a>
+        <a href="/repo/file/README.md/edit?session=${encodeURIComponent(params.session.token)}">Edit README</a>
+        `
             : `
         <a href="/shopping?session=${encodeURIComponent(params.session.token)}">Products</a>
         <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>
