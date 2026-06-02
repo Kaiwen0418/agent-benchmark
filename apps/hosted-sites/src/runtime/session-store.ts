@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CartItem, Order } from "../apps/shopping-lite/types.js";
 import type { WikiAnswerSubmission } from "../apps/wiki-lite/types.js";
+import type { HostedAppSessionState } from "./app-definition.js";
 import type { HostedSession } from "./types.js";
 
 type PersistedSessionRow = {
@@ -37,10 +38,7 @@ type SessionStoreDeps = {
   getSupabaseAdmin: () => SupabaseClient | null | undefined;
   defaultStartPathForApp: (app: string) => string;
   defaultGoalForSession: (app: string, taskSlug: string) => string;
-  buildInitialSessionState: (app: string) => Pick<
-    HostedSession,
-    "products" | "cart" | "orders" | "wikiArticles" | "wikiAnswerSubmissions" | "threads" | "moderationActions"
-  >;
+  buildInitialSessionState: (app: string) => HostedAppSessionState;
   clientIp: (request: IncomingMessage) => string | null;
   clientUserAgent: (request: IncomingMessage) => string | null;
   clientReferer: (request: IncomingMessage) => string | null;

@@ -1,77 +1,28 @@
-import { buildForumFinalState } from "../apps/forum-lite/final-state.js";
-import { forumSeedThreads, forumSeedModerations, getForumDefaultGoal, getForumStartPath } from "../apps/forum-lite/seed.js";
-import { buildShoppingFinalState } from "../apps/shopping-lite/final-state.js";
-import { shoppingSeedProducts, getShoppingDefaultGoal, getShoppingStartPath } from "../apps/shopping-lite/seed.js";
-import { buildWikiFinalState } from "../apps/wiki-lite/final-state.js";
-import { wikiSeedArticles, getWikiDefaultGoal, getWikiStartPath } from "../apps/wiki-lite/seed.js";
+import { forumLiteDefinition } from "../apps/forum-lite/definition.js";
+import { shoppingLiteDefinition } from "../apps/shopping-lite/definition.js";
+import { wikiLiteDefinition } from "../apps/wiki-lite/definition.js";
+import type { HostedAppDefinition, HostedAppRouteDeps, HostedAppSessionState } from "./app-definition.js";
 import type { HostedSession } from "./types.js";
 
-type HostedAppSessionState = Pick<
-  HostedSession,
-  "products" | "cart" | "orders" | "wikiArticles" | "wikiAnswerSubmissions" | "threads" | "moderationActions"
->;
-
-export type HostedAppDefinition = {
-  id: string;
-  getDefaultStartPath: () => string;
-  getDefaultGoal: (taskSlug: string) => string;
-  buildInitialSessionState: () => HostedAppSessionState;
-  buildFinalState: (session: HostedSession) => unknown;
+const emptyInitialSessionState: HostedAppSessionState = {
+  products: [],
+  cart: [],
+  orders: [],
+  wikiArticles: [],
+  wikiAnswerSubmissions: [],
+  threads: [],
+  moderationActions: [],
 };
 
-const shoppingLiteApp: HostedAppDefinition = {
-  id: "shopping-lite",
-  getDefaultStartPath: getShoppingStartPath,
-  getDefaultGoal: () => getShoppingDefaultGoal(),
-  buildInitialSessionState: () => ({
-    products: shoppingSeedProducts.map((product) => ({ ...product })),
-    cart: [],
-    orders: [],
-    wikiArticles: wikiSeedArticles.map((article) => ({ ...article })),
-    wikiAnswerSubmissions: [],
-    threads: forumSeedThreads.map((thread) => ({ ...thread })),
-    moderationActions: [...forumSeedModerations],
-  }),
-  buildFinalState: buildShoppingFinalState,
-};
+const appDefinitions: HostedAppDefinition[] = [
+  shoppingLiteDefinition,
+  wikiLiteDefinition,
+  forumLiteDefinition,
+];
 
-const wikiLiteApp: HostedAppDefinition = {
-  id: "wiki-lite",
-  getDefaultStartPath: getWikiStartPath,
-  getDefaultGoal: () => getWikiDefaultGoal(),
-  buildInitialSessionState: () => ({
-    products: shoppingSeedProducts.map((product) => ({ ...product })),
-    cart: [],
-    orders: [],
-    wikiArticles: wikiSeedArticles.map((article) => ({ ...article })),
-    wikiAnswerSubmissions: [],
-    threads: forumSeedThreads.map((thread) => ({ ...thread })),
-    moderationActions: [...forumSeedModerations],
-  }),
-  buildFinalState: buildWikiFinalState,
-};
-
-const forumLiteApp: HostedAppDefinition = {
-  id: "forum-lite",
-  getDefaultStartPath: getForumStartPath,
-  getDefaultGoal: () => getForumDefaultGoal(),
-  buildInitialSessionState: () => ({
-    products: shoppingSeedProducts.map((product) => ({ ...product })),
-    cart: [],
-    orders: [],
-    wikiArticles: wikiSeedArticles.map((article) => ({ ...article })),
-    wikiAnswerSubmissions: [],
-    threads: forumSeedThreads.map((thread) => ({ ...thread })),
-    moderationActions: [...forumSeedModerations],
-  }),
-  buildFinalState: buildForumFinalState,
-};
-
-const hostedApps = new Map<string, HostedAppDefinition>([
-  [shoppingLiteApp.id, shoppingLiteApp],
-  [wikiLiteApp.id, wikiLiteApp],
-  [forumLiteApp.id, forumLiteApp],
-]);
+const hostedApps = new Map<string, HostedAppDefinition>(
+  appDefinitions.map((definition) => [definition.id, definition]),
+);
 
 function getFallbackApp() {
   return hostedApps.get("shopping-lite")!;
@@ -82,7 +33,7 @@ export function getHostedAppDefinition(app: string) {
 }
 
 export function listHostedAppDefinitions() {
-  return Array.from(hostedApps.values());
+  return [...appDefinitions];
 }
 
 export function defaultStartPathForApp(app: string) {
@@ -94,9 +45,20 @@ export function defaultGoalForSession(app: string, taskSlug: string) {
 }
 
 export function buildInitialSessionState(app: string): HostedAppSessionState {
-  return getHostedAppDefinition(app).buildInitialSessionState();
+  return {
+    ...emptyInitialSessionState,
+    ...getHostedAppDefinition(app).buildInitialSessionState(),
+  };
 }
 
 export function buildFinalState(session: HostedSession) {
   return getHostedAppDefinition(session.app).buildFinalState(session);
+}
+
+export function evaluateSession(session: HostedSession) {
+  return getHostedAppDefinition(session.app).evaluate(session);
+}
+
+export function createAppRouteHandlers(deps: HostedAppRouteDeps) {
+  return appDefinitions.flatMap((definition) => definition.createRoutes(deps));
 }

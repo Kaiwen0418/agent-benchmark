@@ -1,20 +1,18 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { evaluateSession } from "./evaluation.js";
 import type { HostedAttemptOverviewSession, HostedSession } from "./runtime/types.js";
 import { redirect, readForm, readJson, sendJson, notFound, badRequest } from "./runtime/http.js";
 import { createAttemptsRoutes } from "./routes/attempts.js";
 import { createApiRoutes } from "./routes/api.js";
-import { createForumRoutes } from "./routes/forum.js";
 import { createRoutes } from "./routes/index.js";
-import { createShoppingRoutes } from "./routes/shopping.js";
-import { createWikiRoutes } from "./routes/wiki.js";
 import {
   buildFinalState,
   buildInitialSessionState,
+  createAppRouteHandlers,
   defaultGoalForSession,
   defaultStartPathForApp,
+  evaluateSession,
 } from "./runtime/app-registry.js";
 import { createOrchestratorClient } from "./runtime/orchestrator-client.js";
 import { createSessionStore } from "./runtime/session-store.js";
@@ -139,40 +137,10 @@ const apiRoutes = createApiRoutes({
   notFound,
 });
 
-const shoppingRoutes = createShoppingRoutes({
+const appRouteHandlers = createAppRouteHandlers({
   publicBaseUrl,
   defaultStartPathForApp,
   now,
-  makeId,
-  getSession,
-  persistSessionSnapshot,
-  recordEvent,
-  forwardRunEvent,
-  completeSession: completeSessionViaOrchestrator,
-  evaluateSession,
-  readForm,
-  badRequest,
-  notFound,
-});
-
-const wikiRoutes = createWikiRoutes({
-  publicBaseUrl,
-  defaultStartPathForApp,
-  now,
-  getSession,
-  persistSessionSnapshot,
-  recordEvent,
-  forwardRunEvent,
-  completeSession: completeSessionViaOrchestrator,
-  evaluateSession,
-  readForm,
-  badRequest,
-  notFound,
-});
-
-const forumRoutes = createForumRoutes({
-  publicBaseUrl,
-  defaultStartPathForApp,
   makeId,
   getSession,
   persistSessionSnapshot,
@@ -189,9 +157,7 @@ const routes = createRoutes({
   handlers: [
     apiRoutes.handle,
     attemptsRoutes.handle,
-    shoppingRoutes.handle,
-    wikiRoutes.handle,
-    forumRoutes.handle,
+    ...appRouteHandlers,
   ],
   notFound,
 });
