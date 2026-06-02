@@ -20,9 +20,7 @@
       "@agentbench/scoring": ["packages/scoring/src/index.ts"],
       "@agentbench/scoring/*": ["packages/scoring/src/*"],
       "@agentbench/shared": ["packages/shared/src/index.ts"],
-      "@agentbench/shared/*": ["packages/shared/src/*"],
-      "@agentbench/mcp-tools": ["packages/mcp-tools/src/index.ts"],
-      "@agentbench/mcp-tools/*": ["packages/mcp-tools/src/*"]
+      "@agentbench/shared/*": ["packages/shared/src/*"]
     }
   }
 }

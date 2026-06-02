@@ -7,8 +7,6 @@
     "dev": "turbo run dev",
     "dev:web": "pnpm --filter web dev",
     "dev:orchestrator": "pnpm --filter hosted-orchestrator dev",
-    "dev:runner": "pnpm --filter runner dev",
-    "dev:mock": "pnpm --filter mock-sites dev",
     "dev:hosted": "pnpm --filter hosted-sites dev",
     "infra:up": "docker-compose up -d --build",
     "infra:down": "docker-compose down",

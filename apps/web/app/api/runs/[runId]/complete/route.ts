@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { completeRunInputSchema } from "@agentbench/protocol";
 import { completeBenchmarkRun } from "@/lib/db";
-import { requireRunnerAuth } from "@/lib/runner-auth";
+import { requireInternalServiceAuth } from "@/lib/internal-auth";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ runId: string }> },
 ) {
-  const authError = requireRunnerAuth(request);
+  const authError = requireInternalServiceAuth(request);
   if (authError) {
     return authError;
   }

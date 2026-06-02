@@ -7,9 +7,7 @@
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
-        "RUNNER_SHARED_SECRET",
-        "AGENTBENCH_MCP_BASE_URL",
-        "MCP_SESSION_SECRET"
+        "RUNNER_SHARED_SECRET"
       ],
       "outputs": ["dist/**", ".next/**"]
     },

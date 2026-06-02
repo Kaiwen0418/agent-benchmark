@@ -33,12 +33,7 @@ The homepage is now centered on one primary path:
 - the default benchmark case is a two-step hosted suite:
   - `shopping-lite`
   - `wiki-lite`
-- when `AGENTBENCH_MCP_BASE_URL` and `MCP_SESSION_SECRET` are configured, the payload includes:
-  - `transport: streamable_http`
-  - `url: <web-origin>/api/mcp/runs/<run-id>`
-  - `Authorization: Bearer <run-scoped-token>`
-- the legacy web MCP route can still proxy to the runner MCP HTTP server
-- for hosted-web runs, the agent primarily uses the hosted suite URL instead of MCP as the main task surface
+- for hosted-web runs, the agent uses the hosted suite URL as the main task surface
 - hosted-sites writes per-session results and the aggregated attempt score
 
 ## Local Startup Notes
@@ -46,15 +41,15 @@ The homepage is now centered on one primary path:
 Default startup uses Docker runtime for backend services:
 
 - `docker-compose up -d --build` (from repository root)
-- this boots `hosted-sites + gateway`
+- this boots `hosted-sites + hosted-orchestrator + gateway`
 - web app is still started with `pnpm dev:web`
 
-`apps/hosted-sites` and the legacy runner/MCP stack are separate by design:
+`apps/hosted-sites` and `apps/hosted-orchestrator` are separate by design:
 
 - `hosted-sites` serves session-scoped benchmark apps and writes hosted scoring data
-- `mcp:http` serves MCP tools and request/response tracing when you still need the legacy tool path
+- `hosted-orchestrator` owns attempt lifecycle, suite advancement, aggregation, and timeout handling
 
-`pnpm dev:runner` is optional unless you need internal queued run execution or MCP regression testing. For normal `Start Agent Session` testing, `web + hosted-sites` is the default path.
+For normal `Start Agent Session` testing, `web + hosted-sites + hosted-orchestrator` is the default path.
 
 ## Next Recommended Steps
 

@@ -5,7 +5,6 @@ import type {
   BenchmarkRun,
   CompleteRunInput,
   QuotaStatus,
-  Runner,
 } from "@agentbench/protocol";
 import path from "node:path";
 import fs from "node:fs";
@@ -45,8 +44,6 @@ function nextUtcDay(date = new Date()) {
 
 function getLocalArtifactsRoot() {
   const candidates = [
-    path.resolve(process.cwd(), "apps/runner/.runner-artifacts"),
-    path.resolve(process.cwd(), "../runner/.runner-artifacts"),
     path.resolve(process.cwd(), ".runner-artifacts"),
   ];
 
@@ -509,134 +506,6 @@ export async function completeBenchmarkRun(runId: string, input: CompleteRunInpu
   });
 
   return mapRunRow(data);
-}
-
-export async function registerRunner(params: {
-  name: string;
-  capacity: number;
-}): Promise<Runner> {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.registerRunner(params.name, params.capacity);
-  }
-
-  const { data, error } = await supabase
-    .from("runners")
-    .insert({
-      name: params.name,
-      capacity: params.capacity,
-      current_load: 0,
-      status: "online",
-      last_heartbeat: new Date().toISOString(),
-    })
-    .select("id, name, status, capacity, current_load, last_heartbeat, created_at")
-    .single();
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to register runner");
-  }
-
-  return {
-    id: data.id,
-    name: data.name,
-    status: data.status,
-    capacity: data.capacity,
-    currentLoad: data.current_load,
-    lastHeartbeat: data.last_heartbeat,
-    createdAt: data.created_at,
-  };
-}
-
-export async function heartbeatRunner(params: {
-  runnerId: string;
-  currentLoad: number;
-  status: Runner["status"];
-}) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.heartbeatRunner(params.runnerId, params.currentLoad, params.status);
-  }
-
-  const { data, error } = await supabase
-    .from("runners")
-    .update({
-      current_load: params.currentLoad,
-      status: params.status,
-      last_heartbeat: new Date().toISOString(),
-    })
-    .eq("id", params.runnerId)
-    .select("id, name, status, capacity, current_load, last_heartbeat, created_at")
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
-  if (!data) {
-    return null;
-  }
-
-  return {
-    id: data.id,
-    name: data.name,
-    status: data.status,
-    capacity: data.capacity,
-    currentLoad: data.current_load,
-    lastHeartbeat: data.last_heartbeat,
-    createdAt: data.created_at,
-  };
-}
-
-export async function listRunners() {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.listRunners();
-  }
-
-  const { data, error } = await supabase
-    .from("runners")
-    .select("id, name, status, capacity, current_load, last_heartbeat, created_at")
-    .order("created_at", { ascending: true });
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to list runners");
-  }
-
-  return data.map((item) => ({
-    id: item.id,
-    name: item.name,
-    status: item.status,
-    capacity: item.capacity,
-    currentLoad: item.current_load,
-    lastHeartbeat: item.last_heartbeat,
-    createdAt: item.created_at,
-  }));
-}
-
-export async function assignRunnerJob(runnerId: string) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.assignQueuedRun(runnerId);
-  }
-
-  const { data, error } = await supabase.rpc("claim_next_benchmark_run", {
-    p_runner_id: runnerId,
-  });
-
-  if (error) {
-    throw error;
-  }
-
-  if (!data) {
-    return null;
-  }
-
-  const runRow = Array.isArray(data) ? data[0] : data;
-  if (!runRow || typeof runRow.id !== "string" || typeof runRow.case_id !== "string") {
-    return null;
-  }
-
-  return mapRunRow(runRow);
 }
 
 export async function getQuotaStatus(params: {

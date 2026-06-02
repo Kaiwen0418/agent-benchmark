@@ -198,7 +198,7 @@ This keeps the default runtime small:
 Recommended startup sets:
 
 - Hosted-web path: `dev:web` + `dev:orchestrator` + `dev:hosted`
-- Internal demo path: add `dev:runner`
+- Local hosted stack: add `dev:hosted` and `dev:orchestrator`
 
 ## Hosted Web PoC
 

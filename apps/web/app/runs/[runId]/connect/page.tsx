@@ -66,7 +66,7 @@ export default async function RunConnectPage({
               <div className="text-xs uppercase tracking-[0.18em] text-[#756e62]">
                 {payload.hostedWeb.available ? "Hosted Suite" : "Local Demo Note"}
               </div>
-              <p className="mt-4 text-sm leading-7 text-[#4f4a43]">{payload.localDemo.note}</p>
+              <p className="mt-4 text-sm leading-7 text-[#4f4a43]">{payload.hostedNote.note}</p>
               <div className="mt-5 rounded-[1rem] bg-[#111111] px-4 py-3 text-sm text-white">
                 {payload.hostedWeb.available ? (
                   <>
@@ -86,13 +86,9 @@ export default async function RunConnectPage({
                   </>
                 ) : (
                   <>
-                    MCP: <span className="font-medium">{payload.mcp.transport}</span>
+                    Hosted URL: <span className="font-medium">{payload.connectUrl}</span>
                     <br />
-                    MCP URL: <span className="font-medium">{payload.mcp.url ?? "not generated in this build"}</span>
-                    <br />
-                    Auth: <span className="font-medium">{payload.mcp.headers ? "Bearer token included in config" : "none"}</span>
-                    <br />
-                    Command: <span className="font-medium">{payload.mcp.launchCommand}</span>
+                    Status: <span className="font-medium">{payload.status}</span>
                   </>
                 )}
               </div>

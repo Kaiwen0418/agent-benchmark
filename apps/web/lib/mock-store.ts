@@ -5,7 +5,6 @@ import type {
   BenchmarkRun,
   CreateRunInput,
   RunEvent,
-  Runner,
   RunStatus,
 } from "@agentbench/protocol";
 
@@ -102,22 +101,11 @@ const seedCases: BenchmarkCase[] = [
   },
 ];
 
-const seedRunner: Runner = {
-  id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f1001",
-  name: "mock-runner-eu-1",
-  status: "online",
-  capacity: 2,
-  currentLoad: 0,
-  lastHeartbeat: now(),
-  createdAt: now(),
-};
-
 type Store = {
   cases: BenchmarkCase[];
   runs: BenchmarkRun[];
   events: RunEvent[];
   artifacts: Artifact[];
-  runners: Runner[];
 };
 
 declare global {
@@ -131,7 +119,6 @@ function getStore(): Store {
       runs: [],
       events: [],
       artifacts: [],
-      runners: [seedRunner],
     };
   }
 
@@ -236,65 +223,6 @@ export const mockStore = {
   listArtifacts(runId: string) {
     return getStore().artifacts.filter((item) => item.runId === runId);
   },
-
-  listRunners() {
-    return getStore().runners;
-  },
-
-  registerRunner(name: string, capacity: number) {
-    const runner: Runner = {
-      id: makeId(),
-      name,
-      status: "online",
-      capacity,
-      currentLoad: 0,
-      lastHeartbeat: now(),
-      createdAt: now(),
-    };
-    getStore().runners.push(runner);
-    return runner;
-  },
-
-  heartbeatRunner(runnerId: string, currentLoad: number, status: Runner["status"]) {
-    const runner = getStore().runners.find((item) => item.id === runnerId);
-    if (!runner) {
-      return null;
-    }
-    runner.currentLoad = currentLoad;
-    runner.status = status;
-    runner.lastHeartbeat = now();
-    return runner;
-  },
-
-  assignQueuedRun(runnerId: string) {
-    const runner = getStore().runners.find((item) => item.id === runnerId);
-    if (!runner) {
-      return null;
-    }
-
-    if (runner.currentLoad >= runner.capacity) {
-      return null;
-    }
-
-    const run = getStore().runs.find((item) => item.status === "queued" && item.executionMode === "internal");
-    if (!run) {
-      return null;
-    }
-
-    if (run.runnerId !== null || run.status !== "queued") {
-      return null;
-    }
-
-    run.runnerId = runnerId;
-    run.status = "starting";
-    run.startedAt = now();
-    runner.currentLoad += 1;
-    runner.status = runner.currentLoad >= runner.capacity ? "busy" : "online";
-    this.appendEvent(run.id, "run.assigned", { runnerId });
-    this.appendEvent(run.id, "run.starting", { runnerId });
-    return run;
-  },
-
   setRunStatus(runId: string, status: RunStatus) {
     const run = this.getRun(runId);
     if (!run) {

@@ -1,0 +1,137 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { HostedWebScoreResult } from "@agentbench/scoring";
+import { addProductToCart, submitCheckoutOrder } from "../apps/shopping-lite/actions.js";
+import { renderCart, renderOrder, renderProducts } from "../apps/shopping-lite/render.js";
+import { redirect, sendJson } from "../runtime/http.js";
+import type { HostedSession } from "../runtime/types.js";
+
+type ShoppingRoutesDeps = {
+  publicBaseUrl: string;
+  defaultStartPathForApp: (app: string) => string;
+  now: () => string;
+  makeId: (prefix: string) => string;
+  getSession: (url: URL, request: IncomingMessage) => Promise<HostedSession | null>;
+  persistSessionSnapshot: (session: HostedSession) => Promise<void>;
+  recordEvent: (session: HostedSession, payload: Record<string, unknown>) => Promise<void>;
+  forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
+  completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
+  evaluateSession: (session: HostedSession) => HostedWebScoreResult;
+  readForm: (request: IncomingMessage) => Promise<URLSearchParams>;
+  badRequest: (response: ServerResponse, message: string) => void;
+  notFound: (response: ServerResponse) => void;
+};
+
+export function createShoppingRoutes(deps: ShoppingRoutesDeps) {
+  async function handle(request: IncomingMessage, response: ServerResponse, url: URL) {
+    if (request.method === "GET" && url.pathname === "/shopping") {
+      const session = await deps.getSession(url, request);
+      if (!session) {
+        deps.badRequest(response, "Missing or invalid session");
+        return true;
+      }
+
+      renderProducts(session, response, deps.publicBaseUrl, deps.defaultStartPathForApp);
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/shopping/cart") {
+      const session = await deps.getSession(url, request);
+      if (!session) {
+        deps.badRequest(response, "Missing or invalid session");
+        return true;
+      }
+
+      const form = await deps.readForm(request);
+      const productId = form.get("productId");
+      if (typeof productId !== "string" || !session.products.some((product) => product.id === productId)) {
+        deps.badRequest(response, "Invalid product");
+        return true;
+      }
+
+      addProductToCart(session, productId);
+      await deps.persistSessionSnapshot(session);
+      await deps.recordEvent(session, { type: "task.signal", name: "cart.item_added", productId });
+      await deps.forwardRunEvent(session, "hosted.task_signal", {
+        source: "hosted-sites",
+        sessionId: session.id,
+        taskSlug: session.taskSlug,
+        name: "cart.item_added",
+        productId,
+      });
+      redirect(response, `/shopping/cart?session=${encodeURIComponent(session.token)}`);
+      return true;
+    }
+
+    if (request.method === "GET" && url.pathname === "/shopping/cart") {
+      const session = await deps.getSession(url, request);
+      if (!session) {
+        deps.badRequest(response, "Missing or invalid session");
+        return true;
+      }
+
+      renderCart(session, response, deps.publicBaseUrl, deps.defaultStartPathForApp);
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/shopping/checkout") {
+      const session = await deps.getSession(url, request);
+      if (!session) {
+        deps.badRequest(response, "Missing or invalid session");
+        return true;
+      }
+      if (session.cart.length === 0) {
+        deps.badRequest(response, "Cart is empty");
+        return true;
+      }
+
+      const form = await deps.readForm(request);
+      const shippingMethod = form.get("shippingMethod") === "express" ? "express" : "standard";
+      const order = submitCheckoutOrder(session, {
+        makeId: deps.makeId,
+        now: deps.now,
+        shippingMethod,
+      });
+      await deps.persistSessionSnapshot(session);
+      await deps.recordEvent(session, { type: "task.signal", name: "order.submitted", orderId: order.id });
+      await deps.forwardRunEvent(session, "hosted.task_signal", {
+        source: "hosted-sites",
+        sessionId: session.id,
+        taskSlug: session.taskSlug,
+        name: "order.submitted",
+        orderId: order.id,
+      });
+      const result = deps.evaluateSession(session);
+      const completed = await deps.completeSession(session, result);
+      if (!completed) {
+        sendJson(response, 502, { error: "Hosted orchestrator unavailable" });
+        return true;
+      }
+      redirect(response, `/shopping/order/${encodeURIComponent(order.id)}?session=${encodeURIComponent(session.token)}`);
+      return true;
+    }
+
+    const orderMatch = url.pathname.match(/^\/shopping\/order\/([^/]+)$/);
+    if (request.method === "GET" && orderMatch) {
+      const session = await deps.getSession(url, request);
+      if (!session) {
+        deps.badRequest(response, "Missing or invalid session");
+        return true;
+      }
+
+      const order = session.orders.find((candidate) => candidate.id === decodeURIComponent(orderMatch[1]));
+      if (!order) {
+        deps.notFound(response);
+        return true;
+      }
+
+      renderOrder(session, order, response, deps.publicBaseUrl, deps.defaultStartPathForApp, deps.evaluateSession);
+      return true;
+    }
+
+    return false;
+  }
+
+  return {
+    handle,
+  };
+}

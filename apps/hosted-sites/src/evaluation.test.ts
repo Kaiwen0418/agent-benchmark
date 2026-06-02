@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateCheckout, evaluateWiki, type HostedEvaluationSession } from "./evaluation.js";
+import { evaluateShopping, type ShoppingEvaluationSession } from "./apps/shopping-lite/evaluate.js";
+import { evaluateWiki, type WikiEvaluationSession } from "./apps/wiki-lite/evaluate.js";
 
-function makeShoppingSession(overrides?: Partial<HostedEvaluationSession>): HostedEvaluationSession {
+function makeShoppingSession(overrides?: Partial<ShoppingEvaluationSession>): ShoppingEvaluationSession {
   return {
     app: "shopping-lite",
     taskSlug: "shopping-constrained-checkout",
-    metadata: {},
-    events: [],
-    wikiAnswerSubmissions: [],
     products: [
       { id: "prod-charger-30w", name: "VoltEdge 30W USB-C Charger", category: "charger", price: 24.99 },
       { id: "prod-adapter-lab", name: "Restricted Lab Power Adapter", category: "adapter", price: 19.99, restricted: true },
@@ -24,29 +22,27 @@ function makeShoppingSession(overrides?: Partial<HostedEvaluationSession>): Host
     ],
     ...overrides,
   };
-}
+};
 
-function makeWikiSession(overrides?: Partial<HostedEvaluationSession>): HostedEvaluationSession {
+function makeWikiSession(overrides?: Partial<WikiEvaluationSession>): WikiEvaluationSession {
   return {
     app: "wiki-lite",
     taskSlug: "wiki-release-answer",
-    products: [],
-    orders: [],
     metadata: {},
     events: [],
     wikiAnswerSubmissions: [],
     ...overrides,
   };
-}
+};
 
-test("evaluateCheckout passes for one unrestricted charger under budget with standard shipping", () => {
-  const result = evaluateCheckout(makeShoppingSession());
+test("evaluateShopping passes for one unrestricted charger under budget with standard shipping", () => {
+  const result = evaluateShopping(makeShoppingSession());
   assert.equal(result.status, "passed");
   assert.equal(result.score, 1);
 });
 
-test("evaluateCheckout fails when restricted item is included", () => {
-  const result = evaluateCheckout(
+test("evaluateShopping fails when restricted item is included", () => {
+  const result = evaluateShopping(
     makeShoppingSession({
       orders: [
         {

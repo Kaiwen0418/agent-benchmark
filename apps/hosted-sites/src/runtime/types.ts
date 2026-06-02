@@ -1,0 +1,54 @@
+import type { CartItem, Order, Product } from "../apps/shopping-lite/types.js";
+import type { WikiAnswerSubmission, WikiArticle } from "../apps/wiki-lite/types.js";
+
+export type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
+
+export type HostedSession = {
+  id: string;
+  token: string;
+  runId: string | null;
+  caseId: string | null;
+  attemptId: string | null;
+  callbackSecret: string | null;
+  app: string;
+  suiteSlug: string;
+  suiteVersion: string;
+  taskSlug: string;
+  taskVersion: string;
+  sequenceIndex: number;
+  weight: number;
+  required: boolean;
+  title: string | null;
+  goal: string;
+  startPath: string | null;
+  seedVersion: string;
+  metadata: Record<string, unknown>;
+  status: HostedSessionStatus;
+  expiresAt: string | null;
+  accessCount: number;
+  lastAccessedAt: string | null;
+  firstSeenIp: string | null;
+  lastSeenIp: string | null;
+  firstSeenUserAgent: string | null;
+  lastSeenUserAgent: string | null;
+  createdAt: string;
+  events: Array<Record<string, unknown>>;
+  products: Product[];
+  cart: CartItem[];
+  orders: Order[];
+  wikiArticles: WikiArticle[];
+  wikiAnswerSubmissions: WikiAnswerSubmission[];
+  persisted: boolean;
+};
+
+export type HostedAttemptOverviewSession = {
+  id: string;
+  token: string;
+  app: string;
+  taskSlug: string;
+  title: string | null;
+  goal: string;
+  startPath: string | null;
+  sequenceIndex: number;
+  status: HostedSessionStatus;
+};

@@ -1,6 +1,5 @@
 import type { BenchmarkCase, BenchmarkRun } from "@agentbench/protocol";
 import { getOrCreateHostedWebAttemptConnection, isHostedWebCase } from "./hosted-web";
-import { createMcpSessionToken, getMcpUpstreamBase } from "./mcp-session";
 
 const benchmarkGoals: Record<string, string> = {
   "web-search": "Search the mock workspace, extract the top result, and save a short summary.",
@@ -31,41 +30,15 @@ export async function buildRunConnectPayload(params: {
       : null;
   const connectUrl = `${origin}/runs/${run.id}/connect`;
   const configUrl = `${origin}/api/runs/${run.id}/connect`;
-  const mcpUpstream = getMcpUpstreamBase(origin);
-  const mcpSessionToken = createMcpSessionToken(run.id);
-  const mcpUrl =
-    mcpUpstream && mcpSessionToken ? `${origin}/api/mcp/runs/${encodeURIComponent(run.id)}` : null;
-  const launchCommand = [
-    `AGENTBENCH_RUN_ID=${run.id}`,
-    `AGENTBENCH_WEB_URL=${origin}`,
-    'RUNNER_SHARED_SECRET="<your-local-runner-secret>"',
-    "pnpm --filter runner start:mcp:http",
-  ].join(" ");
   const goal = getGoal(benchmarkCase);
   const title = benchmarkCase?.title ?? "AgentBench Run";
-  const prompt = hostedWeb
-    ? [
-        "Open the hosted AgentBench benchmark site below and complete the task.",
-        "The site is session-scoped, may contain multiple ordered tasks, and reports telemetry back to AgentBench.",
-        "Stop when the active task is completed or clearly blocked.",
-        "",
-        hostedWeb.orchestratorUrl ?? connectUrl,
-      ].join("\n")
-    : mcpUrl
-    ? [
-        "Open the AgentBench run link below and follow the instructions on that page.",
-        "A run-scoped HTTP MCP endpoint has been prepared for this run.",
-        "Use only the tools provided for this run and stop when finished.",
-        "",
-        connectUrl,
-      ].join("\n")
-    : [
-        "Open the AgentBench run link below and follow the instructions on that page.",
-        "This local demo does not issue a remote MCP URL yet. It only shows the run context and the local MCP launch command.",
-        "Use only the tools provided for this run and stop when finished.",
-        "",
-        connectUrl,
-      ].join("\n");
+  const prompt = [
+    "Open the hosted AgentBench benchmark site below and complete the task.",
+    "The site is session-scoped, may contain multiple ordered tasks, and reports telemetry back to AgentBench.",
+    "Stop when the active task is completed or clearly blocked.",
+    "",
+    hostedWeb?.orchestratorUrl ?? connectUrl,
+  ].join("\n");
 
   return {
     runId: run.id,
@@ -86,20 +59,11 @@ export async function buildRunConnectPayload(params: {
           "Use only the session URLs allocated for this run.",
           "Stop after the active objective is completed or clearly blocked.",
         ]
-      : mcpUrl
-        ? [
+      : [
           `Open the connection page for run ${run.id}.`,
-          "Read the benchmark objective and the generated MCP endpoint details.",
-          "Connect to the provided MCP URL for this run.",
-          "Use only the tools exposed for this run.",
-          "Call run.complete after the objective is satisfied.",
-          "Stop after the objective is completed or clearly blocked by policy.",
-        ]
-        : [
-          `Open the connection page for run ${run.id}.`,
-          "Read the benchmark objective and the local MCP launch details.",
-          "Do not expect a remote MCP server URL in this build.",
-          "Use only the tools exposed for this run.",
+          "Read the benchmark objective and hosted suite details.",
+          "Open the allocated hosted session URL for this run.",
+          "Use only the tools and sites exposed for this run.",
           "Stop after the objective is completed or clearly blocked by policy.",
         ],
     prompt,
@@ -144,27 +108,10 @@ export async function buildRunConnectPayload(params: {
           },
           sessions: [],
         },
-    localDemo: {
-      enabled: true,
+    hostedNote: {
       note: hostedWeb
-        ? "This run uses the hosted-web PoC. The benchmark site owns task state and emits scorer-compatible telemetry."
-        : mcpUrl
-        ? "This build exposes a run-scoped MCP proxy URL. The web app signs a short-lived token and forwards requests to the local runner MCP server."
-        : "This build does not have a reachable MCP URL configured yet. The generated URLs below are instruction/config pages.",
-    },
-    mcp: {
-      available: Boolean(mcpUrl),
-      transport: mcpUrl ? "streamable_http" : "stdio",
-      url: mcpUrl,
-      headers: mcpUrl && mcpSessionToken
-        ? {
-            Authorization: `Bearer ${mcpSessionToken}`,
-          }
-        : null,
-      launchCommand,
-      mockSitesUrl: "http://localhost:3001",
-      upstreamUrl: mcpUpstream ? `${mcpUpstream}?runId=${encodeURIComponent(run.id)}` : null,
-      status: mcpUrl ? "web-proxied-local-http-demo" : "local-demo-only",
+        ? "This run uses the hosted-web suite. The hosted benchmark site owns task state and emits scorer-compatible telemetry."
+        : "This run is expected to use the hosted benchmark path. No legacy MCP fallback is configured.",
     },
   };
 }

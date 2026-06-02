@@ -16,7 +16,7 @@ type RunConnectPayload = {
     title: string;
     goal: string;
   };
-  localDemo: {
+  hostedNote: {
     note: string;
   };
   hostedWeb: {
@@ -45,16 +45,6 @@ type RunConnectPayload = {
       title: string | null;
       status: string;
     }>;
-  };
-  mcp: {
-    available: boolean;
-    transport: string;
-    url: string | null;
-    headers: Record<string, string> | null;
-    launchCommand: string;
-    mockSitesUrl: string;
-    upstreamUrl: string | null;
-    status: string;
   };
 };
 
@@ -389,7 +379,8 @@ export function RunConnectionCard() {
               <>
                 <div className="text-sm font-medium text-[#111111]">Raw config</div>
                 <p className="mt-2 text-sm leading-7 text-[#585248]">
-                  Full JSON payload for the run context. Hosted-web runs use the hosted URL as the primary agent target; MCP is legacy optional context.
+                  Full JSON payload for the run context. Hosted-web runs use the hosted URL as the primary agent target.
+                  Full JSON payload for the run context. Hosted-web runs use the hosted URL as the primary agent target.
                 </p>
                 <pre className="mt-4 overflow-x-auto rounded-[1rem] bg-[#111111] p-4 text-xs leading-6 text-[#d7ff00]">
                   {JSON.stringify(payload, null, 2)}
@@ -402,8 +393,6 @@ export function RunConnectionCard() {
                   Active session: <span className="font-medium">{payload.hostedWeb.activeSessionId ?? "not allocated"}</span>
                   <br />
                   Hosted-web URL: <span className="font-medium">{payload.hostedWeb.orchestratorUrl ?? "not available"}</span>
-                  <br />
-                  Legacy MCP: <span className="font-medium">{payload.mcp.available ? "available" : "not required"}</span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button

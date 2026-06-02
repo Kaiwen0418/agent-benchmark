@@ -949,6 +949,44 @@ Smoke coverage:
   - `timeout`
   - the split-mode smoke now boots both `hosted-sites` and `hosted-orchestrator`
 
+Hosted-sites runtime refactor status:
+
+- `apps/hosted-sites/src/server.ts` has been reduced from a single large mixed file into a top-level HTTP entrypoint plus extracted modules for:
+  - `runtime/session-store.ts`
+  - `runtime/http.ts`
+  - `runtime/telemetry.ts`
+  - `runtime/orchestrator-client.ts`
+  - `routes/api.ts`
+  - `routes/attempts.ts`
+  - `routes/shopping.ts`
+  - `routes/wiki.ts`
+- app-specific HTML rendering has moved into:
+  - `apps/shopping-lite/render.ts`
+  - `apps/wiki-lite/render.ts`
+- app-specific mutations and scoring have also moved into app directories:
+  - `apps/shopping-lite/actions.ts`
+  - `apps/shopping-lite/evaluate.ts`
+  - `apps/shopping-lite/seed.ts`
+  - `apps/shopping-lite/final-state.ts`
+  - `apps/wiki-lite/actions.ts`
+  - `apps/wiki-lite/evaluate.ts`
+  - `apps/wiki-lite/seed.ts`
+  - `apps/wiki-lite/final-state.ts`
+- top-level `evaluation.ts` now only dispatches to app-level evaluators instead of owning shopping/wiki task logic directly
+- app-level seed data, default goals/start paths, and final-state shaping are now composed through `runtime/app-registry.ts`
+- `runtime/app-registry.ts` now exposes a real app-registry boundary:
+  - app definitions
+  - default start paths
+  - default goals
+  - initial session state builders
+  - final-state builders
+- route dispatch is now composed through `routes/index.ts` instead of hard-coded top-level branching in `server.ts`
+- hosted runtime types are now split by boundary instead of a single shared file:
+  - `runtime/types.ts`
+  - `apps/shopping-lite/types.ts`
+  - `apps/wiki-lite/types.ts`
+- this leaves `server.ts` primarily responsible for top-level route dispatch, telemetry/session APIs, scoring endpoints, and completion wiring
+
 ## Operational Guidance
 
 Start with low telemetry volume.

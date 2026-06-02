@@ -4,9 +4,9 @@
 
 ## Summary
 
-AgentBench is now split into a cloud control plane, a hosted-web benchmark layer, and a legacy isolated runner layer.
+AgentBench is now split into a cloud control plane and a hosted-web benchmark layer.
 
-The cloud layer manages users, runs, metadata, scores, and replay access. `apps/hosted-sites` serves the primary benchmark surfaces for external-agent runs. The runner remains available for internal demos, MCP tooling, and queued execution.
+The cloud layer manages users, runs, metadata, scores, and replay access. `apps/hosted-sites` serves the benchmark surfaces for external-agent runs, and `apps/hosted-orchestrator` owns attempt lifecycle and suite progression.
 
 ## High-level Layout
 
@@ -20,17 +20,9 @@ Cloud SaaS Layer
         ↓
 Hosted Benchmark Layer
   hosted-sites
+  hosted-orchestrator
   session-scoped task apps
   telemetry + scoring callbacks
-        ↓
-Legacy Runner Control Plane
-        ↓
-Self-hosted Linux Runner
-  Docker
-  Playwright
-  noVNC
-  MCP tools
-  Mock email/file systems
 ```
 
 ## Major Components
@@ -44,17 +36,6 @@ User-facing SaaS application for:
 - run creation
 - leaderboard views
 - replay and observability UI
-
-### `apps/runner`
-
-Self-hosted execution service responsible for:
-
-- polling or receiving work
-- preparing sandbox environments
-- running benchmark tasks
-- streaming status, traces, and artifacts
-
-This is no longer the default path for hosted-web external-agent runs.
 
 ### `apps/hosted-sites`
 
@@ -75,11 +56,7 @@ Current suite model:
 
 ### `packages/protocol`
 
-Shared types and schemas for cloud-to-runner communication.
-
-### `packages/mcp-tools`
-
-Tool definitions and schemas exposed to agents inside the benchmark environment.
+Shared types and schemas for benchmark runs and control-plane communication.
 
 ### `packages/test-cases`
 
@@ -92,7 +69,6 @@ Run evaluation logic and result aggregation.
 ## Architectural Priorities
 
 - hosted-web suite orchestration
-- runner isolation
 - deterministic execution
 - typed contracts
 - replayability

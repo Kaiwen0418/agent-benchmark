@@ -141,9 +141,9 @@ function eventSummary(event: RunEvent) {
     case "run.created":
       return event.payload.status === "waiting_for_agent" ? "Waiting for agent connection" : "Run queued";
     case "run.assigned":
-      return "Runner assigned";
+      return "Execution assigned";
     case "run.starting":
-      return "Sandbox starting";
+      return "Execution starting";
     case "run.running":
       return event.payload.source === "mcp" ? "Agent started using tools" : "Sandbox ready";
     case "agent.connected":
@@ -572,12 +572,12 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         reasoning:
           mode === "external-agent"
             ? ["Run created", "Waiting for local agent connection"]
-            : ["Run queued", "Waiting for runner assignment"],
+            : ["Run queued", "Waiting for execution assignment"],
         artifacts: [],
         bootMessages:
           mode === "external-agent"
             ? ["Run created", "Waiting for local agent connection"]
-            : ["Run created", "Waiting for runner assignment"],
+            : ["Run created", "Waiting for execution assignment"],
         activeTab: "events",
         liveSlide: 1,
         quota: result.quota ?? get().quota,

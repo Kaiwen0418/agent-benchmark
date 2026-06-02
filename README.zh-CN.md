@@ -198,7 +198,7 @@ pnpm dev:hosted
 推荐的启动组合：
 
 - 托管 Web 路径：`dev:web` + `dev:orchestrator` + `dev:hosted`
-- 内部演示路径：添加 `dev:runner`
+- 本地托管栈：添加 `dev:hosted` 和 `dev:orchestrator`
 
 ## 托管 Web PoC
 

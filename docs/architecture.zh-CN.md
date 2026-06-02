@@ -4,9 +4,9 @@
 
 ## 摘要
 
-AgentBench 现在分为云控制平面、托管 Web 基准层和传统隔离 runner 层。
+AgentBench 现在分为云控制平面和托管 Web 基准层。
 
-云层管理用户、运行、元数据、分数和回放访问。`apps/hosted-sites` 为外部代理运行提供主要基准界面。runner 仍然可用于内部演示、MCP 工具和队列执行。
+云层管理用户、运行、元数据、分数和回放访问。`apps/hosted-sites` 为外部代理运行提供基准界面，`apps/hosted-orchestrator` 负责 attempt 生命周期和套件推进。
 
 ## 高层布局
 
@@ -20,17 +20,9 @@ Cloud SaaS 层
         ↓
 托管基准层
   hosted-sites
+  hosted-orchestrator
   会话级任务应用
   遥测 + 评分回调
-        ↓
-传统 Runner 控制平面
-        ↓
-自托管 Linux Runner
-  Docker
-  Playwright
-  noVNC
-  MCP 工具
-  模拟邮件/文件系统
 ```
 
 ## 主要组件
@@ -44,17 +36,6 @@ Cloud SaaS 层
 - 运行创建
 - 排行榜视图
 - 回放和可观测性 UI
-
-### `apps/runner`
-
-自托管执行服务，负责：
-
-- 轮询或接收工作
-- 准备沙箱环境
-- 运行基准任务
-- 流式传输状态、追踪和产物
-
-这不再是托管 Web 外部代理运行的默认路径。
 
 ### `apps/hosted-sites`
 
@@ -75,11 +56,7 @@ Cloud SaaS 层
 
 ### `packages/protocol`
 
-云到 runner 通信的共享类型和模式。
-
-### `packages/mcp-tools`
-
-在基准环境中暴露给代理的工具定义和模式。
+benchmark run 和控制平面通信的共享类型与模式。
 
 ### `packages/test-cases`
 
@@ -92,7 +69,6 @@ Cloud SaaS 层
 ## 架构优先级
 
 - 托管 Web 套件编排
-- Runner 隔离
 - 确定性执行
 - 类型化契约
 - 可回放性
