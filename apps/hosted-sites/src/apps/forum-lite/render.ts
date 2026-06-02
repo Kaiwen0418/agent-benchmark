@@ -1,0 +1,109 @@
+import type { ServerResponse } from "node:http";
+import type { ForumThread } from "./types.js";
+import type { HostedSession } from "../../runtime/types.js";
+import { escapeHtml, layout, sendHtml } from "../../templates.js";
+
+export function renderForumIndex(
+  session: HostedSession,
+  response: ServerResponse,
+  publicBaseUrl: string,
+  defaultStartPathForApp: (app: string) => string,
+) {
+  const cards = session.threads
+    .map(
+      (thread) => `<article class="card">
+        <h2>${escapeHtml(thread.title)}</h2>
+        <p class="muted">Category: ${escapeHtml(thread.category)} · Posts: ${thread.posts.length}${thread.locked ? " · <span class=\"danger\">Locked</span>" : ""}</p>
+        <a href="/forum/thread/${encodeURIComponent(thread.id)}?session=${encodeURIComponent(session.token)}">Open thread</a>
+      </article>`,
+    )
+    .join("");
+
+  sendHtml(
+    response,
+    200,
+    layout({
+      title: "AgentBench Forum",
+      session,
+      body: `<section class="grid">${cards}</section>`,
+      publicBaseUrl,
+      defaultStartPathForApp,
+    }),
+  );
+}
+
+export function renderThread(
+  session: HostedSession,
+  thread: ForumThread,
+  response: ServerResponse,
+  publicBaseUrl: string,
+  defaultStartPathForApp: (app: string) => string,
+  evaluateSession: (session: HostedSession) => { status: string; score: number; summary: string },
+) {
+  const postsHtml = thread.posts
+    .map(
+      (post) => `<div style="border-bottom:1px solid var(--line);padding:12px 0;">
+        <p style="margin:0 0 4px;"><strong>${escapeHtml(post.author)}</strong></p>
+        <p style="margin:0;">${escapeHtml(post.body)}</p>
+      </div>`,
+    )
+    .join("");
+
+  const lockedBanner = thread.locked
+    ? `<div class="panel" style="background:#fff0ef;border-color:#e8b4b0;">
+        <p class="danger" style="margin:0;">This thread is locked.</p>
+      </div>`
+    : "";
+
+  const replyForm = thread.locked
+    ? ""
+    : `<section class="panel" style="margin-top:16px;">
+        <h2>Reply</h2>
+        <form method="post" action="/forum/thread/${encodeURIComponent(thread.id)}/reply?session=${encodeURIComponent(session.token)}">
+          <label>
+            Message
+            <textarea name="body" rows="4" style="display:block;width:100%;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;font-family:inherit;"></textarea>
+          </label>
+          <button type="submit" style="margin-top:12px;">Post reply</button>
+        </form>
+      </section>`;
+
+  const lockForm = thread.locked
+    ? ""
+    : `<section class="panel" style="margin-top:16px;">
+        <h2>Moderation</h2>
+        <form method="post" action="/forum/thread/${encodeURIComponent(thread.id)}/lock?session=${encodeURIComponent(session.token)}">
+          <label>
+            Lock reason
+            <input name="reason" placeholder="safety escalation" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+          </label>
+          <button type="submit" style="margin-top:12px;">Lock thread</button>
+        </form>
+      </section>`;
+
+  const score = evaluateSession(session);
+
+  sendHtml(
+    response,
+    200,
+    layout({
+      title: thread.title,
+      session,
+      body: `
+        ${lockedBanner}
+        <section class="panel">
+          <h2>${escapeHtml(thread.title)}</h2>
+          <p class="muted">Category: ${escapeHtml(thread.category)}</p>
+          <div>${postsHtml}</div>
+        </section>
+        ${replyForm}
+        ${lockForm}
+        <section class="panel" style="margin-top:16px;">
+          <h2>Evaluator preview</h2>
+          <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+        </section>`,
+      publicBaseUrl,
+      defaultStartPathForApp,
+    }),
+  );
+}

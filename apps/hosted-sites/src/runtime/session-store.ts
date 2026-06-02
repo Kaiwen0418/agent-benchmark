@@ -39,7 +39,7 @@ type SessionStoreDeps = {
   defaultGoalForSession: (app: string, taskSlug: string) => string;
   buildInitialSessionState: (app: string) => Pick<
     HostedSession,
-    "products" | "cart" | "orders" | "wikiArticles" | "wikiAnswerSubmissions"
+    "products" | "cart" | "orders" | "wikiArticles" | "wikiAnswerSubmissions" | "threads" | "moderationActions"
   >;
   clientIp: (request: IncomingMessage) => string | null;
   clientUserAgent: (request: IncomingMessage) => string | null;
@@ -184,6 +184,8 @@ export function createSessionStore(deps: SessionStoreDeps) {
       orders,
       wikiArticles: initialState.wikiArticles,
       wikiAnswerSubmissions,
+      threads: initialState.threads,
+      moderationActions: initialState.moderationActions,
       persisted: params.row.status !== "expired",
     } satisfies HostedSession;
   }
@@ -448,6 +450,8 @@ export function createSessionStore(deps: SessionStoreDeps) {
       orders: initialState.orders,
       wikiArticles: initialState.wikiArticles,
       wikiAnswerSubmissions: initialState.wikiAnswerSubmissions,
+      threads: initialState.threads,
+      moderationActions: initialState.moderationActions,
       persisted: false,
     };
 
