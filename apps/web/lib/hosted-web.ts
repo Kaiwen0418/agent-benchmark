@@ -97,7 +97,13 @@ function getHostedOrchestratorBaseUrl() {
 }
 
 function resolveHostedUrl(baseUrl: string, path: string) {
-  return new URL(path, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).toString();
+  const base = new URL(baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  const basePath = base.pathname.replace(/\/+$/, "");
+  const requestPath = path.startsWith("/") ? path : `/${path}`;
+  base.pathname = `${basePath}${requestPath}`;
+  base.search = "";
+  base.hash = "";
+  return base.toString();
 }
 
 function metadataString(metadata: Record<string, unknown>, key: string, fallback: string) {
@@ -367,10 +373,11 @@ function runnerSecretOrThrow() {
 async function fetchHostedOrchestrator<T>(path: string, init?: RequestInit) {
   const baseUrl = getHostedOrchestratorBaseUrl();
   const runnerSecret = runnerSecretOrThrow();
+  const requestUrl = resolveHostedUrl(baseUrl, path);
 
   let response: Response;
   try {
-    response = await fetch(resolveHostedUrl(baseUrl, path), {
+    response = await fetch(requestUrl, {
       ...init,
       headers: {
         "x-runner-secret": runnerSecret,
@@ -593,10 +600,11 @@ async function initializeHostedWebAttempt(params: {
 }) {
   const baseUrl = getHostedOrchestratorBaseUrl();
   const runnerSecret = runnerSecretOrThrow();
+  const requestUrl = resolveHostedUrl(baseUrl, "/api/attempts/init");
 
   let response: Response;
   try {
-    response = await fetch(resolveHostedUrl(baseUrl, "/api/attempts/init"), {
+    response = await fetch(requestUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -628,7 +636,7 @@ async function initializeHostedWebAttempt(params: {
     throw new HostedWebSessionError({
       message:
         "Hosted orchestrator is not reachable. Check HOSTED_ORCHESTRATOR_URL and the hosted-orchestrator deployment.",
-      hostedSitesUrl: baseUrl,
+      hostedSitesUrl: requestUrl,
       cause: error,
     });
   }
@@ -637,7 +645,7 @@ async function initializeHostedWebAttempt(params: {
     throw new HostedWebSessionError({
       message: `Hosted orchestrator rejected attempt initialization with HTTP ${response.status}.`,
       status: response.status >= 500 ? 502 : 400,
-      hostedSitesUrl: baseUrl,
+      hostedSitesUrl: requestUrl,
       retryable: response.status >= 500,
     });
   }

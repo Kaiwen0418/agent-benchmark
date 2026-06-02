@@ -1,6 +1,8 @@
 # 托管 Web 基准测试
 
 > [English](./hosted-web-benchmark.md) | 中文
+>
+> App 生成与评分实现指南见：[Hosted-Site App 设计与评分指南](./hosted-site-app-authoring.zh-CN.md)。
 
 ## 目的
 

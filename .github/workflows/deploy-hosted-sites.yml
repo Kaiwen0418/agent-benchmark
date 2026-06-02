@@ -120,6 +120,7 @@ jobs:
             printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml pull
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d
+            ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --force-recreate --no-deps gateway
 
             dump_deploy_logs() {
               ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml ps || true
