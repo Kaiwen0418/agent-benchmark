@@ -6,6 +6,7 @@ import type { HostedAttemptOverviewSession, HostedSession } from "./runtime/type
 import { redirect, readForm, readJson, sendJson, notFound, badRequest } from "./runtime/http.js";
 import { createAttemptsRoutes } from "./routes/attempts.js";
 import { createApiRoutes } from "./routes/api.js";
+import { createForumRoutes } from "./routes/forum.js";
 import { createRoutes } from "./routes/index.js";
 import { createShoppingRoutes } from "./routes/shopping.js";
 import { createWikiRoutes } from "./routes/wiki.js";
@@ -169,12 +170,28 @@ const wikiRoutes = createWikiRoutes({
   notFound,
 });
 
+const forumRoutes = createForumRoutes({
+  publicBaseUrl,
+  defaultStartPathForApp,
+  makeId,
+  getSession,
+  persistSessionSnapshot,
+  recordEvent,
+  forwardRunEvent,
+  completeSession: completeSessionViaOrchestrator,
+  evaluateSession,
+  readForm,
+  badRequest,
+  notFound,
+});
+
 const routes = createRoutes({
   handlers: [
     apiRoutes.handle,
     attemptsRoutes.handle,
     shoppingRoutes.handle,
     wikiRoutes.handle,
+    forumRoutes.handle,
   ],
   notFound,
 });

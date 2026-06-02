@@ -1,3 +1,5 @@
+import { buildForumFinalState } from "../apps/forum-lite/final-state.js";
+import { forumSeedThreads, forumSeedModerations, getForumDefaultGoal, getForumStartPath } from "../apps/forum-lite/seed.js";
 import { buildShoppingFinalState } from "../apps/shopping-lite/final-state.js";
 import { shoppingSeedProducts, getShoppingDefaultGoal, getShoppingStartPath } from "../apps/shopping-lite/seed.js";
 import { buildWikiFinalState } from "../apps/wiki-lite/final-state.js";
@@ -6,7 +8,7 @@ import type { HostedSession } from "./types.js";
 
 type HostedAppSessionState = Pick<
   HostedSession,
-  "products" | "cart" | "orders" | "wikiArticles" | "wikiAnswerSubmissions"
+  "products" | "cart" | "orders" | "wikiArticles" | "wikiAnswerSubmissions" | "threads" | "moderationActions"
 >;
 
 export type HostedAppDefinition = {
@@ -27,6 +29,8 @@ const shoppingLiteApp: HostedAppDefinition = {
     orders: [],
     wikiArticles: wikiSeedArticles.map((article) => ({ ...article })),
     wikiAnswerSubmissions: [],
+    threads: forumSeedThreads.map((thread) => ({ ...thread })),
+    moderationActions: [...forumSeedModerations],
   }),
   buildFinalState: buildShoppingFinalState,
 };
@@ -41,13 +45,32 @@ const wikiLiteApp: HostedAppDefinition = {
     orders: [],
     wikiArticles: wikiSeedArticles.map((article) => ({ ...article })),
     wikiAnswerSubmissions: [],
+    threads: forumSeedThreads.map((thread) => ({ ...thread })),
+    moderationActions: [...forumSeedModerations],
   }),
   buildFinalState: buildWikiFinalState,
+};
+
+const forumLiteApp: HostedAppDefinition = {
+  id: "forum-lite",
+  getDefaultStartPath: getForumStartPath,
+  getDefaultGoal: () => getForumDefaultGoal(),
+  buildInitialSessionState: () => ({
+    products: shoppingSeedProducts.map((product) => ({ ...product })),
+    cart: [],
+    orders: [],
+    wikiArticles: wikiSeedArticles.map((article) => ({ ...article })),
+    wikiAnswerSubmissions: [],
+    threads: forumSeedThreads.map((thread) => ({ ...thread })),
+    moderationActions: [...forumSeedModerations],
+  }),
+  buildFinalState: buildForumFinalState,
 };
 
 const hostedApps = new Map<string, HostedAppDefinition>([
   [shoppingLiteApp.id, shoppingLiteApp],
   [wikiLiteApp.id, wikiLiteApp],
+  [forumLiteApp.id, forumLiteApp],
 ]);
 
 function getFallbackApp() {

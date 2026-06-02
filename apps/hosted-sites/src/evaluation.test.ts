@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { evaluateForum, type ForumEvaluationSession } from "./apps/forum-lite/evaluate.js";
 import { evaluateShopping, type ShoppingEvaluationSession } from "./apps/shopping-lite/evaluate.js";
 import { evaluateWiki, type WikiEvaluationSession } from "./apps/wiki-lite/evaluate.js";
 
@@ -89,4 +90,110 @@ test("evaluateWiki fails when article was not viewed even if answer matches", ()
 
   assert.equal(result.status, "failed");
   assert.match(result.summary, /requires opening the release-history article/i);
+});
+
+function makeForumSession(overrides?: Partial<ForumEvaluationSession>): ForumEvaluationSession {
+  return {
+    app: "forum-lite",
+    taskSlug: "forum-battery-moderation",
+    threads: [
+      {
+        id: "thr-battery",
+        title: "Battery swelling issue after firmware update",
+        category: "safety",
+        posts: [
+          { id: "p-battery-1", author: "user123", body: "My device started swelling after the latest firmware update." },
+          {
+            id: "p-battery-2",
+            author: "tech_support",
+            body: "Official recall link: https://support.example.com/recall/battery-2026",
+          },
+        ],
+      },
+    ],
+    moderationActions: [],
+    ...overrides,
+  };
+}
+
+test("evaluateForum passes when agent replies with recall link and locks thread with correct reason", () => {
+  const result = evaluateForum(
+    makeForumSession({
+      threads: [
+        {
+          id: "thr-battery",
+          title: "Battery swelling issue after firmware update",
+          category: "safety",
+          locked: true,
+          posts: [
+            { id: "p-battery-1", author: "user123", body: "My device started swelling after the latest firmware update." },
+            {
+              id: "p-battery-2",
+              author: "tech_support",
+              body: "Official recall link: https://support.example.com/recall/battery-2026",
+            },
+            { id: "p-agent", author: "agent", body: "Here is the recall link: https://support.example.com/recall/battery-2026" },
+          ],
+        },
+      ],
+      moderationActions: [{ id: "mod_1", threadId: "thr-battery", action: "lock", reason: "safety escalation" }],
+    }),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateForum fails when thread is not locked", () => {
+  const result = evaluateForum(
+    makeForumSession({
+      threads: [
+        {
+          id: "thr-battery",
+          title: "Battery swelling issue after firmware update",
+          category: "safety",
+          posts: [
+            { id: "p-battery-1", author: "user123", body: "My device started swelling after the latest firmware update." },
+            {
+              id: "p-battery-2",
+              author: "tech_support",
+              body: "Official recall link: https://support.example.com/recall/battery-2026",
+            },
+            { id: "p-agent", author: "agent", body: "Here is the recall link: https://support.example.com/recall/battery-2026" },
+          ],
+        },
+      ],
+    }),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateForum fails when agent reply is missing recall link", () => {
+  const result = evaluateForum(
+    makeForumSession({
+      threads: [
+        {
+          id: "thr-battery",
+          title: "Battery swelling issue after firmware update",
+          category: "safety",
+          locked: true,
+          posts: [
+            { id: "p-battery-1", author: "user123", body: "My device started swelling after the latest firmware update." },
+            {
+              id: "p-battery-2",
+              author: "tech_support",
+              body: "Official recall link: https://support.example.com/recall/battery-2026",
+            },
+            { id: "p-agent", author: "agent", body: "I don't know the link." },
+          ],
+        },
+      ],
+      moderationActions: [{ id: "mod_1", threadId: "thr-battery", action: "lock", reason: "safety escalation" }],
+    }),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
 });

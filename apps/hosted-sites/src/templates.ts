@@ -156,6 +156,11 @@ export function layout(params: {
         <a href="/wiki?session=${encodeURIComponent(params.session.token)}">Search</a>
         <a href="/wiki/article/agentbench-release-history?session=${encodeURIComponent(params.session.token)}">Release History</a>
         `
+            : params.session.app === "forum-lite"
+            ? `
+        <a href="/forum?session=${encodeURIComponent(params.session.token)}">Threads</a>
+        <a href="/forum/thread/thr-battery?session=${encodeURIComponent(params.session.token)}">Battery Thread</a>
+        `
             : `
         <a href="/shopping?session=${encodeURIComponent(params.session.token)}">Products</a>
         <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>
