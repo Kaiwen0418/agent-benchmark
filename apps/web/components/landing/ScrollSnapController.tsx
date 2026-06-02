@@ -2,11 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
-const SCROLL_DURATION = 100;
-
-function easeInOut(t: number) {
-  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-}
+const SNAP_IDLE_MS = 140;
+const SNAP_DISTANCE_THRESHOLD = 120;
 
 function getSnapSections(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>("section[id], footer")).filter(
@@ -15,43 +12,16 @@ function getSnapSections(): HTMLElement[] {
 }
 
 export function ScrollSnapController() {
-  const lockedRef = useRef(false);
-  const rafRef = useRef<number | null>(null);
+  const snapTimeoutRef = useRef<number | null>(null);
+  const suppressSnapRef = useRef(false);
+  const lastDirectionRef = useRef<1 | -1>(1);
 
   useEffect(() => {
-    const animateScrollTo = (targetY: number) => {
-      if (lockedRef.current) return;
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-
-      const startY = window.scrollY;
-      const distance = targetY - startY;
-      if (Math.abs(distance) < 4) return;
-
-      lockedRef.current = true;
-      const start = performance.now();
-
-      const step = (now: number) => {
-        const elapsed = now - start;
-        const progress = Math.min(elapsed / SCROLL_DURATION, 1);
-        window.scrollTo(0, startY + distance * easeInOut(progress));
-        if (progress < 1) {
-          rafRef.current = requestAnimationFrame(step);
-        } else {
-          lockedRef.current = false;
-          rafRef.current = null;
-        }
-      };
-
-      rafRef.current = requestAnimationFrame(step);
-    };
-
-    const getCurrentIndex = (sections: HTMLElement[]) => {
-      const scrollMid = window.scrollY + window.innerHeight / 2;
-      let idx = 0;
-      for (let i = 0; i < sections.length; i++) {
-        if (sections[i].offsetTop <= scrollMid) idx = i;
+    const clearSnapTimeout = () => {
+      if (snapTimeoutRef.current !== null) {
+        window.clearTimeout(snapTimeoutRef.current);
+        snapTimeoutRef.current = null;
       }
-      return idx;
     };
 
     const isInsideScrollable = (target: EventTarget | null, deltaY: number): boolean => {
@@ -68,25 +38,80 @@ export function ScrollSnapController() {
       return false;
     };
 
-    const handleWheel = (e: WheelEvent) => {
-      if (isInsideScrollable(e.target, e.deltaY)) return;
+    const getCurrentIndex = (sections: HTMLElement[]) => {
+      const scrollMid = window.scrollY + window.innerHeight / 2;
+      let idx = 0;
+      for (let i = 0; i < sections.length; i++) {
+        if (sections[i].offsetTop <= scrollMid) idx = i;
+      }
+      return idx;
+    };
+
+    const snapToSectionIfNeeded = () => {
+      if (suppressSnapRef.current) {
+        suppressSnapRef.current = false;
+        return;
+      }
 
       const sections = getSnapSections();
       if (!sections.length) return;
 
-      if (lockedRef.current) {
-        e.preventDefault();
+      const currentIdx = getCurrentIndex(sections);
+      const currentSection = sections[currentIdx];
+      const sectionTop = currentSection.offsetTop;
+      const sectionBottom = sectionTop + currentSection.offsetHeight;
+      const viewportTop = window.scrollY;
+      const viewportBottom = viewportTop + window.innerHeight;
+      const direction = lastDirectionRef.current;
+
+      let targetY: number | null = null;
+
+      if (currentSection.offsetHeight <= window.innerHeight + SNAP_DISTANCE_THRESHOLD) {
+        const distanceToTop = Math.abs(viewportTop - sectionTop);
+        if (distanceToTop <= SNAP_DISTANCE_THRESHOLD) {
+          targetY = sectionTop;
+        } else {
+          const nextSection = sections[currentIdx + 1];
+          if (nextSection) {
+            const distanceToNext = Math.abs(viewportTop - nextSection.offsetTop);
+            if (distanceToNext <= SNAP_DISTANCE_THRESHOLD) {
+              targetY = nextSection.offsetTop;
+            }
+          }
+        }
+      } else if (direction > 0) {
+        const nextSection = sections[currentIdx + 1];
+        if (nextSection && viewportBottom >= sectionBottom - SNAP_DISTANCE_THRESHOLD) {
+          targetY = nextSection.offsetTop;
+        }
+      } else if (viewportTop <= sectionTop + SNAP_DISTANCE_THRESHOLD) {
+        targetY = sectionTop;
+      }
+
+      if (targetY === null || Math.abs(window.scrollY - targetY) < 4) {
         return;
       }
 
-      const direction = e.deltaY > 0 ? 1 : -1;
-      const currentIdx = getCurrentIndex(sections);
-      const newIndex = Math.max(0, Math.min(sections.length - 1, currentIdx + direction));
+      window.scrollTo({
+        top: targetY,
+        behavior: "smooth",
+      });
+    };
 
-      if (newIndex === currentIdx) return;
+    const scheduleSnap = () => {
+      clearSnapTimeout();
+      snapTimeoutRef.current = window.setTimeout(snapToSectionIfNeeded, SNAP_IDLE_MS);
+    };
 
-      e.preventDefault();
-      animateScrollTo(sections[newIndex].offsetTop);
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      lastDirectionRef.current = e.deltaY > 0 ? 1 : -1;
+      suppressSnapRef.current = isInsideScrollable(e.target, e.deltaY);
+      scheduleSnap();
+    };
+
+    const handleScroll = () => {
+      scheduleSnap();
     };
 
     const handleAnchorClick = (e: MouseEvent) => {
@@ -97,20 +122,22 @@ export function ScrollSnapController() {
       const target = document.querySelector<HTMLElement>(hash);
       if (!target) return;
       e.preventDefault();
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        lockedRef.current = false;
-      }
-      animateScrollTo(target.offsetTop);
+      clearSnapTimeout();
+      window.scrollTo({
+        top: target.offsetTop,
+        behavior: "smooth",
+      });
     };
 
-    window.addEventListener("wheel", handleWheel, { passive: false });
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    window.addEventListener("scroll", handleScroll, { passive: true });
     document.addEventListener("click", handleAnchorClick);
 
     return () => {
+      clearSnapTimeout();
       window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("scroll", handleScroll);
       document.removeEventListener("click", handleAnchorClick);
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
