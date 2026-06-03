@@ -30,8 +30,10 @@
 - 运行状态从 `waiting_for_agent` 开始
 - UI 分配一个带有一个或多个有序托管会话的尝试
 - 连接页面和 JSON 配置暴露一个尝试级托管套件 URL 以及每个会话的详细信息
-- 默认基准案例是一个两步托管套件：
+- 默认基准案例是一个四步托管套件：
   - `shopping-lite`
+  - `forum-lite`
+  - `repo-lite`
   - `wiki-lite`
 - 对于托管 Web 运行，代理使用托管套件 URL 作为主要任务界面
 - hosted-sites 写入每个会话的结果和汇总的尝试分数

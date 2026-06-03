@@ -51,7 +51,7 @@ values
     '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
     'shopping-constrained-checkout',
     'Hosted Web Suite',
-    'Run a two-step hosted suite across shopping-lite and wiki-lite.',
+    'Run a four-step hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite.',
     'browser',
     'easy',
     'hosted-web',
@@ -71,6 +71,30 @@ values
           "required": true
         },
         {
+          "app": "forum-lite",
+          "taskSlug": "forum-battery-moderation",
+          "title": "Forum Moderation",
+          "goal": "Find the thread about battery swelling, reply with the official recall link from the policy post, then lock the thread with reason ''safety escalation''.",
+          "startPath": "/forum",
+          "taskVersion": "v1",
+          "seedVersion": "forum-lite-v1",
+          "sequenceIndex": 1,
+          "weight": 1,
+          "required": true
+        },
+        {
+          "app": "repo-lite",
+          "taskSlug": "repo-readme-fix",
+          "title": "Repository README Fix",
+          "goal": "Fix the README install command to use pnpm, then open a merge request titled \"Fix install instructions\" targeting main.",
+          "startPath": "/repo",
+          "taskVersion": "v1",
+          "seedVersion": "repo-lite-v1",
+          "sequenceIndex": 2,
+          "weight": 1,
+          "required": true
+        },
+        {
           "app": "wiki-lite",
           "taskSlug": "wiki-release-answer",
           "title": "Wiki Release Lookup",
@@ -78,7 +102,7 @@ values
           "startPath": "/wiki",
           "taskVersion": "v1",
           "seedVersion": "wiki-lite-v1",
-          "sequenceIndex": 1,
+          "sequenceIndex": 3,
           "weight": 1,
           "required": true
         }

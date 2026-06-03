@@ -202,9 +202,11 @@ Recommended startup sets:
 
 ## Hosted Web PoC
 
-The current hosted-web demo benchmark is a two-step suite:
+The current hosted-web demo benchmark is a four-step suite:
 
 - `shopping-lite`: constrained checkout
+- `forum-lite`: reply to a safety thread and lock it with the required moderation reason
+- `repo-lite`: update README install instructions and open a merge request
 - `wiki-lite`: retrieve and submit the release-history date
 
 The suite is stored as one benchmark case with ordered hosted sessions and weighted required-session aggregation.
@@ -247,7 +249,9 @@ curl -X POST http://localhost:3003/api/sessions \
 Open the returned `startUrl` or use `/api/runs/:runId/connect` from the web app to allocate a real attempt. For the default benchmark case, the agent should:
 
 1. buy exactly one USB-C charger at or below `$30` with standard shipping and no restricted products
-2. use the hosted wiki to find when `wiki-lite` followed the hosted-web suite alpha and submit the exact date
+2. reply to the battery swelling forum thread with the official recall link and lock it with reason `safety escalation`
+3. update the repo README install command to `pnpm install` and open a merge request titled `Fix install instructions` targeting `main`
+4. use the hosted wiki to find when `wiki-lite` followed the hosted-web suite alpha and submit the exact date
 
 ## Docker Gateway Bundle (hosted-sites + gateway)
 

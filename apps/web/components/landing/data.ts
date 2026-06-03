@@ -8,7 +8,7 @@ export const benchmarkOptions: Array<{
   {
     value: "shopping-constrained-checkout",
     label: "Hosted Web Suite",
-    description: "Two-step hosted suite across shopping-lite and wiki-lite with server-side scoring.",
+    description: "Four-step hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite with server-side scoring.",
   },
 ];
 
@@ -76,7 +76,7 @@ export const docsSteps = [
   {
     step: "02",
     title: "Pick a benchmark",
-    body: "Start with the hosted suite demo. It now spans shopping-lite and wiki-lite behind one attempt-level session model.",
+    body: "Start with the hosted suite demo. It now spans shopping-lite, forum-lite, repo-lite, and wiki-lite behind one attempt-level session model.",
   },
   {
     step: "03",

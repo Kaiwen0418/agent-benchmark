@@ -202,9 +202,11 @@ pnpm dev:hosted
 
 ## 托管 Web PoC
 
-当前的托管 Web 演示基准是一个两步套件：
+当前的托管 Web 演示基准是一个四步套件：
 
 - `shopping-lite`：受限结账
+- `forum-lite`：回复安全线程，并使用指定管理原因锁定线程
+- `repo-lite`：更新 README 安装命令并创建合并请求
 - `wiki-lite`：检索并提交发布历史日期
 
 该套件作为一个基准案例存储，带有有序的托管会话和加权必需会话汇总。
@@ -247,7 +249,9 @@ curl -X POST http://localhost:3003/api/sessions \
 打开返回的 `startUrl` 或使用 Web 应用的 `/api/runs/:runId/connect` 来分配一个真实的尝试。对于默认基准案例，代理应该：
 
 1. 以标准运费购买一个价格不超过 `$30` 的 USB-C 充电器，且不包含受限产品
-2. 使用托管 wiki 查找 `wiki-lite` 跟随托管 Web 套件 alpha 的日期，并提交确切日期
+2. 使用官方召回链接回复电池膨胀论坛线程，并用 `safety escalation` 原因锁定该线程
+3. 将 repo README 安装命令更新为 `pnpm install`，并创建标题为 `Fix install instructions`、目标分支为 `main` 的合并请求
+4. 使用托管 wiki 查找 `wiki-lite` 跟随托管 Web 套件 alpha 的日期，并提交确切日期
 
 ## Docker 网关套件（hosted-sites + gateway）
 

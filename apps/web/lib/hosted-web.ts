@@ -129,6 +129,19 @@ function tokenFromStartUrl(startUrl: string) {
   }
 }
 
+function defaultHostedStartPathForApp(app: string) {
+  if (app === "wiki-lite") {
+    return "/wiki";
+  }
+  if (app === "forum-lite") {
+    return "/forum";
+  }
+  if (app === "repo-lite") {
+    return "/repo";
+  }
+  return "/shopping";
+}
+
 function getHostedWebSuiteMetadata(benchmarkCase: BenchmarkCase): HostedWebSuiteMetadata {
   const metadata = benchmarkCase.metadata;
   const parsed = hostedWebSuiteMetadataSchema.safeParse(metadata);
@@ -695,7 +708,7 @@ export async function getOrCreateHostedWebAttemptConnection(params: {
         required:
           attempt.sessionDefinitions.find((definition) => definition.sequenceIndex === session.sequenceIndex)
             ?.required ?? true,
-        startUrl: `${getHostedSitesBaseUrl()}${session.startPath ?? (session.app === "wiki-lite" ? "/wiki" : "/shopping")}?session=${encodeURIComponent(session.token)}`,
+        startUrl: `${getHostedSitesBaseUrl()}${session.startPath ?? defaultHostedStartPathForApp(session.app)}?session=${encodeURIComponent(session.token)}`,
         goal: session.goal,
         title: session.title,
         status: session.status,
