@@ -36,6 +36,9 @@ jobs:
       - name: Test hosted-sites
         run: pnpm --filter hosted-sites test
 
+      - name: Test scoring
+        run: pnpm --filter @agentbench/scoring test
+
       - name: Build web
         run: pnpm --filter web build
 

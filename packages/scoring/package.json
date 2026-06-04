@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test dist/*.test.js"
+    "test": "pnpm run build && node --test dist/*.test.js"
   },
   "dependencies": {
     "zod": "^3.24.1"
