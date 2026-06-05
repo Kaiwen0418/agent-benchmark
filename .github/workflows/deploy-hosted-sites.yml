@@ -90,6 +90,7 @@ jobs:
             OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
             HOSTED_IMAGE="ghcr.io/${OWNER}/agentbench-hosted-sites"
             ORCHESTRATOR_IMAGE="ghcr.io/${OWNER}/agentbench-hosted-orchestrator"
+            GATEWAY_IMAGE="nginx:1.27-alpine"
             case "$(uname -m)" in
               x86_64|amd64)
                 GATEWAY_PLATFORM="linux/amd64"
@@ -123,20 +124,22 @@ jobs:
             NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
             SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
             GATEWAY_HTTP_PORT=${GATEWAY_HTTP_PORT}
+            GATEWAY_IMAGE=${GATEWAY_IMAGE}
             GATEWAY_PLATFORM=${GATEWAY_PLATFORM}
             EOF
 
-            test -f infra/caddy/Caddyfile.hosted-sites
+            test -f infra/nginx/hosted-sites.conf
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml config >/tmp/agentbench-compose.yml
-            grep -F "infra/caddy/Caddyfile.hosted-sites" /tmp/agentbench-compose.yml >/dev/null
+            grep -F "infra/nginx/hosted-sites.conf" /tmp/agentbench-compose.yml >/dev/null
             grep -F "platform: ${GATEWAY_PLATFORM}" /tmp/agentbench-compose.yml >/dev/null
 
             dump_deploy_logs() {
               echo "---- host architecture ----"
               uname -a || true
+              echo "gateway image=${GATEWAY_IMAGE}"
               echo "gateway platform=${GATEWAY_PLATFORM}"
-              echo "---- caddy image architecture ----"
-              docker image inspect caddy:2 --format '{{.Os}}/{{.Architecture}}' 2>/dev/null || true
+              echo "---- gateway image architecture ----"
+              docker image inspect "${GATEWAY_IMAGE}" --format '{{.Os}}/{{.Architecture}}' 2>/dev/null || true
               echo "---- .env.server keys ----"
               sed -n 's/^\([^=]*\)=.*/\1=<redacted>/p' .env.server 2>/dev/null || true
               echo "---- docker compose ps ----"
@@ -155,7 +158,9 @@ jobs:
             trap 'deploy_status=$?; if [ "$deploy_status" -ne 0 ]; then dump_deploy_logs; fi' EXIT
 
             printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
-            docker pull --platform "${GATEWAY_PLATFORM}" caddy:2
+            docker image rm -f "${GATEWAY_IMAGE}" || true
+            docker pull --platform "${GATEWAY_PLATFORM}" "${GATEWAY_IMAGE}"
+            docker run --rm --platform "${GATEWAY_PLATFORM}" --entrypoint nginx "${GATEWAY_IMAGE}" -v
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml pull
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d
             ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --force-recreate --no-deps gateway
@@ -166,7 +171,11 @@ jobs:
               2>/dev/null || true
 
             smoke_check() {
-              curl -fsS "http://localhost:${GATEWAY_HTTP_PORT}/health" > /dev/null
+              docker run --rm --network host "${HOSTED_IMAGE}:${IMAGE_TAG}" node -e "fetch('http://localhost:${GATEWAY_HTTP_PORT}/health').then((response) => process.exit(response.ok ? 0 : 1)).catch((error) => { console.error(error); process.exit(1); })"
+            }
+
+            internal_smoke_check() {
+              docker exec agentbench-hosted-sites-hosted-sites-1 node -e "fetch('http://gateway/health').then((response) => process.exit(response.ok ? 0 : 1)).catch((error) => { console.error(error); process.exit(1); })"
             }
 
             gateway_running() {
@@ -174,7 +183,7 @@ jobs:
             }
 
             for attempt in $(seq 1 30); do
-              if smoke_check; then
+              if internal_smoke_check && smoke_check; then
                 exit 0
               fi
               echo "Smoke check failed; retrying (${attempt}/30)."

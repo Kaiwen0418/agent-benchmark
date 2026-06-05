@@ -87,7 +87,7 @@ agentbench/
 │  └─ shared/
 ├─ infra/
 │  ├─ docker/
-│  ├─ caddy/
+│  ├─ nginx/
 │  └─ scripts/
 ├─ supabase/
 │  ├─ migrations/
@@ -260,7 +260,7 @@ This is the default local runtime path.
 Files:
 
 - [docker-compose.yml](/Users/blueberryncherry/Proj/agent-benchmark/docker-compose.yml)
-- [Caddyfile.hosted-sites](/Users/blueberryncherry/Proj/agent-benchmark/infra/caddy/Caddyfile.hosted-sites)
+- [hosted-sites.conf](/Users/blueberryncherry/Proj/agent-benchmark/infra/nginx/hosted-sites.conf)
 - [`.env.docker.example`](/Users/blueberryncherry/Proj/agent-benchmark/.env.docker.example)
 
 Prepare env:
