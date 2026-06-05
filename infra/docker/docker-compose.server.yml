@@ -32,6 +32,7 @@ services:
 
   gateway:
     image: caddy:2
+    platform: ${GATEWAY_PLATFORM:-linux/amd64}
     ports:
       - "${GATEWAY_HTTP_PORT:-8080}:80"
     volumes:
