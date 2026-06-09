@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
+import { hostname } from "node:os";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { HostedAttemptOverviewSession, HostedSession } from "./runtime/types.js";
 import { redirect, readForm, readJson, sendJson, notFound, badRequest } from "./runtime/http.js";
@@ -15,6 +16,7 @@ import {
   evaluateSession,
 } from "./runtime/app-registry.js";
 import { createOrchestratorClient } from "./runtime/orchestrator-client.js";
+import { createRedisSessionCache } from "./runtime/session-cache.js";
 import { createSessionStore } from "./runtime/session-store.js";
 import { createTelemetryRuntime } from "./runtime/telemetry.js";
 
@@ -25,9 +27,18 @@ const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:300
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const instanceId = process.env.HOSTED_SITES_INSTANCE_ID ?? `${hostname()}:${process.pid}`;
+const redisUrl = process.env.HOSTED_SESSION_REDIS_URL ?? process.env.REDIS_URL;
+const sessionRedisTtlMs = Number(process.env.HOSTED_SESSION_REDIS_TTL_MS ?? 1000 * 60 * 60 * 6);
 
 const sessions = new Map<string, HostedSession>();
 let supabaseAdmin: SupabaseClient | null | undefined;
+const sessionCache = redisUrl
+  ? createRedisSessionCache({
+      url: redisUrl,
+      defaultTtlMs: Number.isFinite(sessionRedisTtlMs) && sessionRedisTtlMs > 0 ? sessionRedisTtlMs : 1000 * 60 * 60 * 6,
+    })
+  : null;
 
 function now() {
   return new Date().toISOString();
@@ -82,15 +93,9 @@ const orchestratorClient = createOrchestratorClient({
   buildFinalState,
 });
 
-const telemetryRuntime = createTelemetryRuntime({
-  now,
-  agentbenchWebUrl,
-  runnerSharedSecret,
-  getSupabaseAdmin,
-});
-
 const sessionStore = createSessionStore({
   sessions,
+  sessionCache,
   publicBaseUrl,
   now,
   makeId,
@@ -105,7 +110,14 @@ const sessionStore = createSessionStore({
   onSessionExpired: orchestratorClient.timeoutAttempt,
 });
 
-const { createHostedSession, getSession, persistSessionSnapshot } = sessionStore;
+const { createHostedSession, getSession, getSessionByToken, persistSessionSnapshot } = sessionStore;
+const telemetryRuntime = createTelemetryRuntime({
+  now,
+  agentbenchWebUrl,
+  runnerSharedSecret,
+  getSupabaseAdmin,
+  persistSessionSnapshot,
+});
 const { recordEvent, forwardRunEvent, telemetryRunEventType } = telemetryRuntime;
 const {
   completeSession: completeSessionViaOrchestrator,
@@ -126,7 +138,7 @@ const apiRoutes = createApiRoutes({
   publicBaseUrl,
   createHostedSession,
   getSession,
-  getLiveSessionByToken: (token) => sessions.get(token),
+  getSessionByToken,
   recordEvent,
   forwardRunEvent,
   telemetryRunEventType,
@@ -167,7 +179,13 @@ const server = createServer(async (request, response) => {
 
   try {
     if (request.method === "GET" && url.pathname === "/health") {
-      sendJson(response, 200, { ok: true });
+      sendJson(response, 200, {
+        ok: true,
+        service: "hosted-sites",
+        instanceId,
+        pid: process.pid,
+        sessionCache: sessionCache ? "redis" : "memory",
+      });
       return;
     }
 
@@ -193,5 +211,5 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, () => {
-  console.log(`[hosted-sites] listening on ${publicBaseUrl}`);
+  console.log(`[hosted-sites] listening on ${publicBaseUrl} (${instanceId})`);
 });

@@ -275,6 +275,20 @@ Start:
 docker-compose up -d --build
 ```
 
+Start multiple hosted-sites replicas for horizontal-scaling practice:
+
+```bash
+docker-compose up -d --build --scale hosted-sites=4
+```
+
+Check which replica served a request:
+
+```bash
+curl http://localhost:8080/health
+```
+
+The default Docker bundle includes Redis and sets `HOSTED_SESSION_REDIS_URL=redis://redis:6379`, so hosted-sites replicas share runtime session state without depending on Supabase reads.
+
 Stop:
 
 ```bash

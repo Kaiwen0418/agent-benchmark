@@ -9,7 +9,7 @@
 - Docker
 - pnpm workspace
 - Turborepo
-- Caddy gateway
+- Nginx gateway
 - hosted-web benchmark apps
 
 ## Principles
@@ -146,7 +146,7 @@ Avoid:
 
 during the MVP stage.
 
-The hosted server deploy uses `apps/hosted-sites`, `apps/hosted-orchestrator`, and a Caddy `gateway`. Caddyfile changes require gateway reload or recreation; the deploy workflow should recreate gateway after `docker compose up -d`.
+The hosted server deploy uses `apps/hosted-sites`, `apps/hosted-orchestrator`, and an Nginx `gateway`. Nginx config changes require gateway reload or recreation; the deploy workflow should recreate gateway after `docker compose up -d`.
 
 ### 9. Observability
 

@@ -25,7 +25,7 @@ type ApiRoutesDeps = {
     metadata?: Record<string, unknown>;
   }) => Promise<HostedSession>;
   getSession: (url: URL, request: IncomingMessage) => Promise<HostedSession | null>;
-  getLiveSessionByToken: (token: string) => HostedSession | undefined;
+  getSessionByToken: (token: string, request: IncomingMessage) => Promise<HostedSession | null>;
   recordEvent: (session: HostedSession, payload: Record<string, unknown>) => Promise<void>;
   forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
   telemetryRunEventType: (type: string) => string;
@@ -144,7 +144,7 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
     const scoreMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/score$/);
     if (request.method === "GET" && scoreMatch) {
       const token = decodeURIComponent(scoreMatch[1]);
-      const session = deps.getLiveSessionByToken(token);
+      const session = await deps.getSessionByToken(token, request);
       if (!session) {
         deps.notFound(response);
         return true;
@@ -156,7 +156,7 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
     const completeMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/complete$/);
     if (request.method === "POST" && completeMatch) {
       const token = decodeURIComponent(completeMatch[1]);
-      const session = deps.getLiveSessionByToken(token);
+      const session = await deps.getSessionByToken(token, request);
       if (!session) {
         deps.notFound(response);
         return true;

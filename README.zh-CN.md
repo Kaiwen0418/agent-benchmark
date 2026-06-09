@@ -87,7 +87,7 @@ agentbench/
 │  └─ shared/
 ├─ infra/
 │  ├─ docker/
-│  ├─ caddy/
+│  ├─ nginx/
 │  └─ scripts/
 ├─ supabase/
 │  ├─ migrations/
@@ -260,7 +260,7 @@ curl -X POST http://localhost:3003/api/sessions \
 文件：
 
 - [docker-compose.yml](/Users/blueberryncherry/Proj/agent-benchmark/docker-compose.yml)
-- [Caddyfile.hosted-sites](/Users/blueberryncherry/Proj/agent-benchmark/infra/caddy/Caddyfile.hosted-sites)
+- [hosted-sites.conf](/Users/blueberryncherry/Proj/agent-benchmark/infra/nginx/hosted-sites.conf)
 - [`.env.docker.example`](/Users/blueberryncherry/Proj/agent-benchmark/.env.docker.example)
 
 准备环境：

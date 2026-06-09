@@ -27,21 +27,23 @@ services:
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      HOSTED_SESSION_REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
     restart: unless-stopped
 
   gateway:
-    image: caddy:2
+    image: nginx:1.27-alpine
     ports:
       - "${GATEWAY_HTTP_PORT:-8080}:80"
     volumes:
-      - ./infra/caddy/Caddyfile.hosted-sites:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
+      - ./infra/nginx/hosted-sites.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - hosted-orchestrator
       - hosted-sites
+      - redis
     restart: unless-stopped
-
-volumes:
-  caddy-data:
-  caddy-config:

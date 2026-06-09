@@ -123,6 +123,9 @@ jobs:
             HOSTED_ORCHESTRATOR_PUBLIC_URL=${HOSTED_ORCHESTRATOR_PUBLIC_URL}
             NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
             SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+            HOSTED_SESSION_REDIS_URL=redis://redis:6379
+            HOSTED_SESSION_REDIS_TTL_MS=21600000
+            REDIS_IMAGE=redis:7-alpine
             GATEWAY_HTTP_PORT=${GATEWAY_HTTP_PORT}
             GATEWAY_IMAGE=${GATEWAY_IMAGE}
             GATEWAY_PLATFORM=${GATEWAY_PLATFORM}
@@ -151,7 +154,7 @@ jobs:
               echo "---- gateway inspect ports ----"
               docker inspect agentbench-hosted-sites-gateway-1 --format '{{json .NetworkSettings.Ports}}' 2>/dev/null || true
               echo "---- compose logs ----"
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml logs --tail=160 gateway hosted-sites hosted-orchestrator || true
+              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml logs --tail=160 gateway hosted-sites hosted-orchestrator redis || true
             }
 
             deploy_status=0
@@ -171,11 +174,11 @@ jobs:
               2>/dev/null || true
 
             smoke_check() {
-              docker run --rm --network host "${HOSTED_IMAGE}:${IMAGE_TAG}" node -e "fetch('http://localhost:${GATEWAY_HTTP_PORT}/health').then((response) => process.exit(response.ok ? 0 : 1)).catch((error) => { console.error(error); process.exit(1); })"
+              docker run --rm --network host "${HOSTED_IMAGE}:${IMAGE_TAG}" node -e "fetch('http://localhost:${GATEWAY_HTTP_PORT}/health').then(async (response) => { if (!response.ok) process.exit(1); const body = await response.json(); process.exit(body.sessionCache === 'redis' ? 0 : 1); }).catch((error) => { console.error(error); process.exit(1); })"
             }
 
             internal_smoke_check() {
-              docker exec agentbench-hosted-sites-hosted-sites-1 node -e "fetch('http://gateway/health').then((response) => process.exit(response.ok ? 0 : 1)).catch((error) => { console.error(error); process.exit(1); })"
+              docker exec agentbench-hosted-sites-hosted-sites-1 node -e "fetch('http://gateway/health').then(async (response) => { if (!response.ok) process.exit(1); const body = await response.json(); process.exit(body.sessionCache === 'redis' ? 0 : 1); }).catch((error) => { console.error(error); process.exit(1); })"
             }
 
             gateway_running() {

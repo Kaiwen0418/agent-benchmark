@@ -28,6 +28,14 @@ services:
       HOSTED_SESSION_SWEEP_INTERVAL_MS: ${HOSTED_SESSION_SWEEP_INTERVAL_MS:-60000}
       HOSTED_SESSION_TERMINAL_RETENTION_MS: ${HOSTED_SESSION_TERMINAL_RETENTION_MS:-1800000}
       HOSTED_ACCESS_LOG_RETENTION_MS: ${HOSTED_ACCESS_LOG_RETENTION_MS:-1209600000}
+      HOSTED_SESSION_REDIS_URL: ${HOSTED_SESSION_REDIS_URL:-redis://redis:6379}
+      HOSTED_SESSION_REDIS_TTL_MS: ${HOSTED_SESSION_REDIS_TTL_MS:-21600000}
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     restart: unless-stopped
 
   gateway:
@@ -40,4 +48,5 @@ services:
     depends_on:
       - hosted-orchestrator
       - hosted-sites
+      - redis
     restart: unless-stopped

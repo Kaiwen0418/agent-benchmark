@@ -7,6 +7,7 @@ type TelemetryDeps = {
   agentbenchWebUrl: string;
   runnerSharedSecret: string | undefined;
   getSupabaseAdmin: () => SupabaseClient | null | undefined;
+  persistSessionSnapshot?: (session: HostedSession) => Promise<void>;
 };
 
 export function createTelemetryRuntime(deps: TelemetryDeps) {
@@ -15,6 +16,8 @@ export function createTelemetryRuntime(deps: TelemetryDeps) {
       ...payload,
       createdAt: deps.now(),
     });
+
+    await deps.persistSessionSnapshot?.(session);
 
     if (!session.persisted || !session.runId) {
       return;

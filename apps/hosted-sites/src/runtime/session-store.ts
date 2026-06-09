@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CartItem, Order } from "../apps/shopping-lite/types.js";
 import type { WikiAnswerSubmission } from "../apps/wiki-lite/types.js";
 import type { HostedAppSessionState } from "./app-definition.js";
+import type { SessionCache } from "./session-cache.js";
 import type { HostedSession } from "./types.js";
 
 type PersistedSessionRow = {
@@ -31,6 +32,7 @@ type PersistedSessionRow = {
 
 type SessionStoreDeps = {
   sessions: Map<string, HostedSession>;
+  sessionCache?: SessionCache | null;
   publicBaseUrl: string;
   now: () => string;
   makeId: (prefix: string) => string;
@@ -69,6 +71,32 @@ export function createSessionStore(deps: SessionStoreDeps) {
         wikiAnswerSubmissions: session.wikiAnswerSubmissions,
       },
     };
+  }
+
+  async function cacheSession(session: HostedSession) {
+    deps.sessions.set(session.token, session);
+    if (!deps.sessionCache) {
+      return;
+    }
+
+    try {
+      await deps.sessionCache.set(session);
+    } catch (error) {
+      console.error("[hosted-sites] failed to cache session", error);
+    }
+  }
+
+  async function deleteCachedSession(token: string) {
+    deps.sessions.delete(token);
+    if (!deps.sessionCache) {
+      return;
+    }
+
+    try {
+      await deps.sessionCache.delete(token);
+    } catch (error) {
+      console.error("[hosted-sites] failed to delete cached session", error);
+    }
   }
 
   function hydrateSessionFromMetadata(params: {
@@ -192,6 +220,8 @@ export function createSessionStore(deps: SessionStoreDeps) {
   }
 
   async function persistSessionSnapshot(session: HostedSession) {
+    await cacheSession(session);
+
     if (!session.persisted) {
       return;
     }
@@ -248,7 +278,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
 
   async function markSessionExpired(session: HostedSession, request: IncomingMessage) {
     session.status = "expired";
-    deps.sessions.delete(session.token);
+    await deleteCachedSession(session.token);
 
     if (session.persisted) {
       const supabase = deps.getSupabaseAdmin();
@@ -293,6 +323,8 @@ export function createSessionStore(deps: SessionStoreDeps) {
     if (!session.firstSeenUserAgent) {
       session.firstSeenUserAgent = agent;
     }
+
+    await cacheSession(session);
 
     if (session.persisted) {
       const supabase = deps.getSupabaseAdmin();
@@ -364,6 +396,10 @@ export function createSessionStore(deps: SessionStoreDeps) {
   }
 
   async function refreshPersistedSessionControlState(session: HostedSession) {
+    if (deps.sessionCache) {
+      return session;
+    }
+
     if (!session.persisted) {
       return session;
     }
@@ -460,7 +496,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
     };
 
     const session = await persistNewSession(baseSession, startUrl);
-    deps.sessions.set(session.token, session);
+    await cacheSession(session);
     return session;
   }
 
@@ -468,6 +504,23 @@ export function createSessionStore(deps: SessionStoreDeps) {
     const token = url.searchParams.get("session");
     if (!token) {
       return null;
+    }
+
+    if (deps.sessionCache) {
+      try {
+        const cached = await deps.sessionCache.get(token);
+        if (cached) {
+          deps.sessions.set(token, cached);
+          if (isExpired(cached) || cached.status === "expired") {
+            await markSessionExpired(cached, request);
+            return null;
+          }
+          await recordSessionAccess(cached, request, "session.access");
+          return cached;
+        }
+      } catch (error) {
+        console.error("[hosted-sites] failed to read cached session", error);
+      }
     }
 
     const existing = deps.sessions.get(token);
@@ -501,14 +554,21 @@ export function createSessionStore(deps: SessionStoreDeps) {
       await markSessionExpired(hydrated, request);
       return null;
     }
-    deps.sessions.set(token, hydrated);
+    await cacheSession(hydrated);
     await recordSessionAccess(hydrated, request, "session.access");
     return hydrated;
+  }
+
+  async function getSessionByToken(token: string, request: IncomingMessage) {
+    const sessionUrl = new URL("/", deps.publicBaseUrl);
+    sessionUrl.searchParams.set("session", token);
+    return getSession(sessionUrl, request);
   }
 
   return {
     createHostedSession,
     getSession,
+    getSessionByToken,
     persistSessionSnapshot,
   };
 }
