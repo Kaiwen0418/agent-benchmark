@@ -1,7 +1,7 @@
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
 
-export function buildShoppingFinalState(session: HostedSession) {
-  const order = session.orders.at(-1);
+export function buildShoppingFinalState(session: HostedSessionFor<"shopping-lite">) {
+  const order = session.state.orders.at(-1);
   return {
     app: "shopping-lite",
     taskSlug: session.taskSlug,
@@ -12,7 +12,7 @@ export function buildShoppingFinalState(session: HostedSession) {
           shippingMethod: order.shippingMethod,
           submittedAt: order.submittedAt,
           items: order.items.map((item) => {
-            const product = session.products.find((candidate) => candidate.id === item.productId);
+            const product = session.state.products.find((candidate) => candidate.id === item.productId);
             return {
               productId: item.productId,
               name: product?.name ?? item.productId,

@@ -1,12 +1,13 @@
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@agentbench/shared";
 import type { HostedSession } from "./types.js";
 
 type TelemetryDeps = {
   now: () => string;
   agentbenchWebUrl: string;
   runnerSharedSecret: string | undefined;
-  getSupabaseAdmin: () => SupabaseClient | null | undefined;
+  getSupabaseAdmin: () => SupabaseClient<Database> | null | undefined;
   persistSessionSnapshot?: (session: HostedSession) => Promise<void>;
 };
 

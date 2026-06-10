@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { IncomingMessage } from "node:http";
-import { buildInitialSessionState, defaultGoalForSession, defaultStartPathForApp } from "./app-registry.js";
+import {
+  buildInitialSessionState,
+  defaultGoalForSession,
+  defaultStartPathForApp,
+  extractHostedAppState,
+  hydrateHostedAppState,
+  resolveHostedAppId,
+} from "./app-registry.js";
 import { createSessionStore } from "./session-store.js";
 import type { SessionCache } from "./session-cache.js";
 import type { HostedSession } from "./types.js";
@@ -36,7 +43,10 @@ function createStore(params: {
     getSupabaseAdmin: () => null,
     defaultStartPathForApp,
     defaultGoalForSession,
+    resolveHostedAppId,
     buildInitialSessionState,
+    extractHostedAppState,
+    hydrateHostedAppState,
     clientIp: () => null,
     clientUserAgent: () => null,
     clientReferer: () => null,
@@ -73,14 +83,20 @@ test("session snapshots update the shared cache", async () => {
   const sessions = new Map<string, HostedSession>();
   const store = createStore({ sessions, sessionCache });
   const session = await store.createHostedSession({ app: "shopping-lite" });
+  if (session.app !== "shopping-lite") {
+    throw new Error("Expected shopping session");
+  }
 
-  session.cart.push({ productId: "prod-charger-30w", quantity: 1 });
+  session.state.cart.push({ productId: "prod-charger-30w", quantity: 1 });
   await store.persistSessionSnapshot(session);
   sessions.clear();
 
   const loaded = await store.getSessionByToken(session.token, {} as IncomingMessage);
+  if (loaded?.app !== "shopping-lite") {
+    throw new Error("Expected cached shopping session");
+  }
 
-  assert.deepEqual(loaded?.cart, [{ productId: "prod-charger-30w", quantity: 1 }]);
+  assert.deepEqual(loaded.state.cart, [{ productId: "prod-charger-30w", quantity: 1 }]);
 });
 
 test("shared cache stays authoritative over stale local sessions", async () => {
@@ -90,14 +106,20 @@ test("shared cache stays authoritative over stale local sessions", async () => {
   const firstStore = createStore({ sessions: firstInstanceSessions, sessionCache });
   const secondStore = createStore({ sessions: secondInstanceSessions, sessionCache });
   const session = await firstStore.createHostedSession({ app: "shopping-lite" });
+  if (session.app !== "shopping-lite") {
+    throw new Error("Expected shopping session");
+  }
 
   const stale = structuredClone(session);
   secondInstanceSessions.set(session.token, stale);
 
-  session.cart.push({ productId: "prod-charger-30w", quantity: 1 });
+  session.state.cart.push({ productId: "prod-charger-30w", quantity: 1 });
   await firstStore.persistSessionSnapshot(session);
 
   const loaded = await secondStore.getSessionByToken(session.token, {} as IncomingMessage);
+  if (loaded?.app !== "shopping-lite") {
+    throw new Error("Expected cached shopping session");
+  }
 
-  assert.deepEqual(loaded?.cart, [{ productId: "prod-charger-30w", quantity: 1 }]);
+  assert.deepEqual(loaded.state.cart, [{ productId: "prod-charger-30w", quantity: 1 }]);
 });

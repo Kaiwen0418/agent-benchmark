@@ -2,16 +2,22 @@ import { notFound } from "next/navigation";
 import { LiveRunViewer } from "@/components/run/LiveRunViewer";
 import { getBenchmarkCase, getBenchmarkRun, listArtifacts, listRunEvents } from "@/lib/db";
 
+function getEventPayloadUrl(payload: Awaited<ReturnType<typeof listRunEvents>>[number]["payload"]) {
+  return payload && typeof payload === "object" && !Array.isArray(payload) && typeof payload.url === "string"
+    ? payload.url
+    : null;
+}
+
 function deriveInitialFrameUrl(
   events: Awaited<ReturnType<typeof listRunEvents>>,
   artifacts: Awaited<ReturnType<typeof listArtifacts>>,
 ) {
   const liveEvent = [...events]
     .reverse()
-    .find((event) => event.type === "live.frame" && typeof event.payload.url === "string");
+    .find((event) => event.type === "live.frame" && typeof getEventPayloadUrl(event.payload) === "string");
 
-  if (liveEvent && typeof liveEvent.payload.url === "string") {
-    return liveEvent.payload.url;
+  if (liveEvent) {
+    return getEventPayloadUrl(liveEvent.payload);
   }
 
   const latestScreenshot = [...artifacts]

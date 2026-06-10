@@ -10,8 +10,10 @@ import type { ForumThread, ModerationAction } from "./types.js";
 export type ForumEvaluationSession = {
   app: "forum-lite" | string;
   taskSlug: string;
-  threads: ForumThread[];
-  moderationActions: ModerationAction[];
+  state: {
+    threads: ForumThread[];
+    moderationActions: ModerationAction[];
+  };
 };
 
 const EXPECTED_RECALL_LINK = "https://support.example.com/recall/battery-2026";
@@ -19,7 +21,7 @@ const TARGET_THREAD_ID = "thr-battery";
 const EXPECTED_LOCK_REASON = "safety escalation";
 
 export function evaluateForum(session: ForumEvaluationSession): HostedWebScoreResult {
-  const targetThread = session.threads.find((candidate) => candidate.id === TARGET_THREAD_ID);
+  const targetThread = session.state.threads.find((candidate) => candidate.id === TARGET_THREAD_ID);
   const retrieve = evaluateRetrieveValue(session, targetThread);
   const backend = evaluateForumBackendState(session, targetThread);
   const ui = targetThread?.locked
@@ -89,7 +91,7 @@ function evaluateForumBackendState(
   const agentReplies = targetThread.posts.filter((post) => post.author === "agent");
   const hasAgentReply = agentReplies.length > 0;
   const isLocked = targetThread.locked === true;
-  const lockAction = session.moderationActions.find(
+  const lockAction = session.state.moderationActions.find(
     (action) => action.threadId === TARGET_THREAD_ID && action.action === "lock",
   );
   const lockReasonMatches = lockAction?.reason.trim().toLowerCase() === EXPECTED_LOCK_REASON.toLowerCase();

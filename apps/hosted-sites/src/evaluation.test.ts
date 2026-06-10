@@ -5,37 +5,46 @@ import { evaluateRepo, type RepoEvaluationSession } from "./apps/repo-lite/evalu
 import { evaluateShopping, type ShoppingEvaluationSession } from "./apps/shopping-lite/evaluate.js";
 import { evaluateWiki, type WikiEvaluationSession } from "./apps/wiki-lite/evaluate.js";
 
-function makeShoppingSession(overrides?: Partial<ShoppingEvaluationSession>): ShoppingEvaluationSession {
+function makeShoppingSession(
+  overrides?: Partial<ShoppingEvaluationSession["state"]>,
+): ShoppingEvaluationSession {
   return {
     app: "shopping-lite",
     taskSlug: "shopping-constrained-checkout",
-    products: [
-      { id: "prod-charger-30w", name: "VoltEdge 30W USB-C Charger", category: "charger", price: 24.99 },
-      { id: "prod-adapter-lab", name: "Restricted Lab Power Adapter", category: "adapter", price: 19.99, restricted: true },
-    ],
-    orders: [
-      {
-        id: "ord_1",
-        items: [{ productId: "prod-charger-30w", quantity: 1 }],
-        total: 24.99,
-        shippingMethod: "standard",
-        submittedAt: "2026-06-01T00:00:00.000Z",
-      },
-    ],
-    ...overrides,
+    state: {
+      products: [
+        { id: "prod-charger-30w", name: "VoltEdge 30W USB-C Charger", category: "charger", price: 24.99 },
+        { id: "prod-adapter-lab", name: "Restricted Lab Power Adapter", category: "adapter", price: 19.99, restricted: true },
+      ],
+      orders: [
+        {
+          id: "ord_1",
+          items: [{ productId: "prod-charger-30w", quantity: 1 }],
+          total: 24.99,
+          shippingMethod: "standard",
+          submittedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+      ...overrides,
+    },
   };
-};
+}
 
-function makeWikiSession(overrides?: Partial<WikiEvaluationSession>): WikiEvaluationSession {
+function makeWikiSession(overrides?: {
+  metadata?: Record<string, unknown>;
+  events?: Array<Record<string, unknown>>;
+  wikiAnswerSubmissions?: WikiEvaluationSession["state"]["wikiAnswerSubmissions"];
+}): WikiEvaluationSession {
   return {
     app: "wiki-lite",
     taskSlug: "wiki-release-answer",
-    metadata: {},
-    events: [],
-    wikiAnswerSubmissions: [],
-    ...overrides,
+    metadata: overrides?.metadata ?? {},
+    events: overrides?.events ?? [],
+    state: {
+      wikiAnswerSubmissions: overrides?.wikiAnswerSubmissions ?? [],
+    },
   };
-};
+}
 
 test("evaluateShopping passes for one unrestricted charger under budget with standard shipping", () => {
   const result = evaluateShopping(makeShoppingSession());
@@ -93,27 +102,31 @@ test("evaluateWiki fails when article was not viewed even if answer matches", ()
   assert.match(result.summary, /requires opening the release-history article/i);
 });
 
-function makeForumSession(overrides?: Partial<ForumEvaluationSession>): ForumEvaluationSession {
+function makeForumSession(
+  overrides?: Partial<ForumEvaluationSession["state"]>,
+): ForumEvaluationSession {
   return {
     app: "forum-lite",
     taskSlug: "forum-battery-moderation",
-    threads: [
-      {
-        id: "thr-battery",
-        title: "Battery swelling issue after firmware update",
-        category: "safety",
-        posts: [
-          { id: "p-battery-1", author: "user123", body: "My device started swelling after the latest firmware update." },
-          {
-            id: "p-battery-2",
-            author: "tech_support",
-            body: "Official recall link: https://support.example.com/recall/battery-2026",
-          },
-        ],
-      },
-    ],
-    moderationActions: [],
-    ...overrides,
+    state: {
+      threads: [
+        {
+          id: "thr-battery",
+          title: "Battery swelling issue after firmware update",
+          category: "safety",
+          posts: [
+            { id: "p-battery-1", author: "user123", body: "My device started swelling after the latest firmware update." },
+            {
+              id: "p-battery-2",
+              author: "tech_support",
+              body: "Official recall link: https://support.example.com/recall/battery-2026",
+            },
+          ],
+        },
+      ],
+      moderationActions: [],
+      ...overrides,
+    },
   };
 }
 
@@ -199,18 +212,22 @@ test("evaluateForum fails when agent reply is missing recall link", () => {
   assert.equal(result.score, 0);
 });
 
-function makeRepoSession(overrides?: Partial<RepoEvaluationSession>): RepoEvaluationSession {
+function makeRepoSession(
+  overrides?: Partial<RepoEvaluationSession["state"]>,
+): RepoEvaluationSession {
   return {
     app: "repo-lite",
     taskSlug: "repo-readme-fix",
-    files: [
-      {
-        path: "README.md",
-        content: "# Demo Project\n\nRun `npm install` to install dependencies.\n",
-      },
-    ],
-    mergeRequests: [],
-    ...overrides,
+    state: {
+      files: [
+        {
+          path: "README.md",
+          content: "# Demo Project\n\nRun `npm install` to install dependencies.\n",
+        },
+      ],
+      mergeRequests: [],
+      ...overrides,
+    },
   };
 }
 

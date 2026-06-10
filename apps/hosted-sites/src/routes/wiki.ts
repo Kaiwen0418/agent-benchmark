@@ -3,7 +3,7 @@ import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { markArticleViewed, submitWikiAnswer } from "../apps/wiki-lite/actions.js";
 import { renderWikiArticle, renderWikiIndex } from "../apps/wiki-lite/render.js";
 import { redirect, sendJson } from "../runtime/http.js";
-import type { HostedSession } from "../runtime/types.js";
+import { isHostedSessionForApp, type HostedSession } from "../runtime/types.js";
 
 type WikiRoutesDeps = {
   publicBaseUrl: string;
@@ -21,9 +21,14 @@ type WikiRoutesDeps = {
 };
 
 export function createWikiRoutes(deps: WikiRoutesDeps) {
+  async function getWikiSession(url: URL, request: IncomingMessage) {
+    const session = await deps.getSession(url, request);
+    return session && isHostedSessionForApp(session, "wiki-lite") ? session : null;
+  }
+
   async function handle(request: IncomingMessage, response: ServerResponse, url: URL) {
     if (request.method === "GET" && url.pathname === "/wiki") {
-      const session = await deps.getSession(url, request);
+      const session = await getWikiSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
@@ -35,14 +40,14 @@ export function createWikiRoutes(deps: WikiRoutesDeps) {
 
     const wikiArticleMatch = url.pathname.match(/^\/wiki\/article\/([^/]+)$/);
     if (request.method === "GET" && wikiArticleMatch) {
-      const session = await deps.getSession(url, request);
+      const session = await getWikiSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
 
       const articleSlug = decodeURIComponent(wikiArticleMatch[1]);
-      const article = session.wikiArticles.find((candidate) => candidate.slug === articleSlug);
+      const article = session.state.wikiArticles.find((candidate) => candidate.slug === articleSlug);
       if (!article) {
         deps.notFound(response);
         return true;
@@ -57,7 +62,7 @@ export function createWikiRoutes(deps: WikiRoutesDeps) {
     }
 
     if (request.method === "POST" && url.pathname === "/wiki/answer") {
-      const session = await deps.getSession(url, request);
+      const session = await getWikiSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;

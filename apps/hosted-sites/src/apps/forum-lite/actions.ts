@@ -1,8 +1,10 @@
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
+
+type ForumSession = HostedSessionFor<"forum-lite">;
 import type { ForumPost, ModerationAction } from "./types.js";
 
 export function addReplyToThread(
-  session: HostedSession,
+  session: ForumSession,
   params: {
     threadId: string;
     author: string;
@@ -10,7 +12,7 @@ export function addReplyToThread(
     makeId: (prefix: string) => string;
   },
 ) {
-  const thread = session.threads.find((candidate) => candidate.id === params.threadId);
+  const thread = session.state.threads.find((candidate) => candidate.id === params.threadId);
   if (!thread) {
     return { success: false, error: "Thread not found" } as const;
   }
@@ -28,14 +30,14 @@ export function addReplyToThread(
 }
 
 export function lockThread(
-  session: HostedSession,
+  session: ForumSession,
   params: {
     threadId: string;
     reason: string;
     makeId: (prefix: string) => string;
   },
 ) {
-  const thread = session.threads.find((candidate) => candidate.id === params.threadId);
+  const thread = session.state.threads.find((candidate) => candidate.id === params.threadId);
   if (!thread) {
     return { success: false, error: "Thread not found" } as const;
   }
@@ -47,6 +49,6 @@ export function lockThread(
     action: "lock",
     reason: params.reason,
   };
-  session.moderationActions.push(action);
+  session.state.moderationActions.push(action);
   return { success: true, action } as const;
 }

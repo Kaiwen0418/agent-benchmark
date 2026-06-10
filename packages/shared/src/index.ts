@@ -1,4 +1,31 @@
+export type { Database, Json } from "./database.types.js";
+
 export type HostedAttemptSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
+
+export type HostedWebSessionPersistenceStatus =
+  | HostedAttemptSessionStatus
+  | "scoring";
+
+export type HostedWebSessionMetadata<TAppState extends Record<string, unknown> = Record<string, unknown>> =
+  Record<string, unknown> & {
+    schemaVersion?: 1;
+    suiteSlug?: string;
+    suiteVersion?: string;
+    title?: string | null;
+    goal?: string;
+    startPath?: string | null;
+    appState?: TAppState;
+  };
+
+export type RedisHostedSessionEnvelopeV1<TSession> = {
+  schemaVersion: 1;
+  session: TSession;
+};
+
+export type RedisHostedSessionEnvelopeV2<TSession> = {
+  schemaVersion: 2;
+  session: TSession;
+};
 
 export type HostedAttemptReadSession = {
   id: string;

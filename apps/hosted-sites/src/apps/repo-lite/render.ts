@@ -1,16 +1,18 @@
 import type { ServerResponse } from "node:http";
 import type { RepoFile, RepoMergeRequest } from "./types.js";
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
+
+type RepoSession = HostedSessionFor<"repo-lite">;
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
 
 export function renderRepoIndex(
-  session: HostedSession,
+  session: RepoSession,
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
 ) {
-  const readmeFile = session.files.find((f) => f.path === "README.md");
-  const fileList = session.files
+  const readmeFile = session.state.files.find((f) => f.path === "README.md");
+  const fileList = session.state.files
     .map(
       (file) => `<li>
         <a href="/repo/file/${encodeURIComponent(file.path)}?session=${encodeURIComponent(session.token)}">${escapeHtml(file.path)}</a>
@@ -18,7 +20,7 @@ export function renderRepoIndex(
     )
     .join("");
 
-  const mrList = session.mergeRequests
+  const mrList = session.state.mergeRequests
     .map(
       (mr) => `<li>
         <a href="/repo/mr/${encodeURIComponent(mr.id)}?session=${encodeURIComponent(session.token)}">${escapeHtml(mr.title)}</a>
@@ -62,7 +64,7 @@ export function renderRepoIndex(
 }
 
 export function renderFileEdit(
-  session: HostedSession,
+  session: RepoSession,
   file: RepoFile,
   response: ServerResponse,
   publicBaseUrl: string,
@@ -91,12 +93,12 @@ export function renderFileEdit(
 }
 
 export function renderNewMR(
-  session: HostedSession,
+  session: RepoSession,
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
 ) {
-  const readmeFile = session.files.find((f) => f.path === "README.md");
+  const readmeFile = session.state.files.find((f) => f.path === "README.md");
   const diffPreview = readmeFile
     ? `<pre style="background:#fff;border:1px solid var(--line);border-radius:6px;padding:12px;overflow:auto;">${escapeHtml(readmeFile.content)}</pre>`
     : '<p class="muted">README.md not found.</p>';
@@ -130,12 +132,12 @@ export function renderNewMR(
 }
 
 export function renderMRDetail(
-  session: HostedSession,
+  session: RepoSession,
   mr: RepoMergeRequest,
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
-  evaluateSession: (session: HostedSession) => { status: string; score: number; summary: string },
+  evaluateSession: (session: RepoSession) => { status: string; score: number; summary: string },
 ) {
   const score = evaluateSession(session);
   const changedFilesHtml = mr.changedFiles

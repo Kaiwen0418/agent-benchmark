@@ -6,6 +6,7 @@ import type {
   CompleteRunInput,
   QuotaStatus,
 } from "@agentbench/protocol";
+import type { Database } from "@agentbench/shared";
 import path from "node:path";
 import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
@@ -405,7 +406,7 @@ export async function appendRunEvent(runId: string, input: AppendRunEventInput) 
           ? "completed"
           : "failed";
 
-    const patch: Record<string, string | null> = { status: nextStatus };
+    const patch: Database["public"]["Tables"]["benchmark_runs"]["Update"] = { status: nextStatus };
     if (nextStatus === "running" && typeof input.payload.liveViewUrl === "string") {
       patch.live_view_url = input.payload.liveViewUrl;
     }

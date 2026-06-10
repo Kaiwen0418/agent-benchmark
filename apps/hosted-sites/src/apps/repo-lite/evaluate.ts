@@ -10,8 +10,10 @@ import type { RepoFile, RepoMergeRequest } from "./types.js";
 export type RepoEvaluationSession = {
   app: "repo-lite" | string;
   taskSlug: string;
-  files: RepoFile[];
-  mergeRequests: RepoMergeRequest[];
+  state: {
+    files: RepoFile[];
+    mergeRequests: RepoMergeRequest[];
+  };
 };
 
 const EXPECTED_MR_TITLE = "Fix install instructions";
@@ -20,7 +22,7 @@ const BAD_COMMAND = "npm install";
 const GOOD_COMMAND = "pnpm install";
 
 export function evaluateRepo(session: RepoEvaluationSession): HostedWebScoreResult {
-  const latestMR = session.mergeRequests.at(-1);
+  const latestMR = session.state.mergeRequests.at(-1);
   const backend = evaluateRepoBackendState(session, latestMR);
   const ui = latestMR
     ? passedEvaluator({
@@ -47,7 +49,7 @@ function evaluateRepoBackendState(
   session: RepoEvaluationSession,
   mr: RepoMergeRequest | undefined,
 ): HostedWebEvaluatorResult {
-  const readme = session.files.find((f) => f.path === "README.md");
+  const readme = session.state.files.find((f) => f.path === "README.md");
   const readmeHasGoodCommand = readme ? readme.content.includes(GOOD_COMMAND) : false;
   const readmeHasBadCommand = readme ? /\bnpm install\b/.test(readme.content) : true;
 

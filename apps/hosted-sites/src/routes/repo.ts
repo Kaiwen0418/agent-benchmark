@@ -3,7 +3,7 @@ import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { createMergeRequest, updateFileContent } from "../apps/repo-lite/actions.js";
 import { renderFileEdit, renderMRDetail, renderNewMR, renderRepoIndex } from "../apps/repo-lite/render.js";
 import { redirect, sendJson } from "../runtime/http.js";
-import type { HostedSession } from "../runtime/types.js";
+import { isHostedSessionForApp, type HostedSession } from "../runtime/types.js";
 
 type RepoRoutesDeps = {
   publicBaseUrl: string;
@@ -21,9 +21,14 @@ type RepoRoutesDeps = {
 };
 
 export function createRepoRoutes(deps: RepoRoutesDeps) {
+  async function getRepoSession(url: URL, request: IncomingMessage) {
+    const session = await deps.getSession(url, request);
+    return session && isHostedSessionForApp(session, "repo-lite") ? session : null;
+  }
+
   async function handle(request: IncomingMessage, response: ServerResponse, url: URL) {
     if (request.method === "GET" && url.pathname === "/repo") {
-      const session = await deps.getSession(url, request);
+      const session = await getRepoSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
@@ -35,14 +40,14 @@ export function createRepoRoutes(deps: RepoRoutesDeps) {
 
     const fileEditMatch = url.pathname.match(/^\/repo\/file\/([^/]+)\/edit$/);
     if (request.method === "GET" && fileEditMatch) {
-      const session = await deps.getSession(url, request);
+      const session = await getRepoSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
 
       const filePath = decodeURIComponent(fileEditMatch[1]);
-      const file = session.files.find((candidate) => candidate.path === filePath);
+      const file = session.state.files.find((candidate) => candidate.path === filePath);
       if (!file) {
         deps.notFound(response);
         return true;
@@ -53,7 +58,7 @@ export function createRepoRoutes(deps: RepoRoutesDeps) {
     }
 
     if (request.method === "POST" && fileEditMatch) {
-      const session = await deps.getSession(url, request);
+      const session = await getRepoSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
@@ -88,7 +93,7 @@ export function createRepoRoutes(deps: RepoRoutesDeps) {
     }
 
     if (request.method === "GET" && url.pathname === "/repo/mr/new") {
-      const session = await deps.getSession(url, request);
+      const session = await getRepoSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
@@ -99,7 +104,7 @@ export function createRepoRoutes(deps: RepoRoutesDeps) {
     }
 
     if (request.method === "POST" && url.pathname === "/repo/mr/new") {
-      const session = await deps.getSession(url, request);
+      const session = await getRepoSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
@@ -146,14 +151,14 @@ export function createRepoRoutes(deps: RepoRoutesDeps) {
 
     const mrMatch = url.pathname.match(/^\/repo\/mr\/([^/]+)$/);
     if (request.method === "GET" && mrMatch) {
-      const session = await deps.getSession(url, request);
+      const session = await getRepoSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
 
       const mrId = decodeURIComponent(mrMatch[1]);
-      const mr = session.mergeRequests.find((candidate) => candidate.id === mrId);
+      const mr = session.state.mergeRequests.find((candidate) => candidate.id === mrId);
       if (!mr) {
         deps.notFound(response);
         return true;

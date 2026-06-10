@@ -1,33 +1,38 @@
 import type { IncomingMessage } from "node:http";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CartItem, Order } from "../apps/shopping-lite/types.js";
-import type { WikiAnswerSubmission } from "../apps/wiki-lite/types.js";
-import type { HostedAppSessionState } from "./app-definition.js";
+import type { Database, HostedWebSessionMetadata } from "@agentbench/shared";
 import type { SessionCache } from "./session-cache.js";
-import type { HostedSession } from "./types.js";
+import type { HostedAppPersistenceState, HostedAppSessionState, HostedSession } from "./types.js";
 
-type PersistedSessionRow = {
-  id: string;
-  run_id: string | null;
-  case_id: string | null;
-  attempt_id: string | null;
-  app: string;
-  task_slug: string;
-  task_version: string;
-  sequence_index: number;
-  weight: number;
-  required: boolean;
-  seed_version: string;
-  status: string;
-  expires_at: string | null;
-  access_count: number | null;
-  last_accessed_at: string | null;
-  first_seen_ip: string | null;
-  last_seen_ip: string | null;
-  first_seen_user_agent: string | null;
-  last_seen_user_agent: string | null;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
+type PersistedSessionMetadata = HostedWebSessionMetadata<HostedAppPersistenceState>;
+type PersistedSessionRow = Pick<
+  Database["public"]["Tables"]["hosted_web_sessions"]["Row"],
+  | "id"
+  | "run_id"
+  | "case_id"
+  | "attempt_id"
+  | "app"
+  | "task_slug"
+  | "task_version"
+  | "sequence_index"
+  | "weight"
+  | "required"
+  | "seed_version"
+  | "status"
+  | "metadata"
+  | "created_at"
+  | "expires_at"
+  | "access_count"
+  | "last_accessed_at"
+  | "first_seen_ip"
+  | "last_seen_ip"
+  | "first_seen_user_agent"
+  | "last_seen_user_agent"
+> & {
+  metadata: PersistedSessionMetadata | null;
+};
+type RawPersistedSessionRow = Omit<PersistedSessionRow, "metadata"> & {
+  metadata: Database["public"]["Tables"]["hosted_web_sessions"]["Row"]["metadata"];
 };
 
 type SessionStoreDeps = {
@@ -37,10 +42,13 @@ type SessionStoreDeps = {
   now: () => string;
   makeId: (prefix: string) => string;
   hashToken: (token: string) => string;
-  getSupabaseAdmin: () => SupabaseClient | null | undefined;
+  getSupabaseAdmin: () => SupabaseClient<Database> | null | undefined;
   defaultStartPathForApp: (app: string) => string;
   defaultGoalForSession: (app: string, taskSlug: string) => string;
+  resolveHostedAppId: (app: string) => HostedSession["app"];
   buildInitialSessionState: (app: string) => HostedAppSessionState;
+  extractHostedAppState: (session: HostedSession) => HostedAppPersistenceState;
+  hydrateHostedAppState: (app: string, value: unknown) => HostedAppSessionState;
   clientIp: (request: IncomingMessage) => string | null;
   clientUserAgent: (request: IncomingMessage) => string | null;
   clientReferer: (request: IncomingMessage) => string | null;
@@ -60,17 +68,14 @@ export function createSessionStore(deps: SessionStoreDeps) {
   function buildSessionMetadata(session: HostedSession) {
     return {
       ...session.metadata,
+      schemaVersion: 1,
       suiteSlug: session.suiteSlug,
       suiteVersion: session.suiteVersion,
       title: session.title,
       goal: session.goal,
       startPath: session.startPath,
-      appState: {
-        cart: session.cart,
-        orders: session.orders,
-        wikiAnswerSubmissions: session.wikiAnswerSubmissions,
-      },
-    };
+      appState: deps.extractHostedAppState(session),
+    } satisfies PersistedSessionMetadata;
   }
 
   async function cacheSession(session: HostedSession) {
@@ -107,60 +112,8 @@ export function createSessionStore(deps: SessionStoreDeps) {
       params.row.metadata && typeof params.row.metadata === "object" && !Array.isArray(params.row.metadata)
         ? params.row.metadata
         : {};
-    const appState =
-      metadata.appState && typeof metadata.appState === "object" && !Array.isArray(metadata.appState)
-        ? (metadata.appState as Record<string, unknown>)
-        : {};
-
-    const cart = Array.isArray(appState.cart)
-      ? appState.cart
-          .filter((item): item is CartItem => {
-            if (!item || typeof item !== "object") {
-              return false;
-            }
-            const candidate = item as Record<string, unknown>;
-            return typeof candidate.productId === "string" && typeof candidate.quantity === "number";
-          })
-          .map((item) => ({ productId: item.productId, quantity: item.quantity }))
-      : [];
-    const orders = Array.isArray(appState.orders)
-      ? appState.orders
-          .filter((order): order is Order => {
-            if (!order || typeof order !== "object") {
-              return false;
-            }
-            const candidate = order as Record<string, unknown>;
-            return (
-              typeof candidate.id === "string" &&
-              Array.isArray(candidate.items) &&
-              typeof candidate.total === "number" &&
-              (candidate.shippingMethod === "standard" || candidate.shippingMethod === "express") &&
-              typeof candidate.submittedAt === "string"
-            );
-          })
-          .map((order) => ({
-            id: order.id,
-            items: order.items,
-            total: order.total,
-            shippingMethod: order.shippingMethod,
-            submittedAt: order.submittedAt,
-          }))
-      : [];
-    const wikiAnswerSubmissions = Array.isArray(appState.wikiAnswerSubmissions)
-      ? appState.wikiAnswerSubmissions
-          .filter((submission): submission is WikiAnswerSubmission => {
-            if (!submission || typeof submission !== "object") {
-              return false;
-            }
-            const candidate = submission as Record<string, unknown>;
-            return typeof candidate.answer === "string" && typeof candidate.submittedAt === "string";
-          })
-          .map((submission) => ({
-            answer: submission.answer,
-            submittedAt: submission.submittedAt,
-          }))
-      : [];
-    const initialState = deps.buildInitialSessionState(params.row.app);
+    const app = deps.resolveHostedAppId(params.row.app);
+    const appState = deps.hydrateHostedAppState(app, metadata.appState);
 
     return {
       id: params.row.id,
@@ -169,7 +122,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
       caseId: params.row.case_id,
       attemptId: params.row.attempt_id,
       callbackSecret: null,
-      app: params.row.app,
+      app,
       suiteSlug: typeof metadata.suiteSlug === "string" ? metadata.suiteSlug : params.row.task_slug,
       suiteVersion: typeof metadata.suiteVersion === "string" ? metadata.suiteVersion : "v1",
       taskSlug: params.row.task_slug,
@@ -205,18 +158,19 @@ export function createSessionStore(deps: SessionStoreDeps) {
       lastSeenUserAgent: params.row.last_seen_user_agent,
       createdAt: params.row.created_at,
       events: [],
-      products: initialState.products,
-      cart,
-      orders,
-      wikiArticles: initialState.wikiArticles,
-      wikiAnswerSubmissions,
-      threads: initialState.threads,
-      moderationActions: initialState.moderationActions,
-      files: initialState.files,
-      issues: initialState.issues,
-      mergeRequests: initialState.mergeRequests,
+      state: appState,
       persisted: params.row.status !== "expired",
-    } satisfies HostedSession;
+    } as HostedSession;
+  }
+
+  function asPersistedSessionRow(row: RawPersistedSessionRow): PersistedSessionRow {
+    return {
+      ...row,
+      metadata:
+        row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+          ? (row.metadata as PersistedSessionMetadata)
+          : null,
+    };
   }
 
   async function persistSessionSnapshot(session: HostedSession) {
@@ -419,7 +373,15 @@ export function createSessionStore(deps: SessionStoreDeps) {
       return session;
     }
 
-    session.status = data.status ?? session.status;
+    if (
+      data.status === "created" ||
+      data.status === "active" ||
+      data.status === "completed" ||
+      data.status === "failed" ||
+      data.status === "expired"
+    ) {
+      session.status = data.status;
+    }
     session.expiresAt = data.expires_at ?? session.expiresAt;
     return session;
   }
@@ -444,12 +406,12 @@ export function createSessionStore(deps: SessionStoreDeps) {
     metadata?: Record<string, unknown>;
   }) {
     const token = deps.makeId("tok");
-    const app = params.app ?? "shopping-lite";
+    const app = deps.resolveHostedAppId(params.app ?? "shopping-lite");
     const taskSlug = params.taskSlug ?? "shopping-constrained-checkout";
     const startPath = params.startPath ?? deps.defaultStartPathForApp(app);
     const startUrl = `${deps.publicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
     const initialState = deps.buildInitialSessionState(app);
-    const baseSession: HostedSession = {
+    const baseSession = {
       id: deps.makeId("hws"),
       token,
       runId: params.runId ?? null,
@@ -482,18 +444,9 @@ export function createSessionStore(deps: SessionStoreDeps) {
       lastSeenUserAgent: null,
       createdAt: deps.now(),
       events: [],
-      products: initialState.products,
-      cart: initialState.cart,
-      orders: initialState.orders,
-      wikiArticles: initialState.wikiArticles,
-      wikiAnswerSubmissions: initialState.wikiAnswerSubmissions,
-      threads: initialState.threads,
-      moderationActions: initialState.moderationActions,
-      files: initialState.files,
-      issues: initialState.issues,
-      mergeRequests: initialState.mergeRequests,
+      state: initialState,
       persisted: false,
-    };
+    } as HostedSession;
 
     const session = await persistNewSession(baseSession, startUrl);
     await cacheSession(session);
@@ -549,7 +502,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
       return null;
     }
 
-    const hydrated = hydrateSessionFromMetadata({ token, row: data });
+    const hydrated = hydrateSessionFromMetadata({ token, row: asPersistedSessionRow(data) });
     if (isExpired(hydrated) || hydrated.status === "expired") {
       await markSessionExpired(hydrated, request);
       return null;

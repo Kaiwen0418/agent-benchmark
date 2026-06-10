@@ -5,9 +5,9 @@ import { createMergeRequest, updateFileContent } from "./apps/repo-lite/actions.
 import { addProductToCart, getCartTotal, submitCheckoutOrder } from "./apps/shopping-lite/actions.js";
 import { markArticleViewed, submitWikiAnswer } from "./apps/wiki-lite/actions.js";
 import { buildInitialSessionState, defaultGoalForSession, defaultStartPathForApp } from "./runtime/app-registry.js";
-import type { HostedSession } from "./runtime/types.js";
+import type { HostedAppId, HostedSessionFor } from "./runtime/types.js";
 
-function makeSession(app: string): HostedSession {
+function makeSession<TApp extends HostedAppId>(app: TApp): HostedSessionFor<TApp> {
   return {
     id: "session-1",
     token: "tok_1",
@@ -39,8 +39,8 @@ function makeSession(app: string): HostedSession {
     createdAt: "2026-06-01T00:00:00.000Z",
     events: [],
     persisted: false,
-    ...buildInitialSessionState(app),
-  };
+    state: buildInitialSessionState(app),
+  } as unknown as HostedSessionFor<TApp>;
 }
 
 test("shopping actions add products, submit order, and clear cart", () => {
@@ -48,7 +48,7 @@ test("shopping actions add products, submit order, and clear cart", () => {
   addProductToCart(session, "prod-charger-30w");
   addProductToCart(session, "prod-charger-30w");
 
-  assert.deepEqual(session.cart, [{ productId: "prod-charger-30w", quantity: 2 }]);
+  assert.deepEqual(session.state.cart, [{ productId: "prod-charger-30w", quantity: 2 }]);
   assert.equal(getCartTotal(session), 49.98);
 
   const order = submitCheckoutOrder(session, {
@@ -59,8 +59,8 @@ test("shopping actions add products, submit order, and clear cart", () => {
 
   assert.equal(order.id, "ord_1");
   assert.equal(order.items.length, 1);
-  assert.equal(session.orders.length, 1);
-  assert.deepEqual(session.cart, []);
+  assert.equal(session.state.orders.length, 1);
+  assert.deepEqual(session.state.cart, []);
 });
 
 test("wiki actions dedupe viewed articles and trim submitted answers", () => {
@@ -76,7 +76,7 @@ test("wiki actions dedupe viewed articles and trim submitted answers", () => {
   });
 
   assert.equal(answer, "June 1, 2026");
-  assert.equal(session.wikiAnswerSubmissions.at(-1)?.answer, "June 1, 2026");
+  assert.equal(session.state.wikiAnswerSubmissions.at(-1)?.answer, "June 1, 2026");
 });
 
 test("forum actions reject locked threads and persist moderation actions", () => {
@@ -96,8 +96,8 @@ test("forum actions reject locked threads and persist moderation actions", () =>
     makeId: (prefix) => `${prefix}_1`,
   });
   assert.equal(lock.success, true);
-  assert.equal(session.threads.find((thread) => thread.id === "thr-battery")?.locked, true);
-  assert.equal(session.moderationActions.at(-1)?.reason, "safety escalation");
+  assert.equal(session.state.threads.find((thread) => thread.id === "thr-battery")?.locked, true);
+  assert.equal(session.state.moderationActions.at(-1)?.reason, "safety escalation");
 
   const rejected = addReplyToThread(session, {
     threadId: "thr-battery",
@@ -120,7 +120,7 @@ test("repo actions update README and create merge request snapshots", () => {
   });
 
   assert.equal(mr.success, true);
-  assert.equal(session.mergeRequests.length, 1);
-  assert.equal(session.mergeRequests[0].title, "Fix install instructions");
-  assert.equal(session.mergeRequests[0].changedFiles[0].content.includes("pnpm install"), true);
+  assert.equal(session.state.mergeRequests.length, 1);
+  assert.equal(session.state.mergeRequests[0].title, "Fix install instructions");
+  assert.equal(session.state.mergeRequests[0].changedFiles[0].content.includes("pnpm install"), true);
 });

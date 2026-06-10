@@ -1,16 +1,18 @@
 import type { ServerResponse } from "node:http";
 import type { Order } from "./types.js";
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
+
+type ShoppingSession = HostedSessionFor<"shopping-lite">;
 import { getCartRows, getCartTotal } from "./actions.js";
 import { escapeHtml, layout, money, sendHtml } from "../../templates.js";
 
 export function renderProducts(
-  session: HostedSession,
+  session: ShoppingSession,
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
 ) {
-  const cards = session.products
+  const cards = session.state.products
     .map((product) => {
       const restricted = product.restricted ? `<p class="danger">Restricted product</p>` : "";
       return `<article class="card">
@@ -40,7 +42,7 @@ export function renderProducts(
 }
 
 export function renderCart(
-  session: HostedSession,
+  session: ShoppingSession,
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
@@ -86,12 +88,12 @@ export function renderCart(
 }
 
 export function renderOrder(
-  session: HostedSession,
+  session: ShoppingSession,
   order: Order,
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
-  evaluateSession: (session: HostedSession) => { status: string; score: number; summary: string },
+  evaluateSession: (session: ShoppingSession) => { status: string; score: number; summary: string },
 ) {
   const score = evaluateSession(session);
   sendHtml(

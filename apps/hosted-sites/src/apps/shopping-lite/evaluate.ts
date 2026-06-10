@@ -10,12 +10,14 @@ import type { Order, Product } from "./types.js";
 export type ShoppingEvaluationSession = {
   app: "shopping-lite" | string;
   taskSlug: string;
-  products: Product[];
-  orders: Order[];
+  state: {
+    products: Product[];
+    orders: Order[];
+  };
 };
 
 export function evaluateShopping(session: ShoppingEvaluationSession): HostedWebScoreResult {
-  const submittedOrder = session.orders.at(-1);
+  const submittedOrder = session.state.orders.at(-1);
   const backend = evaluateShoppingBackendState(session, submittedOrder);
   const ui = submittedOrder
     ? passedEvaluator({
@@ -55,7 +57,7 @@ export function evaluateShoppingBackendState(
   }
 
   const rows = order.items.map((item) => {
-    const product = session.products.find((candidate) => candidate.id === item.productId);
+    const product = session.state.products.find((candidate) => candidate.id === item.productId);
     return { item, product };
   });
   const chargerItems = rows.filter((row) => row.product?.category === "charger");

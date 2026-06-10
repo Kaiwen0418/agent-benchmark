@@ -1,7 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { buildHostedAttemptReadModel, type HostedAttemptReadModel } from "@agentbench/shared";
+import {
+  buildHostedAttemptReadModel,
+  type Database,
+  type HostedAttemptReadModel,
+  type HostedWebSessionMetadata,
+} from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { createAttemptHandlers } from "./attempt-handlers.js";
 import {
@@ -20,23 +25,26 @@ const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-type PersistedSessionRow = {
-  id: string;
-  run_id: string | null;
-  case_id: string | null;
-  attempt_id: string | null;
-  app: string;
-  task_slug: string;
-  task_version: string;
-  sequence_index: number;
-  weight: number;
-  required: boolean;
-  seed_version: string;
-  status: string;
-  metadata: Record<string, unknown> | null;
-  start_url: string;
-  expires_at: string | null;
-  created_at: string;
+type PersistedSessionRow = Pick<
+  Database["public"]["Tables"]["hosted_web_sessions"]["Row"],
+  | "id"
+  | "run_id"
+  | "case_id"
+  | "attempt_id"
+  | "app"
+  | "task_slug"
+  | "task_version"
+  | "sequence_index"
+  | "weight"
+  | "required"
+  | "seed_version"
+  | "status"
+  | "metadata"
+  | "start_url"
+  | "expires_at"
+  | "created_at"
+> & {
+  metadata: HostedWebSessionMetadata | null;
 };
 
 type AttemptOverviewSession = HostedAttemptReadModel["sessions"][number] & {
@@ -49,7 +57,7 @@ type AttemptOverviewSession = HostedAttemptReadModel["sessions"][number] & {
 };
 
 const pendingFinalStates = new Map<string, unknown>();
-let supabaseAdmin: SupabaseClient | null | undefined;
+let supabaseAdmin: SupabaseClient<Database> | null | undefined;
 let cleanupSweepInFlight = false;
 
 function envNumber(name: string, fallback: number) {
@@ -454,6 +462,8 @@ async function initializeAttempt(params: {
   if (!supabase || !params.runId || !params.caseId) {
     throw new Error("Hosted attempt initialization requires database-backed run and case ids.");
   }
+  const runId = params.runId;
+  const caseId = params.caseId;
 
   const metadata = {
     sessions: params.sessions.map((session) => ({
@@ -476,8 +486,8 @@ async function initializeAttempt(params: {
   const { data: attemptRow, error: attemptError } = await supabase
     .from("benchmark_attempts")
     .insert({
-      run_id: params.runId,
-      case_id: params.caseId,
+      run_id: runId,
+      case_id: caseId,
       provider: "hosted-web",
       suite_slug: params.suiteSlug,
       suite_version: params.suiteVersion,
@@ -501,16 +511,17 @@ async function initializeAttempt(params: {
     const status: HostedSessionStatus = session.sequenceIndex > 0 ? "created" : "active";
     const sessionMetadata = {
       ...session.metadata,
+      schemaVersion: 1,
       suiteSlug: params.suiteSlug,
       suiteVersion: params.suiteVersion,
       title: session.title,
       goal: session.goal ?? defaultGoalForSession(session.app, session.taskSlug),
       startPath,
-    };
+    } satisfies HostedWebSessionMetadata;
 
     return {
-      run_id: params.runId,
-      case_id: params.caseId,
+      run_id: runId,
+      case_id: caseId,
       attempt_id: attemptRow.id,
       provider: "hosted-web",
       app: session.app,

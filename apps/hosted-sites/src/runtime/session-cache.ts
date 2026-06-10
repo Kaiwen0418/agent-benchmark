@@ -1,5 +1,7 @@
 import { createClient } from "redis";
-import type { HostedSession } from "./types.js";
+import type { RedisHostedSessionEnvelopeV2 } from "@agentbench/shared";
+import { resolveHostedAppId } from "./app-registry.js";
+import type { HostedAppId, HostedAppPersistenceState, HostedSession } from "./types.js";
 
 export type SessionCache = {
   get: (token: string) => Promise<HostedSession | null>;
@@ -16,6 +18,122 @@ type RedisSessionCacheOptions = {
 function ttlSecondsForSession(session: HostedSession, defaultTtlMs: number) {
   const ttlMs = session.expiresAt ? new Date(session.expiresAt).getTime() - Date.now() : defaultTtlMs;
   return Math.max(1, Math.ceil(ttlMs / 1000));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isHostedSessionStatus(value: unknown) {
+  return (
+    value === "created" ||
+    value === "active" ||
+    value === "completed" ||
+    value === "failed" ||
+    value === "expired"
+  );
+}
+
+function isNullableString(value: unknown) {
+  return value === null || typeof value === "string";
+}
+
+const stateKeysByApp = {
+  "shopping-lite": ["products", "cart", "orders"],
+  "wiki-lite": ["wikiArticles", "wikiAnswerSubmissions"],
+  "forum-lite": ["threads", "moderationActions"],
+  "repo-lite": ["files", "issues", "mergeRequests"],
+} as const satisfies { [TApp in HostedAppId]: readonly (keyof HostedAppPersistenceState)[] };
+
+function isHostedAppSessionState(app: HostedAppId, value: unknown) {
+  return isRecord(value) && stateKeysByApp[app].every((key) => Array.isArray(value[key]));
+}
+
+function hasHostedSessionFields(value: Record<string, unknown>) {
+  return (
+    typeof value.id === "string" &&
+    typeof value.token === "string" &&
+    isNullableString(value.runId) &&
+    isNullableString(value.caseId) &&
+    isNullableString(value.attemptId) &&
+    isNullableString(value.callbackSecret) &&
+    typeof value.app === "string" &&
+    typeof value.suiteSlug === "string" &&
+    typeof value.suiteVersion === "string" &&
+    typeof value.taskSlug === "string" &&
+    typeof value.taskVersion === "string" &&
+    typeof value.sequenceIndex === "number" &&
+    typeof value.weight === "number" &&
+    typeof value.required === "boolean" &&
+    isNullableString(value.title) &&
+    typeof value.goal === "string" &&
+    isNullableString(value.startPath) &&
+    typeof value.seedVersion === "string" &&
+    isHostedSessionStatus(value.status) &&
+    isNullableString(value.expiresAt) &&
+    typeof value.accessCount === "number" &&
+    isNullableString(value.lastAccessedAt) &&
+    isNullableString(value.firstSeenIp) &&
+    isNullableString(value.lastSeenIp) &&
+    isNullableString(value.firstSeenUserAgent) &&
+    isNullableString(value.lastSeenUserAgent) &&
+    typeof value.createdAt === "string" &&
+    isRecord(value.metadata) &&
+    Array.isArray(value.events) &&
+    typeof value.persisted === "boolean"
+  );
+}
+
+function normalizeHostedSession(value: unknown): HostedSession | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (!hasHostedSessionFields(value)) {
+    return null;
+  }
+
+  const app = resolveHostedAppId(value.app as string);
+  const stateKeys = stateKeysByApp[app];
+
+  if (isHostedAppSessionState(app, value.state)) {
+    return { ...value, app } as HostedSession;
+  }
+
+  if (!stateKeys.every((key) => Array.isArray(value[key]))) {
+    return null;
+  }
+
+  const state = Object.fromEntries(stateKeys.map((key) => [key, value[key]]));
+  const migrated: Record<string, unknown> = { ...value, app, state };
+  for (const key of Object.values(stateKeysByApp).flat()) {
+    delete migrated[key];
+  }
+  return migrated as HostedSession;
+}
+
+export function encodeRedisHostedSession(session: HostedSession) {
+  return JSON.stringify({
+    schemaVersion: 2,
+    session,
+  } satisfies RedisHostedSessionEnvelopeV2<HostedSession>);
+}
+
+export function decodeRedisHostedSession(value: string) {
+  const parsed: unknown = JSON.parse(value);
+  const candidate =
+    isRecord(parsed) &&
+    (parsed.schemaVersion === 1 || parsed.schemaVersion === 2) &&
+    "session" in parsed
+      ? parsed.session
+      : parsed;
+  const session = normalizeHostedSession(candidate);
+
+  if (!session) {
+    throw new Error("Invalid Redis hosted session payload");
+  }
+
+  return session;
 }
 
 export function createRedisSessionCache(options: RedisSessionCacheOptions): SessionCache {
@@ -47,12 +165,12 @@ export function createRedisSessionCache(options: RedisSessionCacheOptions): Sess
       if (!value) {
         return null;
       }
-      return JSON.parse(value) as HostedSession;
+      return decodeRedisHostedSession(value);
     },
 
     async set(session) {
       await ensureConnected();
-      await client.set(keyForToken(session.token), JSON.stringify(session), {
+      await client.set(keyForToken(session.token), encodeRedisHostedSession(session), {
         EX: ttlSecondsForSession(session, options.defaultTtlMs),
       });
     },

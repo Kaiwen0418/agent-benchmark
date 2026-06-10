@@ -3,7 +3,7 @@ import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { addReplyToThread, lockThread } from "../apps/forum-lite/actions.js";
 import { renderForumIndex, renderThread } from "../apps/forum-lite/render.js";
 import { redirect, sendJson } from "../runtime/http.js";
-import type { HostedSession } from "../runtime/types.js";
+import { isHostedSessionForApp, type HostedSession } from "../runtime/types.js";
 
 type ForumRoutesDeps = {
   publicBaseUrl: string;
@@ -21,9 +21,14 @@ type ForumRoutesDeps = {
 };
 
 export function createForumRoutes(deps: ForumRoutesDeps) {
+  async function getForumSession(url: URL, request: IncomingMessage) {
+    const session = await deps.getSession(url, request);
+    return session && isHostedSessionForApp(session, "forum-lite") ? session : null;
+  }
+
   async function handle(request: IncomingMessage, response: ServerResponse, url: URL) {
     if (request.method === "GET" && url.pathname === "/forum") {
-      const session = await deps.getSession(url, request);
+      const session = await getForumSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
@@ -35,14 +40,14 @@ export function createForumRoutes(deps: ForumRoutesDeps) {
 
     const threadMatch = url.pathname.match(/^\/forum\/thread\/([^/]+)$/);
     if (request.method === "GET" && threadMatch) {
-      const session = await deps.getSession(url, request);
+      const session = await getForumSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
 
       const threadId = decodeURIComponent(threadMatch[1]);
-      const thread = session.threads.find((candidate) => candidate.id === threadId);
+      const thread = session.state.threads.find((candidate) => candidate.id === threadId);
       if (!thread) {
         deps.notFound(response);
         return true;
@@ -54,7 +59,7 @@ export function createForumRoutes(deps: ForumRoutesDeps) {
 
     const replyMatch = url.pathname.match(/^\/forum\/thread\/([^/]+)\/reply$/);
     if (request.method === "POST" && replyMatch) {
-      const session = await deps.getSession(url, request);
+      const session = await getForumSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
@@ -97,7 +102,7 @@ export function createForumRoutes(deps: ForumRoutesDeps) {
 
     const lockMatch = url.pathname.match(/^\/forum\/thread\/([^/]+)\/lock$/);
     if (request.method === "POST" && lockMatch) {
-      const session = await deps.getSession(url, request);
+      const session = await getForumSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;

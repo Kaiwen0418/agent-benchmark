@@ -11,7 +11,9 @@ export type WikiEvaluationSession = {
   taskSlug: string;
   metadata: Record<string, unknown>;
   events: Array<Record<string, unknown>>;
-  wikiAnswerSubmissions: WikiAnswerSubmission[];
+  state: {
+    wikiAnswerSubmissions: WikiAnswerSubmission[];
+  };
 };
 
 export function normalizeWikiAnswer(value: string) {
@@ -20,7 +22,7 @@ export function normalizeWikiAnswer(value: string) {
 
 export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResult {
   const expectedAnswer = "June 1, 2026";
-  const latestAnswer = session.wikiAnswerSubmissions.at(-1);
+  const latestAnswer = session.state.wikiAnswerSubmissions.at(-1);
   const viewedArticleSlugs = Array.isArray(session.metadata.viewedArticleSlugs)
     ? session.metadata.viewedArticleSlugs.filter((value): value is string => typeof value === "string")
     : [];

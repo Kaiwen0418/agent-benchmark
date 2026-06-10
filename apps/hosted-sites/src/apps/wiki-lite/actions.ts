@@ -1,6 +1,8 @@
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
 
-export function markArticleViewed(session: HostedSession, articleSlug: string) {
+type WikiSession = HostedSessionFor<"wiki-lite">;
+
+export function markArticleViewed(session: WikiSession, articleSlug: string) {
   const viewedArticleSlugs = Array.isArray(session.metadata.viewedArticleSlugs)
     ? session.metadata.viewedArticleSlugs.filter((value): value is string => typeof value === "string")
     : [];
@@ -17,14 +19,14 @@ export function markArticleViewed(session: HostedSession, articleSlug: string) {
 }
 
 export function submitWikiAnswer(
-  session: HostedSession,
+  session: WikiSession,
   params: {
     answer: string;
     now: () => string;
   },
 ) {
   const normalizedAnswer = params.answer.trim();
-  session.wikiAnswerSubmissions.push({
+  session.state.wikiAnswerSubmissions.push({
     answer: normalizedAnswer,
     submittedAt: params.now(),
   });

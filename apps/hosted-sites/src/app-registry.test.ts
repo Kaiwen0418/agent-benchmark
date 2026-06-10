@@ -7,15 +7,17 @@ import {
   defaultGoalForSession,
   defaultStartPathForApp,
   evaluateSession,
+  extractHostedAppState,
   getHostedAppDefinition,
+  hydrateHostedAppState,
   listHostedAppDefinitions,
 } from "./runtime/app-registry.js";
 import type { HostedAppRouteDeps } from "./runtime/app-definition.js";
-import type { HostedSession } from "./runtime/types.js";
+import type { HostedAppId, HostedSessionFor } from "./runtime/types.js";
 
-const expectedApps = ["shopping-lite", "wiki-lite", "forum-lite", "repo-lite"];
+const expectedApps = ["shopping-lite", "wiki-lite", "forum-lite", "repo-lite"] as const;
 
-function makeSession(app: string): HostedSession {
+function makeSession<TApp extends HostedAppId>(app: TApp): HostedSessionFor<TApp> {
   const state = buildInitialSessionState(app);
   return {
     id: "session-1",
@@ -48,8 +50,8 @@ function makeSession(app: string): HostedSession {
     createdAt: "2026-06-01T00:00:00.000Z",
     events: [],
     persisted: false,
-    ...state,
-  };
+    state,
+  } as unknown as HostedSessionFor<TApp>;
 }
 
 function makeRouteDeps(): HostedAppRouteDeps {
@@ -85,20 +87,67 @@ test("app registry exposes every hosted app definition", () => {
   }
 });
 
-test("app registry builds complete initial session state for every app", () => {
+test("app registry builds only the state owned by each app", () => {
+  assert.deepEqual(Object.keys(buildInitialSessionState("shopping-lite")).sort(), ["cart", "orders", "products"]);
+  assert.deepEqual(Object.keys(buildInitialSessionState("wiki-lite")).sort(), ["wikiAnswerSubmissions", "wikiArticles"]);
+  assert.deepEqual(Object.keys(buildInitialSessionState("forum-lite")).sort(), ["moderationActions", "threads"]);
+  assert.deepEqual(Object.keys(buildInitialSessionState("repo-lite")).sort(), ["files", "issues", "mergeRequests"]);
+});
+
+test("app registry creates isolated state arrays for each session", () => {
+  const first = buildInitialSessionState("shopping-lite");
+  const second = buildInitialSessionState("shopping-lite");
+
+  first.cart.push({ productId: "product-1", quantity: 1 });
+  assert.deepEqual(second.cart, []);
+});
+
+test("app registry extracts only state owned by each app", () => {
+  const expectedKeys = {
+    "shopping-lite": ["cart", "orders", "products"],
+    "wiki-lite": ["wikiAnswerSubmissions", "wikiArticles"],
+    "forum-lite": ["moderationActions", "threads"],
+    "repo-lite": ["files", "issues", "mergeRequests"],
+  };
+
   for (const app of expectedApps) {
-    const state = buildInitialSessionState(app);
-    assert.ok(Array.isArray(state.products));
-    assert.ok(Array.isArray(state.cart));
-    assert.ok(Array.isArray(state.orders));
-    assert.ok(Array.isArray(state.wikiArticles));
-    assert.ok(Array.isArray(state.wikiAnswerSubmissions));
-    assert.ok(Array.isArray(state.threads));
-    assert.ok(Array.isArray(state.moderationActions));
-    assert.ok(Array.isArray(state.files));
-    assert.ok(Array.isArray(state.issues));
-    assert.ok(Array.isArray(state.mergeRequests));
+    const state = extractHostedAppState(makeSession(app));
+    assert.deepEqual(
+      Object.keys(state).sort(),
+      expectedKeys[app as keyof typeof expectedKeys],
+    );
   }
+});
+
+test("app registry hydrates persisted forum and repo state", () => {
+  const forumState = hydrateHostedAppState("forum-lite", {
+    threads: [{ id: "thread-1", title: "Persisted", category: "support", posts: [], locked: true }],
+    moderationActions: [{ id: "mod-1", threadId: "thread-1", action: "lock", reason: "persisted" }],
+    cart: [{ productId: "ignored", quantity: 1 }],
+  });
+  const repoState = hydrateHostedAppState("repo-lite", {
+    files: [{ path: "README.md", content: "persisted" }],
+    issues: [],
+    mergeRequests: [{ id: "mr-1", title: "Persisted", changedFiles: [], targetBranch: "main" }],
+    threads: [{ id: "ignored" }],
+  });
+
+  assert.equal(forumState.threads[0]?.title, "Persisted");
+  assert.equal(forumState.moderationActions[0]?.reason, "persisted");
+  assert.equal("cart" in forumState, false);
+  assert.equal(repoState.files[0]?.content, "persisted");
+  assert.equal(repoState.mergeRequests[0]?.title, "Persisted");
+  assert.equal("threads" in repoState, false);
+});
+
+test("app registry keeps seeded state when legacy metadata omits app fields", () => {
+  const state = hydrateHostedAppState("shopping-lite", {
+    cart: [{ productId: "prod-charger-30w", quantity: 1 }],
+  });
+
+  assert.equal(state.products.length > 0, true);
+  assert.deepEqual(state.cart, [{ productId: "prod-charger-30w", quantity: 1 }]);
+  assert.deepEqual(state.orders, []);
 });
 
 test("app registry composes one route handler per hosted app", () => {

@@ -1,21 +1,38 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import type { HostedRouteHandler } from "../routes/index.js";
-import type { HostedSession } from "./types.js";
-
-export type HostedAppSessionState = Pick<
+import type {
+  HostedAppId,
+  HostedAppStateById,
   HostedSession,
-  | "products"
-  | "cart"
-  | "orders"
-  | "wikiArticles"
-  | "wikiAnswerSubmissions"
-  | "threads"
-  | "moderationActions"
-  | "files"
-  | "issues"
-  | "mergeRequests"
->;
+  HostedSessionFor,
+} from "./types.js";
+
+export type {
+  ForumAppSessionState,
+  HostedAppId,
+  HostedAppPersistenceState,
+  HostedAppSessionState,
+  HostedAppStateById,
+  RepoAppSessionState,
+  ShoppingAppSessionState,
+  WikiAppSessionState,
+} from "./types.js";
+
+export function isStateRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function readStateArray<T>(
+  value: unknown,
+  key: string,
+  isItem: (item: unknown) => item is T,
+) {
+  if (!isStateRecord(value) || !Array.isArray(value[key])) {
+    return undefined;
+  }
+  return value[key].filter(isItem);
+}
 
 export type HostedAppRouteDeps = {
   publicBaseUrl: string;
@@ -33,12 +50,14 @@ export type HostedAppRouteDeps = {
   notFound: (response: ServerResponse) => void;
 };
 
-export type HostedAppDefinition = {
-  id: string;
+export type HostedAppDefinition<TApp extends HostedAppId = HostedAppId> = {
+  id: TApp;
+  stateKeys: readonly (keyof HostedAppStateById[TApp])[];
   getDefaultStartPath: () => string;
   getDefaultGoal: (taskSlug: string) => string;
-  buildInitialSessionState: () => Partial<HostedAppSessionState>;
-  buildFinalState: (session: HostedSession) => unknown;
-  evaluate: (session: HostedSession) => HostedWebScoreResult;
+  buildInitialSessionState: () => HostedAppStateById[TApp];
+  hydratePersistedState: (value: unknown) => Partial<HostedAppStateById[TApp]>;
+  buildFinalState: (session: HostedSessionFor<TApp>) => unknown;
+  evaluate: (session: HostedSessionFor<TApp>) => HostedWebScoreResult;
   createRoutes: (deps: HostedAppRouteDeps) => HostedRouteHandler[];
 };

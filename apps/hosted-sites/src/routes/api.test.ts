@@ -39,7 +39,7 @@ function makeSession(): HostedSession {
     createdAt: "2026-06-01T00:00:00.000Z",
     events: [],
     persisted: true,
-    ...buildInitialSessionState(app),
+    state: buildInitialSessionState(app),
   };
 }
 

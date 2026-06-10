@@ -1,10 +1,12 @@
 import type { ServerResponse } from "node:http";
 import type { WikiArticle } from "./types.js";
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
+
+type WikiSession = HostedSessionFor<"wiki-lite">;
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
 
 export function renderWikiIndex(
-  session: HostedSession,
+  session: WikiSession,
   response: ServerResponse,
   query: string,
   publicBaseUrl: string,
@@ -12,10 +14,10 @@ export function renderWikiIndex(
 ) {
   const normalizedQuery = query.trim().toLowerCase();
   const articles = normalizedQuery
-    ? session.wikiArticles.filter((article) =>
+    ? session.state.wikiArticles.filter((article) =>
         `${article.title} ${article.summary} ${article.body}`.toLowerCase().includes(normalizedQuery),
       )
-    : session.wikiArticles;
+    : session.state.wikiArticles;
 
   const cards = articles
     .map(
@@ -27,7 +29,7 @@ export function renderWikiIndex(
     )
     .join("");
 
-  const submitted = session.wikiAnswerSubmissions.at(-1);
+  const submitted = session.state.wikiAnswerSubmissions.at(-1);
   sendHtml(
     response,
     200,
@@ -65,7 +67,7 @@ export function renderWikiIndex(
 }
 
 export function renderWikiArticle(
-  session: HostedSession,
+  session: WikiSession,
   article: WikiArticle,
   response: ServerResponse,
   publicBaseUrl: string,

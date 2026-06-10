@@ -1,8 +1,8 @@
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
 
-export function buildForumFinalState(session: HostedSession) {
-  const targetThread = session.threads.find((candidate) => candidate.id === "thr-battery");
-  const lockAction = session.moderationActions.find(
+export function buildForumFinalState(session: HostedSessionFor<"forum-lite">) {
+  const targetThread = session.state.threads.find((candidate) => candidate.id === "thr-battery");
+  const lockAction = session.state.moderationActions.find(
     (action) => action.threadId === "thr-battery" && action.action === "lock",
   );
 

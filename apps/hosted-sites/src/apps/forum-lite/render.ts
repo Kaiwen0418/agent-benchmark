@@ -1,15 +1,17 @@
 import type { ServerResponse } from "node:http";
 import type { ForumThread } from "./types.js";
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
+
+type ForumSession = HostedSessionFor<"forum-lite">;
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
 
 export function renderForumIndex(
-  session: HostedSession,
+  session: ForumSession,
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
 ) {
-  const cards = session.threads
+  const cards = session.state.threads
     .map(
       (thread) => `<article class="card">
         <h2>${escapeHtml(thread.title)}</h2>
@@ -33,12 +35,12 @@ export function renderForumIndex(
 }
 
 export function renderThread(
-  session: HostedSession,
+  session: ForumSession,
   thread: ForumThread,
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
-  evaluateSession: (session: HostedSession) => { status: string; score: number; summary: string },
+  evaluateSession: (session: ForumSession) => { status: string; score: number; summary: string },
 ) {
   const postsHtml = thread.posts
     .map(

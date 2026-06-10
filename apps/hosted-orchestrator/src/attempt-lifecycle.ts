@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { HostedAttemptReadModel } from "@agentbench/shared";
+import type { Database, HostedAttemptReadModel, HostedAttemptSessionStatus } from "@agentbench/shared";
 import {
   aggregateSuiteScore,
   type HostedWebScoreResult,
@@ -8,7 +8,7 @@ import {
 } from "@agentbench/scoring";
 
 export type AttemptStatus = "created" | "running" | "scoring" | "completed" | "failed" | "cancelled" | "timeout";
-export type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
+export type HostedSessionStatus = HostedAttemptSessionStatus;
 
 export type AttemptLifecycleSession = {
   id: string;
@@ -85,7 +85,7 @@ export type TimeoutAttemptCommandResult = {
 
 type AttemptLifecycleDeps = {
   now: () => string;
-  getSupabaseAdmin: () => SupabaseClient | null | undefined;
+  getSupabaseAdmin: () => SupabaseClient<Database> | null | undefined;
   loadAttemptMetadata: (attemptId: string | null) => Promise<Record<string, unknown>>;
   loadAttemptSessions: (attemptId: string) => Promise<AttemptLifecycleAdvanceSession[]>;
   loadAttemptReadModel: (attemptId: string) => Promise<HostedAttemptReadModel<AttemptLifecycleAdvanceSession>>;
@@ -475,7 +475,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .limit(1)
       .maybeSingle();
 
-    if (!existingAttemptScore) {
+    if (!existingAttemptScore && params.runId) {
       const { error: attemptScoreError } = await supabase.from("benchmark_attempt_scores").insert({
         run_id: params.runId,
         attempt_id: params.attemptId,

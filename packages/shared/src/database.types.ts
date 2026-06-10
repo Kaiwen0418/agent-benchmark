@@ -1,0 +1,549 @@
+export type Json = string | number | boolean | null | { [key: string]: any } | any[];
+
+export type Database = {
+  public: {
+    Tables: {
+      benchmark_cases: {
+        Row: {
+          category: string;
+          created_at: string;
+          description: string;
+          difficulty: string;
+          id: string;
+          is_public: boolean;
+          metadata: { [key: string]: any };
+          provider: "native" | "hosted-web" | "webarena" | null;
+          slug: string;
+          title: string;
+        };
+        Insert: {
+          category: string;
+          created_at?: string;
+          description: string;
+          difficulty: string;
+          id?: string;
+          is_public?: boolean;
+          metadata?: { [key: string]: any };
+          provider?: "native" | "hosted-web" | "webarena" | null;
+          slug: string;
+          title: string;
+        };
+        Update: {
+          category?: string;
+          created_at?: string;
+          description?: string;
+          difficulty?: string;
+          id?: string;
+          is_public?: boolean;
+          metadata?: { [key: string]: any };
+          provider?: "native" | "hosted-web" | "webarena" | null;
+          slug?: string;
+          title?: string;
+        };
+        Relationships: [];
+      };
+      benchmark_attempt_scores: {
+        Row: {
+          attempt_id: string;
+          breakdown: Json;
+          created_at: string;
+          id: string;
+          run_id: string;
+          score: number;
+          status: "passed" | "failed" | "error";
+          summary: string;
+        };
+        Insert: {
+          attempt_id: string;
+          breakdown?: Json;
+          created_at?: string;
+          id?: string;
+          run_id: string;
+          score: number;
+          status: "passed" | "failed" | "error";
+          summary: string;
+        };
+        Update: {
+          attempt_id?: string;
+          breakdown?: Json;
+          created_at?: string;
+          id?: string;
+          run_id?: string;
+          score?: number;
+          status?: "passed" | "failed" | "error";
+          summary?: string;
+        };
+        Relationships: [];
+      };
+      benchmark_attempts: {
+        Row: {
+          aggregate_score: number | null;
+          case_id: string;
+          completed_at: string | null;
+          created_at: string;
+          id: string;
+          metadata: Json;
+          provider: string;
+          run_id: string;
+          scoring_summary: Json;
+          started_at: string | null;
+          status: "created" | "running" | "scoring" | "completed" | "failed" | "cancelled" | "timeout";
+          suite_slug: string;
+          suite_version: string;
+        };
+        Insert: {
+          aggregate_score?: number | null;
+          case_id: string;
+          completed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          metadata?: Json;
+          provider: string;
+          run_id: string;
+          scoring_summary?: Json;
+          started_at?: string | null;
+          status?: "created" | "running" | "scoring" | "completed" | "failed" | "cancelled" | "timeout";
+          suite_slug: string;
+          suite_version: string;
+        };
+        Update: {
+          aggregate_score?: number | null;
+          case_id?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          metadata?: Json;
+          provider?: string;
+          run_id?: string;
+          scoring_summary?: Json;
+          started_at?: string | null;
+          status?: "created" | "running" | "scoring" | "completed" | "failed" | "cancelled" | "timeout";
+          suite_slug?: string;
+          suite_version?: string;
+        };
+        Relationships: [];
+      };
+      benchmark_runs: {
+        Row: {
+          case_id: string;
+          completed_at: string | null;
+          created_at: string;
+          error_message: string | null;
+          execution_mode: "internal" | "external-agent";
+          guest_id: string | null;
+          id: string;
+          live_view_url: string | null;
+          runner_id: string | null;
+          score: number | null;
+          started_at: string | null;
+          status:
+            | "queued"
+            | "waiting_for_agent"
+            | "agent_connected"
+            | "starting"
+            | "running"
+            | "scoring"
+            | "completed"
+            | "failed"
+            | "cancelled"
+            | "timeout";
+          user_id: string | null;
+        };
+        Insert: {
+          case_id: string;
+          completed_at?: string | null;
+          created_at?: string;
+          error_message?: string | null;
+          execution_mode: "internal" | "external-agent";
+          guest_id?: string | null;
+          id?: string;
+          live_view_url?: string | null;
+          runner_id?: string | null;
+          score?: number | null;
+          started_at?: string | null;
+          status?:
+            | "queued"
+            | "waiting_for_agent"
+            | "agent_connected"
+            | "starting"
+            | "running"
+            | "scoring"
+            | "completed"
+            | "failed"
+            | "cancelled"
+            | "timeout";
+          user_id?: string | null;
+        };
+        Update: {
+          case_id?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          error_message?: string | null;
+          execution_mode?: "internal" | "external-agent";
+          guest_id?: string | null;
+          id?: string;
+          live_view_url?: string | null;
+          runner_id?: string | null;
+          score?: number | null;
+          started_at?: string | null;
+          status?:
+            | "queued"
+            | "waiting_for_agent"
+            | "agent_connected"
+            | "starting"
+            | "running"
+            | "scoring"
+            | "completed"
+            | "failed"
+            | "cancelled"
+            | "timeout";
+          user_id?: string | null;
+        };
+        Relationships: [];
+      };
+      artifacts: {
+        Row: {
+          created_at: string;
+          id: string;
+          run_id: string;
+          storage_path: string | null;
+          type: string;
+          url: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          run_id: string;
+          storage_path?: string | null;
+          type: string;
+          url?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          run_id?: string;
+          storage_path?: string | null;
+          type?: string;
+          url?: string | null;
+        };
+        Relationships: [];
+      };
+      hosted_web_access_logs: {
+        Row: {
+          attempt_id: string | null;
+          created_at: string;
+          event: string;
+          id: string;
+          ip: string | null;
+          metadata: Json;
+          referer: string | null;
+          run_id: string | null;
+          session_id: string | null;
+          user_agent: string | null;
+        };
+        Insert: {
+          attempt_id?: string | null;
+          created_at?: string;
+          event: string;
+          id?: string;
+          ip?: string | null;
+          metadata?: Json;
+          referer?: string | null;
+          run_id?: string | null;
+          session_id?: string | null;
+          user_agent?: string | null;
+        };
+        Update: {
+          attempt_id?: string | null;
+          created_at?: string;
+          event?: string;
+          id?: string;
+          ip?: string | null;
+          metadata?: Json;
+          referer?: string | null;
+          run_id?: string | null;
+          session_id?: string | null;
+          user_agent?: string | null;
+        };
+        Relationships: [];
+      };
+      hosted_web_events: {
+        Row: {
+          attempt_id: string | null;
+          created_at: string;
+          id: string;
+          name: string | null;
+          payload: Json;
+          run_id: string;
+          session_id: string;
+          type: string;
+        };
+        Insert: {
+          attempt_id?: string | null;
+          created_at?: string;
+          id?: string;
+          name?: string | null;
+          payload?: Json;
+          run_id: string;
+          session_id: string;
+          type: string;
+        };
+        Update: {
+          attempt_id?: string | null;
+          created_at?: string;
+          id?: string;
+          name?: string | null;
+          payload?: Json;
+          run_id?: string;
+          session_id?: string;
+          type?: string;
+        };
+        Relationships: [];
+      };
+      hosted_web_results: {
+        Row: {
+          app: string | null;
+          attempt_id: string | null;
+          created_at: string;
+          evaluators: Json;
+          final_state: Json;
+          id: string;
+          run_id: string;
+          score: number;
+          session_id: string;
+          status: "passed" | "failed" | "error";
+          summary: string;
+          task_slug: string | null;
+          weight: number;
+        };
+        Insert: {
+          app?: string | null;
+          attempt_id?: string | null;
+          created_at?: string;
+          evaluators?: Json;
+          final_state?: Json;
+          id?: string;
+          run_id: string;
+          score: number;
+          session_id: string;
+          status: "passed" | "failed" | "error";
+          summary: string;
+          task_slug?: string | null;
+          weight?: number;
+        };
+        Update: {
+          app?: string | null;
+          attempt_id?: string | null;
+          created_at?: string;
+          evaluators?: Json;
+          final_state?: Json;
+          id?: string;
+          run_id?: string;
+          score?: number;
+          session_id?: string;
+          status?: "passed" | "failed" | "error";
+          summary?: string;
+          task_slug?: string | null;
+          weight?: number;
+        };
+        Relationships: [];
+      };
+      hosted_web_sessions: {
+        Row: {
+          access_count: number;
+          activated_at: string | null;
+          app: string;
+          attempt_id: string | null;
+          case_id: string;
+          completed_at: string | null;
+          created_at: string;
+          created_by_guest_id: string | null;
+          created_by_user_id: string | null;
+          expires_at: string | null;
+          first_seen_ip: string | null;
+          first_seen_user_agent: string | null;
+          id: string;
+          last_accessed_at: string | null;
+          last_seen_ip: string | null;
+          last_seen_user_agent: string | null;
+          metadata: Json;
+          provider: string;
+          required: boolean;
+          run_id: string;
+          seed_version: string;
+          sequence_index: number;
+          session_token_hash: string;
+          start_url: string;
+          status: "created" | "active" | "scoring" | "completed" | "failed" | "expired";
+          task_slug: string;
+          task_version: string;
+          weight: number;
+        };
+        Insert: {
+          access_count?: number;
+          activated_at?: string | null;
+          app: string;
+          attempt_id?: string | null;
+          case_id: string;
+          completed_at?: string | null;
+          created_at?: string;
+          created_by_guest_id?: string | null;
+          created_by_user_id?: string | null;
+          expires_at?: string | null;
+          first_seen_ip?: string | null;
+          first_seen_user_agent?: string | null;
+          id?: string;
+          last_accessed_at?: string | null;
+          last_seen_ip?: string | null;
+          last_seen_user_agent?: string | null;
+          metadata?: Json;
+          provider?: string;
+          required?: boolean;
+          run_id: string;
+          seed_version: string;
+          sequence_index?: number;
+          session_token_hash: string;
+          start_url: string;
+          status?: "created" | "active" | "scoring" | "completed" | "failed" | "expired";
+          task_slug: string;
+          task_version?: string;
+          weight?: number;
+        };
+        Update: {
+          access_count?: number;
+          activated_at?: string | null;
+          app?: string;
+          attempt_id?: string | null;
+          case_id?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          created_by_guest_id?: string | null;
+          created_by_user_id?: string | null;
+          expires_at?: string | null;
+          first_seen_ip?: string | null;
+          first_seen_user_agent?: string | null;
+          id?: string;
+          last_accessed_at?: string | null;
+          last_seen_ip?: string | null;
+          last_seen_user_agent?: string | null;
+          metadata?: Json;
+          provider?: string;
+          required?: boolean;
+          run_id?: string;
+          seed_version?: string;
+          sequence_index?: number;
+          session_token_hash?: string;
+          start_url?: string;
+          status?: "created" | "active" | "scoring" | "completed" | "failed" | "expired";
+          task_slug?: string;
+          task_version?: string;
+          weight?: number;
+        };
+        Relationships: [];
+      };
+      profiles: {
+        Row: {
+          daily_run_limit: number | null;
+          id: string;
+        };
+        Insert: {
+          daily_run_limit?: number | null;
+          id: string;
+        };
+        Update: {
+          daily_run_limit?: number | null;
+          id?: string;
+        };
+        Relationships: [];
+      };
+      run_events: {
+        Row: {
+          created_at: string;
+          id: string;
+          payload: { [key: string]: any };
+          run_id: string;
+          type:
+            | "run.created"
+            | "run.assigned"
+            | "run.starting"
+            | "run.running"
+            | "agent.connected"
+            | "live.frame"
+            | "tool.call"
+            | "tool.result"
+            | "mcp.request"
+            | "mcp.response"
+            | "mcp.error"
+            | "hosted.session.created"
+            | "hosted.page.load"
+            | "hosted.action"
+            | "hosted.task_signal"
+            | "hosted.score"
+            | "artifact.created"
+            | "score.updated"
+            | "run.completed"
+            | "run.failed";
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          payload?: { [key: string]: any };
+          run_id: string;
+          type:
+            | "run.created"
+            | "run.assigned"
+            | "run.starting"
+            | "run.running"
+            | "agent.connected"
+            | "live.frame"
+            | "tool.call"
+            | "tool.result"
+            | "mcp.request"
+            | "mcp.response"
+            | "mcp.error"
+            | "hosted.session.created"
+            | "hosted.page.load"
+            | "hosted.action"
+            | "hosted.task_signal"
+            | "hosted.score"
+            | "artifact.created"
+            | "score.updated"
+            | "run.completed"
+            | "run.failed";
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          payload?: { [key: string]: any };
+          run_id?: string;
+          type?:
+            | "run.created"
+            | "run.assigned"
+            | "run.starting"
+            | "run.running"
+            | "agent.connected"
+            | "live.frame"
+            | "tool.call"
+            | "tool.result"
+            | "mcp.request"
+            | "mcp.response"
+            | "mcp.error"
+            | "hosted.session.created"
+            | "hosted.page.load"
+            | "hosted.action"
+            | "hosted.task_signal"
+            | "hosted.score"
+            | "artifact.created"
+            | "score.updated"
+            | "run.completed"
+            | "run.failed";
+        };
+        Relationships: [];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+};

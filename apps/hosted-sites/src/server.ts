@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import crypto from "node:crypto";
 import { hostname } from "node:os";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@agentbench/shared";
 import type { HostedAttemptOverviewSession, HostedSession } from "./runtime/types.js";
 import { redirect, readForm, readJson, sendJson, notFound, badRequest } from "./runtime/http.js";
 import { createAttemptsRoutes } from "./routes/attempts.js";
@@ -14,6 +15,9 @@ import {
   defaultGoalForSession,
   defaultStartPathForApp,
   evaluateSession,
+  extractHostedAppState,
+  hydrateHostedAppState,
+  resolveHostedAppId,
 } from "./runtime/app-registry.js";
 import { createOrchestratorClient } from "./runtime/orchestrator-client.js";
 import { createRedisSessionCache } from "./runtime/session-cache.js";
@@ -32,7 +36,7 @@ const redisUrl = process.env.HOSTED_SESSION_REDIS_URL ?? process.env.REDIS_URL;
 const sessionRedisTtlMs = Number(process.env.HOSTED_SESSION_REDIS_TTL_MS ?? 1000 * 60 * 60 * 6);
 
 const sessions = new Map<string, HostedSession>();
-let supabaseAdmin: SupabaseClient | null | undefined;
+let supabaseAdmin: SupabaseClient<Database> | null | undefined;
 const sessionCache = redisUrl
   ? createRedisSessionCache({
       url: redisUrl,
@@ -103,7 +107,10 @@ const sessionStore = createSessionStore({
   getSupabaseAdmin,
   defaultStartPathForApp,
   defaultGoalForSession,
+  resolveHostedAppId,
   buildInitialSessionState,
+  extractHostedAppState,
+  hydrateHostedAppState,
   clientIp,
   clientUserAgent,
   clientReferer,

@@ -1,13 +1,13 @@
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
 
-export function buildWikiFinalState(session: HostedSession) {
+export function buildWikiFinalState(session: HostedSessionFor<"wiki-lite">) {
   const viewedArticleSlugs = Array.isArray(session.metadata.viewedArticleSlugs)
     ? session.metadata.viewedArticleSlugs.filter((value): value is string => typeof value === "string")
     : [];
   return {
     app: "wiki-lite",
     taskSlug: session.taskSlug,
-    latestAnswer: session.wikiAnswerSubmissions.at(-1) ?? null,
+    latestAnswer: session.state.wikiAnswerSubmissions.at(-1) ?? null,
     viewedReleaseHistory:
       session.events.some(
         (event) =>

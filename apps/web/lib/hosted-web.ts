@@ -10,6 +10,16 @@ import { createSupabaseAdminClient } from "./supabase/admin";
 
 type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
 
+function toHostedSessionStatus(status: string): HostedSessionStatus {
+  return status === "created" ||
+    status === "active" ||
+    status === "completed" ||
+    status === "failed" ||
+    status === "expired"
+    ? status
+    : "created";
+}
+
 export type HostedWebSessionConnection = {
   sessionId: string;
   attemptId: string | null;
@@ -320,7 +330,7 @@ async function listExistingHostedWebSessions(attemptId: string) {
       startUrl: row.start_url,
       goal: typeof metadata.goal === "string" ? metadata.goal : "",
       title: typeof metadata.title === "string" ? metadata.title : null,
-      status: row.status,
+      status: toHostedSessionStatus(row.status),
     } satisfies HostedWebSessionConnection;
   });
 }

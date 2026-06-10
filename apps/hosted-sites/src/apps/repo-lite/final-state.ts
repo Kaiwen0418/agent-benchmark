@@ -1,8 +1,8 @@
-import type { HostedSession } from "../../runtime/types.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
 
-export function buildRepoFinalState(session: HostedSession) {
-  const readme = session.files.find((f) => f.path === "README.md");
-  const latestMR = session.mergeRequests.at(-1);
+export function buildRepoFinalState(session: HostedSessionFor<"repo-lite">) {
+  const readme = session.state.files.find((f) => f.path === "README.md");
+  const latestMR = session.state.mergeRequests.at(-1);
 
   return {
     app: "repo-lite",
