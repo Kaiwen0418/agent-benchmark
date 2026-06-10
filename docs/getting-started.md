@@ -1,0 +1,103 @@
+# Getting Started
+
+> [中文](./getting-started.zh-CN.md) | English
+
+## Prerequisites
+
+- Node.js and pnpm
+- Docker with Docker Compose
+- Supabase CLI and a Supabase project
+
+## Install
+
+```bash
+pnpm install
+cp apps/web/.env.example apps/web/.env.local
+```
+
+Configure these values in `apps/web/.env.local`:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `RUNNER_SHARED_SECRET`
+- `HOSTED_SITES_URL`
+- `HOSTED_ORCHESTRATOR_URL`
+
+Apply the database migrations and seed data:
+
+```bash
+supabase db push
+supabase db seed
+```
+
+## Start the Default Local Stack
+
+The default runtime uses Docker for Redis, hosted-sites, hosted-orchestrator, and the Nginx gateway.
+
+```bash
+cp .env.docker.example .env
+docker-compose up -d --build
+pnpm dev:web
+```
+
+Default endpoints:
+
+- Web UI: `http://localhost:3000`
+- Gateway: `http://localhost:8080`
+- hosted-sites health: `http://localhost:8080/health`
+- orchestrator through gateway: `http://localhost:8080/orchestrator`
+
+Stop the hosted stack with:
+
+```bash
+docker-compose down
+```
+
+## Process-Level Development
+
+For direct debugging without running the hosted services in Docker:
+
+```bash
+pnpm dev:orchestrator
+pnpm dev:hosted
+pnpm dev:web
+```
+
+The default direct-process ports are:
+
+- web: `3000`
+- hosted-sites: `3003`
+- hosted-orchestrator: `3004`
+
+`hosted-sites` serves session-scoped benchmark applications. `hosted-orchestrator` owns attempt initialization, progression, completion, timeout handling, and aggregate scoring. Redis stores shared runtime session state so multiple hosted-sites replicas can serve the same session.
+
+## Hosted Web Suite
+
+The current suite contains:
+
+- `shopping-lite`: constrained checkout
+- `forum-lite`: reply to and moderate a safety thread
+- `repo-lite`: update installation instructions and create a merge request
+- `wiki-lite`: retrieve and submit a release-history date
+
+Create a standalone local session:
+
+```bash
+curl -X POST http://localhost:3003/api/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Open the returned `startUrl`. A normal web run can instead allocate an attempt through `/api/runs/:runId/connect`.
+
+Callback communication requires `AGENTBENCH_WEB_URL` and the same `RUNNER_SHARED_SECRET` in the web and hosted runtimes.
+
+## Validation
+
+```bash
+pnpm test
+pnpm build
+```
+
+See [Hosted Web Benchmarks](./hosted-web-benchmark.md) for the execution model and [Deployment and Scaling](./deployment.md) for replica testing and production deployment.

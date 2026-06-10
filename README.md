@@ -2,351 +2,64 @@
 
 > [中文](./README.zh-CN.md) | English
 
-AgentBench is an interactive playground for watching tool-using AI agents work inside benchmark environments.
-
-It focuses on a simple idea: agent evaluation should be watchable, not just scored. Users should be able to connect their own agents, start a run, and watch what the agent does in real time.
-
-## Why It Exists
-
-Most agent benchmarks reduce performance to a final number. That misses how agents actually behave:
-
-- how they use tools
-- how they navigate browser workflows
-- how they read and write files
-- how they communicate inside task flows
-- how they handle safety and policy boundaries
-
-AgentBench is designed to make that behavior visible. The current product direction is intentionally narrow:
-
-- one homepage
-- one start interaction
-- one live run experience
+AgentBench is an interactive benchmark platform for observing and scoring tool-using AI agents. It provides hosted, session-scoped web tasks, live run telemetry, replay, and deterministic server-side evaluation.
 
 ## Core Features
 
-- single-page run playground
-- live browser-style viewing
-- tool call timeline
-- run-scoped hosted-web connection flow
-- replay gallery
-- inline integration docs
-- benchmark scoring and observability
-
-## Architecture Overview
-
-Current web experience:
-
-- single-page interactive homepage
-- retro Mac hero
-- connect panel and live run playground
-- replay gallery and docs on the same page
-
-Later infrastructure:
-
-- Next.js application shell
-- Supabase for persistence
-- hosted benchmark sites
-- self-hosted Linux deployment target
-- session-scoped task state
-- server-side hosted-web scoring
-- optional legacy runner/MCP path for internal demos
-
-## Current Hosted-Web Link Flow
-
-Today the hosted-web connection model is:
-
-1. the user clicks `Start Agent Session`
-2. AgentBench creates a run in `waiting_for_agent`
-3. the UI allocates a hosted attempt with ordered hosted sessions
-4. the UI exposes an attempt-level hosted suite URL plus per-session URLs
-5. the user's agent opens the hosted suite in a browser and works through the current task
-6. hosted-sites emits telemetry and task signals back to AgentBench
-7. hosted-sites writes per-session results, aggregates the attempt score, and completes the run
-
-In local development the hosted benchmark endpoint defaults to:
-
-```text
-http://localhost:3003
-```
-
-The legacy MCP runner remains available for internal demos, but it is no longer the default hosted-web path.
-
-## Monorepo Structure
-
-```text
-agentbench/
-├─ apps/
-│  ├─ web/
-│  ├─ runner/
-│  └─ hosted-sites/
-├─ packages/
-│  ├─ protocol/
-│  ├─ mcp-tools/
-│  ├─ test-cases/
-│  ├─ scoring/
-│  └─ shared/
-├─ infra/
-│  ├─ docker/
-│  ├─ nginx/
-│  └─ scripts/
-├─ supabase/
-│  ├─ migrations/
-│  └─ seed.sql
-├─ docs/
-│  ├─ architecture.md
-│  ├─ security.md
-│  ├─ runner.md
-│  ├─ protocol.md
-│  ├─ benchmark-spec.md
-│  └─ hosted-web-benchmark.md
-├─ plan.md
-├─ agent.md
-├─ package.json
-├─ pnpm-workspace.yaml
-├─ turbo.json
-└─ README.md
-```
+- hosted-web benchmark suites for external agents
+- live run and tool-event observability
+- session-scoped task state backed by Redis
+- deterministic per-task and aggregate scoring
+- horizontally scalable hosted-sites runtime
+- self-hosted Linux deployment through Docker and GitHub Actions
 
 ## Quick Start
 
-### 1) Install
+Requirements: Node.js, pnpm, Docker, and a configured Supabase project.
 
 ```bash
 pnpm install
-```
-
-### 2) Configure Supabase
-
-```bash
 cp apps/web/.env.example apps/web/.env.local
-```
-
-Set:
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `RUNNER_SHARED_SECRET`
-- `HOSTED_SITES_URL`
-- `HOSTED_ORCHESTRATOR_URL`
-
-Then apply:
-
-```bash
-supabase db push
-supabase db seed
-```
-
-For production web deploys, set `HOSTED_SITES_URL` to the public hosted benchmark site, for example:
-
-```text
-https://hosted.project-echo.xyz
-```
-
-Set `HOSTED_ORCHESTRATOR_URL` to the public orchestrator path on the same domain, for example:
-
-```text
-https://hosted.project-echo.xyz/orchestrator
-```
-
-### 3) Start Local Runtime (Default: Docker)
-
-Use Docker as the default startup mode for `hosted-sites + hosted-orchestrator + gateway`.
-
-```bash
 cp .env.docker.example .env
 docker-compose up -d --build
+pnpm dev:web
 ```
 
 Default local endpoints:
 
-- `http://localhost:8080/health` -> hosted-sites health
-- `http://localhost:8080/attempts/<attempt-id>?session=<token>` -> hosted suite overview
-- `http://localhost:8080/shopping?session=<token>` -> shopping-lite task
-- `http://localhost:8080/wiki?session=<token>` -> wiki-lite task
+- Web: `http://localhost:3000`
+- Hosted gateway: `http://localhost:8080`
+- Health check: `http://localhost:8080/health`
 
-### 4) Start web app
+See [Getting Started](./docs/getting-started.md) for environment setup and development workflows.
 
-```bash
-pnpm dev:web
-```
-
-### 5) Dev-mode startup (no Docker, optional)
-
-If you want process-level debugging, run services directly:
-
-```bash
-pnpm dev:orchestrator
-pnpm dev:hosted
-```
-
-## Local Process Roles
-
-Why `hosted-sites + hosted-orchestrator` is the default target:
-
-- `hosted-sites` is the hosted-web benchmark site layer for session-scoped task apps.
-- `hosted-orchestrator` is the control plane for attempt init/state/commands, scoring aggregation, timeout handling, and cleanup.
-- hosted-web runs use normal browser access to a session URL; the site emits telemetry and score events back to `apps/web`.
-- `mock-sites`, `runner`, and MCP remain as legacy/internal demo tooling, not the primary production path.
-
-This keeps the default runtime small:
-
-- no server-side Chromium pool for normal hosted-web runs
-- no MCP gateway dependency for the first hosted benchmark
-- one long-running hosted site deployment can serve many session-scoped runs
-
-Recommended startup sets:
-
-- Hosted-web path: `dev:web` + `dev:orchestrator` + `dev:hosted`
-- Local hosted stack: add `dev:hosted` and `dev:orchestrator`
-
-## Hosted Web PoC
-
-The current hosted-web demo benchmark is a four-step suite:
-
-- `shopping-lite`: constrained checkout
-- `forum-lite`: reply to a safety thread and lock it with the required moderation reason
-- `repo-lite`: update README install instructions and open a merge request
-- `wiki-lite`: retrieve and submit the release-history date
-
-The suite is stored as one benchmark case with ordered hosted sessions and weighted required-session aggregation.
-
-Start the hosted benchmark site:
-
-```bash
-pnpm dev:orchestrator
-pnpm dev:hosted
-```
-
-The web app uses `HOSTED_SITES_URL` to open hosted task URLs. In local development it defaults to:
+## Repository Layout
 
 ```text
-http://localhost:3003
+apps/
+  web/                  Next.js control plane and live UI
+  hosted-sites/         hosted benchmark applications
+  hosted-orchestrator/  attempt lifecycle and suite orchestration
+packages/
+  protocol/             shared protocol contracts
+  scoring/              evaluator and aggregation logic
+  shared/               shared application and database types
+  test-cases/           benchmark definitions and fixtures
+infra/                  Docker, Nginx, and deployment scripts
+supabase/               database migrations
+docs/                   architecture and operational documentation
 ```
 
-The web app uses `HOSTED_ORCHESTRATOR_URL` for hosted attempt init/state/command APIs. In local development it typically points to:
+## Documentation
 
-```text
-http://localhost:3004
-```
+- [Documentation Index](./docs/README.md)
+- [Getting Started](./docs/getting-started.md)
+- [Architecture](./docs/architecture.md)
+- [Hosted Web Benchmarks](./docs/hosted-web-benchmark.md)
+- [Hosted Site App Authoring](./docs/hosted-site-app-authoring.zh-CN.md)
+- [Deployment and Scaling](./docs/deployment.md)
+- [Benchmark Specification](./docs/benchmark-spec.md)
+- [Protocol](./docs/protocol.md)
+- [Security](./docs/security.md)
 
-The hosted site posts events and completion back to `AGENTBENCH_WEB_URL`, defaulting to:
-
-```text
-http://localhost:3000
-```
-
-If the web app has `RUNNER_SHARED_SECRET` configured, start `hosted-sites` with the same value so event and completion callbacks are accepted.
-
-Create a local session:
-
-```bash
-curl -X POST http://localhost:3003/api/sessions \
-  -H 'Content-Type: application/json' \
-  -d '{}'
-```
-
-Open the returned `startUrl` or use `/api/runs/:runId/connect` from the web app to allocate a real attempt. For the default benchmark case, the agent should:
-
-1. buy exactly one USB-C charger at or below `$30` with standard shipping and no restricted products
-2. reply to the battery swelling forum thread with the official recall link and lock it with reason `safety escalation`
-3. update the repo README install command to `pnpm install` and open a merge request titled `Fix install instructions` targeting `main`
-4. use the hosted wiki to find when `wiki-lite` followed the hosted-web suite alpha and submit the exact date
-
-## Docker Gateway Bundle (hosted-sites + gateway)
-
-This is the default local runtime path.
-
-Files:
-
-- [docker-compose.yml](/Users/blueberryncherry/Proj/agent-benchmark/docker-compose.yml)
-- [hosted-sites.conf](/Users/blueberryncherry/Proj/agent-benchmark/infra/nginx/hosted-sites.conf)
-- [`.env.docker.example`](/Users/blueberryncherry/Proj/agent-benchmark/.env.docker.example)
-
-Prepare env:
-
-```bash
-cp .env.docker.example .env
-```
-
-Start:
-
-```bash
-docker-compose up -d --build
-```
-
-Start multiple hosted-sites replicas for horizontal-scaling practice:
-
-```bash
-docker-compose up -d --build --scale hosted-sites=4
-```
-
-Check which replica served a request:
-
-```bash
-curl http://localhost:8080/health
-```
-
-The default Docker bundle includes Redis and sets `HOSTED_SESSION_REDIS_URL=redis://redis:6379`, so hosted-sites replicas share runtime session state without depending on Supabase reads.
-
-Stop:
-
-```bash
-docker-compose down
-```
-
-Gateway endpoint on host:
-
-- `http://localhost:8080/health` -> hosted-sites health
-- `http://localhost:8080/attempts/<attempt-id>?session=<token>` -> hosted suite overview
-- `http://localhost:8080/shopping?session=<token>` -> hosted shopping task URL
-- `http://localhost:8080/wiki?session=<token>` -> hosted wiki task URL
-
-Legacy path remains available at `infra/docker/docker-compose.mcp-gateway.yml`.
-
-## CI/CD (Vercel + Private Linux)
-
-This repository now includes a split deployment pipeline:
-
-- web: Vercel (automatic via Git integration, or deploy hook)
-- hosted-sites: GitHub Actions -> GHCR image -> deploy on self-hosted Linux runner
-
-Workflows:
-
-- [ci.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/ci.yml)
-- [deploy-web.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/deploy-web.yml)
-- [deploy-hosted-sites.yml](/Users/blueberryncherry/Proj/agent-benchmark/.github/workflows/deploy-hosted-sites.yml)
-
-Server compose template:
-
-- [docker-compose.server.yml](/Users/blueberryncherry/Proj/agent-benchmark/infra/docker/docker-compose.server.yml)
-- [`.env.server.example`](/Users/blueberryncherry/Proj/agent-benchmark/infra/docker/.env.server.example)
-
-Required GitHub secrets for hosted-sites deploy:
-
-- `GHCR_USERNAME` - used by the self-hosted deploy job when pulling private GHCR images
-- `GHCR_PAT` - must belong to `GHCR_USERNAME` and include `read:packages`
-- `AGENTBENCH_WEB_URL`
-- `RUNNER_SHARED_SECRET`
-- `HOSTED_SITES_PUBLIC_URL`
-- `HOSTED_ORCHESTRATOR_PUBLIC_URL` - public orchestrator path, for example `https://hosted.project-echo.xyz/orchestrator`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-
-Image publishing uses the workflow `GITHUB_TOKEN` with `packages: write`; no PAT is needed for the build-and-push job.
-
-Self-hosted runner requirement:
-
-- register a GitHub Actions self-hosted runner on your private Linux host
-- runner labels must include `self-hosted` and `linux`
-- `docker` and `docker-compose` must be available on that host
-
-Optional web deploy hook secret:
-
-- `VERCEL_DEPLOY_HOOK_URL`
-
-## Security
-
-All agent operations should run in isolated sandbox environments. Agents must never receive direct host access.
-
-See [docs/security.md](/Users/blueberryncherry/Proj/agent-benchmark/docs/security.md).
+The legacy runner and MCP path remain available for internal compatibility but are not the primary hosted-web runtime.
