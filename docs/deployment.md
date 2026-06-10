@@ -61,7 +61,7 @@ Relevant workflows:
 - [`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml)
 - [`.github/workflows/deploy-hosted-sites.yml`](../.github/workflows/deploy-hosted-sites.yml)
 
-The hosted deployment workflow builds images, pushes them to GHCR, and runs the server deployment through a self-hosted Linux runner. The server pulls the requested image tag and recreates the Compose services.
+The hosted deployment workflow builds images, pushes them to GHCR, and runs the server deployment through a self-hosted GitHub Actions runner on Linux. This infrastructure agent is unrelated to the removed benchmark execution runner. The server pulls the requested image tag and recreates the Compose services.
 
 Required GitHub secrets:
 
@@ -78,13 +78,13 @@ Optional web deployment secret:
 
 - `VERCEL_DEPLOY_HOOK_URL`
 
-The self-hosted runner must have the `self-hosted` and `linux` labels, Docker access, Docker Compose, enough disk space for images, and network access to GHCR and Supabase.
+The self-hosted GitHub Actions runner must have the `self-hosted` and `linux` labels, Docker access, Docker Compose, enough disk space for images, and network access to GHCR and Supabase.
 
 ## When Manual Server Intervention Is Needed
 
 Normal application deployments should not require SSH access. Manual intervention is usually limited to:
 
-- first-time runner, Docker, firewall, DNS, or TLS setup
+- first-time GitHub Actions runner, Docker, firewall, DNS, or TLS setup
 - expired GHCR credentials or changed GitHub secrets
 - incompatible Compose or environment-variable changes
 - failed database migrations requiring investigation
@@ -93,7 +93,3 @@ Normal application deployments should not require SSH access. Manual interventio
 - broken host networking or unavailable external dependencies
 
 Inspect the self-hosted Actions job and container logs before changing server state manually.
-
-## Legacy Gateway
-
-The old MCP/Caddy path is retained only in `infra/docker/docker-compose.mcp-gateway.yml` and `infra/caddy/Caddyfile.mcp-gateway`. It is not part of the default hosted deployment.

@@ -2,78 +2,87 @@
 
 > [中文](./architecture.zh-CN.md) | English
 
-## Summary
+## System Boundary
 
-AgentBench is now split into a cloud control plane and a hosted-web benchmark layer.
+AgentBench is a hosted-web benchmark platform. The evaluated agent owns its browser. AgentBench owns run creation, benchmark websites, session state, telemetry, and scoring.
 
-The cloud layer manages users, runs, metadata, scores, and replay access. `apps/hosted-sites` serves the benchmark surfaces for external-agent runs, and `apps/hosted-orchestrator` owns attempt lifecycle and suite progression.
-
-## High-level Layout
-
-```text
-Cloud SaaS Layer
-  Next.js
-  Supabase
-  Leaderboard
-  Run management
-  Auth
-        ↓
-Hosted Benchmark Layer
-  hosted-sites
-  hosted-orchestrator
-  session-scoped task apps
-  telemetry + scoring callbacks
+```mermaid
+flowchart LR
+  Agent["External Agent Browser"] -->|"session URL"| Gateway["Nginx Gateway"]
+  User["User Browser"] --> Web["apps/web"]
+  Web -->|"initialize attempt"| Orchestrator["apps/hosted-orchestrator"]
+  Gateway --> Sites["apps/hosted-sites replicas"]
+  Gateway --> Orchestrator
+  Sites <--> Redis[("Redis session cache")]
+  Web <--> DB[("Supabase")]
+  Sites <--> DB
+  Orchestrator <--> DB
+  Sites -->|"run events"| Web
+  Orchestrator -->|"aggregate completion"| Web
 ```
 
-## Major Components
+## Components
 
 ### `apps/web`
 
-User-facing SaaS application for:
-
-- auth
-- benchmark selection
-- run creation
-- leaderboard views
-- replay and observability UI
+- creates and reads benchmark runs
+- enforces guest/user quotas
+- allocates hosted attempts through the orchestrator
+- receives internal run events and final completion
+- serves live SSE snapshots, artifacts, and replay UI
 
 ### `apps/hosted-sites`
 
-Session-scoped hosted benchmark applications used by the primary hosted-web path.
+- serves `shopping-lite`, `forum-lite`, `repo-lite`, and `wiki-lite`
+- validates session tokens and app ownership
+- mutates session-scoped task state
+- emits telemetry and task signals
+- evaluates individual sessions
+- delegates lifecycle progression and aggregate completion to the orchestrator
 
-Current real apps:
+The service is stateless at the process boundary. Its local map is only a hot copy; Redis is the shared runtime source across replicas, and Supabase is the durable fallback.
 
-- `shopping-lite`
-- `wiki-lite`
+### `apps/hosted-orchestrator`
 
-Current suite model:
+- initializes attempts and ordered sessions
+- owns the active-session pointer
+- validates completion order
+- promotes the next session
+- persists per-session and aggregate score state
+- handles timeout and cleanup sweeps
+- forwards terminal run completion to `apps/web`
 
-- one `benchmark_run`
-- one `benchmark_attempt`
-- multiple ordered `hosted_web_sessions`
-- per-session `hosted_web_results`
-- one aggregated `benchmark_attempt_scores` row
+See [Orchestrator Responsibilities TODO](./orchestrator-todo.md) for the planned boundary cleanup.
 
-### `packages/protocol`
+### Redis
 
-Shared types and schemas for benchmark runs and control-plane communication.
+Redis stores the complete mutable hosted session as a versioned JSON envelope. It enables any hosted-sites replica to serve the next request without depending on process-local memory or a Supabase read.
 
-### `packages/test-cases`
+### Supabase
 
-Versioned benchmark definitions, fixtures, and deterministic task specs.
+Supabase stores durable control-plane and audit data: runs, attempts, hosted sessions, events, results, aggregate scores, access logs, and artifacts. It stores app state snapshots in session metadata for recovery, but it is not the primary per-request state store.
 
-### `packages/scoring`
+### Nginx
 
-Run evaluation logic and result aggregation.
+Nginx is the only gateway. It load-balances hosted-sites replicas and routes the orchestrator prefix to the orchestrator service.
 
-## Architectural Priorities
+## Ownership Rules
 
-- hosted-web suite orchestration
-- deterministic execution
-- typed contracts
-- replayability
-- live observability
+| Concern | Owner |
+| --- | --- |
+| User identity, quota, run UI | `apps/web` |
+| Attempt lifecycle and ordered progression | `apps/hosted-orchestrator` |
+| Task UI and app-state mutation | `apps/hosted-sites` |
+| Shared mutable session state | Redis |
+| Durable records and audit history | Supabase |
+| Per-session evaluation functions | hosted app definitions / `packages/scoring` |
+| Public traffic routing | Nginx |
 
-## MVP Bias
+## Failure Model
 
-For the MVP, favor simple components and explicit boundaries over maximum flexibility.
+- A hosted-sites replica may disappear between requests; Redis allows another replica to continue.
+- Redis failure degrades session availability; Supabase recovery is possible for persisted app state but may not contain transient events.
+- Orchestrator failure prevents attempt progression and aggregate completion, but hosted task pages can still render from Redis.
+- Web callback failure delays live observability or final run completion; persisted hosted results remain available for reconciliation.
+
+Detailed contracts are documented in [API Reference](./api-reference.md), [Data Model](./data-model.md), and [Data Flow](./data-flow.md).

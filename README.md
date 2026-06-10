@@ -59,7 +59,8 @@ docs/                   architecture and operational documentation
 - [Hosted Site App Authoring](./docs/hosted-site-app-authoring.zh-CN.md)
 - [Deployment and Scaling](./docs/deployment.md)
 - [Benchmark Specification](./docs/benchmark-spec.md)
-- [Protocol](./docs/protocol.md)
+- [API Reference](./docs/api-reference.md)
+- [Data Model](./docs/data-model.md)
+- [Data Flow](./docs/data-flow.md)
 - [Security](./docs/security.md)
-
-The legacy runner and MCP path remain available for internal compatibility but are not the primary hosted-web runtime.
+- [Orchestrator Responsibilities TODO](./docs/orchestrator-todo.md)

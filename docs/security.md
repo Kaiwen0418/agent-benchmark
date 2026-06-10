@@ -2,57 +2,53 @@
 
 > [中文](./security.zh-CN.md) | English
 
-## Security Model
+## Trust Boundaries
 
-AgentBench evaluates autonomous systems that may make unsafe or unexpected tool calls. The platform must therefore assume agents are untrusted by default.
+The external agent and its browser are untrusted. AgentBench exposes only benchmark task pages and opaque session URLs; it does not grant host, Docker, filesystem, Supabase, or Redis access to the agent.
 
-## Core Rules
+```mermaid
+flowchart LR
+  Untrusted["External agent/browser"] -->|"opaque session token"| Gateway["Nginx"]
+  Gateway --> Sites["hosted-sites"]
+  Sites --> Redis[("Redis")]
+  Sites --> DB[("Supabase service role")]
+  Sites -->|"shared-secret callback"| Web["apps/web"]
+```
 
-- agents never receive direct host access
-- benchmark execution happens inside isolated sandboxes
-- tool permissions must be explicit
-- mock systems should replace real external systems during MVP
-- public internet access should be disabled or tightly restricted
+## Controls
 
-## Isolation Boundaries
-
-### Runner Host
-
-The runner host is trusted infrastructure and must not be directly exposed to evaluated agents.
-
-### Sandbox
-
-Each benchmark run should execute inside a disposable container or similarly isolated environment with:
-
-- restricted filesystem scope
-- limited network access
-- resource controls
-- auditable tool surfaces
-
-### Browser Context
-
-Browser actions should occur in controlled Playwright contexts tied to a single run.
+- Store only SHA-256 session-token hashes in Supabase.
+- Keep raw tokens in URLs/Redis only for their active lifetime.
+- Require the shared service secret for internal Web and orchestrator writes.
+- Keep Supabase service-role keys server-side.
+- Use RLS for user-owned read paths.
+- Validate app/state shape when decoding Redis payloads.
+- Reject a session token on routes for another app.
+- Use no-store headers on session and control-plane responses.
+- Restrict artifact file paths to the owning run directory.
 
 ## Data Handling
 
-- store only required artifacts
-- tag artifacts by run and benchmark version
-- separate user data from execution data
-- avoid leaking secrets into traces or screenshots
-- keep Supabase row-level security enabled on user-linked data
-- expose only public benchmark metadata to anonymous clients
+- Telemetry must avoid secrets and unnecessary form values.
+- IP and user-agent access logs require retention limits.
+- Final-state evidence should contain only data needed to explain scoring.
+- Redis should not be publicly reachable.
+- Nginx should expose only intended hosted and orchestrator routes.
 
-## MVP Security Priorities
+## Current Risks
 
-- container isolation
-- authenticated runner registration
-- signed or authenticated run assignment
-- trace and artifact access control
-- benchmark environment determinism
+- Session tokens in URLs may appear in browser history, proxy logs, and referrers.
+- Internal auth uses a single shared secret and a legacy header name.
+- Redis and Supabase updates are not one distributed transaction.
+- Callback retries and reconciliation are incomplete.
+- Rate limiting is not yet documented as a gateway-enforced control.
 
-## Future Hardening
+## Required Hardening
 
-- stricter syscall and capability restrictions
-- per-run ephemeral credentials
-- policy-based tool allowlists
-- automated safety regression suites
+- redact session query parameters from access logs
+- rotate and version service credentials
+- add gateway rate limits and request-size limits
+- add callback outbox/retry and reconciliation
+- use command idempotency keys
+- audit RLS and service-role usage before public launch
+- define incident response for leaked session tokens

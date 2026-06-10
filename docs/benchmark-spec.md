@@ -1,53 +1,87 @@
-# Benchmark Spec
+# Benchmark Specification
 
 > [中文](./benchmark-spec.zh-CN.md) | English
 
-## Purpose
+## Definition Layers
 
-Benchmark cases define what an agent must do, what tools it may use, and how success is evaluated.
+A hosted benchmark is defined across two explicit layers:
 
-All benchmark definitions should live in `packages/test-cases`.
+1. Suite metadata selects ordered sessions and scoring weights.
+2. A hosted app definition implements state, routes, actions, final-state projection, and evaluation.
 
-## Benchmark Design Principles
+Suite metadata is stored with the benchmark case and validated through `HostedWebSuiteMetadata`. App implementations live under `apps/hosted-sites/src/apps/<app-id>` and register through the app registry.
 
-- deterministic
-- replayable
-- versioned
-- observable
-- scoped to explicit permissions
+## Suite Metadata
 
-## Benchmark Categories
+```ts
+type HostedWebSuiteMetadata = {
+  suiteSlug: string;
+  suiteVersion: string;
+  sessions: Array<{
+    app: string;
+    taskSlug: string;
+    taskVersion: string;
+    seedVersion?: string;
+    sequenceIndex: number;
+    weight: number;
+    required: boolean;
+    title?: string;
+    goal?: string;
+    startPath?: string;
+    metadata: Record<string, unknown>;
+  }>;
+};
+```
 
-- browser workflows
-- file operations
-- communication workflows
-- safety and policy compliance
+`sequenceIndex` defines progression. `weight` affects aggregate score. A failed `required` session prevents a passing suite result.
 
-## Minimum Case Shape
+## App Definition Requirements
 
-Each benchmark should define:
+Each app must provide:
 
-- stable case id
-- version
-- task description
-- allowed tools
-- environment fixture
-- success criteria
-- failure criteria
-- artifact requirements
-- scoring method
+- a stable app ID
+- typed app-specific state
+- deterministic seed data
+- validators for persisted state
+- default goal and start path
+- route handlers and state mutations
+- final-state projection
+- deterministic evaluators
+- tests for actions, hydration, isolation, and scoring
 
-## Observability Requirements
+## Evaluation Contract
 
-Every case should be designed so reviewers can inspect:
+An evaluator returns:
 
-- what the agent tried
-- what tools were called
-- what the browser state looked like
-- where failure occurred
+- `status`: `passed | failed | error`
+- normalized `score`: `0..1`
+- human-readable `summary`
+- evaluator-level evidence
+- optional breakdown for debugging and aggregation
 
-If a benchmark is difficult to watch or replay, it is probably underspecified.
+Prefer backend-state checks. UI-state or final-response checks should be used only when the success condition cannot be represented by controlled server state.
 
-## MVP Guidance
+## Versioning
 
-Start with narrow browser-first tasks that are easy to observe and easy to score, then expand to richer multi-tool workflows.
+Changing seed data, success conditions, task wording that affects behavior, or app state shape requires a task/seed/suite version change. Historical results must retain the exact versions used during execution.
+
+Redis envelope versioning is independent from benchmark versioning. It describes storage compatibility, not task semantics.
+
+## Design Rules
+
+- deterministic and replayable
+- isolated per session
+- observable through structured events
+- scoreable without trusting the agent
+- small enough to run many concurrent sessions
+- explicit about required versus optional criteria
+- free of external production-system side effects
+
+## Review Checklist
+
+- Can two sessions execute concurrently without sharing state?
+- Can persisted state be validated and safely hydrated?
+- Does the evaluator explain failures with evidence?
+- Are task and seed versions explicit?
+- Is the terminal action idempotent?
+- Does the app work behind a load-balanced hosted-sites deployment?

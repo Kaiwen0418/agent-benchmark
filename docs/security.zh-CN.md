@@ -2,57 +2,53 @@
 
 > [English](./security.md) | 中文
 
-## 安全模型
+## 信任边界
 
-AgentBench 评估可能进行不安全或意外工具调用的自主系统。因此，平台必须默认假设代理不可信。
+外部 Agent 及其浏览器不可信。AgentBench 只暴露基准任务页面和不透明 session URL，不向 Agent 提供宿主机、Docker、文件系统、Supabase 或 Redis 权限。
 
-## 核心规则
+```mermaid
+flowchart LR
+  Untrusted["外部 Agent/浏览器"] -->|"不透明 session token"| Gateway["Nginx"]
+  Gateway --> Sites["hosted-sites"]
+  Sites --> Redis[("Redis")]
+  Sites --> DB[("Supabase service role")]
+  Sites -->|"shared-secret callback"| Web["apps/web"]
+```
 
-- 代理永远不会获得对主机的直接访问
-- 基准执行在隔离的沙箱中发生
-- 工具权限必须显式
-- 在 MVP 期间，模拟系统应替代真实外部系统
-- 公共互联网访问应被禁用或严格限制
+## 控制措施
 
-## 隔离边界
-
-### Runner 主机
-
-Runner 主机是受信任的基础设施，不得直接暴露给被评估的代理。
-
-### 沙箱
-
-每次基准运行应在一次性容器或类似隔离环境中执行，具有：
-
-- 受限的文件系统范围
-- 有限的网络访问
-- 资源控制
-- 可审计的工具界面
-
-### 浏览器上下文
-
-浏览器操作应在与单次运行绑定的受控 Playwright 上下文中发生。
+- Supabase 只保存 session token 的 SHA-256 hash。
+- 原始 token 仅在 active 生命周期内存在于 URL/Redis。
+- Web 内部写入和 orchestrator command 要求 shared service secret。
+- Supabase service-role key 只保留在服务端。
+- 用户数据读取使用 RLS。
+- 解码 Redis payload 时校验 app/state 结构。
+- 在其他 app route 上拒绝不匹配的 session token。
+- Session 和控制面响应使用 no-store header。
+- Artifact 文件路径限制在所属 run 目录内。
 
 ## 数据处理
 
-- 仅存储所需的产物
-- 按运行和基准版本标记产物
-- 将用户数据与执行数据分离
-- 避免将 secrets 泄漏到追踪或截图中
-- 在用户关联数据上保持启用 Supabase 行级安全
-- 仅向匿名客户端暴露公共基准元数据
+- Telemetry 不应包含 secret 和不必要的表单值。
+- IP 和 user-agent access log 必须设置 retention。
+- Final-state evidence 只保留解释评分所需的数据。
+- Redis 不应暴露到公网。
+- Nginx 只暴露预期的 hosted 和 orchestrator routes。
 
-## MVP 安全优先级
+## 当前风险
 
-- 容器隔离
-- 经过认证的 runner 注册
-- 签名或经过认证的运行分配
-- 追踪和产物访问控制
-- 基准环境确定性
+- URL 中的 session token 可能进入浏览器历史、代理日志和 referrer。
+- 内部鉴权使用单一 shared secret，并保留历史 header 名称。
+- Redis 与 Supabase 更新不在一个分布式事务中。
+- Callback retry 和 reconciliation 尚不完整。
+- Gateway rate limiting 尚未形成明确控制规范。
 
-## 未来加固
+## 必要加固
 
-- 更严格的系统调用和能力限制
-- 每次运行的临时凭证
-- 基于策略的工具允许列表
-- 自动化安全回归套件
+- 从 access log 中脱敏 session query parameter
+- 轮换并版本化 service credential
+- 增加 gateway rate limit 和 request-size limit
+- 增加 callback outbox/retry 与 reconciliation
+- 使用 command idempotency key
+- 公网发布前审计 RLS 和 service-role 使用
+- 为 session token 泄漏定义 incident response

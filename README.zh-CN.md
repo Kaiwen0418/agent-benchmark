@@ -59,7 +59,8 @@ docs/                   架构和运维文档
 - [托管站点应用开发](./docs/hosted-site-app-authoring.zh-CN.md)
 - [部署与扩容](./docs/deployment.zh-CN.md)
 - [基准规范](./docs/benchmark-spec.zh-CN.md)
-- [协议](./docs/protocol.zh-CN.md)
+- [API 参考](./docs/api-reference.zh-CN.md)
+- [数据模型](./docs/data-model.zh-CN.md)
+- [数据流](./docs/data-flow.zh-CN.md)
 - [安全](./docs/security.zh-CN.md)
-
-传统 runner 和 MCP 路径仍用于内部兼容，但不再是主要的托管 Web 运行方式。
+- [Orchestrator 职责优化 TODO](./docs/orchestrator-todo.zh-CN.md)

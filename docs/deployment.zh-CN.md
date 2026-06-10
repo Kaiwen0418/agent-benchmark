@@ -61,7 +61,7 @@ docker-compose logs -f --tail=200 hosted-sites
 - [`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml)
 - [`.github/workflows/deploy-hosted-sites.yml`](../.github/workflows/deploy-hosted-sites.yml)
 
-托管部署 workflow 构建镜像、推送到 GHCR，并通过 self-hosted Linux runner 执行服务器部署。服务器根据指定 tag 拉取镜像并重建 Compose 服务。
+托管部署 workflow 构建镜像、推送到 GHCR，并通过 Linux 上的 self-hosted GitHub Actions runner 执行服务器部署。该基础设施 agent 与已移除的 benchmark execution runner 无关。服务器根据指定 tag 拉取镜像并重建 Compose 服务。
 
 需要的 GitHub Secrets：
 
@@ -78,13 +78,13 @@ docker-compose logs -f --tail=200 hosted-sites
 
 - `VERCEL_DEPLOY_HOOK_URL`
 
-self-hosted runner 必须具有 `self-hosted` 和 `linux` 标签，能够使用 Docker 和 Docker Compose，并具备足够磁盘空间以及访问 GHCR、Supabase 的网络权限。
+self-hosted GitHub Actions runner 必须具有 `self-hosted` 和 `linux` 标签，能够使用 Docker 和 Docker Compose，并具备足够磁盘空间以及访问 GHCR、Supabase 的网络权限。
 
 ## 需要手动干预服务器的情况
 
 正常应用发布不应要求 SSH 登录。通常只有以下情况需要手动处理：
 
-- 首次配置 runner、Docker、防火墙、DNS 或 TLS
+- 首次配置 GitHub Actions runner、Docker、防火墙、DNS 或 TLS
 - GHCR 凭据失效或 GitHub Secrets 发生变化
 - Compose 或环境变量出现不兼容修改
 - 数据库迁移失败并需要调查
@@ -93,7 +93,3 @@ self-hosted runner 必须具有 `self-hosted` 和 `linux` 标签，能够使用 
 - 主机网络异常或外部依赖不可用
 
 手动修改服务器状态前，应先检查 self-hosted Actions job 和容器日志。
-
-## 传统网关
-
-旧 MCP/Caddy 路径仅保留在 `infra/docker/docker-compose.mcp-gateway.yml` 和 `infra/caddy/Caddyfile.mcp-gateway`，不属于默认托管部署。
