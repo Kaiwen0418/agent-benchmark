@@ -4,7 +4,7 @@
 
 ## 当前职责
 
-Orchestrator 当前在一个服务、主要一个 `server.ts` 中同时承担 HTTP transport、鉴权、attempt 创建、session 持久化、生命周期 command、评分聚合、timeout、cleanup sweep 和 Web callback。
+Orchestrator 当前在一个服务、主要一个 `server.ts` 中同时承担 HTTP transport、鉴权、attempt 创建、session 持久化、生命周期 command、评分聚合、timeout、cleanup sweep 和 Web callback。它现在是 `benchmark_attempts`、`hosted_web_sessions` 和 `hosted_web_results` 的唯一 writer；hosted-sites 通过鉴权 command 请求持久化，Redis 继续作为运行时缓存。
 
 当前规模下可以运行，但职责边界和故障恢复较难推理。
 
@@ -23,12 +23,20 @@ flowchart LR
 
 在规模真正需要前，orchestrator 可以继续作为一个部署单元，但内部模块应遵守上述边界。
 
+## 演进顺序
+
+1. **完成：** hosted-sites 不再直接写数据库，暂时保留只读恢复。
+2. **完成：** orchestrator 负责 attempt、session、result、event 和 access-log 写入。
+3. **完成：** Redis session key 继续作为 hosted-sites 横向扩容的共享运行时缓存。
+4. **完成：** 独立 Redis Stream 和 consumer group 已成为 orchestrator 写入的 ingest backbone。
+
+Backbone 现已具备独立 API/worker 模式、稳定 attempt/session 分区、互不重叠的 worker assignment 和 Redis partition lease。默认部署使用两个 worker 消费 16 个 partition。剩余工作是 dead-letter、lag metrics、明确 retry policy，以及作为纵深防御的数据库 compare-and-set。
+
 ## P0：正确性
 
 - 为 active-session transition 增加数据库 compare-and-set 或 transaction。
 - 使用明确 command ID，使 `complete-session`、`timeout` 和 attempt 初始化幂等。
 - 增加 unique constraint，防止重复 terminal result 和 aggregate score。
-- Completion command 直接持久化 final state，移除进程内 `pendingFinalStates` Map。
 - 对“session result 已持久化但 Web completion callback 失败”的 attempt 增加 reconciliation。
 - 明确定义 Supabase 和 Web callback 失败后的 retry 行为。
 
@@ -50,9 +58,9 @@ flowchart LR
 ## P2：吞吐和扩容
 
 - Completion 时不再全量读取 result/session rows，改用 transaction 或持续维护的 attempt projection。
-- 将 cleanup 和 reconciliation 作为独立 worker mode，避免每个 orchestrator 副本执行相同 sweep。
-- 周期任务执行前增加 leader election 或数据库 advisory lock。
-- 只有 callback 量或异步 evaluator 成本证明有必要时才引入 queue。
+- 将 cleanup scheduler 从 API 副本移入专用 scheduler；当前通过 time-bucket command ID 防止重复执行。
+- 为重复失败 command 增加 dead-letter 和 poison-message 检查能力。
+- 导出 stream lag、pending-entry count、reclaim count、processing latency 和 timeout 指标。
 - 对同一 attempt 并发 completion、同一 run 多 attempts 进行负载测试。
 
 ## P2：API 演进

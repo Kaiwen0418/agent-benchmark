@@ -158,6 +158,8 @@ stateDiagram-v2
 
 - Active session 的可变任务状态以 Redis 为准。
 - 持久生命周期、审计和评分记录以 Supabase 为准。
+- Orchestrator 是 attempts、hosted sessions 和 hosted results 的唯一应用层 writer；hosted-sites 只可读取 session row 用于缓存恢复。
 - 进程内 Map 不是权威数据，可随时丢失。
 - `metadata.appState` 是恢复 snapshot，不是独立可写 domain model。
 - Attempt 推进由 orchestrator metadata 与持久化 session/result rows 共同决定。
+- Session cache key 与 ingest record 相互独立。持久化 command 使用 `agentbench:orchestrator:commands` Stream、`hosted-orchestrator` consumer group、24 小时 command result key 和短期 response list。

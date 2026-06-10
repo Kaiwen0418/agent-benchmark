@@ -94,7 +94,7 @@ Content-Type: application/json
 }
 ```
 
-事件会写入 hosted session events，在配置持久化时写入数据库，并转发到 Web run event API。
+事件会追加到运行时 session，通过 orchestrator 持久化，并转发到 Web run event API。
 
 ### Task Routes
 
@@ -111,6 +111,8 @@ Content-Type: application/json
 
 除 `/health` 外，所有 endpoint 都要求 shared-secret header。
 
+写 endpoint 会先将 command 追加到 Redis Streams，再等待 worker result。客户端可发送 `x-command-id` 使 retry 幂等；未提供时由 API 生成。
+
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | `GET` | `/health` | 健康检查 |
@@ -119,6 +121,9 @@ Content-Type: application/json
 | `POST` | `/api/attempts/:id/commands/resolve-advance` | 校验当前 session 并返回下一个 URL |
 | `POST` | `/api/attempts/:id/commands/complete-session` | 持久化结果、推进，并在完成时聚合 |
 | `POST` | `/api/attempts/:id/commands/timeout` | 将 attempt 标记为 timeout 并完成 run |
+| `POST` | `/api/sessions/:token/commands/snapshot` | 持久化当前 session metadata snapshot |
+| `POST` | `/api/sessions/:token/commands/access` | 持久化 session 访问计数和 access log |
+| `POST` | `/api/sessions/:token/commands/event` | 持久化一条 hosted event |
 
 ### 初始化 Attempt
 
@@ -144,6 +149,10 @@ Content-Type: application/json
 ### 完成 Session Command
 
 Body 包含 `sessionToken`、`result` 和可选 `finalState`。`result` 包含 `status`、`score`、`summary`、`evaluators` 和 `breakdown`。重复完成是幂等的，会返回最近一次持久化结果。
+
+### Session 持久化 Commands
+
+`snapshot` 接收 `{ "metadata": { ... } }`；`access` 接收当前访问计数、时间、客户端字段和 event 名；`event` 接收 `{ "payload": { "type": "...", ... } }`。这些鉴权 command 使 hosted-sites 不再直接写数据库，同时 Redis 继续作为共享运行时缓存。
 
 ## 错误语义
 

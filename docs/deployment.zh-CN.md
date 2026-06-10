@@ -21,20 +21,23 @@ Nginx 是唯一网关，负责将托管任务流量转发到 hosted-sites，将 
 
 ## 横向扩容
 
-启动多个 hosted-sites 副本：
+启动多个 hosted-sites 和 orchestrator API 副本：
 
 ```bash
-docker-compose up -d --build --scale hosted-sites=4
+docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=2
 ```
 
-Redis 通过 `HOSTED_SESSION_REDIS_URL=redis://redis:6379` 配置。多个副本通过 Redis 共享 session 运行态；Supabase 继续承担持久化和控制面存储，而不是每次请求都依赖的运行时缓存。
+Redis 通过 `HOSTED_SESSION_REDIS_URL=redis://redis:6379` 提供 session cache，通过 `ORCHESTRATOR_REDIS_URL=redis://redis:6379` 提供 command Streams。Supabase 继续承担持久化存储，orchestrator worker 是 hosted data writer。
+
+默认 Compose 拓扑运行两个 worker，分别负责 partition `0-7` 和 `8-15`。不要对 worker service 使用 `--scale`，否则副本会争抢同一 partition。增加 worker 时，应新增 service 并将全部 partition 重新划分为互不重叠的集合。任一 partition 没有活跃 lease 时 readiness 返回 `503`。
 
 常用检查命令：
 
 ```bash
 curl http://localhost:8080/health
+curl http://localhost:8080/orchestrator
 docker-compose ps
-docker-compose logs -f --tail=200 hosted-sites
+docker-compose logs -f --tail=200 hosted-sites hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
 ```
 
 不要为每个 hosted-sites 副本固定映射宿主机端口。Nginx 应通过 Compose 服务网络访问副本。
@@ -44,7 +47,7 @@ docker-compose logs -f --tail=200 hosted-sites
 生产部署拆分为：
 
 - Web 部署在 Vercel
-- hosted-sites、hosted-orchestrator、Redis 和 Nginx 部署在私有 Linux 主机
+- hosted-sites、orchestrator API/workers、Redis 和 Nginx 部署在私有 Linux 主机
 - Supabase 保存持久化应用数据
 - GHCR 保存托管运行时镜像
 

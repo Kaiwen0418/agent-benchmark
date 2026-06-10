@@ -4,7 +4,7 @@
 
 ## Current Responsibilities
 
-The orchestrator currently combines HTTP transport, authentication, attempt creation, session persistence, lifecycle commands, score aggregation, timeout handling, cleanup sweeps, and Web callbacks in one service and largely one server module.
+The orchestrator currently combines HTTP transport, authentication, attempt creation, session persistence, lifecycle commands, score aggregation, timeout handling, cleanup sweeps, and Web callbacks in one service and largely one server module. It is now the sole writer for `benchmark_attempts`, `hosted_web_sessions`, and `hosted_web_results`; hosted-sites sends authenticated persistence commands and keeps Redis as runtime cache.
 
 This is acceptable for the current scale, but it makes ownership and failure recovery harder to reason about.
 
@@ -23,12 +23,20 @@ flowchart LR
 
 The orchestrator should remain one deployable service until scale requires otherwise, but internal modules should follow these boundaries.
 
+## Evolution Sequence
+
+1. **Complete:** hosted-sites has no direct database write path and retains read-only recovery temporarily.
+2. **Complete:** orchestrator owns attempt, session, result, event, and access-log writes.
+3. **Complete:** Redis session keys remain the shared runtime cache for hosted-sites scaling.
+4. **Complete:** a separate Redis Stream and consumer group are the ingest backbone for orchestrator writes.
+
+The backbone now has separate API/worker modes, stable attempt/session partitioning, disjoint worker assignments, and Redis partition leases. The default deployment runs two workers across 16 partitions. Remaining work is dead-letter handling, lag metrics, explicit retry policy, and database compare-and-set as defense in depth.
+
 ## P0: Correctness
 
 - Add database-level compare-and-set or transactions for active-session transitions.
 - Make `complete-session`, `timeout`, and attempt initialization idempotent with explicit command IDs.
 - Add unique constraints preventing duplicate terminal results and aggregate scores.
-- Persist final state directly with the completion command instead of the process-local `pendingFinalStates` map.
 - Add reconciliation for attempts whose session result is persisted but Web completion callback failed.
 - Define exact retry behavior for Supabase and Web callback failures.
 
@@ -50,9 +58,9 @@ The orchestrator should remain one deployable service until scale requires other
 ## P2: Throughput and Scaling
 
 - Replace full result/session reloads during every completion with a transaction or maintained attempt projection.
-- Run cleanup and reconciliation as a separate worker mode so every orchestrator replica does not execute the same sweep.
-- Add leader election or database advisory locking before running periodic jobs.
-- Evaluate a queue only when callback volume or expensive asynchronous evaluators justify it.
+- Move cleanup scheduling out of API replicas into a dedicated scheduler; the current time-bucket command ID prevents duplicate execution.
+- Add dead-letter handling and poison-message inspection for commands that repeatedly fail.
+- Export stream lag, pending-entry count, reclaim count, processing latency, and timeout metrics.
 - Load-test concurrent completion of the same attempt and multiple attempts sharing one run.
 
 ## P2: API Evolution

@@ -158,6 +158,8 @@ stateDiagram-v2
 
 - Redis is authoritative for mutable task state during an active session.
 - Supabase is authoritative for durable lifecycle, audit, and scoring records.
+- The orchestrator is the only application writer for attempts, hosted sessions, and hosted results; hosted-sites may read session rows only for cache recovery.
 - The process-local Map is not authoritative and may be lost at any time.
 - `metadata.appState` is a recovery snapshot, not a separately writable domain model.
 - Attempt progression is determined by orchestrator metadata plus persisted session/result rows.
+- Session cache keys and ingest records are separate. Durable commands use the `agentbench:orchestrator:commands` Stream, consumer group `hosted-orchestrator`, 24-hour command result keys, and short-lived response lists.

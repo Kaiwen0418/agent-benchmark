@@ -1,5 +1,6 @@
 import type { HostedAttemptReadModel } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
+import type { IncomingMessage } from "node:http";
 import type { HostedAttemptOverviewSession, HostedSession } from "./types.js";
 
 function resolveHostedUrl(baseUrl: string, path: string) {
@@ -75,6 +76,66 @@ export function createOrchestratorClient(deps: OrchestratorClientDeps) {
     );
   }
 
+  async function persistSessionSnapshot(session: HostedSession, metadata: Record<string, unknown>) {
+    if (!session.persisted) {
+      return null;
+    }
+
+    return postOrchestratorCommand<{ ok: true }>(
+      `/api/sessions/${encodeURIComponent(session.token)}/commands/snapshot`,
+      { metadata },
+    );
+  }
+
+  async function recordSessionAccess(params: {
+    session: HostedSession;
+    request: IncomingMessage;
+    event: string;
+  }) {
+    if (!params.session.persisted) {
+      return null;
+    }
+
+    const forwardedFor = params.request.headers["x-forwarded-for"];
+    const rawForwardedFor = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+    const ip =
+      typeof rawForwardedFor === "string" && rawForwardedFor.length > 0
+        ? rawForwardedFor.split(",")[0]?.trim() ?? null
+        : typeof params.request.socket.remoteAddress === "string"
+          ? params.request.socket.remoteAddress
+          : null;
+
+    return postOrchestratorCommand<{ ok: true }>(
+      `/api/sessions/${encodeURIComponent(params.session.token)}/commands/access`,
+      {
+        event: params.event,
+        accessedAt: params.session.lastAccessedAt,
+        accessCount: params.session.accessCount,
+        firstSeenIp: params.session.firstSeenIp,
+        lastSeenIp: params.session.lastSeenIp,
+        firstSeenUserAgent: params.session.firstSeenUserAgent,
+        lastSeenUserAgent: params.session.lastSeenUserAgent,
+        ip,
+        userAgent:
+          typeof params.request.headers["user-agent"] === "string"
+            ? params.request.headers["user-agent"]
+            : null,
+        referer: typeof params.request.headers.referer === "string" ? params.request.headers.referer : null,
+      },
+    );
+  }
+
+  async function recordHostedEvent(session: HostedSession, payload: Record<string, unknown>) {
+    if (!session.persisted) {
+      return null;
+    }
+
+    return postOrchestratorCommand<{ ok: true }>(
+      `/api/sessions/${encodeURIComponent(session.token)}/commands/event`,
+      { payload },
+    );
+  }
+
   async function timeoutAttempt(params: {
     attemptId: string;
     runId: string | null;
@@ -110,6 +171,9 @@ export function createOrchestratorClient(deps: OrchestratorClientDeps) {
 
   return {
     completeSession,
+    persistSessionSnapshot,
+    recordSessionAccess,
+    recordHostedEvent,
     timeoutAttempt,
     getAttemptOverview,
     resolveAdvance,

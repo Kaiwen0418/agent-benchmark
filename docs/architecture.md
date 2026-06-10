@@ -10,15 +10,18 @@ AgentBench is a hosted-web benchmark platform. The evaluated agent owns its brow
 flowchart LR
   Agent["External Agent Browser"] -->|"session URL"| Gateway["Nginx Gateway"]
   User["User Browser"] --> Web["apps/web"]
-  Web -->|"initialize attempt"| Orchestrator["apps/hosted-orchestrator"]
+  Web -->|"initialize attempt"| OrchestratorAPI["orchestrator API replicas"]
   Gateway --> Sites["apps/hosted-sites replicas"]
-  Gateway --> Orchestrator
-  Sites <--> Redis[("Redis session cache")]
+  Gateway --> OrchestratorAPI
+  Sites <--> Redis[("Redis cache + command streams")]
   Web <--> DB[("Supabase")]
-  Sites <--> DB
-  Orchestrator <--> DB
+  Sites -.->|"read-only recovery"| DB
+  Sites -->|"durable commands"| OrchestratorAPI
+  OrchestratorAPI --> Streams[("partitioned Redis Streams")]
+  Streams --> Workers["orchestrator workers"]
+  Workers -->|"only hosted writers"| DB
   Sites -->|"run events"| Web
-  Orchestrator -->|"aggregate completion"| Web
+  Workers -->|"aggregate completion"| Web
 ```
 
 ## Components
@@ -40,7 +43,7 @@ flowchart LR
 - evaluates individual sessions
 - delegates lifecycle progression and aggregate completion to the orchestrator
 
-The service is stateless at the process boundary. Its local map is only a hot copy; Redis is the shared runtime source across replicas, and Supabase is the durable fallback.
+The service is stateless at the process boundary. Its local map is only a hot copy; Redis is the shared runtime cache across replicas, and Supabase is a read-only recovery fallback. Durable hosted writes are sent to the orchestrator.
 
 ### `apps/hosted-orchestrator`
 
@@ -49,14 +52,18 @@ The service is stateless at the process boundary. Its local map is only a hot co
 - validates completion order
 - promotes the next session
 - persists per-session and aggregate score state
+- is the only writer for `benchmark_attempts`, `hosted_web_sessions`, and `hosted_web_results`
+- persists hosted session snapshots, access records, and events received as authenticated commands
 - handles timeout and cleanup sweeps
 - forwards terminal run completion to `apps/web`
+
+The same image supports `ORCHESTRATOR_MODE=api|worker|all`. API replicas authenticate, validate, route commands to a stable partition, and serve read models. Worker processes own disjoint partition sets and perform durable writes. Local development defaults to `all`.
 
 See [Orchestrator Responsibilities TODO](./orchestrator-todo.md) for the planned boundary cleanup.
 
 ### Redis
 
-Redis stores the complete mutable hosted session as a versioned JSON envelope. It enables any hosted-sites replica to serve the next request without depending on process-local memory or a Supabase read.
+Redis has two isolated responsibilities. Versioned session keys provide the shared runtime cache used by hosted-sites replicas. Sixteen partitioned Streams form the orchestrator command backbone. Stable entity hashing preserves order for one attempt/session while disjoint workers process partitions concurrently. Redis leases prevent overlapping worker ownership.
 
 ### Supabase
 
@@ -74,6 +81,8 @@ Nginx is the only gateway. It load-balances hosted-sites replicas and routes the
 | Attempt lifecycle and ordered progression | `apps/hosted-orchestrator` |
 | Task UI and app-state mutation | `apps/hosted-sites` |
 | Shared mutable session state | Redis |
+| Durable command ingest and worker coordination | Redis Streams |
+| Durable hosted writes | `apps/hosted-orchestrator` |
 | Durable records and audit history | Supabase |
 | Per-session evaluation functions | hosted app definitions / `packages/scoring` |
 | Public traffic routing | Nginx |
@@ -81,7 +90,7 @@ Nginx is the only gateway. It load-balances hosted-sites replicas and routes the
 ## Failure Model
 
 - A hosted-sites replica may disappear between requests; Redis allows another replica to continue.
-- Redis failure degrades session availability; Supabase recovery is possible for persisted app state but may not contain transient events.
+- Redis failure degrades session availability; hosted-sites can recover persisted app state through read-only Supabase access.
 - Orchestrator failure prevents attempt progression and aggregate completion, but hosted task pages can still render from Redis.
 - Web callback failure delays live observability or final run completion; persisted hosted results remain available for reconciliation.
 

@@ -35,7 +35,12 @@ flowchart LR
   Local -->|"yes"| Handle
   Local -->|"no"| Supabase["Load durable session + appState snapshot"]
   Supabase --> Handle
-  Handle --> Save["Write Redis, then durable metadata when configured"]
+  Handle --> Save["Write Redis runtime cache"]
+  Save --> Command["Send snapshot/access/event command"]
+  Command --> API["orchestrator API"]
+  API -->|"hash attempt/session key"| Stream[("Redis stream partition")]
+  Stream --> Worker["partition owner worker"]
+  Worker --> SupabaseWrite["Persist durable hosted records"]
 ```
 
 The shared Redis lookup is what makes horizontal scaling safe. A load balancer does not require sticky sessions.
@@ -45,9 +50,10 @@ The shared Redis lookup is what makes horizontal scaling safe. A load balancer d
 1. The route validates that the token's `session.app` matches the app route.
 2. An app action mutates only `session.state` for that app.
 3. hosted-sites writes the updated V2 envelope to Redis.
-4. If the session is persisted, hosted-sites updates the app-specific snapshot in `hosted_web_sessions.metadata.appState`.
-5. hosted-sites records a hosted event and forwards a normalized run event to `apps/web`.
-6. The Web live page receives the next SSE snapshot containing run, events, and artifacts.
+4. If the session is persisted, hosted-sites sends snapshot, access, and event commands to the orchestrator.
+5. The orchestrator writes `hosted_web_sessions`, hosted events/access logs, and result state; hosted-sites does not write these tables directly.
+6. hosted-sites forwards a normalized run event to `apps/web`.
+7. The Web live page receives the next SSE snapshot containing run, events, and artifacts.
 
 ## 4. Session Completion and Suite Progression
 
@@ -96,6 +102,8 @@ A periodic orchestrator sweep also finds expired sessions and prunes access logs
 ## 7. Recovery and Consistency
 
 - Redis write failures are logged; the in-process object may continue serving the current request but cross-replica continuity is at risk.
-- Supabase snapshot failures do not immediately break active Redis-backed sessions, but reduce recovery durability.
+- Orchestrator command failures do not immediately break active Redis-backed sessions, but reduce recovery durability and audit completeness.
 - Completion is designed to be idempotent: duplicate terminal commands return the latest result.
 - There is no distributed transaction spanning Redis, Supabase, orchestrator, and Web callbacks. Reconciliation and idempotency are therefore required for stronger reliability.
+
+Redis now serves both as the hosted session cache and, through separate keys, as the orchestrator ingest channel. Commands use `agentbench:orchestrator:commands:p<N>`; per-command results, replies, and partition leases use separate keys. Cache envelopes are never consumed as queue messages.

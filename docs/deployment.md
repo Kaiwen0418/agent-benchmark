@@ -21,20 +21,23 @@ Nginx is the only gateway. It routes hosted task traffic to hosted-sites and orc
 
 ## Horizontal Scaling
 
-Run multiple hosted-sites replicas:
+Run multiple hosted-sites and orchestrator API replicas:
 
 ```bash
-docker-compose up -d --build --scale hosted-sites=4
+docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=2
 ```
 
-Redis is configured through `HOSTED_SESSION_REDIS_URL=redis://redis:6379`. Replicas share session state through Redis, while Supabase remains the durable persistence and control-plane store rather than the per-request runtime cache.
+Redis uses `HOSTED_SESSION_REDIS_URL=redis://redis:6379` for session cache and `ORCHESTRATOR_REDIS_URL=redis://redis:6379` for command Streams. Supabase remains the durable persistence store; orchestrator workers are its hosted-data writers.
+
+The default Compose topology runs two workers: partitions `0-7` and `8-15`. Do not use `--scale` on a worker service because replicas would claim the same partitions. To add workers, define additional worker services and redistribute all partitions into disjoint sets. Readiness returns `503` while any partition has no active lease.
 
 Useful checks:
 
 ```bash
 curl http://localhost:8080/health
+curl http://localhost:8080/orchestrator
 docker-compose ps
-docker-compose logs -f --tail=200 hosted-sites
+docker-compose logs -f --tail=200 hosted-sites hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
 ```
 
 Do not publish a fixed host port for each hosted-sites replica. Nginx should reach replicas through the Compose service network.
@@ -44,7 +47,7 @@ Do not publish a fixed host port for each hosted-sites replica. Nginx should rea
 The production deployment is split into:
 
 - web on Vercel
-- hosted-sites, hosted-orchestrator, Redis, and Nginx on a private Linux host
+- hosted-sites, orchestrator API/workers, Redis, and Nginx on a private Linux host
 - Supabase for durable application data
 - GHCR for hosted runtime images
 

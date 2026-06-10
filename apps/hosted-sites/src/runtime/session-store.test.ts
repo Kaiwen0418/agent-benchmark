@@ -41,6 +41,8 @@ function createStore(params: {
     makeId: (prefix) => `${prefix}_1`,
     hashToken: (token) => `hashed:${token}`,
     getSupabaseAdmin: () => null,
+    persistSessionSnapshotDurably: async () => undefined,
+    persistSessionAccess: async () => undefined,
     defaultStartPathForApp,
     defaultGoalForSession,
     resolveHostedAppId,
@@ -49,7 +51,6 @@ function createStore(params: {
     hydrateHostedAppState,
     clientIp: () => null,
     clientUserAgent: () => null,
-    clientReferer: () => null,
     onSessionExpired: async () => undefined,
   });
 }

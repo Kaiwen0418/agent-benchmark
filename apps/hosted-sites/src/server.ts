@@ -87,10 +87,6 @@ function clientUserAgent(request: IncomingMessage) {
   return typeof request.headers["user-agent"] === "string" ? request.headers["user-agent"] : null;
 }
 
-function clientReferer(request: IncomingMessage) {
-  return typeof request.headers.referer === "string" ? request.headers.referer : null;
-}
-
 const orchestratorClient = createOrchestratorClient({
   baseUrl: orchestratorBaseUrl,
   runnerSharedSecret,
@@ -105,6 +101,8 @@ const sessionStore = createSessionStore({
   makeId,
   hashToken,
   getSupabaseAdmin,
+  persistSessionSnapshotDurably: orchestratorClient.persistSessionSnapshot,
+  persistSessionAccess: orchestratorClient.recordSessionAccess,
   defaultStartPathForApp,
   defaultGoalForSession,
   resolveHostedAppId,
@@ -113,7 +111,6 @@ const sessionStore = createSessionStore({
   hydrateHostedAppState,
   clientIp,
   clientUserAgent,
-  clientReferer,
   onSessionExpired: orchestratorClient.timeoutAttempt,
 });
 
@@ -122,8 +119,8 @@ const telemetryRuntime = createTelemetryRuntime({
   now,
   agentbenchWebUrl,
   runnerSharedSecret,
-  getSupabaseAdmin,
   persistSessionSnapshot,
+  persistHostedEvent: orchestratorClient.recordHostedEvent,
 });
 const { recordEvent, forwardRunEvent, telemetryRunEventType } = telemetryRuntime;
 const {
