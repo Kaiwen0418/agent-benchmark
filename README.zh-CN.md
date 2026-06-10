@@ -33,6 +33,23 @@ pnpm dev:web
 
 环境配置和开发方式参见[快速上手](./docs/getting-started.zh-CN.md)。
 
+## 系统边界
+
+```mermaid
+flowchart LR
+  Agent["External Agent Browser"] -->|"session URL"| Gateway["Nginx Gateway"]
+  User["User Browser"] --> Web["apps/web"]
+  Web -->|"initialize attempt"| Orchestrator["apps/hosted-orchestrator"]
+  Gateway --> Sites["apps/hosted-sites replicas"]
+  Gateway --> Orchestrator
+  Sites <--> Redis[("Redis session cache")]
+  Web <--> DB[("Supabase")]
+  Sites <--> DB
+  Orchestrator <--> DB
+  Sites -->|"run events"| Web
+  Orchestrator -->|"aggregate completion"| Web
+```
+
 ## 仓库结构
 
 ```text

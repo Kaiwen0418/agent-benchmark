@@ -33,6 +33,23 @@ Default local endpoints:
 
 See [Getting Started](./docs/getting-started.md) for environment setup and development workflows.
 
+## System Boundary
+
+```mermaid
+flowchart LR
+  Agent["External Agent Browser"] -->|"session URL"| Gateway["Nginx Gateway"]
+  User["User Browser"] --> Web["apps/web"]
+  Web -->|"initialize attempt"| Orchestrator["apps/hosted-orchestrator"]
+  Gateway --> Sites["apps/hosted-sites replicas"]
+  Gateway --> Orchestrator
+  Sites <--> Redis[("Redis session cache")]
+  Web <--> DB[("Supabase")]
+  Sites <--> DB
+  Orchestrator <--> DB
+  Sites -->|"run events"| Web
+  Orchestrator -->|"aggregate completion"| Web
+```
+
 ## Repository Layout
 
 ```text
