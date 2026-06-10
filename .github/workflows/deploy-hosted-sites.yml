@@ -127,6 +127,10 @@ jobs:
             NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
             SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
             HOSTED_SESSION_REDIS_URL=redis://redis:6379
+            ORCHESTRATOR_REDIS_URL=redis://redis:6379
+            ORCHESTRATOR_PARTITION_COUNT=16
+            ORCHESTRATOR_WORKER_0_PARTITIONS=0,1,2,3,4,5,6,7
+            ORCHESTRATOR_WORKER_1_PARTITIONS=8,9,10,11,12,13,14,15
             HOSTED_SESSION_REDIS_TTL_MS=21600000
             REDIS_IMAGE=redis:7-alpine
             GATEWAY_HTTP_PORT=${GATEWAY_HTTP_PORT}
@@ -157,7 +161,7 @@ jobs:
               echo "---- gateway inspect ports ----"
               docker inspect agentbench-hosted-sites-gateway-1 --format '{{json .NetworkSettings.Ports}}' 2>/dev/null || true
               echo "---- compose logs ----"
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml logs --tail=160 gateway hosted-sites hosted-orchestrator redis || true
+              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml logs --tail=160 gateway hosted-sites hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1 redis || true
             }
 
             deploy_status=0
@@ -184,12 +188,16 @@ jobs:
               docker exec agentbench-hosted-sites-hosted-sites-1 node -e "fetch('http://gateway/health').then(async (response) => { if (!response.ok) process.exit(1); const body = await response.json(); process.exit(body.sessionCache === 'redis' ? 0 : 1); }).catch((error) => { console.error(error); process.exit(1); })"
             }
 
+            orchestrator_smoke_check() {
+              docker exec agentbench-hosted-sites-hosted-sites-1 node -e "fetch('http://gateway/orchestrator').then(async (response) => { const body = await response.json(); process.exit(response.ok && body.ok === true && body.commandBackbone === 'redis-streams' ? 0 : 1); }).catch((error) => { console.error(error); process.exit(1); })"
+            }
+
             gateway_running() {
               [ "$(docker inspect agentbench-hosted-sites-gateway-1 --format '{{.State.Running}}' 2>/dev/null || echo false)" = "true" ]
             }
 
             for attempt in $(seq 1 30); do
-              if internal_smoke_check && smoke_check; then
+              if internal_smoke_check && orchestrator_smoke_check && smoke_check; then
                 exit 0
               fi
               echo "Smoke check failed; retrying (${attempt}/30)."

@@ -23,6 +23,7 @@ export type AttemptLifecycleSession = {
   status: HostedSessionStatus;
   startPath: string | null;
   persisted: boolean;
+  finalState?: unknown;
 };
 
 export type AttemptLifecycleAdvanceSession = {
@@ -128,7 +129,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .order("created_at", { ascending: true });
 
     if (resultsError || !resultRows) {
-      console.error("[hosted-sites] failed to load attempt results for aggregation", resultsError);
+      console.error("[hosted-orchestrator] failed to load attempt results for aggregation", resultsError);
       return { complete: false, aggregate: null };
     }
 
@@ -139,7 +140,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .order("sequence_index", { ascending: true });
 
     if (sessionsError || !sessionRows) {
-      console.error("[hosted-sites] failed to load attempt sessions for aggregation", sessionsError);
+      console.error("[hosted-orchestrator] failed to load attempt sessions for aggregation", sessionsError);
       return { complete: false, aggregate: null };
     }
 
@@ -179,7 +180,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .eq("id", session.id);
 
     if (sessionError) {
-      console.error("[hosted-sites] failed to update hosted session status", sessionError);
+      console.error("[hosted-orchestrator] failed to update hosted session status", sessionError);
     }
 
     if (pendingSessionIds.length > 0) {
@@ -209,7 +210,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
         .eq("id", session.attemptId);
 
       if (attemptProgressError) {
-        console.error("[hosted-sites] failed to update attempt progress", attemptProgressError);
+        console.error("[hosted-orchestrator] failed to update attempt progress", attemptProgressError);
       }
 
       return { complete: false, aggregate: null };
@@ -234,7 +235,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     });
 
     if (scoreError) {
-      console.error("[hosted-sites] failed to persist attempt score", scoreError);
+      console.error("[hosted-orchestrator] failed to persist attempt score", scoreError);
     }
 
     const { error: attemptError } = await supabase
@@ -258,7 +259,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .eq("id", session.attemptId);
 
     if (attemptError) {
-      console.error("[hosted-sites] failed to update attempt", attemptError);
+      console.error("[hosted-orchestrator] failed to update attempt", attemptError);
     }
 
     return { complete: true, aggregate };
@@ -358,7 +359,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
 
     if (attemptError || !attemptRow) {
       if (attemptError) {
-        console.error("[hosted-sites] failed to load attempt for timeout", attemptError);
+        console.error("[hosted-orchestrator] failed to load attempt for timeout", attemptError);
       }
       return {
         command: "timeout-attempt",
@@ -391,7 +392,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .order("sequence_index", { ascending: true });
 
     if (sessionsError || !sessionRows) {
-      console.error("[hosted-sites] failed to load attempt sessions for timeout", sessionsError);
+      console.error("[hosted-orchestrator] failed to load attempt sessions for timeout", sessionsError);
       return {
         command: "timeout-attempt",
         ok: false,
@@ -416,7 +417,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
         .in("id", siblingSessionIds);
 
       if (sessionTimeoutError) {
-        console.error("[hosted-sites] failed to expire sibling sessions during timeout", sessionTimeoutError);
+        console.error("[hosted-orchestrator] failed to expire sibling sessions during timeout", sessionTimeoutError);
       }
     }
 
@@ -458,7 +459,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .eq("id", params.attemptId);
 
     if (attemptUpdateError) {
-      console.error("[hosted-sites] failed to update timed out attempt", attemptUpdateError);
+      console.error("[hosted-orchestrator] failed to update timed out attempt", attemptUpdateError);
       return {
         command: "timeout-attempt",
         ok: false,
@@ -486,7 +487,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       });
 
       if (attemptScoreError) {
-        console.error("[hosted-sites] failed to persist timeout attempt score", attemptScoreError);
+        console.error("[hosted-orchestrator] failed to persist timeout attempt score", attemptScoreError);
       }
     }
 

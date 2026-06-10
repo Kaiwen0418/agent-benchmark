@@ -42,10 +42,11 @@ flowchart LR
   Web -->|"initialize attempt"| Orchestrator["apps/hosted-orchestrator"]
   Gateway --> Sites["apps/hosted-sites replicas"]
   Gateway --> Orchestrator
-  Sites <--> Redis[("Redis session cache")]
+  Sites <--> Redis[("Redis cache + command streams")]
   Web <--> DB[("Supabase")]
-  Sites <--> DB
-  Orchestrator <--> DB
+  Sites -.->|"read-only recovery"| DB
+  Sites -->|"durable commands"| Orchestrator
+  Orchestrator -->|"hosted writes"| DB
   Sites -->|"run events"| Web
   Orchestrator -->|"aggregate completion"| Web
 ```

@@ -483,41 +483,6 @@ export async function timeoutHostedAttempt(params: {
   );
 }
 
-async function persistAttemptState(params: {
-  attemptId: string;
-  attempt: HostedWebAttempt;
-  sessions: HostedWebSessionConnection[];
-}) {
-  const supabase = createSupabaseAdminClient();
-  if (!supabase) {
-    return;
-  }
-
-  const activeSession = params.sessions[0] ?? null;
-  const metadata = {
-    ...params.attempt.metadata,
-    sessions: params.attempt.sessionDefinitions.map((session) => ({
-      app: session.app,
-      taskSlug: session.taskSlug,
-      taskVersion: session.taskVersion,
-      sequenceIndex: session.sequenceIndex,
-      weight: session.weight,
-      required: session.required,
-      title: session.title ?? null,
-      goal: session.goal ?? null,
-      seedVersion: session.seedVersion ?? null,
-      metadata: session.metadata ?? {},
-    })),
-    activeSessionId: activeSession?.sessionId ?? null,
-    activeSequenceIndex: activeSession?.sequenceIndex ?? null,
-    completedSessionIds: params.sessions
-      .filter((session) => session.status === "completed")
-      .map((session) => session.sessionId),
-  };
-
-  await supabase.from("benchmark_attempts").update({ metadata }).eq("id", params.attemptId);
-}
-
 async function getOrCreateHostedWebAttempt(params: {
   run: BenchmarkRun;
   benchmarkCase: BenchmarkCase;
@@ -773,14 +738,6 @@ export async function getOrCreateHostedWebAttemptConnection(params: {
       }),
     ),
   );
-
-  if (attempt.id) {
-    await persistAttemptState({
-      attemptId: attempt.id,
-      attempt,
-      sessions,
-    });
-  }
 
   return toAttemptConnection({ attempt, sessions });
 }

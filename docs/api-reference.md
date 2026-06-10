@@ -94,7 +94,7 @@ Content-Type: application/json
 }
 ```
 
-The event is appended to hosted session events, persisted when configured, and forwarded to the Web run event API.
+The event is appended to the runtime session, sent to the orchestrator for durable persistence, and forwarded to the Web run event API.
 
 ### Task Routes
 
@@ -111,6 +111,8 @@ All task routes require `?session=<token>` and reject a token belonging to a dif
 
 Except for `/health`, every endpoint requires the shared-secret header.
 
+Write endpoints append a command to Redis Streams and wait for the worker result. Clients may send `x-command-id` to make retries idempotent; otherwise the API generates one.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Health check |
@@ -119,6 +121,9 @@ Except for `/health`, every endpoint requires the shared-secret header.
 | `POST` | `/api/attempts/:id/commands/resolve-advance` | Validate current session and return next URL |
 | `POST` | `/api/attempts/:id/commands/complete-session` | Persist result, advance, aggregate if complete |
 | `POST` | `/api/attempts/:id/commands/timeout` | Mark attempt timeout and complete the run |
+| `POST` | `/api/sessions/:token/commands/snapshot` | Persist the current session metadata snapshot |
+| `POST` | `/api/sessions/:token/commands/access` | Persist session access counters and an access-log row |
+| `POST` | `/api/sessions/:token/commands/event` | Persist one hosted event |
 
 ### Initialize Attempt
 
@@ -144,6 +149,10 @@ Except for `/health`, every endpoint requires the shared-secret header.
 ### Complete Session Command
 
 The body contains `sessionToken`, `result`, and optional `finalState`. `result` contains `status`, `score`, `summary`, `evaluators`, and `breakdown`. Duplicate completion is idempotent and returns the latest persisted result.
+
+### Session Persistence Commands
+
+`snapshot` accepts `{ "metadata": { ... } }`. `access` accepts the current access count, timestamps, observed client fields, and event name. `event` accepts `{ "payload": { "type": "...", ... } }`. These authenticated commands keep hosted-sites independent from direct database writes while Redis remains the shared runtime cache.
 
 ## Error Semantics
 

@@ -9,6 +9,7 @@ import {
 } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { createAttemptHandlers } from "./attempt-handlers.js";
+import { createCommandBackbone, type CommandBackboneRole } from "./command-backbone.js";
 import {
   createAttemptLifecycle,
   type AttemptLifecycleAdvanceSession,
@@ -24,6 +25,25 @@ const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:300
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const orchestratorRedisUrl = process.env.ORCHESTRATOR_REDIS_URL ?? process.env.REDIS_URL;
+const orchestratorMode = (process.env.ORCHESTRATOR_MODE ?? "all") as CommandBackboneRole;
+const orchestratorPartitionCount = Math.trunc(envNumber("ORCHESTRATOR_PARTITION_COUNT", 16));
+
+function parseWorkerPartitions(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+  return [...new Set(value.split(",").map((item) => Number(item.trim())))];
+}
+
+const workerPartitions = parseWorkerPartitions(process.env.ORCHESTRATOR_WORKER_PARTITIONS);
+
+if (orchestratorMode !== "api" && orchestratorMode !== "worker" && orchestratorMode !== "all") {
+  throw new Error("ORCHESTRATOR_MODE must be api, worker, or all.");
+}
+if (orchestratorMode === "worker" && !workerPartitions) {
+  throw new Error("ORCHESTRATOR_WORKER_PARTITIONS is required in worker mode.");
+}
 
 type PersistedSessionRow = Pick<
   Database["public"]["Tables"]["hosted_web_sessions"]["Row"],
@@ -56,7 +76,6 @@ type AttemptOverviewSession = HostedAttemptReadModel["sessions"][number] & {
   startPath: string | null;
 };
 
-const pendingFinalStates = new Map<string, unknown>();
 let supabaseAdmin: SupabaseClient<Database> | null | undefined;
 let cleanupSweepInFlight = false;
 
@@ -158,6 +177,11 @@ function sendJson(response: ServerResponse, status: number, payload: unknown) {
 
 function badRequest(response: ServerResponse, message: string) {
   sendJson(response, 400, { error: message });
+}
+
+function commandIdFromRequest(request: IncomingMessage) {
+  const value = request.headers["x-command-id"];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 async function readBody(request: IncomingMessage) {
@@ -418,7 +442,6 @@ async function persistScoreResult(session: AttemptLifecycleSession, result: Host
     return;
   }
 
-  const finalState = pendingFinalStates.get(session.id) ?? null;
   const { error } = await supabase.from("hosted_web_results").insert({
     session_id: session.id,
     run_id: session.runId,
@@ -429,7 +452,7 @@ async function persistScoreResult(session: AttemptLifecycleSession, result: Host
     status: result.status,
     score: result.score,
     summary: result.summary,
-    final_state: finalState,
+    final_state: session.finalState ?? null,
     evaluators: result.evaluators,
   });
 
@@ -621,6 +644,108 @@ async function loadSessionByToken(token: string) {
   return data as PersistedSessionRow;
 }
 
+async function persistHostedSessionSnapshot(token: string, metadata: Record<string, unknown>) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return false;
+  }
+
+  const { data, error } = await supabase
+    .from("hosted_web_sessions")
+    .update({ metadata })
+    .eq("session_token_hash", hashToken(token))
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[hosted-orchestrator] failed to persist session snapshot", error);
+  }
+  return Boolean(data) && !error;
+}
+
+async function persistHostedSessionAccess(
+  token: string,
+  input: Record<string, unknown>,
+) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return false;
+  }
+
+  const session = await loadSessionByToken(token);
+  if (!session) {
+    return false;
+  }
+
+  const nullableString = (value: unknown) => (typeof value === "string" ? value : null);
+  const accessCount =
+    typeof input.accessCount === "number" && Number.isFinite(input.accessCount)
+      ? Math.max(0, Math.trunc(input.accessCount))
+      : 0;
+  const accessedAt = nullableString(input.accessedAt) ?? now();
+
+  const { error: sessionError } = await supabase
+    .from("hosted_web_sessions")
+    .update({
+      access_count: accessCount,
+      last_accessed_at: accessedAt,
+      first_seen_ip: nullableString(input.firstSeenIp),
+      last_seen_ip: nullableString(input.lastSeenIp),
+      first_seen_user_agent: nullableString(input.firstSeenUserAgent),
+      last_seen_user_agent: nullableString(input.lastSeenUserAgent),
+    })
+    .eq("id", session.id);
+
+  const { error: logError } = await supabase.from("hosted_web_access_logs").insert({
+    session_id: session.id,
+    attempt_id: session.attempt_id,
+    run_id: session.run_id,
+    event: typeof input.event === "string" ? input.event : "session.access",
+    ip: nullableString(input.ip),
+    user_agent: nullableString(input.userAgent),
+    referer: nullableString(input.referer),
+    metadata: {
+      app: session.app,
+      taskSlug: session.task_slug,
+    },
+  });
+
+  if (sessionError) {
+    console.error("[hosted-orchestrator] failed to update session access", sessionError);
+  }
+  if (logError) {
+    console.error("[hosted-orchestrator] failed to persist access log", logError);
+  }
+  return !sessionError && !logError;
+}
+
+async function persistHostedEvent(token: string, payload: Record<string, unknown>) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return false;
+  }
+
+  const session = await loadSessionByToken(token);
+  if (!session || !session.run_id) {
+    return false;
+  }
+
+  const type = typeof payload.type === "string" ? payload.type : "hosted.event";
+  const { error } = await supabase.from("hosted_web_events").insert({
+    session_id: session.id,
+    run_id: session.run_id,
+    attempt_id: session.attempt_id,
+    type,
+    name: typeof payload.name === "string" ? payload.name : type,
+    payload,
+  });
+
+  if (error) {
+    console.error("[hosted-orchestrator] failed to persist hosted event", error);
+  }
+  return !error;
+}
+
 async function pruneExpiredAccessLogs() {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -681,6 +806,110 @@ const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOver
   forwardCompletion,
   publicBaseUrl: hostedSitesBaseUrl,
   defaultStartPathForApp,
+});
+
+async function dispatchWriteCommand(type: string, input: Record<string, unknown>) {
+  if (type === "attempt.init") {
+    const initialized = await attemptHandlers.handleInitializeAttempt(input as Parameters<typeof attemptHandlers.handleInitializeAttempt>[0]);
+    return initialized;
+  }
+
+  if (type === "session.snapshot") {
+    const token = typeof input.token === "string" ? input.token : "";
+    const metadata =
+      input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+        ? (input.metadata as Record<string, unknown>)
+        : null;
+    if (!token || !metadata) {
+      return { statusCode: 400, body: { error: "Missing token or metadata" } };
+    }
+    const ok = await persistHostedSessionSnapshot(token, metadata);
+    return { statusCode: ok ? 200 : 404, body: ok ? { ok: true } : { error: "Unknown session" } };
+  }
+
+  if (type === "session.access") {
+    const token = typeof input.token === "string" ? input.token : "";
+    if (!token) {
+      return { statusCode: 400, body: { error: "Missing token" } };
+    }
+    const { token: _token, ...access } = input;
+    const ok = await persistHostedSessionAccess(token, access);
+    return { statusCode: ok ? 200 : 404, body: ok ? { ok: true } : { error: "Unknown session" } };
+  }
+
+  if (type === "session.event") {
+    const token = typeof input.token === "string" ? input.token : "";
+    const payload =
+      input.payload && typeof input.payload === "object" && !Array.isArray(input.payload)
+        ? (input.payload as Record<string, unknown>)
+        : null;
+    if (!token || !payload) {
+      return { statusCode: 400, body: { error: "Missing token or payload" } };
+    }
+    const ok = await persistHostedEvent(token, payload);
+    return { statusCode: ok ? 200 : 404, body: ok ? { ok: true } : { error: "Unknown session" } };
+  }
+
+  if (type === "attempt.complete-session") {
+    const attemptId = typeof input.attemptId === "string" ? input.attemptId : "";
+    const sessionToken = typeof input.sessionToken === "string" ? input.sessionToken : "";
+    const sessionRow = sessionToken ? await loadSessionByToken(sessionToken) : null;
+    if (!sessionRow || sessionRow.attempt_id !== attemptId) {
+      return { statusCode: 404, body: { error: "Unknown session" } };
+    }
+    const resultInput =
+      input.result && typeof input.result === "object" && !Array.isArray(input.result)
+        ? (input.result as Record<string, unknown>)
+        : null;
+    if (!resultInput) {
+      return { statusCode: 400, body: { error: "Missing result" } };
+    }
+    const result: HostedWebScoreResult = {
+      status:
+        resultInput.status === "passed" || resultInput.status === "failed" || resultInput.status === "error"
+          ? resultInput.status
+          : "error",
+      score: typeof resultInput.score === "number" ? resultInput.score : 0,
+      summary: typeof resultInput.summary === "string" ? resultInput.summary : "Hosted session completed.",
+      evaluators: Array.isArray(resultInput.evaluators) ? resultInput.evaluators : [],
+    };
+    return attemptHandlers.handleCompleteSession({
+      session: {
+        ...buildLifecycleSessionFromRow(sessionRow, sessionToken),
+        finalState: input.finalState ?? null,
+      },
+      result,
+    });
+  }
+
+  if (type === "attempt.timeout") {
+    return attemptHandlers.handleTimeoutAttempt({
+      attemptId: typeof input.attemptId === "string" ? input.attemptId : "",
+      runId: typeof input.runId === "string" ? input.runId : null,
+      expiredSessionId: typeof input.expiredSessionId === "string" ? input.expiredSessionId : "",
+      expiredTaskSlug: typeof input.expiredTaskSlug === "string" ? input.expiredTaskSlug : "",
+    });
+  }
+
+  if (type === "maintenance.cleanup") {
+    const expiredSessions = await sweepExpiredSessions();
+    const prunedAccessLogs = await pruneExpiredAccessLogs();
+    return { statusCode: 200, body: { expiredSessions, prunedAccessLogs } };
+  }
+
+  return { statusCode: 400, body: { error: "Unknown command type" } };
+}
+
+if (!orchestratorRedisUrl) {
+  throw new Error("ORCHESTRATOR_REDIS_URL or REDIS_URL is required for the orchestrator command backbone.");
+}
+
+const commandBackbone = createCommandBackbone({
+  redisUrl: orchestratorRedisUrl,
+  handler: dispatchWriteCommand,
+  role: orchestratorMode,
+  partitionCount: orchestratorPartitionCount,
+  assignedPartitions: workerPartitions,
 });
 
 async function sweepExpiredSessions() {
@@ -758,8 +987,16 @@ async function runCleanupSweep(trigger: "startup" | "interval") {
 
   cleanupSweepInFlight = true;
   try {
-    const expiredSessions = await sweepExpiredSessions();
-    const prunedAccessLogs = await pruneExpiredAccessLogs();
+    const sweepBucket = Math.floor(Date.now() / cleanupSweepIntervalMs);
+    const result = await commandBackbone.execute(
+      "maintenance.cleanup",
+      { trigger },
+      "maintenance",
+      `maintenance-cleanup-${sweepBucket}`,
+    );
+    const body = result.body as { expiredSessions?: number; prunedAccessLogs?: number };
+    const expiredSessions = body.expiredSessions ?? 0;
+    const prunedAccessLogs = body.prunedAccessLogs ?? 0;
     if (expiredSessions > 0 || prunedAccessLogs > 0) {
       console.log(
         `[hosted-orchestrator] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs}`,
@@ -775,7 +1012,14 @@ const server = createServer(async (request, response) => {
 
   try {
     if (request.method === "GET" && url.pathname === "/health") {
-      sendJson(response, 200, { ok: true });
+      const readiness = await commandBackbone.readiness();
+      sendJson(response, readiness.ready ? 200 : 503, {
+        ok: readiness.ready,
+        commandBackbone: "redis-streams",
+        mode: orchestratorMode,
+        partitions: orchestratorPartitionCount,
+        missingPartitions: readiness.missingPartitions,
+      });
       return;
     }
 
@@ -786,7 +1030,7 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/attempts/init") {
       const input = await readJson(request);
-      const initialized = await attemptHandlers.handleInitializeAttempt({
+      const initialized = await commandBackbone.execute("attempt.init", {
         runId: typeof input.runId === "string" ? input.runId : null,
         caseId: typeof input.caseId === "string" ? input.caseId : null,
         callbackSecret: typeof input.callbackSecret === "string" ? input.callbackSecret : null,
@@ -815,8 +1059,57 @@ const server = createServer(async (request, response) => {
                     : {},
               }))
           : [],
-      });
+      }, typeof input.runId === "string" ? input.runId : typeof input.caseId === "string" ? input.caseId : "attempt.init", commandIdFromRequest(request));
       sendJson(response, initialized.statusCode, initialized.body);
+      return;
+    }
+
+    const sessionSnapshotMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/commands\/snapshot$/);
+    if (request.method === "POST" && sessionSnapshotMatch) {
+      const input = await readJson(request);
+      const metadata =
+        input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+          ? (input.metadata as Record<string, unknown>)
+          : null;
+      if (!metadata) {
+        badRequest(response, "Missing metadata");
+        return;
+      }
+      const result = await commandBackbone.execute("session.snapshot", {
+        token: decodeURIComponent(sessionSnapshotMatch[1]),
+        metadata,
+      }, decodeURIComponent(sessionSnapshotMatch[1]), commandIdFromRequest(request));
+      sendJson(response, result.statusCode, result.body);
+      return;
+    }
+
+    const sessionAccessMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/commands\/access$/);
+    if (request.method === "POST" && sessionAccessMatch) {
+      const input = await readJson(request);
+      const result = await commandBackbone.execute("session.access", {
+        token: decodeURIComponent(sessionAccessMatch[1]),
+        ...input,
+      }, decodeURIComponent(sessionAccessMatch[1]), commandIdFromRequest(request));
+      sendJson(response, result.statusCode, result.body);
+      return;
+    }
+
+    const sessionEventMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/commands\/event$/);
+    if (request.method === "POST" && sessionEventMatch) {
+      const input = await readJson(request);
+      const payload =
+        input.payload && typeof input.payload === "object" && !Array.isArray(input.payload)
+          ? (input.payload as Record<string, unknown>)
+          : null;
+      if (!payload) {
+        badRequest(response, "Missing payload");
+        return;
+      }
+      const result = await commandBackbone.execute("session.event", {
+        token: decodeURIComponent(sessionEventMatch[1]),
+        payload,
+      }, decodeURIComponent(sessionEventMatch[1]), commandIdFromRequest(request));
+      sendJson(response, result.statusCode, result.body);
       return;
     }
 
@@ -856,41 +1149,13 @@ const server = createServer(async (request, response) => {
         return;
       }
 
-      const sessionRow = await loadSessionByToken(sessionToken);
-      if (!sessionRow || sessionRow.attempt_id !== attemptId) {
-        sendJson(response, 404, { error: "Unknown session" });
-        return;
-      }
-
-      const resultInput =
-        input.result && typeof input.result === "object" && !Array.isArray(input.result)
-          ? (input.result as Record<string, unknown>)
-          : null;
-      if (!resultInput) {
-        badRequest(response, "Missing result");
-        return;
-      }
-
-      const result: HostedWebScoreResult = {
-        status:
-          resultInput.status === "passed" || resultInput.status === "failed" || resultInput.status === "error"
-            ? resultInput.status
-            : "error",
-        score: typeof resultInput.score === "number" ? resultInput.score : 0,
-        summary: typeof resultInput.summary === "string" ? resultInput.summary : "Hosted session completed.",
-        evaluators: Array.isArray(resultInput.evaluators) ? resultInput.evaluators : [],
-      };
-
-      pendingFinalStates.set(sessionRow.id, input.finalState ?? null);
-      try {
-        const completion = await attemptHandlers.handleCompleteSession({
-          session: buildLifecycleSessionFromRow(sessionRow, sessionToken),
-          result,
-        });
-        sendJson(response, completion.statusCode, completion.body);
-      } finally {
-        pendingFinalStates.delete(sessionRow.id);
-      }
+      const completion = await commandBackbone.execute("attempt.complete-session", {
+        attemptId,
+        sessionToken,
+        result: input.result,
+        finalState: input.finalState ?? null,
+      }, attemptId, commandIdFromRequest(request));
+      sendJson(response, completion.statusCode, completion.body);
       return;
     }
 
@@ -904,12 +1169,12 @@ const server = createServer(async (request, response) => {
         return;
       }
 
-      const timeout = await attemptHandlers.handleTimeoutAttempt({
+      const timeout = await commandBackbone.execute("attempt.timeout", {
         attemptId: decodeURIComponent(timeoutMatch[1]),
         runId: typeof input.runId === "string" ? input.runId : null,
         expiredSessionId,
         expiredTaskSlug,
-      });
+      }, decodeURIComponent(timeoutMatch[1]), commandIdFromRequest(request));
       sendJson(response, timeout.statusCode, timeout.body);
       return;
     }
@@ -922,11 +1187,18 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`[hosted-orchestrator] listening on ${publicBaseUrl}`);
-});
+await commandBackbone.start();
 
-void runCleanupSweep("startup");
-setInterval(() => {
-  void runCleanupSweep("interval");
-}, cleanupSweepIntervalMs);
+if (orchestratorMode !== "worker") {
+  server.listen(port, () => {
+    console.log(`[hosted-orchestrator] listening on ${publicBaseUrl}`);
+  });
+  void runCleanupSweep("startup");
+  setInterval(() => {
+    void runCleanupSweep("interval");
+  }, cleanupSweepIntervalMs);
+}
+
+console.log(
+  `[hosted-orchestrator] redis backbone mode=${commandBackbone.info.role} partitions=${commandBackbone.info.assignedPartitions.join(",")}`,
+);

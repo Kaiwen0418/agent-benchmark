@@ -12,7 +12,8 @@
   "dependencies": {
     "@agentbench/scoring": "workspace:*",
     "@agentbench/shared": "workspace:*",
-    "@supabase/supabase-js": "^2.49.1"
+    "@supabase/supabase-js": "^2.49.1",
+    "redis": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

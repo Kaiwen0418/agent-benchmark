@@ -43,6 +43,15 @@ type SessionStoreDeps = {
   makeId: (prefix: string) => string;
   hashToken: (token: string) => string;
   getSupabaseAdmin: () => SupabaseClient<Database> | null | undefined;
+  persistSessionSnapshotDurably?: (
+    session: HostedSession,
+    metadata: Record<string, unknown>,
+  ) => Promise<unknown>;
+  persistSessionAccess?: (params: {
+    session: HostedSession;
+    request: IncomingMessage;
+    event: string;
+  }) => Promise<unknown>;
   defaultStartPathForApp: (app: string) => string;
   defaultGoalForSession: (app: string, taskSlug: string) => string;
   resolveHostedAppId: (app: string) => HostedSession["app"];
@@ -51,7 +60,6 @@ type SessionStoreDeps = {
   hydrateHostedAppState: (app: string, value: unknown) => HostedAppSessionState;
   clientIp: (request: IncomingMessage) => string | null;
   clientUserAgent: (request: IncomingMessage) => string | null;
-  clientReferer: (request: IncomingMessage) => string | null;
   onSessionExpired: (params: {
     attemptId: string;
     runId: string | null;
@@ -180,73 +188,14 @@ export function createSessionStore(deps: SessionStoreDeps) {
       return;
     }
 
-    const supabase = deps.getSupabaseAdmin();
-    if (!supabase) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from("hosted_web_sessions")
-      .update({
-        metadata: buildSessionMetadata(session),
-      })
-      .eq("id", session.id);
-
-    if (error) {
-      console.error("[hosted-sites] failed to persist session snapshot", error);
-    }
-  }
-
-  async function persistAccessLog(params: {
-    session: HostedSession;
-    request: IncomingMessage;
-    event: string;
-  }) {
-    if (!params.session.persisted) {
-      return;
-    }
-
-    const supabase = deps.getSupabaseAdmin();
-    if (!supabase) {
-      return;
-    }
-
-    const { error } = await supabase.from("hosted_web_access_logs").insert({
-      session_id: params.session.id,
-      attempt_id: params.session.attemptId,
-      run_id: params.session.runId,
-      event: params.event,
-      ip: deps.clientIp(params.request),
-      user_agent: deps.clientUserAgent(params.request),
-      referer: deps.clientReferer(params.request),
-      metadata: {
-        app: params.session.app,
-        taskSlug: params.session.taskSlug,
-      },
-    });
-
-    if (error) {
-      console.error("[hosted-sites] failed to persist access log", error);
-    }
+    await deps.persistSessionSnapshotDurably?.(session, buildSessionMetadata(session));
   }
 
   async function markSessionExpired(session: HostedSession, request: IncomingMessage) {
     session.status = "expired";
     await deleteCachedSession(session.token);
 
-    if (session.persisted) {
-      const supabase = deps.getSupabaseAdmin();
-      if (supabase) {
-        await supabase
-          .from("hosted_web_sessions")
-          .update({
-            status: "expired",
-          })
-          .eq("id", session.id);
-      }
-    }
-
-    await persistAccessLog({
+    await deps.persistSessionAccess?.({
       session,
       request,
       event: "session.expired_rejected",
@@ -280,73 +229,11 @@ export function createSessionStore(deps: SessionStoreDeps) {
 
     await cacheSession(session);
 
-    if (session.persisted) {
-      const supabase = deps.getSupabaseAdmin();
-      if (supabase) {
-        await supabase
-          .from("hosted_web_sessions")
-          .update({
-            access_count: session.accessCount,
-            last_accessed_at: accessedAt,
-            first_seen_ip: session.firstSeenIp,
-            last_seen_ip: session.lastSeenIp,
-            first_seen_user_agent: session.firstSeenUserAgent,
-            last_seen_user_agent: session.lastSeenUserAgent,
-          })
-          .eq("id", session.id);
-      }
-    }
-
-    await persistAccessLog({
+    await deps.persistSessionAccess?.({
       session,
       request,
       event,
     });
-  }
-
-  async function persistNewSession(session: HostedSession, startUrl: string): Promise<HostedSession> {
-    const supabase = deps.getSupabaseAdmin();
-    if (!supabase || !session.runId || !session.caseId) {
-      return session;
-    }
-
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString();
-    const { data: sessionRow, error: sessionError } = await supabase
-      .from("hosted_web_sessions")
-      .insert({
-        run_id: session.runId,
-        case_id: session.caseId,
-        attempt_id: session.attemptId,
-        provider: "hosted-web",
-        app: session.app,
-        task_slug: session.taskSlug,
-        task_version: session.taskVersion,
-        sequence_index: session.sequenceIndex,
-        weight: session.weight,
-        required: session.required,
-        seed_version: session.seedVersion,
-        start_url: startUrl,
-        session_token_hash: deps.hashToken(session.token),
-        status: session.status,
-        metadata: buildSessionMetadata(session),
-        activated_at: deps.now(),
-        expires_at: expiresAt,
-      })
-      .select("id, created_at")
-      .single();
-
-    if (sessionError || !sessionRow) {
-      console.error("[hosted-sites] failed to persist hosted session", sessionError);
-      return session;
-    }
-
-    return {
-      ...session,
-      id: sessionRow.id,
-      expiresAt,
-      createdAt: sessionRow.created_at,
-      persisted: true,
-    };
   }
 
   async function refreshPersistedSessionControlState(session: HostedSession) {
@@ -409,7 +296,6 @@ export function createSessionStore(deps: SessionStoreDeps) {
     const app = deps.resolveHostedAppId(params.app ?? "shopping-lite");
     const taskSlug = params.taskSlug ?? "shopping-constrained-checkout";
     const startPath = params.startPath ?? deps.defaultStartPathForApp(app);
-    const startUrl = `${deps.publicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
     const initialState = deps.buildInitialSessionState(app);
     const baseSession = {
       id: deps.makeId("hws"),
@@ -448,9 +334,8 @@ export function createSessionStore(deps: SessionStoreDeps) {
       persisted: false,
     } as HostedSession;
 
-    const session = await persistNewSession(baseSession, startUrl);
-    await cacheSession(session);
-    return session;
+    await cacheSession(baseSession);
+    return baseSession;
   }
 
   async function getSession(url: URL, request: IncomingMessage) {
