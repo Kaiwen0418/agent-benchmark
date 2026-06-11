@@ -16,6 +16,7 @@ import {
   type AttemptLifecycleSession,
   type HostedSessionStatus,
 } from "./attempt-lifecycle.js";
+import { generateAttemptQuestions } from "./question-generation.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -487,9 +488,12 @@ async function initializeAttempt(params: {
   }
   const runId = params.runId;
   const caseId = params.caseId;
+  const generated = generateAttemptQuestions(params.sessions);
+  const generatedSessions = generated.sessions;
 
   const metadata = {
-    sessions: params.sessions.map((session) => ({
+    generationSeed: generated.generationSeed,
+    sessions: generatedSessions.map((session) => ({
       app: session.app,
       taskSlug: session.taskSlug,
       taskVersion: session.taskVersion,
@@ -526,7 +530,7 @@ async function initializeAttempt(params: {
   }
 
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString();
-  const orderedSessions = [...params.sessions].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+  const orderedSessions = [...generatedSessions].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
   const rows = orderedSessions.map((session) => {
     const token = makeId("tok");
     const startPath = session.startPath ?? defaultStartPathForApp(session.app);
@@ -538,7 +542,7 @@ async function initializeAttempt(params: {
       suiteSlug: params.suiteSlug,
       suiteVersion: params.suiteVersion,
       title: session.title,
-      goal: session.goal ?? defaultGoalForSession(session.app, session.taskSlug),
+      goal: session.goal,
       startPath,
     } satisfies HostedWebSessionMetadata;
 
@@ -585,6 +589,9 @@ async function initializeAttempt(params: {
         return null;
       }
       const metadata = extractMetadata(row.metadata as Record<string, unknown> | null);
+      if (typeof metadata.goal !== "string" || metadata.goal.length === 0) {
+        throw new Error(`Generated hosted session ${row.id} is missing its goal.`);
+      }
       return {
         sessionId: row.id,
         attemptId: row.attempt_id,
@@ -596,7 +603,7 @@ async function initializeAttempt(params: {
         weight: row.weight,
         required: row.required,
         startUrl: row.start_url,
-        goal: typeof metadata.goal === "string" ? metadata.goal : defaultGoalForSession(row.app, row.task_slug),
+        goal: metadata.goal,
         title: typeof metadata.title === "string" ? metadata.title : null,
         status: row.status,
       };

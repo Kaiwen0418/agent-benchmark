@@ -42,6 +42,18 @@ docker-compose logs -f --tail=200 hosted-sites hosted-orchestrator hosted-orches
 
 不要为每个 hosted-sites 副本固定映射宿主机端口。Nginx 应通过 Compose 服务网络访问副本。
 
+## 按路径执行 CD
+
+`deploy-hosted-sites.yml` 会在 build 和 pull 前对每次 push 分类：
+
+- `apps/hosted-sites/**` 只 build、pull 和 recreate hosted-sites。
+- `apps/hosted-orchestrator/**` 只 build、pull 和 recreate orchestrator API 与 workers。
+- 共享 scoring/runtime package 变更会重建两个镜像。
+- Nginx 变更只 recreate gateway。
+- Compose 拓扑变更会 reconcile 全部服务，但不会 pull 未变更的应用镜像。
+
+Hosted-sites 与 orchestrator 使用独立 image tag。定向部署会保留当前副本数，因此扩容或部署一个服务不会重启或缩放另一个服务。
+
 ## 生产拓扑
 
 生产部署拆分为：

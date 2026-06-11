@@ -29,6 +29,11 @@ export const forumSeedThreads: ForumThread[] = [
         author: "netizen42",
         body: "My connection drops every 10 minutes on the 5GHz band. 2.4GHz is stable. Any fixes?",
       },
+      {
+        id: "p-wifi-2",
+        author: "tech_support",
+        body: "Use the official 5GHz reset guide: https://support.example.com/network/5ghz-reset before reopening the issue.",
+      },
     ],
   },
   {
@@ -40,6 +45,11 @@ export const forumSeedThreads: ForumThread[] = [
         id: "p-screen-1",
         author: "pixel_fan",
         body: "When I set brightness below 20%, the screen starts flickering. Is this a hardware defect?",
+      },
+      {
+        id: "p-screen-2",
+        author: "tech_support",
+        body: "Follow the display calibration advisory: https://support.example.com/display/flicker-calibration and report the panel revision if it persists.",
       },
     ],
   },

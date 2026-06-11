@@ -5,12 +5,46 @@ import { evaluateRepo, type RepoEvaluationSession } from "./apps/repo-lite/evalu
 import { evaluateShopping, type ShoppingEvaluationSession } from "./apps/shopping-lite/evaluate.js";
 import { evaluateWiki, type WikiEvaluationSession } from "./apps/wiki-lite/evaluate.js";
 
+function generatedTaskConfig(taskConfig: Record<string, unknown>) {
+  return {
+    questionGeneration: {
+      schemaVersion: 1,
+      generationSeed: "test-seed",
+      variantId: "test-variant",
+      taskConfig,
+    },
+  };
+}
+
+const defaultTaskConfigs = {
+  shopping: generatedTaskConfig({
+    targetCategory: "charger",
+    quantity: 1,
+    maxTotal: 30,
+    shippingMethod: "standard",
+    avoidRestricted: true,
+  }),
+  forum: generatedTaskConfig({
+    targetThreadId: "thr-battery",
+    expectedReplyValue: "https://support.example.com/recall/battery-2026",
+    expectedLockReason: "safety escalation",
+  }),
+  repo: generatedTaskConfig({
+    filePath: "README.md",
+    expectedText: "pnpm install",
+    forbiddenText: "npm install",
+    expectedMrTitle: "Fix install instructions",
+    expectedTargetBranch: "main",
+  }),
+};
+
 function makeShoppingSession(
   overrides?: Partial<ShoppingEvaluationSession["state"]>,
 ): ShoppingEvaluationSession {
   return {
     app: "shopping-lite",
     taskSlug: "shopping-constrained-checkout",
+    metadata: defaultTaskConfigs.shopping,
     state: {
       products: [
         { id: "prod-charger-30w", name: "VoltEdge 30W USB-C Charger", category: "charger", price: 24.99 },
@@ -38,7 +72,9 @@ function makeWikiSession(overrides?: {
   return {
     app: "wiki-lite",
     taskSlug: "wiki-release-answer",
-    metadata: overrides?.metadata ?? {},
+    metadata:
+      overrides?.metadata ??
+      generatedTaskConfig({ targetArticleSlug: "agentbench-release-history", expectedAnswer: "June 1, 2026" }),
     events: overrides?.events ?? [],
     state: {
       wikiAnswerSubmissions: overrides?.wikiAnswerSubmissions ?? [],
@@ -99,7 +135,7 @@ test("evaluateWiki fails when article was not viewed even if answer matches", ()
   );
 
   assert.equal(result.status, "failed");
-  assert.match(result.summary, /requires opening the release-history article/i);
+  assert.match(result.summary, /requires opening the generated target article/i);
 });
 
 function makeForumSession(
@@ -108,6 +144,7 @@ function makeForumSession(
   return {
     app: "forum-lite",
     taskSlug: "forum-battery-moderation",
+    metadata: defaultTaskConfigs.forum,
     state: {
       threads: [
         {
@@ -218,6 +255,7 @@ function makeRepoSession(
   return {
     app: "repo-lite",
     taskSlug: "repo-readme-fix",
+    metadata: defaultTaskConfigs.repo,
     state: {
       files: [
         {
@@ -301,4 +339,68 @@ test("evaluateRepo fails when MR title does not match", () => {
 
   assert.equal(result.status, "failed");
   assert.equal(result.score, 0);
+});
+
+test("generated shopping config changes the accepted category and shipping method", () => {
+  const session = makeShoppingSession({
+    products: [{ id: "prod-cable", name: "USB-C Cable", category: "cable", price: 9.99 }],
+    orders: [{
+      id: "ord_cable",
+      items: [{ productId: "prod-cable", quantity: 1 }],
+      total: 9.99,
+      shippingMethod: "express",
+      submittedAt: "2026-06-01T00:00:00.000Z",
+    }],
+  });
+  session.metadata = generatedTaskConfig({
+    targetCategory: "cable",
+    quantity: 1,
+    maxTotal: 10,
+    shippingMethod: "express",
+    avoidRestricted: true,
+  });
+  assert.equal(evaluateShopping(session).status, "passed");
+});
+
+test("generated wiki config changes both the target article and answer", () => {
+  const result = evaluateWiki(makeWikiSession({
+    metadata: generatedTaskConfig({ targetArticleSlug: "shipping-policy", expectedAnswer: "two business days" }),
+    events: [{ type: "page.load", url: "/wiki/article/shipping-policy?session=tok" }],
+    wikiAnswerSubmissions: [{ answer: "two business days", submittedAt: "2026-06-01T00:00:00.000Z" }],
+  }));
+  assert.equal(result.status, "passed");
+});
+
+test("generated forum config changes the target thread, reply value, and lock reason", () => {
+  const session = makeForumSession({
+    threads: [{
+      id: "thr-wifi",
+      title: "WiFi connectivity drops on 5GHz",
+      category: "networking",
+      locked: true,
+      posts: [{ id: "agent", author: "agent", body: "Use https://support.example.com/network/5ghz-reset" }],
+    }],
+    moderationActions: [{ id: "mod", threadId: "thr-wifi", action: "lock", reason: "resolved with guide" }],
+  });
+  session.metadata = generatedTaskConfig({
+    targetThreadId: "thr-wifi",
+    expectedReplyValue: "https://support.example.com/network/5ghz-reset",
+    expectedLockReason: "resolved with guide",
+  });
+  assert.equal(evaluateForum(session).status, "passed");
+});
+
+test("generated repo config changes the replacement text and merge request", () => {
+  const session = makeRepoSession({
+    files: [{ path: "README.md", content: "Run `yarn install` to install dependencies.\n" }],
+    mergeRequests: [{ id: "mr_yarn", title: "Document Yarn setup", changedFiles: [], targetBranch: "main" }],
+  });
+  session.metadata = generatedTaskConfig({
+    filePath: "README.md",
+    expectedText: "yarn install",
+    forbiddenText: "npm install",
+    expectedMrTitle: "Document Yarn setup",
+    expectedTargetBranch: "main",
+  });
+  assert.equal(evaluateRepo(session).status, "passed");
 });

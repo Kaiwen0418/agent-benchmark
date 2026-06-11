@@ -27,7 +27,21 @@ function makeSession(): HostedSession {
     goal: defaultGoalForSession(app, "shopping-lite-task"),
     startPath: defaultStartPathForApp(app),
     seedVersion: "shopping-lite-v1",
-    metadata: {},
+    metadata: {
+      questionGeneration: {
+        schemaVersion: 1,
+        generationSeed: "api-test",
+        variantId: "shopping-test",
+        uiVariant: "workspace",
+        taskConfig: {
+          targetCategory: "charger",
+          quantity: 1,
+          maxTotal: 30,
+          shippingMethod: "standard",
+          avoidRestricted: true,
+        },
+      },
+    },
     status: "active",
     expiresAt: null,
     accessCount: 0,

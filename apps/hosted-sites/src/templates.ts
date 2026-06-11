@@ -2,6 +2,7 @@ import type { ServerResponse } from "node:http";
 import type { HostedAttemptReadModel } from "@agentbench/shared";
 import type { HostedSession, HostedAttemptOverviewSession } from "./runtime/types.js";
 import { sendJson } from "./runtime/http.js";
+import { readUiVariant } from "./runtime/question-config.js";
 
 export function escapeHtml(value: string) {
   return value
@@ -31,6 +32,16 @@ export function layout(params: {
   publicBaseUrl: string;
   defaultStartPathForApp: (app: string) => string;
 }) {
+  const uiVariant = readUiVariant(params.session.metadata);
+  const appNav =
+    params.session.app === "wiki-lite"
+      ? `<a href="/wiki?session=${encodeURIComponent(params.session.token)}">Knowledge base</a>`
+      : params.session.app === "forum-lite"
+        ? `<a href="/forum?session=${encodeURIComponent(params.session.token)}">All threads</a>`
+        : params.session.app === "repo-lite"
+          ? `<a href="/repo?session=${encodeURIComponent(params.session.token)}">Repository</a>`
+          : `<a href="/shopping?session=${encodeURIComponent(params.session.token)}">Catalog</a>
+             <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>`;
   const telemetry = `
     <script>
       window.AgentBenchHostedSession = ${JSON.stringify({
@@ -90,7 +101,10 @@ export function layout(params: {
         --surface: #f7f3ea;
         --panel: #ffffff;
         --accent: #0f766e;
+        --accent-soft: #d9eee9;
         --danger: #a33b2f;
+        --radius: 8px;
+        --shadow: none;
       }
       * { box-sizing: border-box; }
       body {
@@ -99,8 +113,10 @@ export function layout(params: {
         color: var(--ink);
         background: linear-gradient(180deg, #f7f3ea 0%, #ece6d9 100%);
       }
-      header, main { max-width: 1040px; margin: 0 auto; padding: 24px; }
-      header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+      .shell { max-width: 1120px; margin: 0 auto; }
+      header, main { padding: 24px; }
+      header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+      .heading { min-width: 0; flex: 1; }
       h1 { margin: 0; font-size: 30px; line-height: 1.1; }
       h2 { margin: 0 0 12px; font-size: 20px; }
       p { color: var(--muted); line-height: 1.55; }
@@ -115,8 +131,9 @@ export function layout(params: {
       .card, .panel {
         border: 1px solid var(--line);
         background: var(--panel);
-        border-radius: 8px;
+        border-radius: var(--radius);
         padding: 16px;
+        box-shadow: var(--shadow);
       }
       .price { font-size: 22px; font-weight: 800; }
       .muted { color: var(--muted); }
@@ -139,42 +156,74 @@ export function layout(params: {
       table { width: 100%; border-collapse: collapse; background: white; }
       th, td { border-bottom: 1px solid var(--line); padding: 10px; text-align: left; }
       .nav { display: flex; gap: 12px; flex-wrap: wrap; }
+      .nav a { white-space: nowrap; }
       .score { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      .layout-badge { display: inline-block; margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+
+      body.ui-sidebar {
+        --accent: #b45309;
+        --accent-soft: #ffedd5;
+        --surface: #f3eee5;
+        --radius: 2px;
+        background: linear-gradient(135deg, #f3eee5 0%, #e6dccb 100%);
+      }
+      .ui-sidebar .shell { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); min-height: 100vh; }
+      .ui-sidebar header { position: sticky; top: 0; height: 100vh; flex-direction: column; justify-content: flex-start; border-right: 1px solid var(--line); background: rgba(255,255,255,.68); backdrop-filter: blur(12px); }
+      .ui-sidebar main { padding: 32px; }
+      .ui-sidebar .nav { flex-direction: column; width: 100%; margin-top: auto; }
+      .ui-sidebar .nav a { padding: 10px 12px; border: 1px solid var(--line); background: rgba(255,255,255,.72); }
+      .ui-sidebar .task { background: var(--accent-soft); border-left: 4px solid var(--accent); }
+
+      body.ui-compact {
+        --ink: #18201d;
+        --muted: #53615b;
+        --line: #aab9b1;
+        --surface: #e7eee9;
+        --panel: #f8fbf9;
+        --accent: #285943;
+        --accent-soft: #dcebe2;
+        --radius: 0;
+        --shadow: 3px 3px 0 rgba(24,32,29,.13);
+        background: repeating-linear-gradient(0deg, #e7eee9 0, #e7eee9 27px, #dce6df 28px);
+      }
+      .ui-compact .shell { max-width: 920px; }
+      .ui-compact header { align-items: center; padding-bottom: 12px; border-bottom: 3px solid var(--ink); }
+      .ui-compact h1 { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 24px; text-transform: uppercase; }
+      .ui-compact .task { padding: 9px 11px; background: var(--accent-soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      .ui-compact main { padding-top: 16px; }
+      .ui-compact .grid { gap: 10px; }
+      .ui-compact .card, .ui-compact .panel { padding: 12px; }
+      .ui-compact .nav { justify-content: flex-end; font-size: 13px; }
+      .ui-compact button { border-radius: 0; text-transform: uppercase; letter-spacing: .04em; }
+
+      @media (max-width: 720px) {
+        header, main { padding: 16px; }
+        header { flex-direction: column; }
+        .ui-sidebar .shell { display: block; }
+        .ui-sidebar header { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+        .ui-sidebar main { padding: 16px; }
+        .ui-sidebar .nav { flex-direction: row; margin-top: 4px; }
+        .ui-compact header { align-items: flex-start; }
+        .nav { width: 100%; }
+      }
     </style>
     ${telemetry}
   </head>
-  <body>
+  <body class="ui-${uiVariant}" data-ui-variant="${uiVariant}">
+    <div class="shell">
     <header>
-      <div>
+      <div class="heading">
+        <span class="layout-badge">${escapeHtml(params.session.app)} · ${uiVariant}</span>
         <h1>${escapeHtml(params.title)}</h1>
         <div class="task">${escapeHtml(params.session.goal)}</div>
       </div>
       <nav class="nav">
-        ${
-          params.session.app === "wiki-lite"
-            ? `
-        <a href="/wiki?session=${encodeURIComponent(params.session.token)}">Search</a>
-        <a href="/wiki/article/agentbench-release-history?session=${encodeURIComponent(params.session.token)}">Release History</a>
-        `
-            : params.session.app === "forum-lite"
-            ? `
-        <a href="/forum?session=${encodeURIComponent(params.session.token)}">Threads</a>
-        <a href="/forum/thread/thr-battery?session=${encodeURIComponent(params.session.token)}">Battery Thread</a>
-        `
-            : params.session.app === "repo-lite"
-            ? `
-        <a href="/repo?session=${encodeURIComponent(params.session.token)}">Repository</a>
-        <a href="/repo/file/README.md/edit?session=${encodeURIComponent(params.session.token)}">Edit README</a>
-        `
-            : `
-        <a href="/shopping?session=${encodeURIComponent(params.session.token)}">Products</a>
-        <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>
-        `
-        }
+        ${appNav}
         <a href="/api/sessions/${encodeURIComponent(params.session.token)}/score">Score JSON</a>
       </nav>
     </header>
     <main>${params.body}</main>
+    </div>
   </body>
 </html>`;
 }

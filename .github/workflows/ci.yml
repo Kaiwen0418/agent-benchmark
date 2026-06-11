@@ -36,6 +36,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate hosted question generation
+        run: pnpm --filter hosted-orchestrator test:questions
+
+      - name: Validate hosted generated scoring and layouts
+        run: pnpm --filter hosted-sites test:questions
+
       - name: Test hosted-orchestrator
         run: pnpm --filter hosted-orchestrator test
 

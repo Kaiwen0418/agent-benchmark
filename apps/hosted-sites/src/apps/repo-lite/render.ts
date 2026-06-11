@@ -116,11 +116,11 @@ export function renderNewMR(
         <form method="post" action="/repo/mr/new?session=${encodeURIComponent(session.token)}" style="margin-top:16px;">
           <label>
             Title
-            <input name="title" placeholder="Fix install instructions" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+            <input name="title" placeholder="Enter the required merge request title" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
           </label>
           <label style="display:block;margin-top:12px;">
             Target branch
-            <input name="targetBranch" placeholder="main" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+            <input name="targetBranch" placeholder="Enter the required target branch" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
           </label>
           <button type="submit" style="margin-top:12px;">Create merge request</button>
         </form>
