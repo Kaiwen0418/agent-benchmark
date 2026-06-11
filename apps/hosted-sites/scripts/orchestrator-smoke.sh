@@ -125,10 +125,22 @@ INIT_PAYLOAD="$(cat <<JSON
       "weight": 1,
       "required": true,
       "title": "Shopping checkout",
-      "goal": "Buy exactly one unrestricted charger that costs at most 30 USD and use standard shipping.",
       "startPath": "/shopping",
       "seedVersion": "shopping-lite-v1",
-      "metadata": {}
+      "metadata": {
+        "questionVariants": [
+          {
+            "id": "charger-standard-30",
+            "goal": "Buy one unrestricted charger costing at most 30 USD with standard shipping.",
+            "taskConfig": {"targetCategory":"charger","quantity":1,"maxTotal":30,"shippingMethod":"standard","avoidRestricted":true}
+          },
+          {
+            "id": "charger-standard-25",
+            "goal": "Buy one unrestricted charger costing at most 25 USD with standard shipping.",
+            "taskConfig": {"targetCategory":"charger","quantity":1,"maxTotal":25,"shippingMethod":"standard","avoidRestricted":true}
+          }
+        ]
+      }
     },
     {
       "app": "wiki-lite",
@@ -138,10 +150,22 @@ INIT_PAYLOAD="$(cat <<JSON
       "weight": 1,
       "required": true,
       "title": "Wiki release history",
-      "goal": "Answer when wiki-lite followed the hosted-web suite alpha.",
       "startPath": "/wiki",
       "seedVersion": "wiki-lite-v1",
-      "metadata": {}
+      "metadata": {
+        "questionVariants": [
+          {
+            "id": "release-date-exact",
+            "goal": "Find the exact date when wiki-lite followed the hosted-web suite alpha.",
+            "taskConfig": {"targetArticleSlug":"agentbench-release-history","expectedAnswer":"June 1, 2026"}
+          },
+          {
+            "id": "release-date-written",
+            "goal": "Submit the date written in release history for the wiki-lite launch.",
+            "taskConfig": {"targetArticleSlug":"agentbench-release-history","expectedAnswer":"June 1, 2026"}
+          }
+        ]
+      }
     }
   ]
 }
@@ -152,6 +176,20 @@ INIT_JSON="$(curl -fsS -X POST "${ORCHESTRATOR_BASE_URL}/api/attempts/init" \
   -H "Content-Type: application/json" \
   -H "x-runner-secret: ${RUNNER_SHARED_SECRET}" \
   -d "${INIT_PAYLOAD}")"
+
+printf '%s' "${INIT_JSON}" | node -e '
+const initialized = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const sessions = initialized.metadata && initialized.metadata.sessions;
+if (!Array.isArray(sessions) || sessions.length !== 2) {
+  throw new Error("initialized attempt is missing generated session metadata");
+}
+for (const session of sessions) {
+  const generation = session.metadata && session.metadata.questionGeneration;
+  if (!generation || !generation.uiVariant || !generation.uiTheme) {
+    throw new Error("generated session is missing its UI presentation metadata");
+  }
+}
+'
 
 ATTEMPT_ID="$(printf '%s' "${INIT_JSON}" | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).attemptId')"
 FIRST_TOKEN="$(printf '%s' "${INIT_JSON}" | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).sessions[0].token')"

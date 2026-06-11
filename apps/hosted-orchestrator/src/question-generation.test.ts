@@ -31,7 +31,8 @@ test("question generation persists the selected hidden task config", () => {
   assert.notEqual(generated.goal, session.goal);
   assert.equal(selection.generationSeed, "another-seed");
   assert.equal(typeof selection.variantId, "string");
-  assert.match(String(selection.uiVariant), /^(workspace|sidebar|compact)$/);
+  assert.match(String(selection.uiVariant), /^(workspace|sidebar|compact|dashboard|editorial)$/);
+  assert.match(String(selection.uiTheme), /^(light|dark)$/);
   assert.equal(typeof selection.taskConfig, "object");
 });
 
@@ -46,20 +47,29 @@ test("different attempt seeds can select different variants", () => {
   assert.deepEqual(selected, new Set(["alpha", "beta"]));
 });
 
-test("UI layout selection is deterministic and covers multiple layouts", () => {
+test("UI presentation selection is deterministic and covers every layout and theme", () => {
   const first = generateAttemptQuestions([session], "stable-ui-seed").sessions[0];
   const second = generateAttemptQuestions([session], "stable-ui-seed").sessions[0];
   const firstSelection = first.metadata.questionGeneration as Record<string, unknown>;
   const secondSelection = second.metadata.questionGeneration as Record<string, unknown>;
   assert.equal(firstSelection.uiVariant, secondSelection.uiVariant);
+  assert.equal(firstSelection.uiTheme, secondSelection.uiTheme);
 
   const layouts = new Set(
-    Array.from({ length: 48 }, (_, index) => {
+    Array.from({ length: 128 }, (_, index) => {
       const generated = generateAttemptQuestions([session], `ui-seed-${index}`).sessions[0];
       return (generated.metadata.questionGeneration as Record<string, unknown>).uiVariant;
     }),
   );
-  assert.deepEqual(layouts, new Set(["workspace", "sidebar", "compact"]));
+  assert.deepEqual(layouts, new Set(["workspace", "sidebar", "compact", "dashboard", "editorial"]));
+
+  const themes = new Set(
+    Array.from({ length: 128 }, (_, index) => {
+      const generated = generateAttemptQuestions([session], `theme-seed-${index}`).sessions[0];
+      return (generated.metadata.questionGeneration as Record<string, unknown>).uiTheme;
+    }),
+  );
+  assert.deepEqual(themes, new Set(["light", "dark"]));
 });
 
 test("question generation rejects missing, singleton, and duplicate variant pools", () => {

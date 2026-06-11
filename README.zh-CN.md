@@ -33,6 +33,20 @@ pnpm dev:web
 
 环境配置和开发方式参见[快速上手](./docs/getting-started.zh-CN.md)。
 
+## 验证
+
+`pnpm install` 会自动配置仓库的 pre-push hook。需要修复或手动安装时执行：
+
+```bash
+pnpm hooks:install
+```
+
+hook 会执行 `pnpm verify:ci`，与 GitHub Actions 共用覆盖率门槛测试、本地服务 smoke、部署分类测试和生产构建。数据库生命周期 smoke 会创建 Supabase run 数据，因此保持显式执行：
+
+```bash
+pnpm smoke:lifecycle
+```
+
 ## 系统边界
 
 ```mermaid

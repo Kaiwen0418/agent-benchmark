@@ -4,6 +4,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY scripts ./scripts
 COPY apps/hosted-sites ./apps/hosted-sites
 COPY packages/scoring ./packages/scoring
 COPY packages/shared ./packages/shared
@@ -18,6 +19,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
+COPY scripts ./scripts
 COPY apps/hosted-sites ./apps/hosted-sites
 COPY packages/scoring ./packages/scoring
 COPY packages/shared ./packages/shared

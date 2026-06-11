@@ -18,6 +18,19 @@ env:
 jobs:
   build-and-typecheck:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      REDIS_TEST_URL: redis://127.0.0.1:6379
+      ORCHESTRATOR_REDIS_URL: redis://127.0.0.1:6379
     permissions:
       contents: read
     steps:
@@ -36,29 +49,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate hosted question generation
-        run: pnpm --filter hosted-orchestrator test:questions
-
-      - name: Validate hosted generated scoring and layouts
-        run: pnpm --filter hosted-sites test:questions
-
-      - name: Test hosted-orchestrator
-        run: pnpm --filter hosted-orchestrator test
-
-      - name: Test hosted-sites
-        run: pnpm --filter hosted-sites test
-
-      - name: Test scoring
-        run: pnpm --filter @agentbench/scoring test
-
-      - name: Build web
-        run: pnpm --filter web build
-
-      - name: Build scoring
-        run: pnpm --filter @agentbench/scoring build
-
-      - name: Build hosted-sites
-        run: pnpm --filter hosted-sites build
-
-      - name: Build hosted-orchestrator
-        run: pnpm --filter hosted-orchestrator build
+      - name: Run repository verification
+        run: pnpm verify:ci

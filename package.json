@@ -13,7 +13,14 @@
     "infra:logs": "docker-compose logs -f --tail=200",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "test:coverage": "bash scripts/test-coverage.sh",
+    "smoke:local": "bash scripts/smoke-local.sh",
+    "smoke:lifecycle": "bash apps/hosted-sites/scripts/orchestrator-smoke-full-pass.sh",
+    "verify:ci": "bash scripts/verify-ci.sh",
+    "verify:push": "bash scripts/verify-pre-push.sh",
+    "hooks:install": "sh scripts/install-git-hooks.sh",
+    "prepare": "sh scripts/install-git-hooks.sh"
   },
   "devDependencies": {
     "turbo": "^2.0.0"

@@ -7,7 +7,8 @@ export type QuestionVariant = {
   taskConfig: Record<string, unknown>;
 };
 
-const UI_VARIANTS = ["workspace", "sidebar", "compact"] as const;
+const UI_VARIANTS = ["workspace", "sidebar", "compact", "dashboard", "editorial"] as const;
+const UI_THEMES = ["light", "dark"] as const;
 
 type QuestionSession = {
   app: string;
@@ -84,6 +85,14 @@ function uiVariant(seed: string, session: QuestionSession) {
   return UI_VARIANTS[digest.readUInt32BE(0) % UI_VARIANTS.length];
 }
 
+function uiTheme(seed: string, session: QuestionSession) {
+  const digest = crypto
+    .createHash("sha256")
+    .update(`${seed}:theme:${session.sequenceIndex}:${session.app}:${session.taskSlug}`)
+    .digest();
+  return UI_THEMES[digest.readUInt32BE(0) % UI_THEMES.length];
+}
+
 export function generateAttemptQuestions<TSession extends QuestionSession>(
   sessions: TSession[],
   generationSeed: string = crypto.randomUUID(),
@@ -93,6 +102,7 @@ export function generateAttemptQuestions<TSession extends QuestionSession>(
     sessions: sessions.map((session) => {
       const variants = readQuestionVariants(session.metadata);
       const selectedUiVariant = uiVariant(generationSeed, session);
+      const selectedUiTheme = uiTheme(generationSeed, session);
       const variant = variants[variantIndex(generationSeed, session, variants.length)];
       const { questionVariants: _questionVariants, ...sourceMetadata } = session.metadata;
       return {
@@ -103,10 +113,11 @@ export function generateAttemptQuestions<TSession extends QuestionSession>(
         metadata: {
           ...sourceMetadata,
           questionGeneration: {
-            schemaVersion: 1,
+            schemaVersion: 2,
             generationSeed,
             variantId: variant.id,
             uiVariant: selectedUiVariant,
+            uiTheme: selectedUiTheme,
             taskConfig: variant.taskConfig,
           },
         },

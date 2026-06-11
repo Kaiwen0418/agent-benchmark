@@ -13,7 +13,8 @@ export function readTaskConfig(metadata: Record<string, unknown> | null | undefi
   return taskConfig as Record<string, unknown>;
 }
 
-export type HostedUiVariant = "workspace" | "sidebar" | "compact";
+export type HostedUiVariant = "workspace" | "sidebar" | "compact" | "dashboard" | "editorial";
+export type HostedUiTheme = "light" | "dark";
 
 export function readUiVariant(metadata: Record<string, unknown> | null | undefined): HostedUiVariant {
   if (!metadata) {
@@ -24,7 +25,20 @@ export function readUiVariant(metadata: Record<string, unknown> | null | undefin
     return "workspace";
   }
   const value = (generation as Record<string, unknown>).uiVariant;
-  return value === "sidebar" || value === "compact" ? value : "workspace";
+  return value === "sidebar" || value === "compact" || value === "dashboard" || value === "editorial"
+    ? value
+    : "workspace";
+}
+
+export function readUiTheme(metadata: Record<string, unknown> | null | undefined): HostedUiTheme {
+  if (!metadata) {
+    return "light";
+  }
+  const generation = metadata.questionGeneration;
+  if (!generation || typeof generation !== "object" || Array.isArray(generation)) {
+    return "light";
+  }
+  return (generation as Record<string, unknown>).uiTheme === "dark" ? "dark" : "light";
 }
 
 export function configString(config: Record<string, unknown>, key: string) {

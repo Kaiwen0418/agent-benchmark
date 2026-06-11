@@ -33,6 +33,20 @@ Default local endpoints:
 
 See [Getting Started](./docs/getting-started.md) for environment setup and development workflows.
 
+## Verification
+
+`pnpm install` configures the repository pre-push hook automatically. Repair or install it manually when needed:
+
+```bash
+pnpm hooks:install
+```
+
+The hook runs `pnpm verify:ci`, the same coverage-gated tests, local service smoke, deployment classifier tests, and production builds used by GitHub Actions. The database-backed lifecycle smoke remains explicit because it creates Supabase run data:
+
+```bash
+pnpm smoke:lifecycle
+```
+
 ## System Boundary
 
 ```mermaid
