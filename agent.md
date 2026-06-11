@@ -179,3 +179,32 @@ For hosted-web, telemetry should be lightweight and generic:
 - design every run so it can be debugged after the fact
 - do not add hosted app-specific database tables unless there is a clear persistence requirement that cannot fit session snapshots or final result evidence
 - do not make hosted-sites responsible for attempt lifecycle; use hosted-orchestrator for attempt init/state/commands
+
+## Git Commit Convention
+
+All commit subjects must follow Conventional Commits:
+
+```text
+<type>(optional-scope): <imperative summary>
+```
+
+Allowed primary types:
+
+- `feat`: new user-visible capability or meaningful platform behavior
+- `fix`: bug fix
+- `refactor`: internal restructuring without intended behavior change
+- `test`: test-only changes
+- `docs`: documentation-only changes
+- `ci`: CI/CD workflow changes
+- `chore`: maintenance that does not fit the types above
+
+Use lowercase type names, include `: ` after the type or scope, and keep the summary concise. Breaking changes may use `!`, for example `feat!: replace runner execution with hosted-web sessions`.
+
+Examples:
+
+- `feat: scale hosted orchestration with Redis streams`
+- `feat(hosted-sites): add forum moderation variants`
+- `fix(web): preserve attempt progress after reconnect`
+- `ci: add coverage-gated pre-push verification`
+
+Do not use untyped subjects such as `update deployment` or `scale hosted orchestration with Redis streams`.
