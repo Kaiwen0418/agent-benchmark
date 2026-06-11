@@ -6,30 +6,32 @@ import {
   type HostedWebScoreResult,
 } from "@agentbench/scoring";
 import type { ForumThread, ModerationAction } from "./types.js";
+import { configString, readTaskConfig } from "../../runtime/question-config.js";
 
 export type ForumEvaluationSession = {
   app: "forum-lite" | string;
   taskSlug: string;
+  metadata: Record<string, unknown>;
   state: {
     threads: ForumThread[];
     moderationActions: ModerationAction[];
   };
 };
 
-const EXPECTED_RECALL_LINK = "https://support.example.com/recall/battery-2026";
-const TARGET_THREAD_ID = "thr-battery";
-const EXPECTED_LOCK_REASON = "safety escalation";
-
 export function evaluateForum(session: ForumEvaluationSession): HostedWebScoreResult {
-  const targetThread = session.state.threads.find((candidate) => candidate.id === TARGET_THREAD_ID);
-  const retrieve = evaluateRetrieveValue(session, targetThread);
-  const backend = evaluateForumBackendState(session, targetThread);
+  const config = readTaskConfig(session.metadata);
+  const targetThreadId = configString(config, "targetThreadId");
+  const expectedReplyValue = configString(config, "expectedReplyValue");
+  const expectedLockReason = configString(config, "expectedLockReason");
+  const targetThread = session.state.threads.find((candidate) => candidate.id === targetThreadId);
+  const retrieve = evaluateRetrieveValue(targetThread, targetThreadId, expectedReplyValue);
+  const backend = evaluateForumBackendState(session, targetThread, targetThreadId, expectedLockReason);
   const ui = targetThread?.locked
     ? passedEvaluator({
         type: "ui_state",
         name: "thread locked banner visible",
         required: false,
-        evidence: { threadId: TARGET_THREAD_ID },
+        evidence: { threadId: targetThreadId },
       })
     : failedEvaluator({
         type: "ui_state",
@@ -40,25 +42,26 @@ export function evaluateForum(session: ForumEvaluationSession): HostedWebScoreRe
 
   return aggregateStrictScore({
     evaluators: [retrieve, backend, ui],
-    passSummary: "Agent found the battery thread, replied with the recall link, and locked it with the correct reason.",
+    passSummary: "Agent found the generated target thread, replied with the required value, and locked it with the correct reason.",
     failSummary: "One or more required forum conditions were not met.",
   });
 }
 
 function evaluateRetrieveValue(
-  _session: ForumEvaluationSession,
   targetThread: ForumThread | undefined,
+  targetThreadId: string,
+  expectedReplyValue: string,
 ): HostedWebEvaluatorResult {
   const agentReplies = targetThread?.posts.filter((post) => post.author === "agent") ?? [];
-  const hasRecallLink = agentReplies.some((post) => post.body.includes(EXPECTED_RECALL_LINK));
+  const hasExpectedValue = agentReplies.some((post) => post.body.includes(expectedReplyValue));
 
-  if (hasRecallLink) {
+  if (hasExpectedValue) {
     return passedEvaluator({
       type: "retrieve_value",
-      name: "reply contains official recall link",
+      name: "reply contains generated required value",
       evidence: {
-        threadId: TARGET_THREAD_ID,
-        expectedLink: EXPECTED_RECALL_LINK,
+        threadId: targetThreadId,
+        expectedValue: expectedReplyValue,
         agentReplyCount: agentReplies.length,
       },
     });
@@ -66,11 +69,11 @@ function evaluateRetrieveValue(
 
   return failedEvaluator({
     type: "retrieve_value",
-    name: "reply contains official recall link",
-    errorMessage: `No agent reply contains the expected recall link: ${EXPECTED_RECALL_LINK}.`,
+    name: "reply contains generated required value",
+    errorMessage: `No agent reply contains the expected value: ${expectedReplyValue}.`,
     evidence: {
-      threadId: TARGET_THREAD_ID,
-      expectedLink: EXPECTED_RECALL_LINK,
+      threadId: targetThreadId,
+      expectedValue: expectedReplyValue,
       agentReplyCount: agentReplies.length,
     },
   });
@@ -79,11 +82,13 @@ function evaluateRetrieveValue(
 function evaluateForumBackendState(
   session: ForumEvaluationSession,
   targetThread: ForumThread | undefined,
+  targetThreadId: string,
+  expectedLockReason: string,
 ): HostedWebEvaluatorResult {
   if (!targetThread) {
     return failedEvaluator({
       type: "backend_state",
-      name: "battery thread moderated and replied",
+      name: "generated target thread moderated and replied",
       errorMessage: "Target battery thread not found.",
     });
   }
@@ -92,12 +97,12 @@ function evaluateForumBackendState(
   const hasAgentReply = agentReplies.length > 0;
   const isLocked = targetThread.locked === true;
   const lockAction = session.state.moderationActions.find(
-    (action) => action.threadId === TARGET_THREAD_ID && action.action === "lock",
+    (action) => action.threadId === targetThreadId && action.action === "lock",
   );
-  const lockReasonMatches = lockAction?.reason.trim().toLowerCase() === EXPECTED_LOCK_REASON.toLowerCase();
+  const lockReasonMatches = lockAction?.reason.trim().toLowerCase() === expectedLockReason.toLowerCase();
 
   const evidence = {
-    threadId: TARGET_THREAD_ID,
+    threadId: targetThreadId,
     hasAgentReply,
     agentReplyCount: agentReplies.length,
     isLocked,
@@ -110,14 +115,14 @@ function evaluateForumBackendState(
   return pass
     ? passedEvaluator({
         type: "backend_state",
-        name: "battery thread moderated and replied",
+        name: "generated target thread moderated and replied",
         evidence,
       })
     : failedEvaluator({
         type: "backend_state",
-        name: "battery thread moderated and replied",
+        name: "generated target thread moderated and replied",
         errorMessage:
-          "Backend state must include an agent reply, the thread must be locked, and the lock reason must be 'safety escalation'.",
+          `Backend state must include an agent reply, the thread must be locked, and the lock reason must be '${expectedLockReason}'.`,
         evidence,
       });
 }

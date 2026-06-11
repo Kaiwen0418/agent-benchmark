@@ -2,7 +2,7 @@ name: agentbench-hosted-sites
 
 services:
   hosted-orchestrator:
-    image: ${HOSTED_ORCHESTRATOR_IMAGE}:${IMAGE_TAG}
+    image: ${HOSTED_ORCHESTRATOR_IMAGE}:${HOSTED_ORCHESTRATOR_IMAGE_TAG:-latest-main}
     environment:
       HOSTED_ORCHESTRATOR_PORT: 3004
       HOSTED_ORCHESTRATOR_PUBLIC_URL: ${HOSTED_ORCHESTRATOR_PUBLIC_URL}
@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
 
   hosted-orchestrator-worker-0:
-    image: ${HOSTED_ORCHESTRATOR_IMAGE}:${IMAGE_TAG}
+    image: ${HOSTED_ORCHESTRATOR_IMAGE}:${HOSTED_ORCHESTRATOR_IMAGE_TAG:-latest-main}
     environment:
       HOSTED_SITES_URL: http://hosted-sites:3003
       AGENTBENCH_WEB_URL: ${AGENTBENCH_WEB_URL}
@@ -37,7 +37,7 @@ services:
     restart: unless-stopped
 
   hosted-orchestrator-worker-1:
-    image: ${HOSTED_ORCHESTRATOR_IMAGE}:${IMAGE_TAG}
+    image: ${HOSTED_ORCHESTRATOR_IMAGE}:${HOSTED_ORCHESTRATOR_IMAGE_TAG:-latest-main}
     environment:
       HOSTED_SITES_URL: http://hosted-sites:3003
       AGENTBENCH_WEB_URL: ${AGENTBENCH_WEB_URL}
@@ -53,7 +53,7 @@ services:
     restart: unless-stopped
 
   hosted-sites:
-    image: ${HOSTED_SITES_IMAGE}:${IMAGE_TAG}
+    image: ${HOSTED_SITES_IMAGE}:${HOSTED_SITES_IMAGE_TAG:-latest-main}
     environment:
       HOSTED_SITES_PORT: 3003
       HOSTED_SITES_PUBLIC_URL: ${HOSTED_SITES_PUBLIC_URL}

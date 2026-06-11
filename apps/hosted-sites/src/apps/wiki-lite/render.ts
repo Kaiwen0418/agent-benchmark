@@ -49,9 +49,9 @@ export function renderWikiIndex(
       <section class="grid" style="margin-top:16px;">${cards}</section>
       <section class="panel" style="margin-top:16px;">
         <h2>Submit answer</h2>
-        <p>Enter the date when wiki-lite followed the hosted-web suite alpha.</p>
+        <p>Submit the exact value requested in the task.</p>
         <form method="post" action="/wiki/answer?session=${encodeURIComponent(session.token)}">
-          <input name="answer" placeholder="June 1, 2026" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+          <input name="answer" placeholder="Enter the exact answer" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
           <button type="submit" style="margin-top:12px;">Submit answer</button>
         </form>
         ${
@@ -86,7 +86,7 @@ export function renderWikiArticle(
       <section class="panel" style="margin-top:16px;">
         <h2>Submit answer</h2>
         <form method="post" action="/wiki/answer?session=${encodeURIComponent(session.token)}">
-          <input name="answer" placeholder="Enter the exact date" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+          <input name="answer" placeholder="Enter the exact answer" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
           <button type="submit" style="margin-top:12px;">Submit answer</button>
         </form>
       </section>`,

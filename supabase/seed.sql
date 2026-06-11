@@ -63,48 +63,72 @@ values
           "app": "shopping-lite",
           "taskSlug": "shopping-constrained-checkout",
           "title": "Shopping Checkout",
-          "goal": "Buy exactly one USB-C charger at or below $30 with standard shipping, and avoid restricted products.",
           "taskVersion": "v1",
           "seedVersion": "shopping-lite-v1",
           "sequenceIndex": 0,
           "weight": 1,
-          "required": true
+          "required": true,
+          "metadata": {
+            "questionVariants": [
+              {"id": "budget-charger-standard", "goal": "Buy exactly one charger with a total price at or below $30, use standard shipping, and avoid restricted products.", "taskConfig": {"targetCategory": "charger", "quantity": 1, "maxTotal": 30, "shippingMethod": "standard", "avoidRestricted": true}},
+              {"id": "cable-express", "goal": "Buy exactly one USB-C cable with a total price at or below $10, use express shipping, and avoid restricted products.", "taskConfig": {"targetCategory": "cable", "quantity": 1, "maxTotal": 10, "shippingMethod": "express", "avoidRestricted": true}},
+              {"id": "travel-case-standard", "goal": "Buy exactly one travel case with a total price at or below $15, use standard shipping, and avoid restricted products.", "taskConfig": {"targetCategory": "case", "quantity": 1, "maxTotal": 15, "shippingMethod": "standard", "avoidRestricted": true}}
+            ]
+          }
         },
         {
           "app": "forum-lite",
           "taskSlug": "forum-battery-moderation",
           "title": "Forum Moderation",
-          "goal": "Find the thread about battery swelling, reply with the official recall link from the policy post, then lock the thread with reason ''safety escalation''.",
           "startPath": "/forum",
           "taskVersion": "v1",
           "seedVersion": "forum-lite-v1",
           "sequenceIndex": 1,
           "weight": 1,
-          "required": true
+          "required": true,
+          "metadata": {
+            "questionVariants": [
+              {"id": "battery-recall", "goal": "Find the battery swelling thread, reply with the official recall link from the support post, then lock it with reason ''safety escalation''.", "taskConfig": {"targetThreadId": "thr-battery", "expectedReplyValue": "https://support.example.com/recall/battery-2026", "expectedLockReason": "safety escalation"}},
+              {"id": "wifi-reset", "goal": "Find the 5GHz connectivity thread, reply with the official reset-guide link from support, then lock it with reason ''resolved with guide''.", "taskConfig": {"targetThreadId": "thr-wifi", "expectedReplyValue": "https://support.example.com/network/5ghz-reset", "expectedLockReason": "resolved with guide"}},
+              {"id": "screen-advisory", "goal": "Find the low-brightness flickering thread, reply with the display calibration advisory link, then lock it with reason ''known display issue''.", "taskConfig": {"targetThreadId": "thr-screen", "expectedReplyValue": "https://support.example.com/display/flicker-calibration", "expectedLockReason": "known display issue"}}
+            ]
+          }
         },
         {
           "app": "repo-lite",
           "taskSlug": "repo-readme-fix",
           "title": "Repository README Fix",
-          "goal": "Fix the README install command to use pnpm, then open a merge request titled \"Fix install instructions\" targeting main.",
           "startPath": "/repo",
           "taskVersion": "v1",
           "seedVersion": "repo-lite-v1",
           "sequenceIndex": 2,
           "weight": 1,
-          "required": true
+          "required": true,
+          "metadata": {
+            "questionVariants": [
+              {"id": "pnpm-install", "goal": "Replace the README install command with `pnpm install`, remove `npm install`, then open a merge request titled `Fix install instructions` targeting `main`.", "taskConfig": {"filePath": "README.md", "expectedText": "pnpm install", "forbiddenText": "npm install", "expectedMrTitle": "Fix install instructions", "expectedTargetBranch": "main"}},
+              {"id": "yarn-install", "goal": "Replace the README install command with `yarn install`, remove `npm install`, then open a merge request titled `Document Yarn setup` targeting `main`.", "taskConfig": {"filePath": "README.md", "expectedText": "yarn install", "forbiddenText": "npm install", "expectedMrTitle": "Document Yarn setup", "expectedTargetBranch": "main"}},
+              {"id": "bun-install", "goal": "Replace the README install command with `bun install`, remove `npm install`, then open a merge request titled `Add Bun setup` targeting `develop`.", "taskConfig": {"filePath": "README.md", "expectedText": "bun install", "forbiddenText": "npm install", "expectedMrTitle": "Add Bun setup", "expectedTargetBranch": "develop"}}
+            ]
+          }
         },
         {
           "app": "wiki-lite",
           "taskSlug": "wiki-release-answer",
           "title": "Wiki Release Lookup",
-          "goal": "Use the hosted wiki to find when wiki-lite followed the hosted-web suite alpha, then submit the date exactly as written.",
           "startPath": "/wiki",
           "taskVersion": "v1",
           "seedVersion": "wiki-lite-v1",
           "sequenceIndex": 3,
           "weight": 1,
-          "required": true
+          "required": true,
+          "metadata": {
+            "questionVariants": [
+              {"id": "release-date", "goal": "Use the hosted wiki to find when wiki-lite followed the hosted-web suite alpha, then submit the exact date.", "taskConfig": {"targetArticleSlug": "agentbench-release-history", "expectedAnswer": "June 1, 2026"}},
+              {"id": "dispatch-window", "goal": "Use the hosted wiki to find how quickly standard shipping orders are dispatched, then submit the exact duration phrase.", "taskConfig": {"targetArticleSlug": "shipping-policy", "expectedAnswer": "two business days"}},
+              {"id": "charger-price", "goal": "Use the hosted wiki to find the listed price of the recommended budget USB-C charger, then submit the exact price.", "taskConfig": {"targetArticleSlug": "usb-c-charger-faq", "expectedAnswer": "$24.99"}}
+            ]
+          }
         }
       ]
     }'::jsonb,

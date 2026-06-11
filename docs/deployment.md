@@ -42,6 +42,18 @@ docker-compose logs -f --tail=200 hosted-sites hosted-orchestrator hosted-orches
 
 Do not publish a fixed host port for each hosted-sites replica. Nginx should reach replicas through the Compose service network.
 
+## Path-Specific CD
+
+`deploy-hosted-sites.yml` classifies each push before building or pulling images:
+
+- `apps/hosted-sites/**` builds, pulls, and recreates only hosted-sites.
+- `apps/hosted-orchestrator/**` builds, pulls, and recreates only the orchestrator API and workers.
+- shared scoring/runtime packages rebuild both images.
+- Nginx changes recreate only the gateway.
+- Compose topology changes reconcile all services without pulling unaffected application images.
+
+Hosted-sites and orchestrator use independent image tags. Targeted deploys preserve the currently running replica counts, so scaling one service does not restart or resize the other.
+
 ## Production Topology
 
 The production deployment is split into:

@@ -6,20 +6,22 @@ import {
   type HostedWebScoreResult,
 } from "@agentbench/scoring";
 import type { RepoFile, RepoMergeRequest } from "./types.js";
+import { configString, readTaskConfig } from "../../runtime/question-config.js";
+
+function containsStandaloneText(content: string, value: string) {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^A-Za-z0-9_])${escaped}(?:$|[^A-Za-z0-9_])`).test(content);
+}
 
 export type RepoEvaluationSession = {
   app: "repo-lite" | string;
   taskSlug: string;
+  metadata: Record<string, unknown>;
   state: {
     files: RepoFile[];
     mergeRequests: RepoMergeRequest[];
   };
 };
-
-const EXPECTED_MR_TITLE = "Fix install instructions";
-const EXPECTED_TARGET_BRANCH = "main";
-const BAD_COMMAND = "npm install";
-const GOOD_COMMAND = "pnpm install";
 
 export function evaluateRepo(session: RepoEvaluationSession): HostedWebScoreResult {
   const latestMR = session.state.mergeRequests.at(-1);
@@ -40,7 +42,7 @@ export function evaluateRepo(session: RepoEvaluationSession): HostedWebScoreResu
 
   return aggregateStrictScore({
     evaluators: [backend, ui],
-    passSummary: "README was fixed to use pnpm install and a correct MR was opened targeting main.",
+    passSummary: "The generated file-edit and merge-request requirements were satisfied.",
     failSummary: "One or more required repo conditions were not met.",
   });
 }
@@ -49,9 +51,15 @@ function evaluateRepoBackendState(
   session: RepoEvaluationSession,
   mr: RepoMergeRequest | undefined,
 ): HostedWebEvaluatorResult {
-  const readme = session.state.files.find((f) => f.path === "README.md");
-  const readmeHasGoodCommand = readme ? readme.content.includes(GOOD_COMMAND) : false;
-  const readmeHasBadCommand = readme ? /\bnpm install\b/.test(readme.content) : true;
+  const config = readTaskConfig(session.metadata);
+  const filePath = configString(config, "filePath");
+  const expectedText = configString(config, "expectedText");
+  const forbiddenText = configString(config, "forbiddenText");
+  const expectedMrTitle = configString(config, "expectedMrTitle");
+  const expectedTargetBranch = configString(config, "expectedTargetBranch");
+  const file = session.state.files.find((candidate) => candidate.path === filePath);
+  const fileHasExpectedText = file ? file.content.includes(expectedText) : false;
+  const fileHasForbiddenText = file ? containsStandaloneText(file.content, forbiddenText) : true;
 
   if (!mr) {
     return failedEvaluator({
@@ -59,25 +67,27 @@ function evaluateRepoBackendState(
       name: "correct merge request created",
       errorMessage: "No merge request was created.",
       evidence: {
-        readmeHasGoodCommand,
-        readmeHasBadCommand,
+        filePath,
+        fileHasExpectedText,
+        fileHasForbiddenText,
         mrTitle: null,
         targetBranch: null,
       },
     });
   }
 
-  const titleMatches = mr.title.trim() === EXPECTED_MR_TITLE;
-  const targetBranchMatches = mr.targetBranch.trim().toLowerCase() === EXPECTED_TARGET_BRANCH.toLowerCase();
-  const pass = titleMatches && targetBranchMatches && readmeHasGoodCommand && !readmeHasBadCommand;
+  const titleMatches = mr.title.trim() === expectedMrTitle;
+  const targetBranchMatches = mr.targetBranch.trim().toLowerCase() === expectedTargetBranch.toLowerCase();
+  const pass = titleMatches && targetBranchMatches && fileHasExpectedText && !fileHasForbiddenText;
 
   const evidence = {
     mrTitle: mr.title,
     targetBranch: mr.targetBranch,
     titleMatches,
     targetBranchMatches,
-    readmeHasGoodCommand,
-    readmeHasBadCommand,
+    filePath,
+    fileHasExpectedText,
+    fileHasForbiddenText,
   };
 
   return pass
@@ -90,7 +100,7 @@ function evaluateRepoBackendState(
         type: "backend_state",
         name: "correct merge request created",
         errorMessage:
-          "MR title must be 'Fix install instructions', target branch must be 'main', README must contain 'pnpm install' and must not contain 'npm install'.",
+          "The edited file and merge request do not satisfy the generated task configuration.",
         evidence,
       });
 }

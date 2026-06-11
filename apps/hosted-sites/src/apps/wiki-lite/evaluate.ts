@@ -5,6 +5,7 @@ import {
   type HostedWebScoreResult,
 } from "@agentbench/scoring";
 import type { WikiAnswerSubmission } from "./types.js";
+import { configString, readTaskConfig } from "../../runtime/question-config.js";
 
 export type WikiEvaluationSession = {
   app: "wiki-lite" | string;
@@ -21,7 +22,9 @@ export function normalizeWikiAnswer(value: string) {
 }
 
 export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResult {
-  const expectedAnswer = "June 1, 2026";
+  const config = readTaskConfig(session.metadata);
+  const expectedAnswer = configString(config, "expectedAnswer");
+  const targetArticleSlug = configString(config, "targetArticleSlug");
   const latestAnswer = session.state.wikiAnswerSubmissions.at(-1);
   const viewedArticleSlugs = Array.isArray(session.metadata.viewedArticleSlugs)
     ? session.metadata.viewedArticleSlugs.filter((value): value is string => typeof value === "string")
@@ -31,21 +34,21 @@ export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResu
       (event) =>
         event.type === "page.load" &&
         typeof event.url === "string" &&
-        String(event.url).includes("/wiki/article/agentbench-release-history"),
-    ) || viewedArticleSlugs.includes("agentbench-release-history");
+        String(event.url).includes(`/wiki/article/${targetArticleSlug}`),
+    ) || viewedArticleSlugs.includes(targetArticleSlug);
   const answerMatches = latestAnswer
     ? normalizeWikiAnswer(latestAnswer.answer) === normalizeWikiAnswer(expectedAnswer)
     : false;
 
   const retrieveValue = answerMatches
-    ? passedEvaluator({
-        type: "retrieve_value",
-        name: "retrieved hosted-web wiki follow-up date",
+      ? passedEvaluator({
+          type: "retrieve_value",
+          name: "retrieved generated wiki answer",
         evidence: { answer: latestAnswer?.answer, expectedAnswer },
       })
-    : failedEvaluator({
-        type: "retrieve_value",
-        name: "retrieved hosted-web wiki follow-up date",
+      : failedEvaluator({
+          type: "retrieve_value",
+          name: "retrieved generated wiki answer",
         errorMessage: "Submitted answer does not match the expected date.",
         evidence: { answer: latestAnswer?.answer ?? null, expectedAnswer },
       });
@@ -64,7 +67,7 @@ export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResu
     ? passedEvaluator({
         type: "ui_state",
         name: "release history article viewed",
-        evidence: { article: "agentbench-release-history" },
+        evidence: { article: targetArticleSlug },
       })
     : failedEvaluator({
         type: "ui_state",
@@ -74,7 +77,7 @@ export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResu
 
   return aggregateStrictScore({
     evaluators: [retrieveValue, backendState, uiState],
-    passSummary: "Submitted answer matches the hosted wiki release-history task.",
-    failSummary: "Wiki task requires opening the release-history article and submitting the exact date.",
+    passSummary: "Submitted answer matches the generated hosted wiki task.",
+    failSummary: "Wiki task requires opening the generated target article and submitting the exact answer.",
   });
 }

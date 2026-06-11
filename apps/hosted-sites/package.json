@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
+    "test:questions": "node --import tsx --test src/evaluation.test.ts src/templates.test.ts src/runtime/question-config.test.ts",
     "test": "node --import tsx --test src/*.test.ts src/**/*.test.ts",
     "start": "node dist/apps/hosted-sites/src/server.js"
   },
