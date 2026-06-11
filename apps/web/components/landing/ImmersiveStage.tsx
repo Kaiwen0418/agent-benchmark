@@ -54,7 +54,7 @@ export function ImmersiveStage() {
   return (
     <>
       <div className="lg:hidden">
-        <HeroSection sectionId="hero" />
+        <HeroSection showDevice={false} sectionId="hero" />
       </div>
       <div className="lg:hidden">
         <PlaygroundSection sectionId="playground" />
