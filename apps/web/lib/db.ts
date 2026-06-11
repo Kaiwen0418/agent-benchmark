@@ -556,16 +556,26 @@ export async function getQuotaStatus(params: {
   }
 
   const guestId = params.guestId;
-  const used = guestId
-    ? getSupabase()
-      ? (
-          await getSupabase()!
-            .from("benchmark_runs")
-            .select("*", { count: "exact", head: true })
-            .eq("guest_id", guestId)
-        ).count ?? 0
-      : mockStore.countRunsForGuest(guestId)
-    : 0;
+  const supabase = getSupabase();
+  let used = 0;
+
+  if (guestId) {
+    if (!supabase) {
+      used = mockStore.countRunsForGuestSince(guestId, startOfUtcDay());
+    } else {
+      const countResult = await supabase
+        .from("benchmark_runs")
+        .select("*", { count: "exact", head: true })
+        .eq("guest_id", guestId)
+        .gte("created_at", startOfUtcDay());
+
+      if (countResult.error) {
+        throw countResult.error;
+      }
+
+      used = countResult.count ?? 0;
+    }
+  }
 
   return {
     mode: "guest",
@@ -573,6 +583,6 @@ export async function getQuotaStatus(params: {
     used,
     limit: GUEST_RUN_LIMIT,
     remaining: Math.max(0, GUEST_RUN_LIMIT - used),
-    resetAt: null,
+    resetAt: nextUtcDay(),
   };
 }

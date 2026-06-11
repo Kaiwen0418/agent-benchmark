@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         error: quota.mode === "guest" ? "trial_limit_reached" : "daily_limit_reached",
         message:
           quota.mode === "guest"
-            ? "Guest trial used. Sign in to continue with 3 daily runs."
+            ? "Today's free run has been used. Try again after the daily reset or sign in for 3 daily runs."
             : "Daily run limit reached. Try again after reset.",
         quota,
       },

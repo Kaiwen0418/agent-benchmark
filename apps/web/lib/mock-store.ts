@@ -229,8 +229,8 @@ export const mockStore = {
     return getStore().runs.filter((item) => item.userId === userId && item.createdAt >= sinceIso).length;
   },
 
-  countRunsForGuest(guestId: string) {
-    return getStore().runs.filter((item) => item.guestId === guestId).length;
+  countRunsForGuestSince(guestId: string, sinceIso: string) {
+    return getStore().runs.filter((item) => item.guestId === guestId && item.createdAt >= sinceIso).length;
   },
 
   createArtifact(runId: string, artifact: Omit<Artifact, "id" | "createdAt" | "runId">) {

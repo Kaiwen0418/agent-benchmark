@@ -28,11 +28,24 @@ export function ConnectAgentCard() {
     void fetchQuota();
   }, [fetchQuota]);
 
+  useEffect(() => {
+    if (!quota?.resetAt) return;
+
+    const resetTime = Date.parse(quota.resetAt);
+    if (!Number.isFinite(resetTime)) return;
+
+    const timeout = window.setTimeout(() => {
+      void fetchQuota();
+    }, Math.max(1_000, resetTime - Date.now() + 250));
+
+    return () => window.clearTimeout(timeout);
+  }, [fetchQuota, quota?.resetAt]);
+
   const quotaBadge = quotaLoading
     ? "Loading quota"
     : quota
       ? quota.mode === "guest"
-        ? `${Math.max(quota.remaining, 0)} guest run left`
+        ? `${Math.max(quota.remaining, 0)} free run left today`
         : `${Math.max(quota.remaining, 0)} of ${quota.limit} runs left`
       : "Quota unavailable";
 
@@ -232,7 +245,7 @@ export function ConnectAgentCard() {
         >
           {isQuotaBlocked
             ? quota?.mode === "guest"
-              ? "Guest Trial Used"
+              ? "Today's Free Run Used"
               : "Daily Limit Reached"
             : "Start Agent Session"}
         </button>
