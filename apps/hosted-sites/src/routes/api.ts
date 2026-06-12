@@ -3,6 +3,20 @@ import type { HostedWebScoreResult } from "@agentbench/scoring";
 import type { HostedSession } from "../runtime/types.js";
 import { sendJson } from "../runtime/http.js";
 
+function sanitizeTelemetryUrl(value: unknown, publicBaseUrl: string) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value, publicBaseUrl);
+    parsed.searchParams.delete("session");
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
+
 type ApiRoutesDeps = {
   publicBaseUrl: string;
   createHostedSession: (params: {
@@ -127,7 +141,7 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
       const payload = {
         type: telemetryType,
         payload: input.payload,
-        url: input.url,
+        url: sanitizeTelemetryUrl(input.url, deps.publicBaseUrl),
         title: input.title,
       };
       await deps.recordEvent(session, payload);

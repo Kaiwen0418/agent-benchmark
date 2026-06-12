@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, HostedWebSessionMetadata } from "@agentbench/shared";
+import { verifyHostedViewerToken, type Database, type HostedWebSessionMetadata } from "@agentbench/shared";
 import type { SessionCache } from "./session-cache.js";
 import type { HostedAppPersistenceState, HostedAppSessionState, HostedSession } from "./types.js";
 
@@ -42,6 +42,7 @@ type SessionStoreDeps = {
   now: () => string;
   makeId: (prefix: string) => string;
   hashToken: (token: string) => string;
+  viewerTokenSecret?: string;
   getSupabaseAdmin: () => SupabaseClient<Database> | null | undefined;
   persistSessionSnapshotDurably?: (
     session: HostedSession,
@@ -115,6 +116,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
   function hydrateSessionFromMetadata(params: {
     token: string;
     row: PersistedSessionRow;
+    accessMode?: "write" | "viewer";
   }) {
     const metadata =
       params.row.metadata && typeof params.row.metadata === "object" && !Array.isArray(params.row.metadata)
@@ -126,6 +128,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
     return {
       id: params.row.id,
       token: params.token,
+      accessMode: params.accessMode ?? "write",
       runId: params.row.run_id,
       caseId: params.row.case_id,
       attemptId: params.row.attempt_id,
@@ -182,6 +185,10 @@ export function createSessionStore(deps: SessionStoreDeps) {
   }
 
   async function persistSessionSnapshot(session: HostedSession) {
+    if (session.accessMode === "viewer") {
+      return;
+    }
+
     await cacheSession(session);
 
     if (!session.persisted) {
@@ -300,6 +307,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
     const baseSession = {
       id: deps.makeId("hws"),
       token,
+      accessMode: "write",
       runId: params.runId ?? null,
       caseId: params.caseId ?? null,
       attemptId: params.attemptId ?? null,
@@ -342,6 +350,31 @@ export function createSessionStore(deps: SessionStoreDeps) {
     const token = url.searchParams.get("session");
     if (!token) {
       return null;
+    }
+
+    const viewerClaims = verifyHostedViewerToken(token, deps.viewerTokenSecret);
+    if (viewerClaims) {
+      const supabase = deps.getSupabaseAdmin();
+      if (!supabase) {
+        return null;
+      }
+
+      const { data, error } = await supabase
+        .from("hosted_web_sessions")
+        .select("id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, created_at, expires_at, access_count, last_accessed_at, first_seen_ip, last_seen_ip, first_seen_user_agent, last_seen_user_agent")
+        .eq("id", viewerClaims.sessionId)
+        .maybeSingle();
+
+      if (error || !data) {
+        return null;
+      }
+
+      const viewerSession = hydrateSessionFromMetadata({
+        token,
+        row: asPersistedSessionRow(data),
+        accessMode: "viewer",
+      });
+      return isExpired(viewerSession) || viewerSession.status === "expired" ? null : viewerSession;
     }
 
     if (deps.sessionCache) {
