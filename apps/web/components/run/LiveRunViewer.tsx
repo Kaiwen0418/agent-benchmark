@@ -155,8 +155,11 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       source.close();
     });
 
-    source.addEventListener("error", () => {
-      source.close();
+    source.addEventListener("error", (event) => {
+      // Native transport errors reconnect automatically. Only a named SSE error is terminal.
+      if (event instanceof MessageEvent) {
+        source.close();
+      }
     });
 
     return () => {

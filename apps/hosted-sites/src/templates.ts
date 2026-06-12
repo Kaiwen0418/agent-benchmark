@@ -173,8 +173,10 @@ export function layout(params: {
       .score { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
       .layout-badge { display: inline-block; margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
       .viewer-banner { margin: 0 24px; padding: 10px 14px; border: 1px solid var(--line); background: var(--accent-soft); color: var(--ink); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-      .viewer-readonly form { pointer-events: none; opacity: .58; }
+      .viewer-readonly form, .viewer-readonly a { pointer-events: none; }
+      .viewer-readonly form { opacity: .58; }
       .viewer-readonly button, .viewer-readonly input, .viewer-readonly textarea, .viewer-readonly select { cursor: not-allowed; }
+      .viewer-readonly a { cursor: default; }
 
       body.theme-dark {
         color-scheme: dark;

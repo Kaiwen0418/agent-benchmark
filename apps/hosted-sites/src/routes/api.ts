@@ -137,6 +137,10 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
         deps.badRequest(response, "Unknown session");
         return true;
       }
+      if (session.accessMode === "viewer") {
+        sendJson(response, 403, { error: "Viewer sessions are read-only" });
+        return true;
+      }
       const telemetryType = typeof input.type === "string" ? input.type : "hosted.event";
       const payload = {
         type: telemetryType,
@@ -173,6 +177,10 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
       const session = await deps.getSessionByToken(token, request);
       if (!session) {
         deps.notFound(response);
+        return true;
+      }
+      if (session.accessMode === "viewer") {
+        sendJson(response, 403, { error: "Viewer sessions are read-only" });
         return true;
       }
       const result = deps.evaluateSession(session);
