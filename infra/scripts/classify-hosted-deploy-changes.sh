@@ -14,6 +14,7 @@ matches_any() {
 }
 
 common_patterns=(
+  '^\.github/workflows/deploy-hosted-sites\.yml$'
   '^packages/(scoring|shared)/'
   '^package\.json$'
   '^pnpm-lock\.yaml$'
@@ -36,7 +37,7 @@ fi
 if matches_any '^infra/nginx/'; then
   infra=true
 fi
-if matches_any '^infra/docker/docker-compose\.server\.yml$'; then
+if matches_any '^infra/docker/docker-compose\.server\.yml$' '^infra/scripts/deploy-hosted-stack\.sh$'; then
   topology=true
 fi
 

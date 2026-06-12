@@ -76,17 +76,28 @@ Relevant workflows:
 - [`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml)
 - [`.github/workflows/deploy-hosted-sites.yml`](../.github/workflows/deploy-hosted-sites.yml)
 
+Hosted CD only accepts `develop` and `main`:
+
+- `develop` automatically deploys through the GitHub `development` Environment, the `agentbench-dev` runner, `latest-develop` images, the `agentbench-development` Compose project, and gateway port `8081` by default.
+- `main` deploys only through the GitHub `production` Environment, the `agentbench-prod` runner, `latest-main` images, the `agentbench-production` Compose project, and gateway port `8080` by default.
+
+Manual dispatches from any other branch fail before accessing a self-hosted runner. The `production` Environment should have approval protection rules configured.
+
 The hosted deployment workflow builds images, pushes them to GHCR, and runs the server deployment through a self-hosted GitHub Actions runner on Linux. This infrastructure agent is unrelated to the removed benchmark execution runner. The server pulls the requested image tag and recreates the Compose services.
 
-Required GitHub secrets:
+Required variables in each GitHub Environment:
 
 - `GHCR_USERNAME`
-- `GHCR_PAT` with `read:packages`
 - `AGENTBENCH_WEB_URL`
-- `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_PUBLIC_URL`
 - `HOSTED_ORCHESTRATOR_PUBLIC_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
+- `GATEWAY_HTTP_PORT`
+
+Required secrets in each GitHub Environment:
+
+- `GHCR_PAT` with `read:packages`
+- `RUNNER_SHARED_SECRET`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
 Optional web deployment secret:
@@ -94,6 +105,8 @@ Optional web deployment secret:
 - `VERCEL_DEPLOY_HOOK_URL`
 
 The self-hosted GitHub Actions runner must have the `self-hosted` and `linux` labels, Docker access, Docker Compose, enough disk space for images, and network access to GHCR and Supabase.
+
+Before enabling the new production Compose project name for the first time, stop the legacy `agentbench-hosted-sites` project during a maintenance window; otherwise its gateway continues to occupy production port `8080`. Remove the legacy project manually only after checking the new configuration. The development project must never operate on production containers.
 
 ## When Manual Server Intervention Is Needed
 

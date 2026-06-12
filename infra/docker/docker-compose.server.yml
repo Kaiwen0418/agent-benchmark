@@ -1,4 +1,4 @@
-name: agentbench-hosted-sites
+name: ${COMPOSE_PROJECT_NAME:-agentbench-hosted-sites}
 
 services:
   hosted-orchestrator:
