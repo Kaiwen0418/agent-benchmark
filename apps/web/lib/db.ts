@@ -111,14 +111,9 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
 }
 
 export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {
-  const localCase = mockStore.getCase(caseId);
-  if (localCase) {
-    return localCase;
-  }
-
   const supabase = getSupabase();
   if (!supabase) {
-    return null;
+    return mockStore.getCase(caseId);
   }
 
   const byId = await supabase
