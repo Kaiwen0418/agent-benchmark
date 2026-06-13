@@ -10,8 +10,19 @@ on:
 
 jobs:
   deploy-web:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: production
     steps:
+      - name: Verify production branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "Production deployment is only allowed from main; received ${GITHUB_REF}." >&2
+            exit 1
+          fi
+
       - name: Trigger Vercel deploy hook (optional)
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}

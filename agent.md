@@ -208,3 +208,37 @@ Examples:
 - `ci: add coverage-gated pre-push verification`
 
 Do not use untyped subjects such as `update deployment` or `scale hosted orchestration with Redis streams`.
+
+## Branch Convention
+
+The long-lived branches are:
+
+- `main`: production branch; only release and emergency hotfix changes may merge here
+- `develop`: integration branch for the test environment and the base branch for normal development
+
+Create short-lived branches from the latest `develop` using one of these prefixes:
+
+```text
+feature/<issue-id>-<short-description>
+fix/<issue-id>-<short-description>
+chore/<issue-id>-<short-description>
+```
+
+Examples:
+
+- `feature/123-hosted-run-replay`
+- `fix/156-session-timeout`
+- `chore/178-upgrade-nextjs`
+
+Branch names must be lowercase, use hyphens, include an issue ID when one exists, and keep the description concise. When no issue exists, use `no-issue`, for example `feature/no-issue-hosted-viewer-session`.
+
+Development workflow:
+
+1. Update `develop` and create the branch from it.
+2. Keep each branch and pull request focused on one issue or cohesive change.
+3. Open the pull request against `develop`; feature branches must not merge directly into `main`.
+4. Require CI and review to pass before using squash merge.
+5. Delete the short-lived branch after merge.
+6. Release through a pull request from `develop` to `main`.
+
+Emergency production fixes use `hotfix/<issue-id>-<short-description>`, branch from `main`, and must be merged back into both `main` and `develop`.
