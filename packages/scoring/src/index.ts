@@ -124,7 +124,7 @@ export function aggregateSuiteScore(params: {
     totalWeight > 0
       ? sessions.reduce((sum, session) => sum + session.score * Math.max(session.weight, 0), 0) / totalWeight
       : 0;
-  const normalizedScore = requiredPassed ? Number(weightedScore.toFixed(4)) : 0;
+  const normalizedScore = Number(weightedScore.toFixed(4));
   const status = hasError ? "error" : requiredPassed ? "passed" : "failed";
 
   return {

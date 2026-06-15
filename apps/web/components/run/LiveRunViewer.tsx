@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { deriveHostedViewerRevision, deriveHostedViewerUrl } from "@/lib/hosted-viewer";
+import { deriveHostedScoring } from "@/lib/hosted-scoring";
 
 type LiveRunViewerProps = {
   runId: string;
@@ -61,11 +62,7 @@ function deriveScore(payload: StreamPayload, fallback: number | null) {
     return payload.run.score;
   }
 
-  const hostedScore = [...payload.events]
-    .reverse()
-    .find((event) => event.type === "hosted.score" && typeof event.payload.score === "number");
-
-  return typeof hostedScore?.payload.score === "number" ? hostedScore.payload.score : fallback;
+  return deriveHostedScoring(payload.events).score ?? fallback;
 }
 
 function hostedEventLabel(event: StreamEvent) {
@@ -209,7 +206,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
             ) : null}
             <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between rounded-full bg-black/55 px-3 py-1.5 text-[9px] uppercase tracking-[0.15em] text-[#f1ebde]">
               <span className="truncate">{initialTitle}</span>
-              <span>Score {score ?? "--"}</span>
+              <span>Score {score === null ? "--" : `${Math.round(score * 100)}%`}</span>
             </div>
           </div>
         </div>
@@ -232,7 +229,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
               Status: {status}
             </div>
             <div className="rounded-full bg-[#d7ff00] px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] text-[#111111]">
-              Score: {score ?? "--"}
+              Score: {score === null ? "--" : `${Math.round(score * 100)}%`}
             </div>
           </div>
         </div>
