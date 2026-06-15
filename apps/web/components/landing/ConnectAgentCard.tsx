@@ -13,6 +13,7 @@ export function ConnectAgentCard() {
   const runError = usePlaygroundStore((state) => state.runError);
   const score = usePlaygroundStore((state) => state.score);
   const timeline = usePlaygroundStore((state) => state.timeline);
+  const streamMode = usePlaygroundStore((state) => state.streamMode);
   const liveViewUrl = usePlaygroundStore((state) => state.liveViewUrl);
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
   const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
@@ -72,6 +73,33 @@ export function ConnectAgentCard() {
         ) : null}
 
         <RunConnectionCard />
+
+        <div className="mt-4 rounded-[1.4rem] border border-[#2b2b2b] bg-[#111111] p-4 text-white">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-[#9b958a]">Event Stream</div>
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[#cfc8bb]">
+              <span className={`h-2 w-2 rounded-full ${streamMode === "sse" ? "bg-[#6df6a4]" : "bg-[#ffd24f]"}`} />
+              {streamMode === "sse" ? "Live" : streamMode === "polling" ? "Polling" : "Connecting"}
+            </div>
+          </div>
+          <div className="scroll-panel mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
+            {timeline.length > 0 ? (
+              [...timeline].slice(-8).reverse().map((entry) => (
+                <div key={entry.id} className="rounded-[0.9rem] border border-white/10 bg-white/[0.05] px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate font-mono text-xs text-[#f3eddf]">{entry.label}</span>
+                    <span className="shrink-0 text-[10px] text-[#8f897e]">{entry.timestamp}</span>
+                  </div>
+                  <div className="mt-1 truncate text-xs text-[#aaa397]">{entry.detail}</div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-[0.9rem] border border-white/10 bg-white/[0.05] px-3 py-3 text-xs text-[#aaa397]">
+                Waiting for the connection page to emit its first event.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }

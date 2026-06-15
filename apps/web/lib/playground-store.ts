@@ -352,7 +352,15 @@ function applyRunSnapshot(
   set: (partial: Partial<PlaygroundStore>) => void,
 ) {
   const { run, events, artifacts } = snapshot;
-  const phase = mapRunStatus(run.status);
+  const runPhase = mapRunStatus(run.status);
+  const hasHostedActivity = events.some(
+    (event) =>
+      event.type === "hosted.page.load" ||
+      event.type === "hosted.action" ||
+      event.type === "hosted.task_signal" ||
+      event.type === "hosted.score",
+  );
+  const phase = runPhase === "booting" && hasHostedActivity ? "running" : runPhase;
   const lastEvent = events[events.length - 1];
   const score = deriveScore(run, events);
   const timeline = mapTimeline(events);
