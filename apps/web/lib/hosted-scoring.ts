@@ -46,10 +46,21 @@ function parseEvaluators(value: unknown): HostedEvaluatorBreakdown[] {
 }
 
 export function deriveHostedScoring(events: HostedScoringEvent[]) {
+  const reversedEvents = [...events].reverse();
+  const latestAttemptId = reversedEvents.find(
+    (event) => event.type === "hosted.score" && typeof event.payload.attemptId === "string",
+  )?.payload.attemptId ?? reversedEvents.find(
+      (event) =>
+        event.type === "hosted.session.created" && typeof event.payload.attemptId === "string",
+    )?.payload.attemptId;
+  const scopedEvents =
+    typeof latestAttemptId === "string"
+      ? events.filter((event) => event.payload.attemptId === latestAttemptId)
+      : events;
   const weights = new Map<string, number>();
   const results = new Map<string, HostedSessionBreakdown>();
 
-  for (const event of events) {
+  for (const event of scopedEvents) {
     const sessionId = typeof event.payload.sessionId === "string" ? event.payload.sessionId : null;
     if (!sessionId) continue;
 
