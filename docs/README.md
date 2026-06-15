@@ -7,6 +7,8 @@
 - [Getting Started](./getting-started.md)
 - [Architecture](./architecture.md)
 - [Data Flow](./data-flow.md)
+- [Frontend Runtime State Machine (Chinese)](./frontend-state-machine.zh-CN.md)
+- [Hosted Attempt Consistency (Chinese)](./attempt-consistency.zh-CN.md)
 
 ## Contracts
 
