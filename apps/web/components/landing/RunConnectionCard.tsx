@@ -91,9 +91,9 @@ export function RunConnectionCard() {
   const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
-    if (phase === "booting" || phase === "running") {
+    if (phase === "booting") {
       setCollapsed(false);
-    } else if (phase === "completed" || phase === "failed") {
+    } else if (phase === "running" || phase === "completed" || phase === "failed") {
       setCollapsed(true);
     }
   }, [phase]);
