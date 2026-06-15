@@ -33,6 +33,7 @@ cp .env.database.example .env.local
 - Local development and the deployed test environment use `TEST_SUPABASE_DB_URL`.
 - Production uses a separate `PROD_SUPABASE_DB_URL`.
 - Migration commands never infer their target from the currently linked Supabase project.
+- The migration script URL-encodes credentials in memory, including raw `%` and `@` characters, without printing the password.
 
 Preview and apply test migrations:
 

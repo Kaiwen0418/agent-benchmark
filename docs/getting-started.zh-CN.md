@@ -33,6 +33,7 @@ cp .env.database.example .env.local
 - 本地开发和部署的 test 环境统一使用 `TEST_SUPABASE_DB_URL`。
 - production 使用独立的 `PROD_SUPABASE_DB_URL`。
 - 不使用 Supabase CLI 当前 linked project 推断目标环境。
+- migration 脚本会在内存中编码连接凭据，兼容密码中的 `%`、`@` 等字符，且不会打印密码。
 
 预览并应用 test migration：
 

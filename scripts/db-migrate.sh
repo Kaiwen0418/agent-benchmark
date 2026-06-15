@@ -35,7 +35,23 @@ if [ -z "${database_url}" ]; then
   exit 1
 fi
 
-database_host="$(printf '%s' "${database_url}" | sed -E 's#^[^:]+://([^@]+@)?([^/:?]+).*#\2#')"
+database_url="$(DATABASE_URL="${database_url}" python3 - <<'PY'
+import os
+from urllib.parse import quote
+
+url = os.environ["DATABASE_URL"]
+scheme, separator, remainder = url.partition("://")
+if not separator or "@" not in remainder:
+    raise SystemExit("Database URL must include a scheme and credentials.")
+credentials, host = remainder.rsplit("@", 1)
+user, password_separator, password = credentials.partition(":")
+if not password_separator:
+    raise SystemExit("Database URL must include a password.")
+print(f"{scheme}://{quote(user, safe='')}:{quote(password, safe='')}@{host}")
+PY
+)"
+database_host="${database_url##*@}"
+database_host="${database_host%%[:/?]*}"
 echo "Applying Supabase migrations to ${database_label} database (${database_host})."
 
 args=(db push --db-url "${database_url}" --include-all --yes)
