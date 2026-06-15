@@ -613,6 +613,29 @@ async function initializeAttemptWithDistributedLock(
   }
 
   try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      throw new Error("Hosted attempt initialization requires a database connection.");
+    }
+    const { data: existingAttempt, error: existingAttemptError } = await supabase
+      .from("benchmark_attempts")
+      .select("id")
+      .eq("run_id", params.runId)
+      .eq("case_id", params.caseId)
+      .eq("provider", "hosted-web")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (existingAttemptError) {
+      throw existingAttemptError;
+    }
+    if (existingAttempt) {
+      return recoverInitializedAttempt({
+        runId: params.runId,
+        caseId: params.caseId,
+        expectedSessionCount: params.sessions.length,
+      });
+    }
     return await initializeAttempt(params);
   } finally {
     await redis.eval(
