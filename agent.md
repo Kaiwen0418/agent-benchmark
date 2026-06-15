@@ -212,7 +212,7 @@ Do not run the mutation steps against production unless the user explicitly requ
 
 While the hosted task is open in the second tab:
 
-1. Open `/runs/<run-id>/live` or observe the embedded playground viewer in the Web tab.
+1. Observe the embedded playground viewer in the Web tab. The internal `?embed=1` route is not a standalone user page.
 2. Confirm a read-only hosted iframe appears after the first hosted page-load event.
 3. Navigate and mutate state from the agent tab. Confirm the iframe follows major page changes and refreshes after task signals.
 4. Keep the run active for more than 30 seconds, trigger another hosted event, and confirm updates continue after the SSE connection rotates or reconnects.
@@ -281,12 +281,15 @@ The long-lived branches are:
 - `main`: production branch; only release and emergency hotfix changes may merge here
 - `develop`: integration branch for the test environment and the base branch for normal development
 
-Create short-lived branches from the latest `develop` using one of these prefixes:
+Create short-lived branches from the latest `develop`. Include an issue ID only when a real issue exists:
 
 ```text
 feature/<issue-id>-<short-description>
 fix/<issue-id>-<short-description>
 chore/<issue-id>-<short-description>
+feature/<short-description>
+fix/<short-description>
+chore/<short-description>
 ```
 
 Examples:
@@ -295,7 +298,7 @@ Examples:
 - `fix/156-session-timeout`
 - `chore/178-upgrade-nextjs`
 
-Branch names must be lowercase, use hyphens, include an issue ID when one exists, and keep the description concise. When no issue exists, use `no-issue`, for example `feature/no-issue-hosted-viewer-session`.
+Branch names must be lowercase, use hyphens, include an issue ID when one exists, and keep the description concise. Do not insert a synthetic `no-issue` segment when there is no issue; use a direct descriptive name such as `feature/hosted-viewer-session`.
 
 Development workflow:
 
