@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { selectVisibleHostedSessions } from "@/lib/hosted-progress";
 import { usePlaygroundStore } from "@/lib/playground-store";
+import { RunDetailTabs } from "./RunDetailTabs";
 
 type ConnectMethod = "link" | "browser" | "advanced";
 
@@ -85,7 +86,6 @@ export function RunConnectionCard() {
   const executionMode = usePlaygroundStore((state) => state.currentExecutionMode);
   const phase = usePlaygroundStore((state) => state.phase);
   const score = usePlaygroundStore((state) => state.score);
-  const scoringSessions = usePlaygroundStore((state) => state.scoringSessions);
   const connectionRefreshKey = usePlaygroundStore(
     (state) =>
       state.timeline.filter(
@@ -476,26 +476,7 @@ export function RunConnectionCard() {
               </div>
             ))}
           </div>
-          {scoringSessions.length > 0 ? (
-            <div className="mt-4 border-t border-[#e1dbd0] pt-4">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[#8f897e]">Completed checks</div>
-              <div className="mt-2 space-y-2">
-                {scoringSessions.flatMap((session) =>
-                  session.evaluators.map((evaluator) => (
-                    <div key={`${session.sessionId}:${evaluator.type}:${evaluator.name}`} className="flex items-start gap-2 text-xs leading-5">
-                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                        evaluator.status === "passed" ? "bg-[#4da66a]" : "bg-[#d45b45]"
-                      }`} />
-                      <div>
-                        <div className="text-[#292620]">{evaluator.name}{evaluator.required ? "" : " (optional)"}</div>
-                        {evaluator.errorMessage ? <div className="text-[#8a4334]">{evaluator.errorMessage}</div> : null}
-                      </div>
-                    </div>
-                  )),
-                )}
-              </div>
-            </div>
-          ) : null}
+          <RunDetailTabs />
         </div>
       ) : null}
     </div>
