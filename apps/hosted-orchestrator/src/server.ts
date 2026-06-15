@@ -19,6 +19,7 @@ import {
   type HostedSessionStatus,
 } from "./attempt-lifecycle.js";
 import { generateAttemptQuestions } from "./question-generation.js";
+import { createSingleFlight } from "./single-flight.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -927,8 +928,13 @@ const attemptLifecycle = createAttemptLifecycle({
   evictInMemorySessions: () => undefined,
 });
 
+const initializeAttemptSingleFlight = createSingleFlight({
+  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
+  run: initializeAttempt,
+});
+
 const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOverviewSession>>({
-  initializeAttempt,
+  initializeAttempt: initializeAttemptSingleFlight,
   completeSessionCommand: (session, result) =>
     attemptLifecycle.executeCompleteSessionCommand({
       type: "complete-session",
