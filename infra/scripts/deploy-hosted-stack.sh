@@ -93,8 +93,6 @@ SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
 HOSTED_SESSION_REDIS_URL=redis://redis:6379
 ORCHESTRATOR_REDIS_URL=redis://redis:6379
 ORCHESTRATOR_PARTITION_COUNT=16
-ORCHESTRATOR_WORKER_0_PARTITIONS=0,1,2,3,4,5,6,7
-ORCHESTRATOR_WORKER_1_PARTITIONS=8,9,10,11,12,13,14,15
 HOSTED_SESSION_REDIS_TTL_MS=21600000
 REDIS_IMAGE=redis:7-alpine
 GATEWAY_HTTP_PORT=${GATEWAY_HTTP_PORT}
@@ -126,7 +124,7 @@ dump_deploy_logs() {
   echo "---- listening gateway port ----"
   (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null || true) | grep -E ":${GATEWAY_HTTP_PORT}\\b" || true
   echo "---- compose logs ----"
-  compose logs --tail=160 gateway hosted-sites hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1 redis || true
+  compose logs --tail=160 gateway hosted-sites hosted-orchestrator redis || true
 }
 
 deploy_status=0
@@ -150,9 +148,8 @@ if [[ "${HOSTED_SITES_CHANGED}" == "true" ]]; then
 fi
 
 if [[ "${ORCHESTRATOR_CHANGED}" == "true" ]]; then
-  compose pull hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
+  compose pull hosted-orchestrator
   compose up -d --no-deps --scale "hosted-orchestrator=${ORCHESTRATOR_REPLICAS}" hosted-orchestrator
-  compose up -d --no-deps hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
 fi
 
 if [[ "${INFRA_CHANGED}" == "true" ]]; then
@@ -166,7 +163,6 @@ if [[ "${TOPOLOGY_CHANGED}" == "true" ]]; then
   compose up -d redis
   compose up -d --no-deps --scale "hosted-sites=${HOSTED_REPLICAS}" hosted-sites
   compose up -d --no-deps --scale "hosted-orchestrator=${ORCHESTRATOR_REPLICAS}" hosted-orchestrator
-  compose up -d --no-deps hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
   compose up -d --force-recreate --no-deps gateway
 fi
 

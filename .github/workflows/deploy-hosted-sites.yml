@@ -12,6 +12,7 @@ on:
       - 'apps/hosted-orchestrator/**'
       - 'packages/scoring/**'
       - 'packages/shared/**'
+      - 'supabase/migrations/**'
       - 'infra/docker/hosted-sites.Dockerfile'
       - 'infra/docker/hosted-orchestrator.Dockerfile'
       - 'infra/docker/docker-compose.server.yml'
@@ -194,11 +195,56 @@ jobs:
             ${{ steps.meta.outputs.image }}:${{ needs.detect-changes.outputs.image_tag }}
             ${{ steps.meta.outputs.image }}:latest-${{ needs.validate-ref.outputs.image_channel }}
 
+  migrate-development:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: development
+    needs: validate-ref
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply development database migrations
+        env:
+          TEST_SUPABASE_DB_URL: ${{ secrets.TEST_SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${TEST_SUPABASE_DB_URL}"
+          supabase db push --db-url "${TEST_SUPABASE_DB_URL}" --include-all --yes
+
+  migrate-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    needs: validate-ref
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply production database migrations
+        env:
+          PROD_SUPABASE_DB_URL: ${{ secrets.PROD_SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${PROD_SUPABASE_DB_URL}"
+          supabase db push --db-url "${PROD_SUPABASE_DB_URL}" --include-all --yes
+
   deploy-development:
     if: |
       always() &&
       github.ref == 'refs/heads/develop' &&
       needs.detect-changes.result == 'success' &&
+      needs.migrate-development.result == 'success' &&
       (needs.build-hosted-sites.result == 'success' || needs.build-hosted-sites.result == 'skipped') &&
       (needs.build-orchestrator.result == 'success' || needs.build-orchestrator.result == 'skipped')
     runs-on:
@@ -210,6 +256,7 @@ jobs:
       - detect-changes
       - build-hosted-sites
       - build-orchestrator
+      - migrate-development
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -240,6 +287,7 @@ jobs:
       always() &&
       github.ref == 'refs/heads/main' &&
       needs.detect-changes.result == 'success' &&
+      needs.migrate-production.result == 'success' &&
       (needs.build-hosted-sites.result == 'success' || needs.build-hosted-sites.result == 'skipped') &&
       (needs.build-orchestrator.result == 'success' || needs.build-orchestrator.result == 'skipped')
     runs-on:
@@ -251,6 +299,7 @@ jobs:
       - detect-changes
       - build-hosted-sites
       - build-orchestrator
+      - migrate-production
     steps:
       - name: Checkout
         uses: actions/checkout@v5
