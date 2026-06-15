@@ -10,6 +10,7 @@ import {
 } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { createAttemptHandlers } from "./attempt-handlers.js";
+import { resolveHostedSitesUrls } from "./service-urls.js";
 import { createCommandBackbone, type CommandBackboneRole } from "./command-backbone.js";
 import {
   createAttemptLifecycle,
@@ -21,8 +22,7 @@ import { generateAttemptQuestions } from "./question-generation.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
-const hostedSitesBaseUrl =
-  process.env.HOSTED_SITES_URL ?? process.env.HOSTED_SITES_PUBLIC_URL ?? "http://localhost:3003";
+const { publicBaseUrl: hostedSitesPublicBaseUrl } = resolveHostedSitesUrls(process.env);
 const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000";
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
@@ -125,7 +125,7 @@ function buildViewerStartUrl(sessionId: string, startPath: string, expiresAt: st
     expiresAt,
     secret: viewerTokenSecret,
   });
-  return `${hostedSitesBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
+  return `${hostedSitesPublicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
 }
 
 function getSupabaseAdmin() {
@@ -549,7 +549,7 @@ async function initializeAttempt(params: {
   const rows = orderedSessions.map((session) => {
     const token = makeId("tok");
     const startPath = session.startPath ?? defaultStartPathForApp(session.app);
-    const startUrl = `${hostedSitesBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
+    const startUrl = `${hostedSitesPublicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
     const status: HostedSessionStatus = session.sequenceIndex > 0 ? "created" : "active";
     const sessionMetadata = {
       ...session.metadata,
@@ -858,7 +858,7 @@ const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOver
   loadAttemptReadModel,
   forwardRunEvent,
   forwardCompletion,
-  publicBaseUrl: hostedSitesBaseUrl,
+  publicBaseUrl: hostedSitesPublicBaseUrl,
   defaultStartPathForApp,
 });
 
