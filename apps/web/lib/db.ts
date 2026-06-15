@@ -12,12 +12,24 @@ import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { mockStore } from "./mock-store";
 
-const GUEST_RUN_LIMIT = 1;
+const PRODUCTION_GUEST_RUN_LIMIT = 1;
+const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
 const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
 const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, metadata, is_public, created_at";
 
 function getSupabase() {
   return createSupabaseAdminClient();
+}
+
+function getGuestRunLimit() {
+  const configuredLimit = Number(process.env.GUEST_RUN_LIMIT);
+  if (Number.isInteger(configuredLimit) && configuredLimit > 0) {
+    return configuredLimit;
+  }
+
+  return process.env.VERCEL_ENV === "preview" || process.env.VERCEL_GIT_COMMIT_REF === "develop"
+    ? DEVELOPMENT_GUEST_RUN_LIMIT
+    : PRODUCTION_GUEST_RUN_LIMIT;
 }
 
 export function isMockMode() {
@@ -551,6 +563,7 @@ export async function getQuotaStatus(params: {
   }
 
   const guestId = params.guestId;
+  const limit = getGuestRunLimit();
   const used = guestId
     ? getSupabase()
       ? (
@@ -566,8 +579,8 @@ export async function getQuotaStatus(params: {
     mode: "guest",
     isAuthenticated: false,
     used,
-    limit: GUEST_RUN_LIMIT,
-    remaining: Math.max(0, GUEST_RUN_LIMIT - used),
+    limit,
+    remaining: Math.max(0, limit - used),
     resetAt: null,
   };
 }
