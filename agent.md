@@ -307,3 +307,49 @@ Development workflow:
 6. Release through a pull request from `develop` to `main`.
 
 Emergency production fixes use `hotfix/<issue-id>-<short-description>`, branch from `main`, and must be merged back into both `main` and `develop`.
+
+## Merge Strategy
+
+Choose the merge method based on whether the intermediate commit history has lasting value, not only on line count.
+
+### Short-Lived Feature And Fix Branches
+
+Use squash merge by default for `feature/*`, `fix/*`, and `chore/*` branches:
+
+- one issue or cohesive change becomes one Conventional Commit on `develop`
+- merge only after CI and review pass
+- delete the local and remote branch after merge
+- do not expect the original branch commits to appear as ancestors of `develop`; squash merge creates a new equivalent commit
+
+### Large Or Long-Running Features
+
+Use an `epic/<issue-id>-<short-description>` branch when the work spans multiple independently meaningful modules or stages. Branch the epic from `develop`, then branch focused `feature/*` or `fix/*` work from the epic.
+
+```text
+develop
+└── epic/<issue-id>-<description>
+    ├── feature/<issue-id>-<stage-one>
+    ├── feature/<issue-id>-<stage-two>
+    └── fix/<issue-id>-<integration-fix>
+```
+
+- squash child branches into the epic branch
+- keep the epic branch commits reviewable, buildable, and independently meaningful
+- merge the completed epic into `develop` with a merge commit to preserve its main development stages
+- delete the epic and child branches after merge
+
+Prefer an epic merge commit when at least two of these apply:
+
+- development lasts more than one week
+- multiple contributors work on it
+- it spans multiple independent modules
+- stages may need to be reverted independently
+- the branch commits have been intentionally curated and provide useful architectural history
+
+### Releases And Hotfixes
+
+- merge `develop` into `main` with a merge commit so each production release has an explicit boundary
+- do not squash the entire release history into one commit
+- create emergency `hotfix/*` branches from `main`
+- merge the hotfix into `main`, then merge or cherry-pick the same fix into `develop` immediately
+- use cherry-pick only for targeted synchronization or emergency fixes, not as the normal feature integration method
