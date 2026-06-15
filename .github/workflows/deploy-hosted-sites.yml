@@ -197,7 +197,10 @@ jobs:
 
   migrate-development:
     if: github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-dev
     environment: development
     needs: validate-ref
     steps:
@@ -216,7 +219,10 @@ jobs:
 
   migrate-production:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-prod
     environment: production
     needs: validate-ref
     steps:
