@@ -4,10 +4,10 @@ import { HeroMacFrame } from "./HeroMacFrame";
 import { cn } from "@/lib/utils";
 
 const stats = [
-  { label: "Live Replay", value: "Real-time browser watch" },
-  { label: "Trace Depth", value: "Tool calls + state shifts" },
-  { label: "Sandbox Feel", value: "Retro Mac live shell" },
-  { label: "First Run", value: "Free playground pass" },
+  { label: "Practical Tasks", value: "Real workflows, not toy demos" },
+  { label: "Reproducible Runs", value: "Same task, same rules" },
+  { label: "Full Trace", value: "Events, tools, and state" },
+  { label: "Stable Scoring", value: "Comparable results" },
 ];
 
 export function HeroSection({
@@ -33,11 +33,11 @@ export function HeroSection({
         <div className={cn("grid items-center gap-12", showDevice && "lg:grid-cols-[0.9fr_1.1fr]")}>
           <div>
             <h1 className="max-w-xl text-[3.4rem] font-[350] leading-[0.96] tracking-[-0.08em] text-[#111111] md:text-[5.4rem]">
-              <span className="block">Watch AI</span>
-              <span className="block font-medium">use the computer.</span>
+              <span className="block">Benchmark agents</span>
+              <span className="block font-medium">in the browser.</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-[#66625a]">
-              Input your agent, press start, and watch it navigate a benchmark in real time. AgentBench is not a dashboard first. It is a live AI playground built for observability.
+              Run practical, reproducible web tasks and inspect every event, tool call, and state change in real time.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <a
