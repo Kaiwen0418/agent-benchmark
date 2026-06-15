@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { LiveRunViewer } from "@/components/run/LiveRunViewer";
 import { getBenchmarkCase, getBenchmarkRun, listArtifacts, listRunEvents } from "@/lib/db";
+import { deriveHostedViewerUrl } from "@/lib/hosted-viewer";
 
 function getEventPayloadUrl(payload: Awaited<ReturnType<typeof listRunEvents>>[number]["payload"]) {
   return payload && typeof payload === "object" && !Array.isArray(payload) && typeof payload.url === "string"
@@ -56,6 +57,7 @@ export default async function RunLivePage({
       initialScore={run.score}
       initialErrorMessage={run.errorMessage}
       initialFrameUrl={deriveInitialFrameUrl(events, artifacts)}
+      initialViewerUrl={deriveHostedViewerUrl(events)}
       embedded={resolvedSearchParams?.embed === "1"}
     />
   );

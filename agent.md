@@ -180,6 +180,71 @@ For hosted-web, telemetry should be lightweight and generic:
 - do not add hosted app-specific database tables unless there is a clear persistence requirement that cannot fit session snapshots or final result evidence
 - do not make hosted-sites responsible for attempt lifecycle; use hosted-orchestrator for attempt init/state/commands
 
+## Preview Environment Network Smoke Test
+
+Run this smoke test after changes to hosted-web lifecycle, telemetry, live viewing, quota, deployment configuration, or cross-service URLs. Use the test environment only. A full smoke creates and mutates test run data and consumes one guest run.
+
+Default endpoints:
+
+```text
+Web: https://test-agent-benchmark-web.vercel.app/
+Hosted sites: https://hosted-test.project-echo.xyz/
+```
+
+Do not run the mutation steps against production unless the user explicitly requests it. Never print complete session tokens, cookies, service-role keys, or runner secrets in reports.
+
+### Browser Flow
+
+1. Open the preview Web URL in the in-app browser and wait for quota loading to finish.
+2. Confirm the Hosted Web Suite is available, the start button becomes enabled, and the browser console has no errors.
+3. Start one run. Record the run ID and attempt ID from the API response or connection payload before navigating away.
+4. Confirm quota decrements exactly once and the connection guide shows four ordered sessions with only session 1 active.
+5. Keep the Web preview open and open the hosted agent URL in a second tab. Do not replace the preview tab when live-view behavior is under test.
+6. Confirm the hosted attempt overview loads through the public HTTPS hostname and contains the expected session order.
+7. Complete each hosted task using its generated task text rather than hard-coded fixture assumptions. Verify each evaluator preview or score endpoint returns `score: 1`.
+8. After each completed session, call the attempt advance endpoint and verify:
+   - `nextSessionId` matches the next ordered session.
+   - `nextStartUrl` uses the public HTTPS hosted hostname.
+   - `nextStartUrl` never exposes Docker names such as `hosted-sites`, localhost, or private ports.
+9. After the final session, verify advance returns `complete: true`, `nextSessionId: null`, and `nextStartUrl: null`.
+
+### Live Viewer Checks
+
+While the hosted task is open in the second tab:
+
+1. Open `/runs/<run-id>/live` or observe the embedded playground viewer in the Web tab.
+2. Confirm a read-only hosted iframe appears after the first hosted page-load event.
+3. Navigate and mutate state from the agent tab. Confirm the iframe follows major page changes and refreshes after task signals.
+4. Keep the run active for more than 30 seconds, trigger another hosted event, and confirm updates continue after the SSE connection rotates or reconnects.
+5. Confirm the iframe uses a viewer-scoped URL, does not expose the write token, allows scrolling, and prevents links/forms from mutating or independently navigating the session.
+6. Confirm task, score, and latest-event overlays update without browser console errors.
+
+### Service And API Checks
+
+Check public service health and lifecycle responses without exposing credentials:
+
+```bash
+curl -fsS https://hosted-test.project-echo.xyz/health
+curl -fsS 'https://hosted-test.project-echo.xyz/api/sessions/<redacted-token>/score'
+curl -fsS 'https://hosted-test.project-echo.xyz/api/attempts/<attempt-id>/advance?session=<redacted-token>'
+```
+
+Verify response URLs are externally reachable. Internal service URLs may be used for server-to-server calls, but must not appear in browser-facing `startUrl`, `nextStartUrl`, viewer URLs, redirects, or connection instructions.
+
+### Result Reporting
+
+Report each area separately:
+
+- Web startup and quota
+- attempt/session initialization
+- all hosted task scores
+- session advancement and public URL correctness
+- telemetry and live viewer behavior
+- SSE behavior after 30 seconds
+- console/network errors
+
+Classify any private/internal URL returned to the browser as a blocking issue. If live viewer verification cannot be completed, state exactly why; successful hosted scoring alone is not evidence that the viewer works.
+
 ## Git Commit Convention
 
 All commit subjects must follow Conventional Commits:

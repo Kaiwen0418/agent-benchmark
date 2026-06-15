@@ -3,6 +3,20 @@ import type { HostedWebScoreResult } from "@agentbench/scoring";
 import type { HostedSession } from "../runtime/types.js";
 import { sendJson } from "../runtime/http.js";
 
+function sanitizeTelemetryUrl(value: unknown, publicBaseUrl: string) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value, publicBaseUrl);
+    parsed.searchParams.delete("session");
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
+
 type ApiRoutesDeps = {
   publicBaseUrl: string;
   createHostedSession: (params: {
@@ -123,11 +137,15 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
         deps.badRequest(response, "Unknown session");
         return true;
       }
+      if (session.accessMode === "viewer") {
+        sendJson(response, 403, { error: "Viewer sessions are read-only" });
+        return true;
+      }
       const telemetryType = typeof input.type === "string" ? input.type : "hosted.event";
       const payload = {
         type: telemetryType,
         payload: input.payload,
-        url: input.url,
+        url: sanitizeTelemetryUrl(input.url, deps.publicBaseUrl),
         title: input.title,
       };
       await deps.recordEvent(session, payload);
@@ -159,6 +177,10 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
       const session = await deps.getSessionByToken(token, request);
       if (!session) {
         deps.notFound(response);
+        return true;
+      }
+      if (session.accessMode === "viewer") {
+        sendJson(response, 403, { error: "Viewer sessions are read-only" });
         return true;
       }
       const result = deps.evaluateSession(session);

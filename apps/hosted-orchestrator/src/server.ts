@@ -3,12 +3,14 @@ import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   buildHostedAttemptReadModel,
+  createHostedViewerToken,
   type Database,
   type HostedAttemptReadModel,
   type HostedWebSessionMetadata,
 } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { createAttemptHandlers } from "./attempt-handlers.js";
+import { resolveHostedSitesUrls } from "./service-urls.js";
 import { createCommandBackbone, type CommandBackboneRole } from "./command-backbone.js";
 import {
   createAttemptLifecycle,
@@ -20,10 +22,10 @@ import { generateAttemptQuestions } from "./question-generation.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
-const hostedSitesBaseUrl =
-  process.env.HOSTED_SITES_URL ?? process.env.HOSTED_SITES_PUBLIC_URL ?? "http://localhost:3003";
+const { publicBaseUrl: hostedSitesPublicBaseUrl } = resolveHostedSitesUrls(process.env);
 const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000";
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
+const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const orchestratorRedisUrl = process.env.ORCHESTRATOR_REDIS_URL ?? process.env.REDIS_URL;
@@ -111,6 +113,19 @@ function tokenFromStartUrl(startUrl: string) {
   } catch {
     return null;
   }
+}
+
+function buildViewerStartUrl(sessionId: string, startPath: string, expiresAt: string) {
+  if (!viewerTokenSecret) {
+    return null;
+  }
+
+  const token = createHostedViewerToken({
+    sessionId,
+    expiresAt,
+    secret: viewerTokenSecret,
+  });
+  return `${hostedSitesPublicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
 }
 
 function getSupabaseAdmin() {
@@ -534,7 +549,7 @@ async function initializeAttempt(params: {
   const rows = orderedSessions.map((session) => {
     const token = makeId("tok");
     const startPath = session.startPath ?? defaultStartPathForApp(session.app);
-    const startUrl = `${hostedSitesBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
+    const startUrl = `${hostedSitesPublicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
     const status: HostedSessionStatus = session.sequenceIndex > 0 ? "created" : "active";
     const sessionMetadata = {
       ...session.metadata,
@@ -603,6 +618,7 @@ async function initializeAttempt(params: {
         weight: row.weight,
         required: row.required,
         startUrl: row.start_url,
+        viewerStartUrl: buildViewerStartUrl(row.id, new URL(seed.start_url).pathname, expiresAt),
         goal: metadata.goal,
         title: typeof metadata.title === "string" ? metadata.title : null,
         status: row.status,
@@ -620,6 +636,37 @@ async function initializeAttempt(params: {
   };
 
   await supabase.from("benchmark_attempts").update({ metadata: mergedMetadata }).eq("id", attemptRow.id);
+
+  await Promise.all(
+    sessions.map((session) =>
+      forwardRunEvent(
+        {
+          id: session.sessionId,
+          token: session.token,
+          runId,
+          attemptId: attemptRow.id,
+          app: session.app,
+          taskSlug: session.taskSlug,
+          suiteSlug: params.suiteSlug,
+          sequenceIndex: session.sequenceIndex,
+          weight: session.weight,
+          status: session.status === "scoring" ? "active" : session.status,
+          startPath: new URL(session.startUrl).pathname,
+          persisted: true,
+        },
+        "hosted.session.created",
+        {
+          source: "hosted-orchestrator",
+          sessionId: session.sessionId,
+          attemptId: attemptRow.id,
+          app: session.app,
+          taskSlug: session.taskSlug,
+          sequenceIndex: session.sequenceIndex,
+          viewerStartUrl: session.viewerStartUrl,
+        },
+      ),
+    ),
+  );
 
   return {
     attemptId: attemptRow.id,
@@ -811,7 +858,7 @@ const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOver
   loadAttemptReadModel,
   forwardRunEvent,
   forwardCompletion,
-  publicBaseUrl: hostedSitesBaseUrl,
+  publicBaseUrl: hostedSitesPublicBaseUrl,
   defaultStartPathForApp,
 });
 
