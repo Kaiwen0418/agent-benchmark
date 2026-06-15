@@ -175,7 +175,15 @@ export function createAttemptHandlers<TReadModel extends HostedAttemptReadModel>
     result: HostedWebScoreResult;
   }): Promise<CompleteSessionHandlerResponse> {
     const completion = await deps.completeSessionCommand(params.session, params.result);
-    await deps.forwardRunEvent(params.session, "hosted.score", completion.result);
+    await deps.forwardRunEvent(params.session, "hosted.score", {
+      ...completion.result,
+      attemptId: params.session.attemptId,
+      sessionId: params.session.id,
+      app: params.session.app,
+      taskSlug: params.session.taskSlug,
+      sequenceIndex: params.session.sequenceIndex,
+      weight: params.session.weight,
+    });
     if (completion.attemptResult.complete && completion.attemptResult.aggregate) {
       await deps.forwardCompletion(params.session, completion.attemptResult.aggregate);
     }

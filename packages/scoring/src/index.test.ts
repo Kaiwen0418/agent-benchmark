@@ -98,7 +98,7 @@ test("aggregateSuiteScore uses weighted score when all required sessions pass", 
   assert.equal(result.breakdown.aggregation, "weighted-required-suite");
 });
 
-test("aggregateSuiteScore zeroes aggregate score when a required session fails", () => {
+test("aggregateSuiteScore preserves earned weighted score when a required session fails", () => {
   const result = aggregateSuiteScore({
     sessions: [
       {
@@ -123,5 +123,6 @@ test("aggregateSuiteScore zeroes aggregate score when a required session fails",
   });
 
   assert.equal(result.status, "failed");
-  assert.equal(result.score, 0);
+  assert.equal(result.score, 0.5);
+  assert.equal(result.status, "failed");
 });

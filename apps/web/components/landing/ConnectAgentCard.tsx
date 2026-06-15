@@ -12,6 +12,7 @@ export function ConnectAgentCard() {
   const quotaLoading = usePlaygroundStore((state) => state.quotaLoading);
   const runError = usePlaygroundStore((state) => state.runError);
   const score = usePlaygroundStore((state) => state.score);
+  const scoringSessions = usePlaygroundStore((state) => state.scoringSessions);
   const timeline = usePlaygroundStore((state) => state.timeline);
   const streamMode = usePlaygroundStore((state) => state.streamMode);
   const liveViewUrl = usePlaygroundStore((state) => state.liveViewUrl);
@@ -73,6 +74,55 @@ export function ConnectAgentCard() {
         ) : null}
 
         <RunConnectionCard />
+
+        {scoringSessions.length > 0 ? (
+          <div className="mt-4 rounded-[1.4rem] border border-[#d7d0c4] bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-[#70695e]">Score Breakdown</div>
+              <div className="rounded-full bg-[#d7ff00] px-3 py-1 text-xs font-medium text-[#111111]">
+                {score === null ? "--" : `${Math.round(score * 100)}%`}
+              </div>
+            </div>
+            <div className="mt-3 space-y-3">
+              {[...scoringSessions].reverse().map((session) => (
+                <div key={session.sessionId} className="rounded-[1rem] border border-[#e2ddd3] bg-[#faf8f3] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[#111111]">{session.taskSlug}</div>
+                      <div className="mt-1 text-xs text-[#6a655c]">{session.summary}</div>
+                    </div>
+                    <div className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] ${
+                      session.status === "passed"
+                        ? "bg-[#e8f7ec] text-[#1f6b35]"
+                        : "bg-[#fff1ed] text-[#8a2d1f]"
+                    }`}>
+                      {Math.round(session.score * 100)}%
+                    </div>
+                  </div>
+                  {session.evaluators.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {session.evaluators.map((evaluator) => (
+                        <div key={`${evaluator.type}:${evaluator.name}`} className="flex items-start gap-2 text-xs leading-5">
+                          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                            evaluator.status === "passed" ? "bg-[#4da66a]" : "bg-[#d45b45]"
+                          }`} />
+                          <div className="min-w-0">
+                            <div className="text-[#292620]">
+                              {evaluator.name}{evaluator.required ? "" : " (optional)"}
+                            </div>
+                            {evaluator.errorMessage ? (
+                              <div className="text-[#8a4334]">{evaluator.errorMessage}</div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-4 rounded-[1.4rem] border border-[#2b2b2b] bg-[#111111] p-4 text-white">
           <div className="flex items-center justify-between gap-3">
@@ -150,7 +200,9 @@ export function ConnectAgentCard() {
           <div className="mt-3 grid grid-cols-3 gap-2">
             <div className="rounded-[1rem] bg-[#d7ff00] p-3">
               <div className="text-[10px] uppercase tracking-[0.18em] text-[#4b5520]">Score</div>
-              <div className="mt-1.5 text-2xl font-medium text-[#111111]">{score ?? "--"}</div>
+              <div className="mt-1.5 text-2xl font-medium text-[#111111]">
+                {score === null ? "--" : `${Math.round(score * 100)}%`}
+              </div>
             </div>
             <div className="rounded-[1rem] bg-[#efede6] p-3">
               <div className="text-[10px] uppercase tracking-[0.18em] text-[#6a655c]">Safety</div>

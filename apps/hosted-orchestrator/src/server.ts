@@ -662,6 +662,8 @@ async function initializeAttempt(params: {
           app: session.app,
           taskSlug: session.taskSlug,
           sequenceIndex: session.sequenceIndex,
+          weight: session.weight,
+          required: session.required,
           viewerStartUrl: session.viewerStartUrl,
         },
       ),

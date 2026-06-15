@@ -47,7 +47,7 @@ export function LiveMacScreenContent() {
     if (phase === "completed") {
       return {
         title: "Run completed",
-        body: `Replay captured. Score ${score ?? 0}.`,
+        body: `Replay captured. Score ${score === null ? "--" : `${Math.round(score * 100)}%`}.`,
         accent: "completed",
       };
     }
