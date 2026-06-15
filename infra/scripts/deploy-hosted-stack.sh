@@ -144,26 +144,26 @@ echo "Image tags: hosted-sites=${HOSTED_SITES_IMAGE_TAG}, orchestrator=${HOSTED_
 
 if [[ "${HOSTED_SITES_CHANGED}" == "true" ]]; then
   compose pull hosted-sites
-  compose up -d --no-deps --scale "hosted-sites=${HOSTED_REPLICAS}" hosted-sites
+  compose up -d --remove-orphans --no-deps --scale "hosted-sites=${HOSTED_REPLICAS}" hosted-sites
 fi
 
 if [[ "${ORCHESTRATOR_CHANGED}" == "true" ]]; then
   compose pull hosted-orchestrator
-  compose up -d --no-deps --scale "hosted-orchestrator=${ORCHESTRATOR_REPLICAS}" hosted-orchestrator
+  compose up -d --remove-orphans --no-deps --scale "hosted-orchestrator=${ORCHESTRATOR_REPLICAS}" hosted-orchestrator
 fi
 
 if [[ "${INFRA_CHANGED}" == "true" ]]; then
   docker pull --platform "${GATEWAY_PLATFORM}" "${GATEWAY_IMAGE}"
   docker run --rm --platform "${GATEWAY_PLATFORM}" --entrypoint nginx "${GATEWAY_IMAGE}" -v
-  compose up -d redis
-  compose up -d --force-recreate --no-deps gateway
+  compose up -d --remove-orphans redis
+  compose up -d --remove-orphans --force-recreate --no-deps gateway
 fi
 
 if [[ "${TOPOLOGY_CHANGED}" == "true" ]]; then
-  compose up -d redis
-  compose up -d --no-deps --scale "hosted-sites=${HOSTED_REPLICAS}" hosted-sites
-  compose up -d --no-deps --scale "hosted-orchestrator=${ORCHESTRATOR_REPLICAS}" hosted-orchestrator
-  compose up -d --force-recreate --no-deps gateway
+  compose up -d --remove-orphans redis
+  compose up -d --remove-orphans --no-deps --scale "hosted-sites=${HOSTED_REPLICAS}" hosted-sites
+  compose up -d --remove-orphans --no-deps --scale "hosted-orchestrator=${ORCHESTRATOR_REPLICAS}" hosted-orchestrator
+  compose up -d --remove-orphans --force-recreate --no-deps gateway
 fi
 
 compose ps
