@@ -83,7 +83,12 @@ export function RunConnectionCard() {
   const runId = usePlaygroundStore((state) => state.currentRunId);
   const executionMode = usePlaygroundStore((state) => state.currentExecutionMode);
   const phase = usePlaygroundStore((state) => state.phase);
-  const eventCount = usePlaygroundStore((state) => state.timeline.length);
+  const connectionRefreshKey = usePlaygroundStore(
+    (state) =>
+      state.timeline.filter(
+        (entry) => entry.label === "hosted.page.load" || entry.label === "hosted.score",
+      ).length,
+  );
   const [method, setMethod] = useState<ConnectMethod>("link");
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
   const [connectError, setConnectError] = useState<RunConnectError | null>(null);
@@ -144,7 +149,7 @@ export function RunConnectionCard() {
     return () => {
       cancelled = true;
     };
-  }, [eventCount, runId, retryNonce]);
+  }, [connectionRefreshKey, runId, retryNonce]);
 
   const browserPrompt = useMemo(() => {
     if (!payload) {

@@ -203,6 +203,26 @@ function hostedTimelineLabel(event: RunEvent) {
   return `hosted.${String(event.payload.type ?? "action")}`;
 }
 
+function hostedTimelineDetail(event: RunEvent) {
+  if (event.type === "hosted.session.created") {
+    return `${String(event.payload.app ?? "hosted-app")} · ${String(event.payload.taskSlug ?? "hosted-task")}`;
+  }
+
+  if (event.type === "hosted.page.load") {
+    return String(event.payload.title ?? event.payload.url ?? "Hosted page loaded");
+  }
+
+  if (event.type === "hosted.task_signal") {
+    return String(event.payload.name ?? "Task signal received");
+  }
+
+  if (event.type === "hosted.score") {
+    return `Score ${String(event.payload.score ?? "--")}`;
+  }
+
+  return String(event.payload.type ?? "Hosted action");
+}
+
 function mapRunStatus(status: RunStatus): RunPhase {
   if (status === "queued" || status === "waiting_for_agent" || status === "agent_connected" || status === "starting") {
     return "booting";
@@ -257,8 +277,9 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
             ? `artifact.${String(event.payload.type ?? "created")}`
             : "score.updated";
 
-      const detail =
-        typeof event.payload.reason === "string"
+      const detail = event.type.startsWith("hosted.")
+        ? hostedTimelineDetail(event)
+        : typeof event.payload.reason === "string"
           ? event.payload.reason
           : typeof event.payload.name === "string"
             ? event.payload.name
