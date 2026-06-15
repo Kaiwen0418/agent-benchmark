@@ -477,6 +477,91 @@ async function persistScoreResult(session: AttemptLifecycleSession, result: Host
   }
 }
 
+async function recoverInitializedAttempt(params: {
+  runId: string;
+  caseId: string;
+  expectedSessionCount: number;
+}) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error("Hosted attempt recovery requires a database connection.");
+  }
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const { data: attemptRow, error: attemptError } = await supabase
+      .from("benchmark_attempts")
+      .select("id, suite_slug, suite_version, metadata")
+      .eq("run_id", params.runId)
+      .eq("case_id", params.caseId)
+      .eq("provider", "hosted-web")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (attemptError) {
+      throw attemptError;
+    }
+
+    if (attemptRow) {
+      const { data: sessionRows, error: sessionError } = await supabase
+        .from("hosted_web_sessions")
+        .select(
+          "id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, start_url, status, metadata, expires_at",
+        )
+        .eq("attempt_id", attemptRow.id)
+        .order("sequence_index", { ascending: true });
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      if (sessionRows?.length === params.expectedSessionCount) {
+        return {
+          attemptId: attemptRow.id,
+          suiteSlug: attemptRow.suite_slug,
+          suiteVersion: attemptRow.suite_version,
+          metadata: extractMetadata(attemptRow.metadata as Record<string, unknown> | null),
+          sessions: sessionRows.map((row) => {
+            const metadata = extractMetadata(row.metadata as Record<string, unknown> | null);
+            const token = tokenFromStartUrl(row.start_url);
+            const startPath =
+              typeof metadata.startPath === "string"
+                ? metadata.startPath
+                : new URL(row.start_url).pathname;
+            if (!token || typeof metadata.goal !== "string") {
+              throw new Error(`Hosted session ${row.id} cannot be recovered.`);
+            }
+            return {
+              sessionId: row.id,
+              attemptId: row.attempt_id,
+              token,
+              app: row.app,
+              taskSlug: row.task_slug,
+              taskVersion: row.task_version,
+              sequenceIndex: row.sequence_index,
+              weight: row.weight,
+              required: row.required,
+              startUrl: row.start_url,
+              viewerStartUrl: buildViewerStartUrl(
+                row.id,
+                startPath,
+                row.expires_at ?? new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString(),
+              ),
+              goal: metadata.goal,
+              title: typeof metadata.title === "string" ? metadata.title : null,
+              status: row.status,
+            };
+          }),
+        };
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error("Timed out recovering concurrently initialized hosted attempt.");
+}
+
 async function initializeAttempt(params: {
   runId: string | null;
   caseId: string | null;
@@ -541,6 +626,13 @@ async function initializeAttempt(params: {
     .single();
 
   if (attemptError || !attemptRow) {
+    if (attemptError?.code === "23505") {
+      return recoverInitializedAttempt({
+        runId,
+        caseId,
+        expectedSessionCount: generatedSessions.length,
+      });
+    }
     throw attemptError ?? new Error("Failed to create hosted attempt");
   }
 

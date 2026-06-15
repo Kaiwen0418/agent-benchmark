@@ -49,3 +49,31 @@ test("deriveHostedScoring preserves evaluator failure reasons", () => {
 
   assert.equal(result.sessions[0]?.evaluators[0]?.errorMessage, "Shipping method did not match.");
 });
+
+test("deriveHostedScoring ignores sessions from superseded attempts", () => {
+  const events = ["old", "current"].flatMap((attemptId) =>
+    [0, 1, 2, 3].map((sequenceIndex) => ({
+      type: "hosted.session.created",
+      payload: { attemptId, sessionId: `${attemptId}-${sequenceIndex}`, sequenceIndex, weight: 1 },
+    })),
+  );
+  events.push({
+    type: "hosted.score",
+    payload: {
+      attemptId: "current",
+      sessionId: "current-0",
+      sequenceIndex: 0,
+      weight: 1,
+      score: 1,
+      status: "passed",
+      summary: "passed",
+      evaluators: [],
+    },
+  });
+  events.push({
+    type: "hosted.session.created",
+    payload: { attemptId: "old", sessionId: "old-late", sequenceIndex: 4, weight: 1 },
+  });
+
+  assert.equal(deriveHostedScoring(events).score, 0.25);
+});
