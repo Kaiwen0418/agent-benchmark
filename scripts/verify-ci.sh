@@ -7,6 +7,9 @@ cd "${ROOT_DIR}"
 echo "== Deployment classifier =="
 bash scripts/test-deploy-classifier.sh
 
+echo "== Web library tests =="
+pnpm --filter web test
+
 echo "== Coverage-gated tests =="
 bash scripts/test-coverage.sh
 

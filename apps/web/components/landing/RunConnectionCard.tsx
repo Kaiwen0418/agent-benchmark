@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { selectVisibleHostedSessions } from "@/lib/hosted-progress";
 import { usePlaygroundStore } from "@/lib/playground-store";
 
 type ConnectMethod = "link" | "browser" | "advanced";
@@ -215,10 +216,11 @@ export function RunConnectionCard() {
   const activeHostedSession = payload.hostedWeb.sessions.find(
     (session) => session.sessionId === payload.hostedWeb.activeSessionId,
   );
-  const visibleHostedSessions =
-    phase === "running" && activeHostedSession
-      ? [activeHostedSession]
-      : payload.hostedWeb.sessions;
+  const visibleHostedSessions = selectVisibleHostedSessions(
+    phase,
+    payload.hostedWeb.sessions,
+    payload.hostedWeb.activeSessionId,
+  );
   const isTerminalRun =
     payload.status === "completed" ||
     payload.status === "failed" ||
