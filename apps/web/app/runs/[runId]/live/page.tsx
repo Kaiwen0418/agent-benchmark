@@ -38,6 +38,9 @@ export default async function RunLivePage({
 }) {
   const { runId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  if (resolvedSearchParams?.embed !== "1") {
+    notFound();
+  }
   const run = await getBenchmarkRun(runId);
 
   if (!run) {
@@ -59,7 +62,7 @@ export default async function RunLivePage({
       initialErrorMessage={run.errorMessage}
       initialFrameUrl={deriveInitialFrameUrl(events, artifacts)}
       initialViewerUrl={deriveHostedViewerUrl(events)}
-      embedded={resolvedSearchParams?.embed === "1"}
+      embedded
     />
   );
 }

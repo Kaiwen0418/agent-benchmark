@@ -82,11 +82,13 @@ export function LiveMacScreenContent() {
   return (
     <div className="relative h-full overflow-hidden rounded-[1.05rem] bg-[#080808] text-white">
       {embeddedLiveViewUrl ? (
-        <iframe
-          src={embeddedLiveViewUrl}
-          title="Embedded live run viewer"
-          className="absolute inset-0 h-full w-full border-0 bg-[#111111]"
-        />
+        <div className="absolute inset-0 overflow-hidden bg-[#111111]">
+          <iframe
+            src={embeddedLiveViewUrl}
+            title="Embedded live run viewer"
+            className="absolute left-0 top-0 h-[160%] w-[160%] origin-top-left scale-[0.625] border-0 bg-[#111111]"
+          />
+        </div>
       ) : liveFrameUrl ? (
         <img
           src={liveFrameUrl}

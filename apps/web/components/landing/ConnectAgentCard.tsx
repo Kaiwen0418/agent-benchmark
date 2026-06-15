@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { benchmarkOptions } from "./data";
 import { RunConnectionCard } from "./RunConnectionCard";
 import { usePlaygroundStore } from "@/lib/playground-store";
+import type { HostedSessionBreakdown } from "@/lib/hosted-scoring";
 
 export function ConnectAgentCard() {
   const benchmark = usePlaygroundStore((state) => state.benchmark);
@@ -15,7 +16,6 @@ export function ConnectAgentCard() {
   const scoringSessions = usePlaygroundStore((state) => state.scoringSessions);
   const timeline = usePlaygroundStore((state) => state.timeline);
   const streamMode = usePlaygroundStore((state) => state.streamMode);
-  const liveViewUrl = usePlaygroundStore((state) => state.liveViewUrl);
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
   const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
   const startRun = usePlaygroundStore((state) => state.startRun);
@@ -62,73 +62,13 @@ export function ConnectAgentCard() {
           Stop Run
         </button>
 
-        {liveViewUrl ? (
-          <a
-            href={liveViewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 flex w-full items-center justify-center rounded-full border border-[#d8d1c4] bg-white px-5 py-3 text-sm text-[#111111]"
-          >
-            Open Live View
-          </a>
-        ) : null}
-
         <RunConnectionCard />
-
-        {scoringSessions.length > 0 ? (
-          <div className="mt-4 rounded-[1.4rem] border border-[#d7d0c4] bg-white p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[11px] uppercase tracking-[0.2em] text-[#70695e]">Score Breakdown</div>
-              <div className="rounded-full bg-[#d7ff00] px-3 py-1 text-xs font-medium text-[#111111]">
-                {score === null ? "--" : `${Math.round(score * 100)}%`}
-              </div>
-            </div>
-            <div className="mt-3 space-y-3">
-              {[...scoringSessions].reverse().map((session) => (
-                <div key={session.sessionId} className="rounded-[1rem] border border-[#e2ddd3] bg-[#faf8f3] p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[#111111]">{session.taskSlug}</div>
-                      <div className="mt-1 text-xs text-[#6a655c]">{session.summary}</div>
-                    </div>
-                    <div className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] ${
-                      session.status === "passed"
-                        ? "bg-[#e8f7ec] text-[#1f6b35]"
-                        : "bg-[#fff1ed] text-[#8a2d1f]"
-                    }`}>
-                      {Math.round(session.score * 100)}%
-                    </div>
-                  </div>
-                  {session.evaluators.length > 0 ? (
-                    <div className="mt-3 space-y-2">
-                      {session.evaluators.map((evaluator) => (
-                        <div key={`${evaluator.type}:${evaluator.name}`} className="flex items-start gap-2 text-xs leading-5">
-                          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                            evaluator.status === "passed" ? "bg-[#4da66a]" : "bg-[#d45b45]"
-                          }`} />
-                          <div className="min-w-0">
-                            <div className="text-[#292620]">
-                              {evaluator.name}{evaluator.required ? "" : " (optional)"}
-                            </div>
-                            {evaluator.errorMessage ? (
-                              <div className="text-[#8a4334]">{evaluator.errorMessage}</div>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         <div className="mt-4 rounded-[1.4rem] border border-[#2b2b2b] bg-[#111111] p-4 text-white">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[11px] uppercase tracking-[0.2em] text-[#9b958a]">Event Stream</div>
             <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[#cfc8bb]">
-              <span className={`h-2 w-2 rounded-full ${streamMode === "sse" ? "bg-[#6df6a4]" : "bg-[#ffd24f]"}`} />
+              <span className={`h-2 w-2 rounded-full ${streamMode === "idle" ? "bg-[#77736b]" : "bg-[#d7ff00]"}`} />
               {streamMode === "sse" ? "Live" : streamMode === "polling" ? "Polling" : "Connecting"}
             </div>
           </div>
@@ -178,17 +118,6 @@ export function ConnectAgentCard() {
           Start Again
         </button>
 
-        {liveViewUrl ? (
-          <a
-            href={liveViewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 flex w-full items-center justify-center rounded-full border border-[#d8d1c4] bg-white px-5 py-3 text-sm text-[#111111]"
-          >
-            Open Live View
-          </a>
-        ) : null}
-
         {runError ? (
           <div className="mt-3 rounded-[1rem] border border-[#ead2ca] bg-[#fff0eb] p-3 text-[13px] leading-6 text-[#8a4334]">
             {runError}
@@ -217,6 +146,15 @@ export function ConnectAgentCard() {
               </div>
             </div>
           </div>
+
+          {scoringSessions.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[#70695e]">Score Breakdown</div>
+              {[...scoringSessions].reverse().map((session) => (
+                <ScoreSession key={session.sessionId} session={session} />
+              ))}
+            </div>
+          ) : null}
 
           {timeline.length > 0 ? (
             <div className="mt-4">
@@ -317,6 +255,39 @@ export function ConnectAgentCard() {
             : "Start Agent Session"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function ScoreSession({ session }: { session: HostedSessionBreakdown }) {
+  return (
+    <div className="rounded-[1rem] border border-[#e2ddd3] bg-[#faf8f3] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium text-[#111111]">{session.taskSlug}</div>
+          <div className="mt-1 text-xs text-[#6a655c]">{session.summary}</div>
+        </div>
+        <div className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] ${
+          session.status === "passed" ? "bg-[#e8f7ec] text-[#1f6b35]" : "bg-[#fff1ed] text-[#8a2d1f]"
+        }`}>
+          {Math.round(session.score * 100)}%
+        </div>
+      </div>
+      {session.evaluators.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {session.evaluators.map((evaluator) => (
+            <div key={`${evaluator.type}:${evaluator.name}`} className="flex items-start gap-2 text-xs leading-5">
+              <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                evaluator.status === "passed" ? "bg-[#4da66a]" : "bg-[#d45b45]"
+              }`} />
+              <div className="min-w-0">
+                <div className="text-[#292620]">{evaluator.name}{evaluator.required ? "" : " (optional)"}</div>
+                {evaluator.errorMessage ? <div className="text-[#8a4334]">{evaluator.errorMessage}</div> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
