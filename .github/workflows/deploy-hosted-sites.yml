@@ -212,10 +212,7 @@ jobs:
       - name: Apply development database migrations
         env:
           TEST_SUPABASE_DB_URL: ${{ secrets.TEST_SUPABASE_DB_URL }}
-        run: |
-          set -euo pipefail
-          test -n "${TEST_SUPABASE_DB_URL}"
-          supabase db push --db-url "${TEST_SUPABASE_DB_URL}" --include-all --yes
+        run: bash scripts/db-migrate.sh test
 
   migrate-production:
     if: github.ref == 'refs/heads/main'
@@ -234,10 +231,7 @@ jobs:
       - name: Apply production database migrations
         env:
           PROD_SUPABASE_DB_URL: ${{ secrets.PROD_SUPABASE_DB_URL }}
-        run: |
-          set -euo pipefail
-          test -n "${PROD_SUPABASE_DB_URL}"
-          supabase db push --db-url "${PROD_SUPABASE_DB_URL}" --include-all --yes
+        run: bash scripts/db-migrate.sh production
 
   deploy-development:
     if: |
