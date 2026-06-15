@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient as createRedisClient, type RedisClientType } from "redis";
 import {
   buildHostedAttemptReadModel,
   createHostedViewerToken,
@@ -81,6 +82,8 @@ type AttemptOverviewSession = HostedAttemptReadModel["sessions"][number] & {
 };
 
 let supabaseAdmin: SupabaseClient<Database> | null | undefined;
+let initializationRedis: RedisClientType | null = null;
+let initializationRedisConnection: Promise<RedisClientType> | null = null;
 let cleanupSweepInFlight = false;
 
 function envNumber(name: string, fallback: number) {
@@ -563,6 +566,62 @@ async function recoverInitializedAttempt(params: {
   throw new Error("Timed out recovering concurrently initialized hosted attempt.");
 }
 
+async function getInitializationRedis() {
+  if (initializationRedis?.isReady) {
+    return initializationRedis;
+  }
+  if (!orchestratorRedisUrl) {
+    return null;
+  }
+  if (!initializationRedisConnection) {
+    const client = createRedisClient({ url: orchestratorRedisUrl });
+    client.on("error", (error) => {
+      console.error("[hosted-orchestrator] attempt initialization lock error", error);
+    });
+    initializationRedisConnection = client.connect().then(() => {
+      initializationRedis = client;
+      return client;
+    }).catch((error) => {
+      initializationRedisConnection = null;
+      throw error;
+    });
+  }
+  return initializationRedisConnection;
+}
+
+async function initializeAttemptWithDistributedLock(
+  params: Parameters<typeof initializeAttempt>[0],
+) {
+  if (!params.runId || !params.caseId) {
+    return initializeAttempt(params);
+  }
+
+  const redis = await getInitializationRedis();
+  if (!redis) {
+    return initializeAttempt(params);
+  }
+
+  const lockKey = `agentbench:hosted-attempt-init:${params.runId}:${params.caseId}`;
+  const lockOwner = crypto.randomUUID();
+  const acquired = await redis.set(lockKey, lockOwner, { NX: true, PX: 30_000 });
+  if (acquired !== "OK") {
+    return recoverInitializedAttempt({
+      runId: params.runId,
+      caseId: params.caseId,
+      expectedSessionCount: params.sessions.length,
+    });
+  }
+
+  try {
+    return await initializeAttempt(params);
+  } finally {
+    await redis.eval(
+      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+      { keys: [lockKey], arguments: [lockOwner] },
+    );
+  }
+}
+
 async function initializeAttempt(params: {
   runId: string | null;
   caseId: string | null;
@@ -930,7 +989,7 @@ const attemptLifecycle = createAttemptLifecycle({
 
 const initializeAttemptSingleFlight = createSingleFlight({
   key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
-  run: initializeAttempt,
+  run: initializeAttemptWithDistributedLock,
 });
 
 const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOverviewSession>>({
