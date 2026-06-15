@@ -20,6 +20,7 @@ import {
   type HostedSessionStatus,
 } from "./attempt-lifecycle.js";
 import { generateAttemptQuestions } from "./question-generation.js";
+import { createIdempotentInitializer } from "./idempotent-initializer.js";
 import { createSingleFlight } from "./single-flight.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
@@ -589,60 +590,60 @@ async function getInitializationRedis() {
   return initializationRedisConnection;
 }
 
-async function initializeAttemptWithDistributedLock(
+async function findExistingInitializedAttempt(
   params: Parameters<typeof initializeAttempt>[0],
 ) {
   if (!params.runId || !params.caseId) {
-    return initializeAttempt(params);
+    return null;
   }
-
-  const redis = await getInitializationRedis();
-  if (!redis) {
-    return initializeAttempt(params);
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error("Hosted attempt initialization requires a database connection.");
   }
-
-  const lockKey = `agentbench:hosted-attempt-init:${params.runId}:${params.caseId}`;
-  const lockOwner = crypto.randomUUID();
-  const acquired = await redis.set(lockKey, lockOwner, { NX: true, PX: 30_000 });
-  if (acquired !== "OK") {
+  const { data, error } = await supabase
+    .from("benchmark_attempts")
+    .select("id")
+    .eq("run_id", params.runId)
+    .eq("case_id", params.caseId)
+    .eq("provider", "hosted-web")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (data) {
     return recoverInitializedAttempt({
       runId: params.runId,
       caseId: params.caseId,
       expectedSessionCount: params.sessions.length,
     });
   }
+  return null;
+}
 
+async function acquireInitializationLease(key: string) {
+  let redis: RedisClientType | null;
   try {
-    const supabase = getSupabaseAdmin();
-    if (!supabase) {
-      throw new Error("Hosted attempt initialization requires a database connection.");
-    }
-    const { data: existingAttempt, error: existingAttemptError } = await supabase
-      .from("benchmark_attempts")
-      .select("id")
-      .eq("run_id", params.runId)
-      .eq("case_id", params.caseId)
-      .eq("provider", "hosted-web")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (existingAttemptError) {
-      throw existingAttemptError;
-    }
-    if (existingAttempt) {
-      return recoverInitializedAttempt({
-        runId: params.runId,
-        caseId: params.caseId,
-        expectedSessionCount: params.sessions.length,
-      });
-    }
-    return await initializeAttempt(params);
-  } finally {
-    await redis.eval(
-      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
-      { keys: [lockKey], arguments: [lockOwner] },
-    );
+    redis = await getInitializationRedis();
+  } catch (error) {
+    console.error("[hosted-orchestrator] Redis unavailable; relying on database idempotency", error);
+    return null;
   }
+  if (!redis) {
+    return null;
+  }
+  const lockOwner = crypto.randomUUID();
+  const acquired = await redis.set(`agentbench:hosted-attempt-init:${key}`, lockOwner, { NX: true, PX: 30_000 });
+  if (acquired !== "OK") return "contended" as const;
+  return {
+    release: async () => {
+      await redis.eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+        { keys: [`agentbench:hosted-attempt-init:${key}`], arguments: [lockOwner] },
+      );
+    },
+  };
 }
 
 async function initializeAttempt(params: {
@@ -1010,9 +1011,26 @@ const attemptLifecycle = createAttemptLifecycle({
   evictInMemorySessions: () => undefined,
 });
 
+const initializeAttemptIdempotently = createIdempotentInitializer({
+  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
+  findExisting: findExistingInitializedAttempt,
+  waitForExisting: (params) => {
+    if (!params.runId || !params.caseId) {
+      throw new Error("Hosted attempt recovery requires run and case ids.");
+    }
+    return recoverInitializedAttempt({
+      runId: params.runId,
+      caseId: params.caseId,
+      expectedSessionCount: params.sessions.length,
+    });
+  },
+  acquireLock: acquireInitializationLease,
+  create: initializeAttempt,
+});
+
 const initializeAttemptSingleFlight = createSingleFlight({
   key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
-  run: initializeAttemptWithDistributedLock,
+  run: initializeAttemptIdempotently,
 });
 
 const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOverviewSession>>({
