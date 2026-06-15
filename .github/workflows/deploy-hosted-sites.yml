@@ -207,7 +207,7 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.75.0
 
       - name: Apply development database migrations
         env:
@@ -226,7 +226,7 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.75.0
 
       - name: Apply production database migrations
         env:
