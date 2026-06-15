@@ -361,7 +361,7 @@ function applyRunSnapshot(
   set({
     currentRunId: run.id,
     currentExecutionMode: run.executionMode,
-    liveViewUrl: run.liveViewUrl,
+    liveViewUrl: run.liveViewUrl ?? `/runs/${run.id}/live`,
     phase,
     statusLine: lastEvent ? eventSummary(lastEvent) : "Run created",
     score,
@@ -564,7 +564,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       set({
         currentRunId: result.run.id,
         currentExecutionMode: result.run.executionMode,
-        liveViewUrl: result.run.liveViewUrl,
+        liveViewUrl: result.run.liveViewUrl ?? `/runs/${result.run.id}/live`,
         phase: "booting",
         statusLine: mode === "external-agent" ? "Waiting for agent connection" : "Run queued",
         score: null,
