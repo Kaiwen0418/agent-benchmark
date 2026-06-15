@@ -83,6 +83,7 @@ export function RunConnectionCard() {
   const runId = usePlaygroundStore((state) => state.currentRunId);
   const executionMode = usePlaygroundStore((state) => state.currentExecutionMode);
   const phase = usePlaygroundStore((state) => state.phase);
+  const eventCount = usePlaygroundStore((state) => state.timeline.length);
   const [method, setMethod] = useState<ConnectMethod>("link");
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
   const [connectError, setConnectError] = useState<RunConnectError | null>(null);
@@ -131,7 +132,6 @@ export function RunConnectionCard() {
 
     void load().catch((error: RunConnectError | Error) => {
       if (!cancelled) {
-        setPayload(null);
         setConnectError({
           error: "error" in error ? error.error : "run_connect_failed",
           message: error.message || "Failed to load run connection info.",
@@ -144,7 +144,7 @@ export function RunConnectionCard() {
     return () => {
       cancelled = true;
     };
-  }, [runId, retryNonce]);
+  }, [eventCount, runId, retryNonce]);
 
   const browserPrompt = useMemo(() => {
     if (!payload) {
@@ -208,6 +208,10 @@ export function RunConnectionCard() {
   const activeHostedSession = payload.hostedWeb.sessions.find(
     (session) => session.sessionId === payload.hostedWeb.activeSessionId,
   );
+  const visibleHostedSessions =
+    phase === "running" && activeHostedSession
+      ? [activeHostedSession]
+      : payload.hostedWeb.sessions;
   const isTerminalRun =
     payload.status === "completed" ||
     payload.status === "failed" ||
@@ -415,45 +419,51 @@ export function RunConnectionCard() {
           </div>
 
           {copyState ? <div className="mt-3 text-xs uppercase tracking-[0.18em] text-[#6f695f]">{copyState}</div> : null}
-          {payload.hostedWeb.available ? (
-            <div className="mt-4 rounded-[1.2rem] border border-[#dfd8cb] bg-[#fbf8f3] p-4 text-sm text-[#3f3b34]">
-              <div className="text-xs uppercase tracking-[0.18em] text-[#70695e]">Hosted Suite</div>
-              <div className="mt-2 font-medium text-[#111111]">
-                {activeHostedSession && payload.hostedWeb.progress.currentIndex !== null
-                  ? `Session ${payload.hostedWeb.progress.currentIndex + 1} / ${payload.hostedWeb.progress.total}`
-                  : isTerminalRun
-                    ? "No active hosted session"
-                    : "Hosted sessions allocated"}
-              </div>
-              <p className="mt-2 leading-7">
-                {activeHostedSession
-                  ? `${activeHostedSession.title ?? activeHostedSession.taskSlug} · ${activeHostedSession.goal}`
-                  : terminalSummary ?? "This run does not currently expose an active hosted objective."}
-              </p>
-              <div className="mt-4 grid gap-2">
-                {payload.hostedWeb.sessions.map((session) => (
-                  <div
-                    key={session.sessionId}
-                    className="flex items-start justify-between gap-3 rounded-[1rem] border border-[#e1dbd0] bg-white px-3 py-3"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-[#111111]">
-                        {session.title ?? session.taskSlug}
-                      </div>
-                      <div className="mt-1 text-xs text-[#6a655c]">
-                        Session {session.sequenceIndex + 1} · {session.app}
-                      </div>
-                    </div>
-                    <div className={`rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] ${statusBadgeTone(session.status)}`}>
-                      {statusLabel(session.status)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </>
       )}
+
+      {payload.hostedWeb.available ? (
+        <div className="mt-4 rounded-[1.2rem] border border-[#dfd8cb] bg-[#fbf8f3] p-4 text-sm text-[#3f3b34]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs uppercase tracking-[0.18em] text-[#70695e]">Hosted Suite</div>
+            <div className="text-xs font-medium text-[#111111]">
+              {payload.hostedWeb.progress.completed} / {payload.hostedWeb.progress.total} complete
+            </div>
+          </div>
+          <div className="mt-2 font-medium text-[#111111]">
+            {activeHostedSession && payload.hostedWeb.progress.currentIndex !== null
+              ? `Session ${payload.hostedWeb.progress.currentIndex + 1} / ${payload.hostedWeb.progress.total}`
+              : isTerminalRun
+                ? "No active hosted session"
+                : "Hosted sessions allocated"}
+          </div>
+          <p className="mt-2 leading-7">
+            {activeHostedSession
+              ? `${activeHostedSession.title ?? activeHostedSession.taskSlug} · ${activeHostedSession.goal}`
+              : terminalSummary ?? "This run does not currently expose an active hosted objective."}
+          </p>
+          <div className="mt-4 grid gap-2">
+            {visibleHostedSessions.map((session) => (
+              <div
+                key={session.sessionId}
+                className="flex items-center justify-between gap-3 rounded-[1rem] border border-[#e1dbd0] bg-white px-3 py-3"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-[#111111]">
+                    {session.title ?? session.taskSlug}
+                  </div>
+                  <div className="mt-1 truncate text-xs text-[#6a655c]">
+                    Session {session.sequenceIndex + 1} · {session.app}
+                  </div>
+                </div>
+                <div className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] ${statusBadgeTone(session.status)}`}>
+                  {statusLabel(session.status)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
