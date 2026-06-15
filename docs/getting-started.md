@@ -24,11 +24,28 @@ Configure these values in `apps/web/.env.local`:
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
 
-Apply the database migrations and seed data:
+Copy the database target example and configure the root `.env.local`:
 
 ```bash
-supabase db push
-supabase db seed
+cp .env.database.example .env.local
+```
+
+- Local development and the deployed test environment use `TEST_SUPABASE_DB_URL`.
+- Production uses a separate `PROD_SUPABASE_DB_URL`.
+- Migration commands never infer their target from the currently linked Supabase project.
+
+Preview and apply test migrations:
+
+```bash
+pnpm db:migrate:test:dry-run
+pnpm db:migrate:test
+```
+
+Production migrations are reserved for the production deployment workflow or an explicit operator action:
+
+```bash
+pnpm db:migrate:prod:dry-run
+pnpm db:migrate:prod
 ```
 
 ## Start the Default Local Stack
