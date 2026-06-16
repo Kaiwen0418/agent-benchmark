@@ -87,7 +87,9 @@ export function RunPanels() {
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-[1.1rem] bg-[#d7ff00] p-4">
             <div className="text-xs uppercase tracking-[0.2em] text-[#4b5520]">Success</div>
-            <div className="mt-2.5 text-3xl font-medium text-[#111111]">{score ?? "--"}</div>
+            <div className="mt-2.5 text-3xl font-medium text-[#111111]">
+              {score === null ? "--" : `${Math.round(score * 100)}%`}
+            </div>
           </div>
           <div className="rounded-[1.1rem] bg-[#efede6] p-4">
             <div className="text-xs uppercase tracking-[0.2em] text-[#6a655c]">Safety</div>

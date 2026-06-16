@@ -1,14 +1,17 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient as createRedisClient, type RedisClientType } from "redis";
 import {
   buildHostedAttemptReadModel,
+  createHostedViewerToken,
   type Database,
   type HostedAttemptReadModel,
   type HostedWebSessionMetadata,
 } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { createAttemptHandlers } from "./attempt-handlers.js";
+import { resolveHostedSitesUrls } from "./service-urls.js";
 import { createCommandBackbone, type CommandBackboneRole } from "./command-backbone.js";
 import {
   createAttemptLifecycle,
@@ -17,13 +20,15 @@ import {
   type HostedSessionStatus,
 } from "./attempt-lifecycle.js";
 import { generateAttemptQuestions } from "./question-generation.js";
+import { createIdempotentInitializer } from "./idempotent-initializer.js";
+import { createSingleFlight } from "./single-flight.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
-const hostedSitesBaseUrl =
-  process.env.HOSTED_SITES_URL ?? process.env.HOSTED_SITES_PUBLIC_URL ?? "http://localhost:3003";
+const { publicBaseUrl: hostedSitesPublicBaseUrl } = resolveHostedSitesUrls(process.env);
 const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000";
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
+const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const orchestratorRedisUrl = process.env.ORCHESTRATOR_REDIS_URL ?? process.env.REDIS_URL;
@@ -78,6 +83,8 @@ type AttemptOverviewSession = HostedAttemptReadModel["sessions"][number] & {
 };
 
 let supabaseAdmin: SupabaseClient<Database> | null | undefined;
+let initializationRedis: RedisClientType | null = null;
+let initializationRedisConnection: Promise<RedisClientType> | null = null;
 let cleanupSweepInFlight = false;
 
 function envNumber(name: string, fallback: number) {
@@ -111,6 +118,19 @@ function tokenFromStartUrl(startUrl: string) {
   } catch {
     return null;
   }
+}
+
+function buildViewerStartUrl(sessionId: string, startPath: string, expiresAt: string) {
+  if (!viewerTokenSecret) {
+    return null;
+  }
+
+  const token = createHostedViewerToken({
+    sessionId,
+    expiresAt,
+    secret: viewerTokenSecret,
+  });
+  return `${hostedSitesPublicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
 }
 
 function getSupabaseAdmin() {
@@ -462,6 +482,170 @@ async function persistScoreResult(session: AttemptLifecycleSession, result: Host
   }
 }
 
+async function recoverInitializedAttempt(params: {
+  runId: string;
+  caseId: string;
+  expectedSessionCount: number;
+}) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error("Hosted attempt recovery requires a database connection.");
+  }
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const { data: attemptRow, error: attemptError } = await supabase
+      .from("benchmark_attempts")
+      .select("id, suite_slug, suite_version, metadata")
+      .eq("run_id", params.runId)
+      .eq("case_id", params.caseId)
+      .eq("provider", "hosted-web")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (attemptError) {
+      throw attemptError;
+    }
+
+    if (attemptRow) {
+      const { data: sessionRows, error: sessionError } = await supabase
+        .from("hosted_web_sessions")
+        .select(
+          "id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, start_url, status, metadata, expires_at",
+        )
+        .eq("attempt_id", attemptRow.id)
+        .order("sequence_index", { ascending: true });
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      if (sessionRows?.length === params.expectedSessionCount) {
+        return {
+          attemptId: attemptRow.id,
+          suiteSlug: attemptRow.suite_slug,
+          suiteVersion: attemptRow.suite_version,
+          metadata: extractMetadata(attemptRow.metadata as Record<string, unknown> | null),
+          sessions: sessionRows.map((row) => {
+            const metadata = extractMetadata(row.metadata as Record<string, unknown> | null);
+            const token = tokenFromStartUrl(row.start_url);
+            const startPath =
+              typeof metadata.startPath === "string"
+                ? metadata.startPath
+                : new URL(row.start_url).pathname;
+            if (!token || typeof metadata.goal !== "string") {
+              throw new Error(`Hosted session ${row.id} cannot be recovered.`);
+            }
+            return {
+              sessionId: row.id,
+              attemptId: row.attempt_id,
+              token,
+              app: row.app,
+              taskSlug: row.task_slug,
+              taskVersion: row.task_version,
+              sequenceIndex: row.sequence_index,
+              weight: row.weight,
+              required: row.required,
+              startUrl: row.start_url,
+              viewerStartUrl: buildViewerStartUrl(
+                row.id,
+                startPath,
+                row.expires_at ?? new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString(),
+              ),
+              goal: metadata.goal,
+              title: typeof metadata.title === "string" ? metadata.title : null,
+              status: row.status,
+            };
+          }),
+        };
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error("Timed out recovering concurrently initialized hosted attempt.");
+}
+
+async function getInitializationRedis() {
+  if (initializationRedis?.isReady) {
+    return initializationRedis;
+  }
+  if (!orchestratorRedisUrl) {
+    return null;
+  }
+  if (!initializationRedisConnection) {
+    const client = createRedisClient({ url: orchestratorRedisUrl });
+    client.on("error", (error) => {
+      console.error("[hosted-orchestrator] attempt initialization lock error", error);
+    });
+    initializationRedisConnection = client.connect().then(() => {
+      initializationRedis = client;
+      return client;
+    }).catch((error) => {
+      initializationRedisConnection = null;
+      throw error;
+    });
+  }
+  return initializationRedisConnection;
+}
+
+async function findExistingInitializedAttempt(
+  params: Parameters<typeof initializeAttempt>[0],
+) {
+  if (!params.runId || !params.caseId) {
+    return null;
+  }
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error("Hosted attempt initialization requires a database connection.");
+  }
+  const { data, error } = await supabase
+    .from("benchmark_attempts")
+    .select("id")
+    .eq("run_id", params.runId)
+    .eq("case_id", params.caseId)
+    .eq("provider", "hosted-web")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  if (data) {
+    return recoverInitializedAttempt({
+      runId: params.runId,
+      caseId: params.caseId,
+      expectedSessionCount: params.sessions.length,
+    });
+  }
+  return null;
+}
+
+async function acquireInitializationLease(key: string) {
+  let redis: RedisClientType | null;
+  try {
+    redis = await getInitializationRedis();
+  } catch (error) {
+    console.error("[hosted-orchestrator] Redis unavailable; relying on database idempotency", error);
+    return null;
+  }
+  if (!redis) {
+    return null;
+  }
+  const lockOwner = crypto.randomUUID();
+  const acquired = await redis.set(`agentbench:hosted-attempt-init:${key}`, lockOwner, { NX: true, PX: 30_000 });
+  if (acquired !== "OK") return "contended" as const;
+  return {
+    release: async () => {
+      await redis.eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+        { keys: [`agentbench:hosted-attempt-init:${key}`], arguments: [lockOwner] },
+      );
+    },
+  };
+}
+
 async function initializeAttempt(params: {
   runId: string | null;
   caseId: string | null;
@@ -526,6 +710,13 @@ async function initializeAttempt(params: {
     .single();
 
   if (attemptError || !attemptRow) {
+    if (attemptError?.code === "23505") {
+      return recoverInitializedAttempt({
+        runId,
+        caseId,
+        expectedSessionCount: generatedSessions.length,
+      });
+    }
     throw attemptError ?? new Error("Failed to create hosted attempt");
   }
 
@@ -534,7 +725,7 @@ async function initializeAttempt(params: {
   const rows = orderedSessions.map((session) => {
     const token = makeId("tok");
     const startPath = session.startPath ?? defaultStartPathForApp(session.app);
-    const startUrl = `${hostedSitesBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
+    const startUrl = `${hostedSitesPublicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
     const status: HostedSessionStatus = session.sequenceIndex > 0 ? "created" : "active";
     const sessionMetadata = {
       ...session.metadata,
@@ -603,6 +794,7 @@ async function initializeAttempt(params: {
         weight: row.weight,
         required: row.required,
         startUrl: row.start_url,
+        viewerStartUrl: buildViewerStartUrl(row.id, new URL(seed.start_url).pathname, expiresAt),
         goal: metadata.goal,
         title: typeof metadata.title === "string" ? metadata.title : null,
         status: row.status,
@@ -620,6 +812,39 @@ async function initializeAttempt(params: {
   };
 
   await supabase.from("benchmark_attempts").update({ metadata: mergedMetadata }).eq("id", attemptRow.id);
+
+  await Promise.all(
+    sessions.map((session) =>
+      forwardRunEvent(
+        {
+          id: session.sessionId,
+          token: session.token,
+          runId,
+          attemptId: attemptRow.id,
+          app: session.app,
+          taskSlug: session.taskSlug,
+          suiteSlug: params.suiteSlug,
+          sequenceIndex: session.sequenceIndex,
+          weight: session.weight,
+          status: session.status === "scoring" ? "active" : session.status,
+          startPath: new URL(session.startUrl).pathname,
+          persisted: true,
+        },
+        "hosted.session.created",
+        {
+          source: "hosted-orchestrator",
+          sessionId: session.sessionId,
+          attemptId: attemptRow.id,
+          app: session.app,
+          taskSlug: session.taskSlug,
+          sequenceIndex: session.sequenceIndex,
+          weight: session.weight,
+          required: session.required,
+          viewerStartUrl: session.viewerStartUrl,
+        },
+      ),
+    ),
+  );
 
   return {
     attemptId: attemptRow.id,
@@ -786,8 +1011,30 @@ const attemptLifecycle = createAttemptLifecycle({
   evictInMemorySessions: () => undefined,
 });
 
+const initializeAttemptIdempotently = createIdempotentInitializer({
+  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
+  findExisting: findExistingInitializedAttempt,
+  waitForExisting: (params) => {
+    if (!params.runId || !params.caseId) {
+      throw new Error("Hosted attempt recovery requires run and case ids.");
+    }
+    return recoverInitializedAttempt({
+      runId: params.runId,
+      caseId: params.caseId,
+      expectedSessionCount: params.sessions.length,
+    });
+  },
+  acquireLock: acquireInitializationLease,
+  create: initializeAttempt,
+});
+
+const initializeAttemptSingleFlight = createSingleFlight({
+  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
+  run: initializeAttemptIdempotently,
+});
+
 const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOverviewSession>>({
-  initializeAttempt,
+  initializeAttempt: initializeAttemptSingleFlight,
   completeSessionCommand: (session, result) =>
     attemptLifecycle.executeCompleteSessionCommand({
       type: "complete-session",
@@ -811,7 +1058,7 @@ const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOver
   loadAttemptReadModel,
   forwardRunEvent,
   forwardCompletion,
-  publicBaseUrl: hostedSitesBaseUrl,
+  publicBaseUrl: hostedSitesPublicBaseUrl,
   defaultStartPathForApp,
 });
 

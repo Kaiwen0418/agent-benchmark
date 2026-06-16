@@ -34,6 +34,7 @@ export function layout(params: {
 }) {
   const uiVariant = readUiVariant(params.session.metadata);
   const uiTheme = readUiTheme(params.session.metadata);
+  const isViewer = params.session.accessMode === "viewer";
   const appNav =
     params.session.app === "wiki-lite"
       ? `<a href="/wiki?session=${encodeURIComponent(params.session.token)}">Knowledge base</a>`
@@ -43,7 +44,7 @@ export function layout(params: {
           ? `<a href="/repo?session=${encodeURIComponent(params.session.token)}">Repository</a>`
           : `<a href="/shopping?session=${encodeURIComponent(params.session.token)}">Catalog</a>
              <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>`;
-  const telemetry = `
+  const telemetry = isViewer ? "" : `
     <script>
       window.AgentBenchHostedSession = ${JSON.stringify({
         token: params.session.token,
@@ -171,6 +172,11 @@ export function layout(params: {
       .nav a { white-space: nowrap; }
       .score { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
       .layout-badge { display: inline-block; margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+      .viewer-banner { margin: 0 24px; padding: 10px 14px; border: 1px solid var(--line); background: var(--accent-soft); color: var(--ink); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+      .viewer-readonly form, .viewer-readonly a { pointer-events: none; }
+      .viewer-readonly form { opacity: .58; }
+      .viewer-readonly button, .viewer-readonly input, .viewer-readonly textarea, .viewer-readonly select { cursor: not-allowed; }
+      .viewer-readonly a { cursor: default; }
 
       body.theme-dark {
         color-scheme: dark;
@@ -327,8 +333,9 @@ export function layout(params: {
     </style>
     ${telemetry}
   </head>
-  <body class="ui-${uiVariant} theme-${uiTheme}" data-ui-variant="${uiVariant}" data-ui-theme="${uiTheme}">
+  <body class="ui-${uiVariant} theme-${uiTheme}${isViewer ? " viewer-readonly" : ""}" data-ui-variant="${uiVariant}" data-ui-theme="${uiTheme}">
     <div class="shell">
+    ${isViewer ? '<div class="viewer-banner">Live read-only session view</div>' : ""}
     <header>
       <div class="heading">
         <span class="layout-badge">${escapeHtml(params.session.app)} · ${uiVariant} · ${uiTheme}</span>

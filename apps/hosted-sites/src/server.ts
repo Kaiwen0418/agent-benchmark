@@ -23,12 +23,14 @@ import { createOrchestratorClient } from "./runtime/orchestrator-client.js";
 import { createRedisSessionCache } from "./runtime/session-cache.js";
 import { createSessionStore } from "./runtime/session-store.js";
 import { createTelemetryRuntime } from "./runtime/telemetry.js";
+import { isHostedViewerMutation } from "./runtime/viewer-access.js";
 
 const port = Number(process.env.HOSTED_SITES_PORT ?? 3003);
 const publicBaseUrl = process.env.HOSTED_SITES_PUBLIC_URL ?? `http://localhost:${port}`;
 const orchestratorBaseUrl = process.env.HOSTED_ORCHESTRATOR_URL ?? "http://localhost:3004";
 const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000";
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
+const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const instanceId = process.env.HOSTED_SITES_INSTANCE_ID ?? `${hostname()}:${process.pid}`;
@@ -100,6 +102,7 @@ const sessionStore = createSessionStore({
   now,
   makeId,
   hashToken,
+  viewerTokenSecret,
   getSupabaseAdmin,
   persistSessionSnapshotDurably: orchestratorClient.persistSessionSnapshot,
   persistSessionAccess: orchestratorClient.recordSessionAccess,
@@ -182,6 +185,12 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
   try {
+    const requestToken = url.searchParams.get("session");
+    if (isHostedViewerMutation(request.method, requestToken, viewerTokenSecret)) {
+      sendJson(response, 403, { error: "Viewer sessions are read-only" });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/health") {
       sendJson(response, 200, {
         ok: true,

@@ -9,6 +9,10 @@ import type {
   RunStatus,
 } from "@agentbench/protocol";
 import { create } from "zustand";
+import {
+  deriveHostedScoring,
+  type HostedSessionBreakdown,
+} from "./hosted-scoring";
 
 export type PlaygroundBenchmark =
   | "web-search"
@@ -46,6 +50,7 @@ type PlaygroundStore = {
   phase: RunPhase;
   statusLine: string;
   score: number | null;
+  scoringSessions: HostedSessionBreakdown[];
   activeTab: PanelTab;
   liveSlide: number;
   timeline: TimelineEntry[];
@@ -92,6 +97,7 @@ const initialState = {
   phase: "idle" as RunPhase,
   statusLine: "Run a benchmark to see your agent in action.",
   score: null,
+  scoringSessions: [] as HostedSessionBreakdown[],
   activeTab: "events" as PanelTab,
   liveSlide: 0,
   timeline: [] as TimelineEntry[],
@@ -203,6 +209,26 @@ function hostedTimelineLabel(event: RunEvent) {
   return `hosted.${String(event.payload.type ?? "action")}`;
 }
 
+function hostedTimelineDetail(event: RunEvent) {
+  if (event.type === "hosted.session.created") {
+    return `${String(event.payload.app ?? "hosted-app")} · ${String(event.payload.taskSlug ?? "hosted-task")}`;
+  }
+
+  if (event.type === "hosted.page.load") {
+    return String(event.payload.title ?? event.payload.url ?? "Hosted page loaded");
+  }
+
+  if (event.type === "hosted.task_signal") {
+    return String(event.payload.name ?? "Task signal received");
+  }
+
+  if (event.type === "hosted.score") {
+    return `Score ${String(event.payload.score ?? "--")}`;
+  }
+
+  return String(event.payload.type ?? "Hosted action");
+}
+
 function mapRunStatus(status: RunStatus): RunPhase {
   if (status === "queued" || status === "waiting_for_agent" || status === "agent_connected" || status === "starting") {
     return "booting";
@@ -257,8 +283,9 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
             ? `artifact.${String(event.payload.type ?? "created")}`
             : "score.updated";
 
-      const detail =
-        typeof event.payload.reason === "string"
+      const detail = event.type.startsWith("hosted.")
+        ? hostedTimelineDetail(event)
+        : typeof event.payload.reason === "string"
           ? event.payload.reason
           : typeof event.payload.name === "string"
             ? event.payload.name
@@ -322,9 +349,13 @@ function mapArtifacts(artifacts: Artifact[]): ArtifactEntry[] {
   });
 }
 
-function deriveScore(run: BenchmarkRun, events: RunEvent[]) {
+function deriveScore(run: BenchmarkRun, hostedScore: number | null, events: RunEvent[]) {
   if (typeof run.score === "number") {
     return run.score;
+  }
+
+  if (hostedScore !== null) {
+    return hostedScore;
   }
 
   const scoreEvent = [...events].reverse().find((event) => event.type === "score.updated" || event.type === "hosted.score");
@@ -352,19 +383,29 @@ function applyRunSnapshot(
   set: (partial: Partial<PlaygroundStore>) => void,
 ) {
   const { run, events, artifacts } = snapshot;
-  const phase = mapRunStatus(run.status);
+  const runPhase = mapRunStatus(run.status);
+  const hasHostedActivity = events.some(
+    (event) =>
+      event.type === "hosted.page.load" ||
+      event.type === "hosted.action" ||
+      event.type === "hosted.task_signal" ||
+      event.type === "hosted.score",
+  );
+  const phase = runPhase === "booting" && hasHostedActivity ? "running" : runPhase;
   const lastEvent = events[events.length - 1];
-  const score = deriveScore(run, events);
+  const hostedScoring = deriveHostedScoring(events);
+  const score = deriveScore(run, hostedScoring.score, events);
   const timeline = mapTimeline(events);
   const liveFrameUrl = deriveLiveFrameUrl(events, artifacts);
 
   set({
     currentRunId: run.id,
     currentExecutionMode: run.executionMode,
-    liveViewUrl: run.liveViewUrl,
+    liveViewUrl: run.liveViewUrl ?? `/runs/${run.id}/live`,
     phase,
     statusLine: lastEvent ? eventSummary(lastEvent) : "Run created",
     score,
+    scoringSessions: hostedScoring.sessions,
     liveSlide: Math.min(Math.max(timeline.length, phase === "idle" ? 0 : 1), 4),
     timeline,
     reasoning: events.slice(-6).map(eventSummary),
@@ -564,10 +605,11 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       set({
         currentRunId: result.run.id,
         currentExecutionMode: result.run.executionMode,
-        liveViewUrl: result.run.liveViewUrl,
+        liveViewUrl: result.run.liveViewUrl ?? `/runs/${result.run.id}/live`,
         phase: "booting",
         statusLine: mode === "external-agent" ? "Waiting for agent connection" : "Run queued",
         score: null,
+        scoringSessions: [],
         timeline: [],
         reasoning:
           mode === "external-agent"

@@ -45,3 +45,21 @@ for (const uiVariant of ["workspace", "sidebar", "compact", "dashboard", "editor
     });
   }
 }
+
+test("viewer layout disables navigation and mutations while retaining the read-only marker", () => {
+  const session = makeSession("workspace", "light");
+  session.accessMode = "viewer";
+
+  const html = layout({
+    title: "Generated Wiki",
+    session,
+    body: '<form><button type="submit">Submit</button></form>',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+
+  assert.match(html, /class="ui-workspace theme-light viewer-readonly"/);
+  assert.match(html, /Live read-only session view/);
+  assert.match(html, /\.viewer-readonly form, \.viewer-readonly a \{ pointer-events: none; \}/);
+  assert.doesNotMatch(html, /window\.AgentBenchHostedSession/);
+});

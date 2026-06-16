@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { deriveHostedViewerRevision, deriveHostedViewerUrl } from "@/lib/hosted-viewer";
+import { deriveHostedScoring } from "@/lib/hosted-scoring";
 
 type LiveRunViewerProps = {
   runId: string;
@@ -9,6 +11,7 @@ type LiveRunViewerProps = {
   initialScore: number | null;
   initialErrorMessage: string | null;
   initialFrameUrl: string | null;
+  initialViewerUrl: string | null;
   embedded?: boolean;
 };
 
@@ -59,11 +62,7 @@ function deriveScore(payload: StreamPayload, fallback: number | null) {
     return payload.run.score;
   }
 
-  const hostedScore = [...payload.events]
-    .reverse()
-    .find((event) => event.type === "hosted.score" && typeof event.payload.score === "number");
-
-  return typeof hostedScore?.payload.score === "number" ? hostedScore.payload.score : fallback;
+  return deriveHostedScoring(payload.events).score ?? fallback;
 }
 
 function hostedEventLabel(event: StreamEvent) {
@@ -121,12 +120,15 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
     initialScore,
     initialErrorMessage,
     initialFrameUrl,
+    initialViewerUrl,
     embedded = false,
   } = props;
   const [status, setStatus] = useState(initialStatus);
   const [score, setScore] = useState<number | null>(initialScore);
   const [errorMessage, setErrorMessage] = useState<string | null>(initialErrorMessage);
   const [frameUrl, setFrameUrl] = useState<string | null>(initialFrameUrl);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(initialViewerUrl);
+  const [viewerRevision, setViewerRevision] = useState(0);
   const [hostedEvents, setHostedEvents] = useState<StreamEvent[]>([]);
   const [suiteSessions, setSuiteSessions] = useState<HostedSuiteSession[]>([]);
 
@@ -140,6 +142,8 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       setErrorMessage(payload.run?.errorMessage ?? initialErrorMessage);
       setFrameUrl(deriveLiveFrameUrl(payload));
       const nextHostedEvents = payload.events.filter((item) => item.type.startsWith("hosted."));
+      setViewerUrl(deriveHostedViewerUrl(nextHostedEvents));
+      setViewerRevision(deriveHostedViewerRevision(nextHostedEvents));
       setHostedEvents(nextHostedEvents.slice(-8));
       setSuiteSessions(deriveHostedSuiteSessions(nextHostedEvents));
     });
@@ -148,8 +152,11 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       source.close();
     });
 
-    source.addEventListener("error", () => {
-      source.close();
+    source.addEventListener("error", (event) => {
+      // Native transport errors reconnect automatically. Only a named SSE error is terminal.
+      if (event instanceof MessageEvent) {
+        source.close();
+      }
     });
 
     return () => {
@@ -163,6 +170,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       : status === "failed"
         ? errorMessage ?? "This run failed."
         : null;
+  const latestHostedEvent = hostedEvents[hostedEvents.length - 1] ?? null;
 
   if (embedded) {
     return (
@@ -173,7 +181,16 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
             <span>{status}</span>
           </div>
           <div className="relative flex-1 bg-[#111111]">
-            {frameUrl ? (
+            {viewerUrl ? (
+              <iframe
+                key={`${viewerUrl}:${viewerRevision}`}
+                src={viewerUrl}
+                title="Read-only hosted session"
+                sandbox="allow-same-origin"
+                referrerPolicy="no-referrer"
+                className="h-full w-full border-0 bg-white"
+              />
+            ) : frameUrl ? (
               <img
                 src={frameUrl}
                 alt="Live browser session"
@@ -182,9 +199,14 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
             ) : (
               <HostedEventFallback events={hostedEvents} compact />
             )}
+            {latestHostedEvent ? (
+              <div className="pointer-events-none absolute left-2 top-2 max-w-[75%] rounded-full bg-black/70 px-3 py-1.5 text-[9px] text-[#f1ebde]">
+                {hostedEventLabel(latestHostedEvent)}
+              </div>
+            ) : null}
             <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between rounded-full bg-black/55 px-3 py-1.5 text-[9px] uppercase tracking-[0.15em] text-[#f1ebde]">
               <span className="truncate">{initialTitle}</span>
-              <span>Score {score ?? "--"}</span>
+              <span>Score {score === null ? "--" : `${Math.round(score * 100)}%`}</span>
             </div>
           </div>
         </div>
@@ -207,7 +229,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
               Status: {status}
             </div>
             <div className="rounded-full bg-[#d7ff00] px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] text-[#111111]">
-              Score: {score ?? "--"}
+              Score: {score === null ? "--" : `${Math.round(score * 100)}%`}
             </div>
           </div>
         </div>
@@ -226,8 +248,17 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
             <span>browser-session.live</span>
             <span>{runId}</span>
           </div>
-          <div className="aspect-[16/10] bg-[#111111]">
-            {frameUrl ? (
+          <div className="relative aspect-[16/10] bg-[#111111]">
+            {viewerUrl ? (
+              <iframe
+                key={`${viewerUrl}:${viewerRevision}`}
+                src={viewerUrl}
+                title="Read-only hosted session"
+                sandbox="allow-same-origin"
+                referrerPolicy="no-referrer"
+                className="h-full w-full border-0 bg-white"
+              />
+            ) : frameUrl ? (
               <img
                 src={frameUrl}
                 alt="Live browser session"
@@ -236,6 +267,11 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
             ) : (
               <HostedEventFallback events={hostedEvents} />
             )}
+            {latestHostedEvent ? (
+              <div className="pointer-events-none absolute left-4 top-4 max-w-[70%] rounded-full bg-black/70 px-4 py-2 text-xs text-[#f1ebde]">
+                {hostedEventLabel(latestHostedEvent)}
+              </div>
+            ) : null}
           </div>
         </div>
 

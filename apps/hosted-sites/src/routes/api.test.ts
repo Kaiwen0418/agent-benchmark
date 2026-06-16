@@ -6,11 +6,12 @@ import { buildInitialSessionState, defaultGoalForSession, defaultStartPathForApp
 import { badRequest, notFound, readJson } from "../runtime/http.js";
 import type { HostedSession } from "../runtime/types.js";
 
-function makeSession(): HostedSession {
+function makeSession(accessMode: "write" | "viewer" = "write"): HostedSession {
   const app = "shopping-lite";
   return {
     id: "session-1",
     token: "tok_1",
+    accessMode,
     runId: "run-1",
     caseId: "case-1",
     attemptId: "attempt-1",
@@ -57,10 +58,15 @@ function makeSession(): HostedSession {
   };
 }
 
-async function withApiServer<T>(handler: (baseUrl: string) => Promise<T>) {
+async function withApiServer<T>(
+  handler: (baseUrl: string) => Promise<T>,
+  accessMode: "write" | "viewer" = "write",
+) {
   const requestedTokens: string[] = [];
   const completedSessions: string[] = [];
-  const session = makeSession();
+  const forwardedEvents: string[] = [];
+  const recordedEvents: string[] = [];
+  const session = makeSession(accessMode);
   const apiRoutes = createApiRoutes({
     publicBaseUrl: "http://localhost:3003",
     createHostedSession: async () => session,
@@ -69,8 +75,12 @@ async function withApiServer<T>(handler: (baseUrl: string) => Promise<T>) {
       requestedTokens.push(token);
       return token === session.token ? session : null;
     },
-    recordEvent: async () => undefined,
-    forwardRunEvent: async () => undefined,
+    recordEvent: async (_session, payload) => {
+      recordedEvents.push(String(payload.type ?? "unknown"));
+    },
+    forwardRunEvent: async (_session, type) => {
+      forwardedEvents.push(type);
+    },
     telemetryRunEventType: (type) => `hosted.${type}`,
     evaluateSession,
     completeSession: async (completedSession, result) => {
@@ -97,6 +107,8 @@ async function withApiServer<T>(handler: (baseUrl: string) => Promise<T>) {
       result,
       requestedTokens,
       completedSessions,
+      forwardedEvents,
+      recordedEvents,
     }));
   } finally {
     await new Promise<void>((resolve, reject) => {
@@ -132,4 +144,42 @@ test("complete route resolves sessions through token lookup", async () => {
   assert.deepEqual(requestedTokens, ["tok_1"]);
   assert.deepEqual(completedSessions, ["tok_1"]);
   assert.equal(typeof result.body.score, "number");
+});
+
+test("viewer token in telemetry body cannot append run events", async () => {
+  const { forwardedEvents, recordedEvents, result } = await withApiServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/telemetry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session: "tok_1",
+        type: "page.load",
+        url: "/shopping",
+      }),
+    });
+    return {
+      status: response.status,
+      body: (await response.json()) as Record<string, unknown>,
+    };
+  }, "viewer");
+
+  assert.equal(result.status, 403);
+  assert.equal(result.body.error, "Viewer sessions are read-only");
+  assert.deepEqual(recordedEvents, []);
+  assert.deepEqual(forwardedEvents, []);
+});
+
+test("viewer token in complete route cannot complete a session", async () => {
+  const { completedSessions, requestedTokens, result } = await withApiServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/sessions/tok_1/complete`, { method: "POST" });
+    return {
+      status: response.status,
+      body: (await response.json()) as Record<string, unknown>,
+    };
+  }, "viewer");
+
+  assert.equal(result.status, 403);
+  assert.equal(result.body.error, "Viewer sessions are read-only");
+  assert.deepEqual(requestedTokens, ["tok_1"]);
+  assert.deepEqual(completedSessions, []);
 });

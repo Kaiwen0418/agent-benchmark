@@ -7,6 +7,8 @@
 - [快速上手](./getting-started.zh-CN.md)
 - [架构](./architecture.zh-CN.md)
 - [数据流](./data-flow.zh-CN.md)
+- [前端运行状态机](./frontend-state-machine.zh-CN.md)
+- [Hosted Attempt 一致性](./attempt-consistency.zh-CN.md)
 
 ## 契约
 

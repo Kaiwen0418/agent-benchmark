@@ -46,6 +46,7 @@ export type HostedAppPersistenceState = Partial<ShoppingAppSessionState> &
 type HostedSessionBase = {
   id: string;
   token: string;
+  accessMode?: "write" | "viewer";
   runId: string | null;
   caseId: string | null;
   attemptId: string | null;

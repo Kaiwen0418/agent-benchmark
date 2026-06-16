@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { benchmarkOptions } from "./data";
 import { RunConnectionCard } from "./RunConnectionCard";
+import { RunDetailTabs } from "./RunDetailTabs";
 import { usePlaygroundStore } from "@/lib/playground-store";
 
 export function ConnectAgentCard() {
@@ -12,8 +13,6 @@ export function ConnectAgentCard() {
   const quotaLoading = usePlaygroundStore((state) => state.quotaLoading);
   const runError = usePlaygroundStore((state) => state.runError);
   const score = usePlaygroundStore((state) => state.score);
-  const timeline = usePlaygroundStore((state) => state.timeline);
-  const liveViewUrl = usePlaygroundStore((state) => state.liveViewUrl);
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
   const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
   const startRun = usePlaygroundStore((state) => state.startRun);
@@ -60,17 +59,6 @@ export function ConnectAgentCard() {
           Stop Run
         </button>
 
-        {liveViewUrl ? (
-          <a
-            href={liveViewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 flex w-full items-center justify-center rounded-full border border-[#d8d1c4] bg-white px-5 py-3 text-sm text-[#111111]"
-          >
-            Open Live View
-          </a>
-        ) : null}
-
         <RunConnectionCard />
       </div>
     );
@@ -100,17 +88,6 @@ export function ConnectAgentCard() {
           Start Again
         </button>
 
-        {liveViewUrl ? (
-          <a
-            href={liveViewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 flex w-full items-center justify-center rounded-full border border-[#d8d1c4] bg-white px-5 py-3 text-sm text-[#111111]"
-          >
-            Open Live View
-          </a>
-        ) : null}
-
         {runError ? (
           <div className="mt-3 rounded-[1rem] border border-[#ead2ca] bg-[#fff0eb] p-3 text-[13px] leading-6 text-[#8a4334]">
             {runError}
@@ -122,7 +99,9 @@ export function ConnectAgentCard() {
           <div className="mt-3 grid grid-cols-3 gap-2">
             <div className="rounded-[1rem] bg-[#d7ff00] p-3">
               <div className="text-[10px] uppercase tracking-[0.18em] text-[#4b5520]">Score</div>
-              <div className="mt-1.5 text-2xl font-medium text-[#111111]">{score ?? "--"}</div>
+              <div className="mt-1.5 text-2xl font-medium text-[#111111]">
+                {score === null ? "--" : `${Math.round(score * 100)}%`}
+              </div>
             </div>
             <div className="rounded-[1rem] bg-[#efede6] p-3">
               <div className="text-[10px] uppercase tracking-[0.18em] text-[#6a655c]">Safety</div>
@@ -138,48 +117,7 @@ export function ConnectAgentCard() {
             </div>
           </div>
 
-          {timeline.length > 0 ? (
-            <div className="mt-4">
-              <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-[#8f8a80]">Recent events</div>
-              <div className="scroll-panel max-h-40 space-y-1.5 overflow-y-auto pr-1">
-                {timeline.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center justify-between gap-3 rounded-[0.75rem] bg-[#f6f3ed] px-3 py-2"
-                  >
-                    <span className="truncate text-[13px] text-[#111111]">{entry.label}</span>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] ${
-                        entry.status === "success"
-                          ? "bg-[#d7ff00] text-[#111111]"
-                          : entry.status === "warning"
-                            ? "bg-[#ffd24f] text-[#111111]"
-                            : entry.status === "error"
-                              ? "bg-[#ff8f6b] text-[#111111]"
-                              : "bg-[#efede6] text-[#5c574d]"
-                      }`}
-                    >
-                      {entry.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4 space-y-2">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-[#8f8a80]">Tips</div>
-              {[
-                "Use Agent Link to hand the run context to an agent without exposing raw JSON by default.",
-                "Hosted-web runs use a session-scoped benchmark site and server-side scoring.",
-                "Each benchmark has a specific goal. The agent is scored on task completion and safety.",
-              ].map((tip) => (
-                <div key={tip} className="flex gap-2.5 rounded-[0.85rem] bg-[#f6f3ed] px-3 py-2.5">
-                  <span className="mt-0.5 shrink-0 text-[#a09890]">→</span>
-                  <span className="text-[13px] leading-5 text-[#5c574d]">{tip}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <RunDetailTabs />
         </div>
       </div>
     );

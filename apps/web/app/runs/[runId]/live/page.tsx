@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { LiveRunViewer } from "@/components/run/LiveRunViewer";
 import { getBenchmarkCase, getBenchmarkRun, listArtifacts, listRunEvents } from "@/lib/db";
+import { deriveHostedViewerUrl } from "@/lib/hosted-viewer";
+import { deriveHostedScoring } from "@/lib/hosted-scoring";
 
 function getEventPayloadUrl(payload: Awaited<ReturnType<typeof listRunEvents>>[number]["payload"]) {
   return payload && typeof payload === "object" && !Array.isArray(payload) && typeof payload.url === "string"
@@ -36,6 +38,9 @@ export default async function RunLivePage({
 }) {
   const { runId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  if (resolvedSearchParams?.embed !== "1") {
+    notFound();
+  }
   const run = await getBenchmarkRun(runId);
 
   if (!run) {
@@ -53,10 +58,11 @@ export default async function RunLivePage({
       runId={runId}
       initialTitle={benchmarkCase?.title ?? "AgentBench Live Run"}
       initialStatus={run.status}
-      initialScore={run.score}
+      initialScore={run.score ?? deriveHostedScoring(events).score}
       initialErrorMessage={run.errorMessage}
       initialFrameUrl={deriveInitialFrameUrl(events, artifacts)}
-      embedded={resolvedSearchParams?.embed === "1"}
+      initialViewerUrl={deriveHostedViewerUrl(events)}
+      embedded
     />
   );
 }

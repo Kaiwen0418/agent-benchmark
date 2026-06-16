@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - develop
       - main
     paths:
       - '.github/workflows/deploy-hosted-sites.yml'
@@ -11,11 +12,13 @@ on:
       - 'apps/hosted-orchestrator/**'
       - 'packages/scoring/**'
       - 'packages/shared/**'
+      - 'supabase/migrations/**'
       - 'infra/docker/hosted-sites.Dockerfile'
       - 'infra/docker/hosted-orchestrator.Dockerfile'
       - 'infra/docker/docker-compose.server.yml'
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'
+      - 'infra/scripts/deploy-hosted-stack.sh'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -26,12 +29,40 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: hosted-deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  validate-ref:
+    runs-on: ubuntu-latest
+    outputs:
+      image_channel: ${{ steps.environment.outputs.image_channel }}
+    steps:
+      - name: Select deployment environment
+        id: environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${GITHUB_REF}" in
+            refs/heads/develop)
+              echo "image_channel=develop" >> "${GITHUB_OUTPUT}"
+              ;;
+            refs/heads/main)
+              echo "image_channel=main" >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "Hosted deployment is only allowed from develop or main; received ${GITHUB_REF}." >&2
+              exit 1
+              ;;
+          esac
+
   detect-changes:
+    needs: validate-ref
     runs-on: ubuntu-latest
     outputs:
       hosted_sites: ${{ steps.changes.outputs.hosted_sites }}
@@ -51,7 +82,7 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE_TAG="${GITHUB_SHA::12}"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "${GITHUB_OUTPUT}"
           CHANGES_FILE="$(mktemp)"
 
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
@@ -59,23 +90,26 @@ jobs:
               'hosted_sites=true' \
               'orchestrator=true' \
               'infra=true' \
-              'topology=true' > "$CHANGES_FILE"
+              'topology=true' > "${CHANGES_FILE}"
           else
             BASE_SHA="${{ github.event.before }}"
-            if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            if [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
               BASE_SHA="HEAD^"
             fi
-            git diff --name-only "$BASE_SHA" "$GITHUB_SHA" | tee /dev/stderr | \
-              bash infra/scripts/classify-hosted-deploy-changes.sh > "$CHANGES_FILE"
+            git diff --name-only "${BASE_SHA}" "${GITHUB_SHA}" | tee /dev/stderr | \
+              bash infra/scripts/classify-hosted-deploy-changes.sh > "${CHANGES_FILE}"
           fi
 
-          cat "$CHANGES_FILE" >> "$GITHUB_OUTPUT"
-          hosted_sites="$(sed -n 's/^hosted_sites=//p' "$CHANGES_FILE")"
-          orchestrator="$(sed -n 's/^orchestrator=//p' "$CHANGES_FILE")"
-          infra="$(sed -n 's/^infra=//p' "$CHANGES_FILE")"
-          topology="$(sed -n 's/^topology=//p' "$CHANGES_FILE")"
+          cat "${CHANGES_FILE}" >> "${GITHUB_OUTPUT}"
+          hosted_sites="$(sed -n 's/^hosted_sites=//p' "${CHANGES_FILE}")"
+          orchestrator="$(sed -n 's/^orchestrator=//p' "${CHANGES_FILE}")"
+          infra="$(sed -n 's/^infra=//p' "${CHANGES_FILE}")"
+          topology="$(sed -n 's/^topology=//p' "${CHANGES_FILE}")"
           {
             echo "## Hosted deployment targets"
+            echo
+            echo "Branch: \`${GITHUB_REF_NAME}\`"
+            echo "Image channel: \`${{ needs.validate-ref.outputs.image_channel }}\`"
             echo
             echo "| Target | Changed |"
             echo "| --- | --- |"
@@ -85,10 +119,12 @@ jobs:
             echo "| compose topology | ${topology} |"
             echo
             echo "Image tag: \`${IMAGE_TAG}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   build-hosted-sites:
-    needs: detect-changes
+    needs:
+      - validate-ref
+      - detect-changes
     if: needs.detect-changes.outputs.hosted_sites == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -97,9 +133,10 @@ jobs:
 
       - name: Set image metadata
         id: meta
+        shell: bash
         run: |
           OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-          echo "image=${REGISTRY}/${OWNER}/agentbench-hosted-sites" >> "$GITHUB_OUTPUT"
+          echo "image=${REGISTRY}/${OWNER}/agentbench-hosted-sites" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -119,10 +156,12 @@ jobs:
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:${{ needs.detect-changes.outputs.image_tag }}
-            ${{ steps.meta.outputs.image }}:latest-main
+            ${{ steps.meta.outputs.image }}:latest-${{ needs.validate-ref.outputs.image_channel }}
 
   build-orchestrator:
-    needs: detect-changes
+    needs:
+      - validate-ref
+      - detect-changes
     if: needs.detect-changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -131,9 +170,10 @@ jobs:
 
       - name: Set image metadata
         id: meta
+        shell: bash
         run: |
           OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-          echo "image=${REGISTRY}/${OWNER}/agentbench-hosted-orchestrator" >> "$GITHUB_OUTPUT"
+          echo "image=${REGISTRY}/${OWNER}/agentbench-hosted-orchestrator" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -153,195 +193,134 @@ jobs:
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:${{ needs.detect-changes.outputs.image_tag }}
-            ${{ steps.meta.outputs.image }}:latest-main
+            ${{ steps.meta.outputs.image }}:latest-${{ needs.validate-ref.outputs.image_channel }}
 
-  deploy-server:
+  migrate-development:
+    if: github.ref == 'refs/heads/develop'
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-dev
+    environment: development
+    needs: validate-ref
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.75.0
+
+      - name: Apply development database migrations
+        env:
+          TEST_SUPABASE_DB_URL: ${{ secrets.TEST_SUPABASE_DB_URL }}
+        run: bash scripts/db-migrate.sh test
+
+  migrate-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-prod
+    environment: production
+    needs: validate-ref
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.75.0
+
+      - name: Apply production database migrations
+        env:
+          PROD_SUPABASE_DB_URL: ${{ secrets.PROD_SUPABASE_DB_URL }}
+        run: bash scripts/db-migrate.sh production
+
+  deploy-development:
     if: |
       always() &&
+      github.ref == 'refs/heads/develop' &&
       needs.detect-changes.result == 'success' &&
+      needs.migrate-development.result == 'success' &&
+      (needs.build-hosted-sites.result == 'success' || needs.build-hosted-sites.result == 'skipped') &&
+      (needs.build-orchestrator.result == 'success' || needs.build-orchestrator.result == 'skipped')
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-dev
+    environment: development
+    needs:
+      - detect-changes
+      - build-hosted-sites
+      - build-orchestrator
+      - migrate-development
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Deploy development stack
+        env:
+          DEPLOYMENT_ENVIRONMENT: development
+          COMPOSE_PROJECT_NAME: agentbench-development
+          IMAGE_CHANNEL: develop
+          IMAGE_TAG: ${{ needs.detect-changes.outputs.image_tag }}
+          HOSTED_SITES_CHANGED: ${{ needs.detect-changes.outputs.hosted_sites }}
+          ORCHESTRATOR_CHANGED: ${{ needs.detect-changes.outputs.orchestrator }}
+          INFRA_CHANGED: ${{ needs.detect-changes.outputs.infra }}
+          TOPOLOGY_CHANGED: ${{ needs.detect-changes.outputs.topology }}
+          GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
+          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
+          HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
+          HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8081' }}
+        run: bash infra/scripts/deploy-hosted-stack.sh
+
+  deploy-production:
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.result == 'success' &&
+      needs.migrate-production.result == 'success' &&
       (needs.build-hosted-sites.result == 'success' || needs.build-hosted-sites.result == 'skipped') &&
       (needs.build-orchestrator.result == 'success' || needs.build-orchestrator.result == 'skipped')
     runs-on:
       - self-hosted
       - linux
       - agentbench-prod
+    environment: production
     needs:
       - detect-changes
       - build-hosted-sites
       - build-orchestrator
+      - migrate-production
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Deploy on self-hosted runner
+      - name: Deploy production stack
         env:
+          DEPLOYMENT_ENVIRONMENT: production
+          COMPOSE_PROJECT_NAME: agentbench-production
+          IMAGE_CHANNEL: main
           IMAGE_TAG: ${{ needs.detect-changes.outputs.image_tag }}
           HOSTED_SITES_CHANGED: ${{ needs.detect-changes.outputs.hosted_sites }}
           ORCHESTRATOR_CHANGED: ${{ needs.detect-changes.outputs.orchestrator }}
           INFRA_CHANGED: ${{ needs.detect-changes.outputs.infra }}
           TOPOLOGY_CHANGED: ${{ needs.detect-changes.outputs.topology }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
-          AGENTBENCH_WEB_URL: ${{ secrets.AGENTBENCH_WEB_URL }}
+          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
-          HOSTED_SITES_PUBLIC_URL: ${{ secrets.HOSTED_SITES_PUBLIC_URL }}
-          HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ secrets.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
+          HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8080' }}
-        run: |
-            set -euo pipefail
-            OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-            HOSTED_IMAGE="ghcr.io/${OWNER}/agentbench-hosted-sites"
-            ORCHESTRATOR_IMAGE="ghcr.io/${OWNER}/agentbench-hosted-orchestrator"
-            HOSTED_SITES_IMAGE_TAG="latest-main"
-            HOSTED_ORCHESTRATOR_IMAGE_TAG="latest-main"
-            if [ "$HOSTED_SITES_CHANGED" = "true" ]; then
-              HOSTED_SITES_IMAGE_TAG="$IMAGE_TAG"
-            fi
-            if [ "$ORCHESTRATOR_CHANGED" = "true" ]; then
-              HOSTED_ORCHESTRATOR_IMAGE_TAG="$IMAGE_TAG"
-            fi
-            GATEWAY_IMAGE="nginx:1.27-alpine"
-            case "$(uname -m)" in
-              x86_64|amd64)
-                GATEWAY_PLATFORM="linux/amd64"
-                ;;
-              aarch64|arm64)
-                GATEWAY_PLATFORM="linux/arm64"
-                ;;
-              *)
-                echo "Unsupported gateway host architecture: $(uname -m)" >&2
-                exit 1
-                ;;
-            esac
-            if docker compose version >/dev/null 2>&1; then
-              COMPOSE="docker compose"
-            elif command -v docker-compose >/dev/null 2>&1; then
-              COMPOSE="docker-compose"
-            else
-              echo "docker compose plugin or docker-compose is required on the self-hosted runner." >&2
-              exit 127
-            fi
-
-            cat > .env.server <<EOF
-            HOSTED_SITES_IMAGE=${HOSTED_IMAGE}
-            HOSTED_ORCHESTRATOR_IMAGE=${ORCHESTRATOR_IMAGE}
-            HOSTED_SITES_IMAGE_TAG=${HOSTED_SITES_IMAGE_TAG}
-            HOSTED_ORCHESTRATOR_IMAGE_TAG=${HOSTED_ORCHESTRATOR_IMAGE_TAG}
-            AGENTBENCH_WEB_URL=${AGENTBENCH_WEB_URL}
-            RUNNER_SHARED_SECRET=${RUNNER_SHARED_SECRET}
-            HOSTED_SITES_PUBLIC_URL=${HOSTED_SITES_PUBLIC_URL}
-            HOSTED_ORCHESTRATOR_URL=http://hosted-orchestrator:3004
-            HOSTED_ORCHESTRATOR_PUBLIC_URL=${HOSTED_ORCHESTRATOR_PUBLIC_URL}
-            NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-            SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-            HOSTED_SESSION_REDIS_URL=redis://redis:6379
-            ORCHESTRATOR_REDIS_URL=redis://redis:6379
-            ORCHESTRATOR_PARTITION_COUNT=16
-            ORCHESTRATOR_WORKER_0_PARTITIONS=0,1,2,3,4,5,6,7
-            ORCHESTRATOR_WORKER_1_PARTITIONS=8,9,10,11,12,13,14,15
-            HOSTED_SESSION_REDIS_TTL_MS=21600000
-            REDIS_IMAGE=redis:7-alpine
-            GATEWAY_HTTP_PORT=${GATEWAY_HTTP_PORT}
-            GATEWAY_IMAGE=${GATEWAY_IMAGE}
-            GATEWAY_PLATFORM=${GATEWAY_PLATFORM}
-            EOF
-
-            test -f infra/nginx/hosted-sites.conf
-            ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml config >/tmp/agentbench-compose.yml
-            grep -F "infra/nginx/hosted-sites.conf" /tmp/agentbench-compose.yml >/dev/null
-            grep -F "platform: ${GATEWAY_PLATFORM}" /tmp/agentbench-compose.yml >/dev/null
-
-            dump_deploy_logs() {
-              echo "---- host architecture ----"
-              uname -a || true
-              echo "gateway image=${GATEWAY_IMAGE}"
-              echo "gateway platform=${GATEWAY_PLATFORM}"
-              echo "---- gateway image architecture ----"
-              docker image inspect "${GATEWAY_IMAGE}" --format '{{.Os}}/{{.Architecture}}' 2>/dev/null || true
-              echo "---- .env.server keys ----"
-              sed -n 's/^\([^=]*\)=.*/\1=<redacted>/p' .env.server 2>/dev/null || true
-              echo "---- docker compose ps ----"
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml ps -a || true
-              echo "---- docker ps agentbench-hosted-sites ----"
-              docker ps -a --filter "name=agentbench-hosted-sites" --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
-              echo "---- listening ports ----"
-              (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null || true) | grep -E ":${GATEWAY_HTTP_PORT}\\b|:80\\b|:3003\\b|:3004\\b" || true
-              echo "---- gateway inspect ports ----"
-              docker inspect agentbench-hosted-sites-gateway-1 --format '{{json .NetworkSettings.Ports}}' 2>/dev/null || true
-              echo "---- compose logs ----"
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml logs --tail=160 gateway hosted-sites hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1 redis || true
-            }
-
-            deploy_status=0
-            trap 'deploy_status=$?; if [ "$deploy_status" -ne 0 ]; then dump_deploy_logs; fi' EXIT
-
-            printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
-            HOSTED_REPLICAS="$(${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml ps -q hosted-sites 2>/dev/null | wc -l | tr -d ' ')"
-            ORCHESTRATOR_REPLICAS="$(${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml ps -q hosted-orchestrator 2>/dev/null | wc -l | tr -d ' ')"
-            HOSTED_REPLICAS="${HOSTED_REPLICAS:-1}"
-            ORCHESTRATOR_REPLICAS="${ORCHESTRATOR_REPLICAS:-1}"
-            [ "$HOSTED_REPLICAS" -gt 0 ] || HOSTED_REPLICAS=1
-            [ "$ORCHESTRATOR_REPLICAS" -gt 0 ] || ORCHESTRATOR_REPLICAS=1
-            echo "Deploy targets: hosted-sites=${HOSTED_SITES_CHANGED}, orchestrator=${ORCHESTRATOR_CHANGED}, nginx=${INFRA_CHANGED}, topology=${TOPOLOGY_CHANGED}"
-            echo "Image tags: hosted-sites=${HOSTED_SITES_IMAGE_TAG}, orchestrator=${HOSTED_ORCHESTRATOR_IMAGE_TAG}"
-
-            if [ "$HOSTED_SITES_CHANGED" = "true" ]; then
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml pull hosted-sites
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --no-deps --scale "hosted-sites=${HOSTED_REPLICAS}" hosted-sites
-            fi
-
-            if [ "$ORCHESTRATOR_CHANGED" = "true" ]; then
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml pull hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --no-deps --scale "hosted-orchestrator=${ORCHESTRATOR_REPLICAS}" hosted-orchestrator
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --no-deps hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
-            fi
-
-            if [ "$INFRA_CHANGED" = "true" ]; then
-              docker pull --platform "${GATEWAY_PLATFORM}" "${GATEWAY_IMAGE}"
-              docker run --rm --platform "${GATEWAY_PLATFORM}" --entrypoint nginx "${GATEWAY_IMAGE}" -v
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d redis
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --force-recreate --no-deps gateway
-            fi
-
-            if [ "$TOPOLOGY_CHANGED" = "true" ]; then
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d redis
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --no-deps --scale "hosted-sites=${HOSTED_REPLICAS}" hosted-sites
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --no-deps --scale "hosted-orchestrator=${ORCHESTRATOR_REPLICAS}" hosted-orchestrator
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --no-deps hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
-              ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml up -d --force-recreate --no-deps gateway
-            fi
-
-            ${COMPOSE} --env-file .env.server -f infra/docker/docker-compose.server.yml ps
-            docker inspect agentbench-hosted-sites-gateway-1 \
-              --format 'gateway state={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}' \
-              2>/dev/null || true
-
-            internal_smoke_check() {
-              docker exec agentbench-hosted-sites-hosted-sites-1 node -e "fetch('http://gateway/health').then(async (response) => { if (!response.ok) process.exit(1); const body = await response.json(); process.exit(body.sessionCache === 'redis' ? 0 : 1); }).catch((error) => { console.error(error); process.exit(1); })"
-            }
-
-            orchestrator_smoke_check() {
-              docker exec agentbench-hosted-sites-hosted-sites-1 node -e "fetch('http://gateway/orchestrator').then(async (response) => { const body = await response.json(); process.exit(response.ok && body.ok === true && body.commandBackbone === 'redis-streams' ? 0 : 1); }).catch((error) => { console.error(error); process.exit(1); })"
-            }
-
-            gateway_running() {
-              [ "$(docker inspect agentbench-hosted-sites-gateway-1 --format '{{.State.Running}}' 2>/dev/null || echo false)" = "true" ]
-            }
-
-            for attempt in $(seq 1 30); do
-              if internal_smoke_check && orchestrator_smoke_check; then
-                exit 0
-              fi
-              echo "Smoke check failed; retrying (${attempt}/30)."
-              if ! gateway_running; then
-                echo "Gateway is not running during smoke check; dumping deploy logs."
-                dump_deploy_logs
-                exit 1
-              fi
-              sleep 2
-            done
-
-            dump_deploy_logs
-            exit 1
+        run: bash infra/scripts/deploy-hosted-stack.sh

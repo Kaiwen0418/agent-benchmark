@@ -1,4 +1,4 @@
-name: agentbench-hosted-sites
+name: ${COMPOSE_PROJECT_NAME:-agentbench-hosted-sites}
 
 services:
   hosted-orchestrator:
@@ -7,47 +7,16 @@ services:
       HOSTED_ORCHESTRATOR_PORT: 3004
       HOSTED_ORCHESTRATOR_PUBLIC_URL: ${HOSTED_ORCHESTRATOR_PUBLIC_URL}
       HOSTED_SITES_URL: http://hosted-sites:3003
+      HOSTED_SITES_PUBLIC_URL: ${HOSTED_SITES_PUBLIC_URL}
       AGENTBENCH_WEB_URL: ${AGENTBENCH_WEB_URL}
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       ORCHESTRATOR_REDIS_URL: ${ORCHESTRATOR_REDIS_URL:-redis://redis:6379}
-      ORCHESTRATOR_MODE: api
+      ORCHESTRATOR_MODE: all
       ORCHESTRATOR_PARTITION_COUNT: ${ORCHESTRATOR_PARTITION_COUNT:-16}
       HOSTED_SESSION_SWEEP_INTERVAL_MS: ${HOSTED_SESSION_SWEEP_INTERVAL_MS:-60000}
       HOSTED_ACCESS_LOG_RETENTION_MS: ${HOSTED_ACCESS_LOG_RETENTION_MS:-1209600000}
-    depends_on:
-      - redis
-    restart: unless-stopped
-
-  hosted-orchestrator-worker-0:
-    image: ${HOSTED_ORCHESTRATOR_IMAGE}:${HOSTED_ORCHESTRATOR_IMAGE_TAG:-latest-main}
-    environment:
-      HOSTED_SITES_URL: http://hosted-sites:3003
-      AGENTBENCH_WEB_URL: ${AGENTBENCH_WEB_URL}
-      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET}
-      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      ORCHESTRATOR_REDIS_URL: ${ORCHESTRATOR_REDIS_URL:-redis://redis:6379}
-      ORCHESTRATOR_MODE: worker
-      ORCHESTRATOR_PARTITION_COUNT: ${ORCHESTRATOR_PARTITION_COUNT:-16}
-      ORCHESTRATOR_WORKER_PARTITIONS: ${ORCHESTRATOR_WORKER_0_PARTITIONS:-0,1,2,3,4,5,6,7}
-    depends_on:
-      - redis
-    restart: unless-stopped
-
-  hosted-orchestrator-worker-1:
-    image: ${HOSTED_ORCHESTRATOR_IMAGE}:${HOSTED_ORCHESTRATOR_IMAGE_TAG:-latest-main}
-    environment:
-      HOSTED_SITES_URL: http://hosted-sites:3003
-      AGENTBENCH_WEB_URL: ${AGENTBENCH_WEB_URL}
-      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET}
-      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      ORCHESTRATOR_REDIS_URL: ${ORCHESTRATOR_REDIS_URL:-redis://redis:6379}
-      ORCHESTRATOR_MODE: worker
-      ORCHESTRATOR_PARTITION_COUNT: ${ORCHESTRATOR_PARTITION_COUNT:-16}
-      ORCHESTRATOR_WORKER_PARTITIONS: ${ORCHESTRATOR_WORKER_1_PARTITIONS:-8,9,10,11,12,13,14,15}
     depends_on:
       - redis
     restart: unless-stopped
@@ -84,8 +53,6 @@ services:
       - ../nginx/hosted-sites.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - hosted-orchestrator
-      - hosted-orchestrator-worker-0
-      - hosted-orchestrator-worker-1
       - hosted-sites
       - redis
     restart: unless-stopped

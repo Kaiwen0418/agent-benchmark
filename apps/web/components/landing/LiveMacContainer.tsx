@@ -47,7 +47,7 @@ export function LiveMacScreenContent() {
     if (phase === "completed") {
       return {
         title: "Run completed",
-        body: `Replay captured. Score ${score ?? 0}.`,
+        body: `Replay captured. Score ${score === null ? "--" : `${Math.round(score * 100)}%`}.`,
         accent: "completed",
       };
     }
@@ -82,11 +82,13 @@ export function LiveMacScreenContent() {
   return (
     <div className="relative h-full overflow-hidden rounded-[1.05rem] bg-[#080808] text-white">
       {embeddedLiveViewUrl ? (
-        <iframe
-          src={embeddedLiveViewUrl}
-          title="Embedded live run viewer"
-          className="absolute inset-0 h-full w-full border-0 bg-[#111111]"
-        />
+        <div className="absolute inset-0 overflow-hidden bg-[#111111]">
+          <iframe
+            src={embeddedLiveViewUrl}
+            title="Embedded live run viewer"
+            className="absolute left-0 top-0 h-[220%] w-[220%] origin-top-left scale-[0.455] border-0 bg-[#111111]"
+          />
+        </div>
       ) : liveFrameUrl ? (
         <img
           src={liveFrameUrl}
