@@ -99,3 +99,9 @@ docs/                   architecture and operational documentation
 - [Data Flow](./docs/data-flow.md)
 - [Security](./docs/security.md)
 - [Orchestrator Responsibilities TODO](./docs/orchestrator-todo.md)
+
+## License
+
+AgentBench is source-available under the [PolyForm Noncommercial License 1.0.0](./LICENSE). Noncommercial use is permitted under its terms. Commercial use requires a separate license from the copyright holder.
+
+This is not an OSI-approved open-source license.

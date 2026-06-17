@@ -46,4 +46,8 @@ Maintainers may request that a large pull request be split before review.
 - Add tests for question variants, completion behavior, and scoring changes.
 - Follow [Hosted Site App Authoring](./docs/hosted-site-app-authoring.zh-CN.md) for new hosted applications.
 
-By submitting a contribution, you confirm that you have the right to submit it under the repository's chosen license and agree to follow the [Code of Conduct](./CODE_OF_CONDUCT.md).
+## Contribution License Grant
+
+You retain copyright in your contribution. By submitting a contribution, you grant Kaiwen0418, as the AgentBench project owner, a perpetual, worldwide, non-exclusive, irrevocable, royalty-free, transferable, and sublicensable license to use, reproduce, modify, prepare derivative works from, publicly display, distribute, commercialize, and relicense your contribution under any terms. You also grant a corresponding patent license for patent claims you can license that are necessarily infringed by the contribution.
+
+You represent that you have the right to grant these licenses. This grant allows the project owner to offer separate commercial licenses while keeping the public repository under the PolyForm Noncommercial License 1.0.0. By submitting a contribution, you also agree to follow the [Code of Conduct](./CODE_OF_CONDUCT.md).

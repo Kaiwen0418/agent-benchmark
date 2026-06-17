@@ -2,6 +2,7 @@
   "name": "agentbench",
   "private": true,
   "version": "0.1.0",
+  "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "turbo run dev",
