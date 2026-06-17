@@ -84,6 +84,9 @@ docs/                   architecture and operational documentation
 
 ## Documentation
 
+- [Contributing](./CONTRIBUTING.md)
+- [Security Policy](./SECURITY.md)
+- [Code of Conduct](./CODE_OF_CONDUCT.md)
 - [Documentation Index](./docs/README.md)
 - [Getting Started](./docs/getting-started.md)
 - [Architecture](./docs/architecture.md)
