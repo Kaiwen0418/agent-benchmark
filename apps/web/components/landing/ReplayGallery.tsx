@@ -5,12 +5,12 @@ export function ReplayGallery() {
     <section id="gallery" className="min-h-screen px-6 py-24 md:px-10 lg:px-16 snap-start">
       <div className="mx-auto max-w-7xl">
         <div className="mb-10 max-w-2xl">
-          <div className="text-xs uppercase tracking-[0.24em] text-[#726b5f]">Replay Gallery</div>
+          <div className="text-xs uppercase tracking-[0.24em] text-[#726b5f]">Result Gallery</div>
           <h2 className="mt-3 text-4xl font-medium tracking-[-0.05em] text-[#111111] md:text-5xl">
-            Replays should feel watchable, not archival.
+            Benchmark outcomes should be easy to compare.
           </h2>
           <p className="mt-4 text-lg leading-8 text-[#66625a]">
-            Successful runs, failed runs, funny runs, and dangerous runs all belong in the same gallery. The replay is part of the product, not an afterthought.
+            Passed, failed, and partial runs are grouped by score, task, and evidence so regressions are visible without reading raw logs.
           </p>
         </div>
 
@@ -30,7 +30,7 @@ export function ReplayGallery() {
                 <div className="mt-4 flex items-center justify-between">
                   <div className="text-3xl font-medium text-[#111111]">{card.score}</div>
                   <button type="button" className="rounded-full bg-[#111111] px-4 py-2 text-sm text-white">
-                    Watch Replay
+                    View Result
                   </button>
                 </div>
               </div>

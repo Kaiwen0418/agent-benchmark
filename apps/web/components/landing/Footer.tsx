@@ -3,7 +3,7 @@ const footerLinks = [
     heading: "Product",
     links: [
       { label: "Playground", href: "#playground" },
-      { label: "Replay Gallery", href: "#gallery" },
+      { label: "Result Gallery", href: "#gallery" },
       { label: "Benchmarks", href: "#docs" },
       { label: "Pricing", href: "#" },
     ],
@@ -12,7 +12,7 @@ const footerLinks = [
     heading: "Developers",
     links: [
       { label: "API Docs", href: "#docs" },
-      { label: "MCP Integration", href: "#docs" },
+      { label: "Hosted Suite", href: "#docs" },
       { label: "Webhooks", href: "#docs" },
       { label: "SDK", href: "#" },
     ],
@@ -37,7 +37,7 @@ export function Footer() {
           <div className="max-w-xs">
             <div className="text-xl font-semibold tracking-[-0.04em] text-white">AgentBench</div>
             <p className="mt-3 text-sm leading-6 text-white/50">
-              A live AI playground built for observability. Connect any MCP-compatible agent and watch it work.
+              Browser benchmarks for evaluating agent performance with reproducible tasks, structured evidence, and stable scoring.
             </p>
           </div>
 
