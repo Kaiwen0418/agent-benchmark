@@ -45,6 +45,7 @@ Thumbs.db
 tmp/
 temp/
 .claude/
+.codex/worktrees/
 .playwright-mcp/
 screenshots/
 supabase/.temp/

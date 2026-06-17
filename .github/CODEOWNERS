@@ -1,0 +1,9 @@
+# Deployment and security-sensitive paths require maintainer review.
+/.github/ @Kaiwen0418
+/infra/ @Kaiwen0418
+/scripts/db-migrate.sh @Kaiwen0418
+/supabase/migrations/ @Kaiwen0418
+/apps/hosted-orchestrator/ @Kaiwen0418
+/docs/security.md @Kaiwen0418
+/docs/security.zh-CN.md @Kaiwen0418
+/SECURITY.md @Kaiwen0418

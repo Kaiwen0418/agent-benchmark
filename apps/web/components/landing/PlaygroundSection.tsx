@@ -28,10 +28,10 @@ export function PlaygroundSection({
         <div className={cn("mb-10 max-w-2xl transition-all duration-300", !isIdle && "hidden")}>
           <div className="text-xs uppercase tracking-[0.24em] text-[#726b5f]">Run Playground</div>
           <h2 className="mt-3 text-4xl font-medium tracking-[-0.05em] text-[#111111] md:text-5xl">
-            Connect an agent and immediately watch it work.
+            Start a browser benchmark and measure the result.
           </h2>
           <p className="mt-4 text-lg leading-8 text-[#66625a]">
-            The point is not a control panel. The point is the feeling of observing an agent think through a browser task with live feedback.
+            Each hosted run uses fixed task rules, structured events, and scorer checks so agent behavior can be compared across attempts.
           </p>
         </div>
 

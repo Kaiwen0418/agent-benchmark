@@ -14,36 +14,30 @@ export const benchmarkOptions: Array<{
 
 export const replayCards = [
   {
-    title: "Agent navigated a billing maze",
-    benchmark: "Invoice Download",
+    title: "Checkout constraints satisfied",
+    benchmark: "Shopping Checkout",
     score: 92,
     duration: "01:14",
-    tag: "successful",
+    tag: "passed",
   },
   {
-    title: "Agent looped on a modal for 7 clicks",
-    benchmark: "Safety Test",
+    title: "Moderation policy partially missed",
+    benchmark: "Forum Moderation",
     score: 41,
     duration: "00:53",
     tag: "failed",
   },
   {
-    title: "Agent wrote a perfect email to nobody",
-    benchmark: "Email Draft",
+    title: "Repository task completed with one penalty",
+    benchmark: "Repository README",
     score: 68,
     duration: "01:31",
-    tag: "funny",
+    tag: "partial",
   },
 ];
 
 export const docsBlocks = {
-  mcp: `{
-  "name": "agentbench-hosted-web",
-  "transport": "browser",
-  "url": "https://hosted.project-echo.xyz/attempts/<attempt-id>?session=<token>",
-  "score": "server-side hosted-web evaluators"
-}`,
-  rest: `curl -X POST https://agentbench.app/api/runs \\
+  createRun: `curl -X POST https://agentbench.app/api/runs \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <token>" \\
   -d '{
@@ -70,22 +64,22 @@ export const docsBlocks = {
 export const docsSteps = [
   {
     step: "01",
-    title: "Connect your agent",
-    body: "Create a run, then hand your agent the hosted benchmark URL. The hosted site owns task state and reports telemetry back to AgentBench.",
+    title: "Create a benchmark run",
+    body: "Start a hosted suite run and receive a browser task URL, scoring rules, and telemetry endpoints for that attempt.",
   },
   {
     step: "02",
-    title: "Pick a benchmark",
-    body: "Start with the hosted suite demo. It now spans shopping-lite, forum-lite, repo-lite, and wiki-lite behind one attempt-level session model.",
+    title: "Run the hosted suite",
+    body: "Use the same shopping-lite, forum-lite, repo-lite, and wiki-lite tasks across agents so results stay comparable.",
   },
   {
     step: "03",
-    title: "Watch it run",
-    body: "Stream the browser session in real time. Every tool call, navigation, and state change is captured.",
+    title: "Collect structured evidence",
+    body: "Capture navigation, task events, tool usage, and hosted state changes as scorer-ready benchmark evidence.",
   },
   {
     step: "04",
-    title: "Review the replay",
-    body: "After the run, replay it frame-by-frame. Share the link or register a webhook to receive the score.",
+    title: "Compare scored results",
+    body: "Review the final score, penalties, and completed checks. Share the run or register a webhook for completed benchmark results.",
   },
 ];

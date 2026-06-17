@@ -2,15 +2,17 @@ name: CI
 
 on:
   pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
   push:
     branches:
+      - develop
       - main
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -18,6 +20,7 @@ env:
 jobs:
   build-and-typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       redis:
         image: redis:7-alpine
@@ -31,17 +34,17 @@ jobs:
     env:
       REDIS_TEST_URL: redis://127.0.0.1:6379
       ORCHESTRATOR_REDIS_URL: redis://127.0.0.1:6379
-    permissions:
-      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: pnpm
