@@ -84,6 +84,9 @@ docs/                   架构和运维文档
 
 ## 文档
 
+- [贡献指南](./CONTRIBUTING.md)
+- [安全报告策略](./SECURITY.md)
+- [行为准则](./CODE_OF_CONDUCT.md)
 - [文档索引](./docs/README.zh-CN.md)
 - [快速上手](./docs/getting-started.zh-CN.md)
 - [架构](./docs/architecture.zh-CN.md)
@@ -96,3 +99,9 @@ docs/                   架构和运维文档
 - [数据流](./docs/data-flow.zh-CN.md)
 - [安全](./docs/security.zh-CN.md)
 - [Orchestrator 职责优化 TODO](./docs/orchestrator-todo.zh-CN.md)
+
+## 许可证
+
+AgentBench 以 [PolyForm Noncommercial License 1.0.0](./LICENSE) 作为源码可见许可证。符合协议条款的非商业使用获得许可；商业使用必须另行取得版权所有者授权。
+
+该许可证不是 OSI 认可的开源许可证。
