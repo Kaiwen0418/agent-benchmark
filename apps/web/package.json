@@ -18,7 +18,7 @@
     "@tanstack/react-query": "^5.101.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.474.0",
-    "next": "^15.1.6",
+    "next": "^15.5.19",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwind-merge": "^2.6.0",
@@ -26,7 +26,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@types/node": "^22.10.7",
+    "@types/node": "^22.19.21",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.20",
