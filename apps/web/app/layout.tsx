@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "AgentBench Playground",
-  description: "Single-page interactive playground for watching AI agents work in real time.",
+  description: "Browser benchmark suite for reproducible agent evaluation and scored web tasks.",
 };
 
 export default function RootLayout({

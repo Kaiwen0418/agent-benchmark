@@ -24,10 +24,10 @@ export function DocsSection() {
         <div className="mb-10 max-w-2xl">
           <div className="text-xs uppercase tracking-[0.24em] text-[#726b5f]">Docs</div>
           <h2 className="mt-3 text-4xl font-medium tracking-[-0.05em] text-[#111111] md:text-5xl">
-            Minimal integration docs, directly on the homepage.
+            Benchmark integration without extra ceremony.
           </h2>
           <p className="mt-4 text-lg leading-8 text-[#66625a]">
-            Keep the path short: connect your agent, run a benchmark, and watch the result. Everything else can come later.
+            Create a run, send the hosted task URL to your agent, and compare the scored result against the same suite rules.
           </p>
         </div>
 
@@ -44,13 +44,12 @@ export function DocsSection() {
 
         {/* Code blocks row 1 */}
         <div className="mb-6 grid gap-6 md:grid-cols-2">
-          <CodeSnippetBlock title="MCP Config" code={docsBlocks.mcp} />
-          <CodeSnippetBlock title="REST Example" code={docsBlocks.rest} />
+          <CodeSnippetBlock title="Create Run" code={docsBlocks.createRun} />
+          <CodeSnippetBlock title="Run Response" code={docsBlocks.response} />
         </div>
 
         {/* Code blocks row 2 */}
         <div className="grid gap-6 md:grid-cols-2">
-          <CodeSnippetBlock title="Run Response" code={docsBlocks.response} />
           <CodeSnippetBlock title="Webhook Payload" code={docsBlocks.webhook} />
         </div>
       </div>

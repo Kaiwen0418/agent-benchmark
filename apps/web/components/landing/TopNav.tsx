@@ -8,7 +8,7 @@ function clamp(value: number, min: number, max: number) {
 
 export function TopNav() {
   const items = [
-    { href: "#gallery", label: "Replay Gallery" },
+    { href: "#gallery", label: "Result Gallery" },
     { href: "#docs", label: "Docs" },
   ];
   const [visibleProgress, setVisibleProgress] = useState(0);
