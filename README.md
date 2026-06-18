@@ -11,6 +11,8 @@ AgentBench is an interactive benchmark platform for observing and scoring tool-u
 - session-scoped task state backed by Redis
 - deterministic per-task and aggregate scoring
 - horizontally scalable hosted-sites runtime
+- partitioned Redis Streams command processing
+- isolated development and production deployment paths
 - self-hosted Linux deployment through Docker and GitHub Actions
 
 ## Quick Start
@@ -51,18 +53,21 @@ pnpm smoke:lifecycle
 
 ```mermaid
 flowchart LR
-  Agent["External Agent Browser"] -->|"session URL"| Gateway["Nginx Gateway"]
-  User["User Browser"] --> Web["apps/web"]
-  Web -->|"initialize attempt"| Orchestrator["apps/hosted-orchestrator"]
+  Agent["External Agent Browser"] -->|"session URL"| Edge["Cloudflare Tunnel"]
+  User["User Browser"] --> Web["apps/web on Vercel"]
+  Web -->|"initialize attempt"| Edge
+  Edge --> Gateway["Nginx Gateway"]
   Gateway --> Sites["apps/hosted-sites replicas"]
-  Gateway --> Orchestrator
+  Gateway --> Orchestrator["orchestrator API"]
   Sites <--> Redis[("Redis cache + command streams")]
   Web <--> DB[("Supabase")]
   Sites -.->|"read-only recovery"| DB
   Sites -->|"durable commands"| Orchestrator
-  Orchestrator -->|"hosted writes"| DB
+  Orchestrator --> Streams[("Redis Streams")]
+  Streams --> Worker["orchestrator worker role"]
+  Worker -->|"hosted writes"| DB
   Sites -->|"run events"| Web
-  Orchestrator -->|"aggregate completion"| Web
+  Worker -->|"aggregate completion"| Web
 ```
 
 ## Repository Layout
@@ -98,7 +103,7 @@ docs/                   architecture and operational documentation
 - [Data Model](./docs/data-model.md)
 - [Data Flow](./docs/data-flow.md)
 - [Security](./docs/security.md)
-- [Orchestrator Responsibilities TODO](./docs/orchestrator-todo.md)
+- [Roadmap](./docs/roadmap.md)
 
 ## License
 

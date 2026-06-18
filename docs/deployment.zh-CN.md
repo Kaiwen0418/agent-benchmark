@@ -17,11 +17,11 @@ cp .env.docker.example .env
 docker-compose up -d --build
 ```
 
-Nginx 是唯一网关，负责将托管任务流量转发到 hosted-sites，将 orchestrator 路径转发到 hosted-orchestrator。
+Nginx 是 Compose 内的唯一网关，负责将托管任务流量转发到 hosted-sites，将 orchestrator 路径转发到 hosted-orchestrator。
 
 ## 横向扩容
 
-启动多个 hosted-sites 和 orchestrator API 副本：
+在本地启动多个 hosted-sites 和 orchestrator API 副本：
 
 ```bash
 docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=2
@@ -29,7 +29,9 @@ docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=
 
 Redis 通过 `HOSTED_SESSION_REDIS_URL=redis://redis:6379` 提供 session cache，通过 `ORCHESTRATOR_REDIS_URL=redis://redis:6379` 提供 command Streams。Supabase 继续承担持久化存储，orchestrator worker 是 hosted data writer。
 
-默认 Compose 拓扑运行两个 worker，分别负责 partition `0-7` 和 `8-15`。不要对 worker service 使用 `--scale`，否则副本会争抢同一 partition。增加 worker 时，应新增 service 并将全部 partition 重新划分为互不重叠的集合。任一 partition 没有活跃 lease 时 readiness 返回 `503`。
+本地 Compose 拓扑运行两个 worker，分别负责 partition `0-7` 和 `8-15`。不要对 worker service 使用 `--scale`，否则副本会争抢同一 partition。增加 worker 时，应新增 service 并将全部 partition 重新划分为互不重叠的集合。任一 partition 没有活跃 lease 时 readiness 返回 `503`。
+
+服务器 Compose profile 当前不同：它只运行一个 `ORCHESTRATOR_MODE=all` 的 `hosted-orchestrator` service。该进程同时提供 API 并负责全部 16 个 partitions。不要将该服务扩容到一个以上副本；恢复生产独立 workers 已列入[路线图](./roadmap.zh-CN.md)。
 
 常用检查命令：
 
@@ -47,21 +49,22 @@ docker-compose logs -f --tail=200 hosted-sites hosted-orchestrator hosted-orches
 `deploy-hosted-sites.yml` 会在 build 和 pull 前对每次 push 分类：
 
 - `apps/hosted-sites/**` 只 build、pull 和 recreate hosted-sites。
-- `apps/hosted-orchestrator/**` 只 build、pull 和 recreate orchestrator API 与 workers。
+- `apps/hosted-orchestrator/**` build、pull 并 recreate 当前服务器 orchestrator service。
 - 共享 scoring/runtime package 变更会重建两个镜像。
 - Nginx 变更只 recreate gateway。
 - Compose 拓扑变更会 reconcile 全部服务，但不会 pull 未变更的应用镜像。
 
-Hosted-sites 与 orchestrator 使用独立 image tag。定向部署会保留当前副本数，因此扩容或部署一个服务不会重启或缩放另一个服务。
+Hosted-sites 与 orchestrator 使用独立 image tag。定向部署会保留当前副本数，因此扩容或部署一个服务不会重启或缩放另一个服务。服务器 orchestrator 处于 `all` mode 时，副本数必须保持为一。
 
 ## 生产拓扑
 
 生产部署拆分为：
 
 - Web 部署在 Vercel
-- hosted-sites、orchestrator API/workers、Redis 和 Nginx 部署在私有 Linux 主机
+- hosted-sites、all-mode orchestrator、Redis 和 Nginx 部署在私有 Linux 主机
 - Supabase 保存持久化应用数据
 - GHCR 保存托管运行时镜像
+- Cloudflare Tunnel 提供各环境独立的公网 ingress 和 TLS
 
 服务器配置：
 
@@ -81,7 +84,7 @@ Hosted CD 只接受 `develop` 和 `main`：
 - `develop` 自动部署到 GitHub `development` Environment，使用 `agentbench-dev` runner、`latest-develop` 镜像、`agentbench-development` Compose project，网关端口默认 `8081`。
 - `main` 只部署到 GitHub `production` Environment，使用 `agentbench-prod` runner、`latest-main` 镜像、`agentbench-production` Compose project，网关端口默认 `8080`。
 
-其他分支即使手动执行 workflow，也会在访问 self-hosted runner 前失败。建议为 `production` Environment 配置审批保护规则。
+其他分支即使手动执行 workflow，也会在访问 self-hosted runner 前失败。Required CI 还会拒绝来源不是 `develop` 或 `hotfix/*` 的 main PR。`production` Environment 应要求审批，并限制只有 `main` 可以部署。
 
 托管部署 workflow 构建镜像、推送到 GHCR，并通过 Linux 上的 self-hosted GitHub Actions runner 执行服务器部署。该基础设施 agent 与已移除的 benchmark execution runner 无关。服务器根据指定 tag 拉取镜像并重建 Compose 服务。
 
@@ -100,13 +103,41 @@ Hosted CD 只接受 `develop` 和 `main`：
 - `RUNNER_SHARED_SECRET`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
+Migration 专用数据库 secrets：
+
+- development：`TEST_SUPABASE_DB_URL`
+- production：`PROD_SUPABASE_DB_URL`
+
+两个 URL 必须指向不同数据库目标。Migration 始终显式选择目标，不使用 Supabase CLI 当前 linked project 推断。
+
 可选的 Web 部署 secret：
 
 - `VERCEL_DEPLOY_HOOK_URL`
 
-self-hosted GitHub Actions runner 必须具有 `self-hosted` 和 `linux` 标签，能够使用 Docker 和 Docker Compose，并具备足够磁盘空间以及访问 GHCR、Supabase 的网络权限。
+每个 Vercel Web project 都必须独立配置：
 
-首次启用新的生产 Compose project 名之前，需要在服务器维护窗口停止旧的 `agentbench-hosted-sites` project，否则旧 gateway 会继续占用生产端口 `8080`。确认新配置无误后，再手动移除旧 project；development project 不应操作任何 production 容器。
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `RUNNER_SHARED_SECRET`
+- `HOSTED_SITES_URL`
+- `HOSTED_ORCHESTRATOR_URL`
+- 可选 `GUEST_RUN_LIMIT`
+
+Development values 必须指向 test hosted hostname 和 development Supabase 目标；production values 必须指向 production hosted hostname 和数据库。对应 GitHub Environment 的 `AGENTBENCH_WEB_URL` 再指回该 Vercel project。
+
+self-hosted GitHub Actions runners 必须具有 `self-hosted`、`linux`，以及 development 的 `agentbench-dev` 或 production 的 `agentbench-prod` 标签；还必须能够使用 Docker 和 Docker Compose，并具备足够磁盘空间以及访问 GHCR、Supabase 的网络权限。
+
+Development project 不应操作任何 production 容器。部署脚本将 `COMPOSE_PROJECT_NAME`、image channel、runner label、gateway port、public URLs 和 database URL 视为一组经过校验的环境映射。
+
+## Cloudflare Tunnel
+
+Cloudflare 为 development 和 production 发布独立 hostname。每个公网 hostname 必须使用与本地 Nginx listener 对应的 HTTP origin：
+
+- development hosted hostname -> `http://localhost:8081`
+- production hosted hostname -> `http://localhost:8080`
+
+不要将 origin 配置为 `https://localhost:<port>`；Nginx 在宿主机端口提供 plain HTTP，公网 TLS 由 Cloudflare 负责。`HOSTED_SITES_PUBLIC_URL` 和 `HOSTED_ORCHESTRATOR_PUBLIC_URL` 必须匹配对应公网 hostname 与 orchestrator route。
 
 ## 需要手动干预服务器的情况
 

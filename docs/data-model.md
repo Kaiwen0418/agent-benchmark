@@ -162,4 +162,4 @@ stateDiagram-v2
 - The process-local Map is not authoritative and may be lost at any time.
 - `metadata.appState` is a recovery snapshot, not a separately writable domain model.
 - Attempt progression is determined by orchestrator metadata plus persisted session/result rows.
-- Session cache keys and ingest records are separate. Durable commands use the `agentbench:orchestrator:commands` Stream, consumer group `hosted-orchestrator`, 24-hour command result keys, and short-lived response lists.
+- Session cache keys and ingest records are separate. Durable commands use partitioned `agentbench:orchestrator:commands:p<N>` Streams, consumer group `hosted-orchestrator`, 24-hour command result keys, short-lived response lists, and partition lease keys.
