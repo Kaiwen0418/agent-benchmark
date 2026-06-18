@@ -17,11 +17,11 @@ cp .env.docker.example .env
 docker-compose up -d --build
 ```
 
-Nginx is the only gateway. It routes hosted task traffic to hosted-sites and orchestrator traffic to hosted-orchestrator.
+Nginx is the only gateway inside Compose. It routes hosted task traffic to hosted-sites and orchestrator traffic to hosted-orchestrator.
 
 ## Horizontal Scaling
 
-Run multiple hosted-sites and orchestrator API replicas:
+Run multiple hosted-sites and orchestrator API replicas locally:
 
 ```bash
 docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=2
@@ -29,7 +29,9 @@ docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=
 
 Redis uses `HOSTED_SESSION_REDIS_URL=redis://redis:6379` for session cache and `ORCHESTRATOR_REDIS_URL=redis://redis:6379` for command Streams. Supabase remains the durable persistence store; orchestrator workers are its hosted-data writers.
 
-The default Compose topology runs two workers: partitions `0-7` and `8-15`. Do not use `--scale` on a worker service because replicas would claim the same partitions. To add workers, define additional worker services and redistribute all partitions into disjoint sets. Readiness returns `503` while any partition has no active lease.
+The local Compose topology runs two workers: partitions `0-7` and `8-15`. Do not use `--scale` on a worker service because replicas would claim the same partitions. To add workers, define additional worker services and redistribute all partitions into disjoint sets. Readiness returns `503` while any partition has no active lease.
+
+The server Compose profile is currently different: it runs one `hosted-orchestrator` service with `ORCHESTRATOR_MODE=all`. That process serves the API and owns all 16 partitions. Do not scale this service above one replica. Restoring separate production workers is a [roadmap](./roadmap.md) item.
 
 Useful checks:
 
@@ -47,21 +49,22 @@ Do not publish a fixed host port for each hosted-sites replica. Nginx should rea
 `deploy-hosted-sites.yml` classifies each push before building or pulling images:
 
 - `apps/hosted-sites/**` builds, pulls, and recreates only hosted-sites.
-- `apps/hosted-orchestrator/**` builds, pulls, and recreates only the orchestrator API and workers.
+- `apps/hosted-orchestrator/**` builds, pulls, and recreates the current server orchestrator service.
 - shared scoring/runtime packages rebuild both images.
 - Nginx changes recreate only the gateway.
 - Compose topology changes reconcile all services without pulling unaffected application images.
 
-Hosted-sites and orchestrator use independent image tags. Targeted deploys preserve the currently running replica counts, so scaling one service does not restart or resize the other.
+Hosted-sites and orchestrator use independent image tags. Targeted deploys preserve the currently running replica counts, so scaling one service does not restart or resize the other. The current server orchestrator replica count must remain one while it runs in `all` mode.
 
 ## Production Topology
 
 The production deployment is split into:
 
 - web on Vercel
-- hosted-sites, orchestrator API/workers, Redis, and Nginx on a private Linux host
+- hosted-sites, the all-mode orchestrator, Redis, and Nginx on a private Linux host
 - Supabase for durable application data
 - GHCR for hosted runtime images
+- Cloudflare Tunnel for environment-specific public ingress and TLS
 
 Server configuration:
 
@@ -81,7 +84,7 @@ Hosted CD only accepts `develop` and `main`:
 - `develop` automatically deploys through the GitHub `development` Environment, the `agentbench-dev` runner, `latest-develop` images, the `agentbench-development` Compose project, and gateway port `8081` by default.
 - `main` deploys only through the GitHub `production` Environment, the `agentbench-prod` runner, `latest-main` images, the `agentbench-production` Compose project, and gateway port `8080` by default.
 
-Manual dispatches from any other branch fail before accessing a self-hosted runner. The `production` Environment should have approval protection rules configured.
+Manual dispatches from any other branch fail before accessing a self-hosted runner. Required CI also rejects pull requests to `main` unless their source is `develop` or `hotfix/*`. The `production` Environment should require approval and allow deployments only from `main`.
 
 The hosted deployment workflow builds images, pushes them to GHCR, and runs the server deployment through a self-hosted GitHub Actions runner on Linux. This infrastructure agent is unrelated to the removed benchmark execution runner. The server pulls the requested image tag and recreates the Compose services.
 
@@ -100,13 +103,41 @@ Required secrets in each GitHub Environment:
 - `RUNNER_SHARED_SECRET`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
+Migration-only database secrets:
+
+- development: `TEST_SUPABASE_DB_URL`
+- production: `PROD_SUPABASE_DB_URL`
+
+These URLs must identify different database targets. Migrations are explicit and never infer a target from the Supabase CLI linked project.
+
 Optional web deployment secret:
 
 - `VERCEL_DEPLOY_HOOK_URL`
 
-The self-hosted GitHub Actions runner must have the `self-hosted` and `linux` labels, Docker access, Docker Compose, enough disk space for images, and network access to GHCR and Supabase.
+Each Vercel Web project must independently configure:
 
-Before enabling the new production Compose project name for the first time, stop the legacy `agentbench-hosted-sites` project during a maintenance window; otherwise its gateway continues to occupy production port `8080`. Remove the legacy project manually only after checking the new configuration. The development project must never operate on production containers.
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `RUNNER_SHARED_SECRET`
+- `HOSTED_SITES_URL`
+- `HOSTED_ORCHESTRATOR_URL`
+- optional `GUEST_RUN_LIMIT`
+
+Development values must point to the test hosted hostname and development Supabase target; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
+
+The self-hosted GitHub Actions runners must have `self-hosted` and `linux`, plus `agentbench-dev` for development or `agentbench-prod` for production. They need Docker access, Docker Compose, enough disk space for images, and network access to GHCR and Supabase.
+
+The development project must never operate on production containers. `COMPOSE_PROJECT_NAME`, image channel, runner label, gateway port, public URLs, and database URL are treated as one validated environment mapping by the deployment script.
+
+## Cloudflare Tunnel
+
+Cloudflare publishes separate hostnames for development and production. Each public hostname must use an HTTP origin matching the local Nginx listener:
+
+- development hosted hostname -> `http://localhost:8081`
+- production hosted hostname -> `http://localhost:8080`
+
+Do not configure these origins as `https://localhost:<port>`; Nginx serves plain HTTP on the host port and Cloudflare provides public TLS. `HOSTED_SITES_PUBLIC_URL` and `HOSTED_ORCHESTRATOR_PUBLIC_URL` must match the corresponding public hostname and orchestrator route.
 
 ## When Manual Server Intervention Is Needed
 

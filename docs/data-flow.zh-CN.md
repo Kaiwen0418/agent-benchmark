@@ -45,6 +45,8 @@ flowchart LR
 
 共享 Redis 查询使横向扩容不需要 sticky session。
 
+图中的 `API` 和 `Worker` 是逻辑角色。本地 Compose 将它们作为独立 services 运行；当前服务器 Compose 将两者共置在一个 `ORCHESTRATOR_MODE=all` 进程中。
+
 ## 3. 任务修改和 Telemetry
 
 1. Route 校验 token 的 `session.app` 与当前 app route 一致。

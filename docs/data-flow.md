@@ -45,6 +45,8 @@ flowchart LR
 
 The shared Redis lookup is what makes horizontal scaling safe. A load balancer does not require sticky sessions.
 
+`API` and `Worker` in these diagrams are logical roles. Local Compose runs them as separate services; the current server Compose colocates them in one `ORCHESTRATOR_MODE=all` process.
+
 ## 3. Task Mutation and Telemetry
 
 1. The route validates that the token's `session.app` matches the app route.
