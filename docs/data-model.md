@@ -59,10 +59,12 @@ Per-session evaluation result:
 - normalized score from `0` to `1`
 - summary, final state, evaluator evidence
 - app/task/weight snapshot for auditability
+- a unique `session_id` invariant; the first persisted terminal result wins concurrent retries
 
 ### `benchmark_attempt_scores`
 
 Aggregate suite result with score, status, summary, and a JSON breakdown of all required and optional sessions.
+Each attempt has at most one aggregate score. A concurrent writer recovers and uses the existing row.
 
 ### `hosted_web_access_logs`
 

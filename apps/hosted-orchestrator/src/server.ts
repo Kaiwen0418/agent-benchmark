@@ -460,7 +460,7 @@ async function forwardTimeoutCompletion(params: {
 async function persistScoreResult(session: AttemptLifecycleSession, result: HostedWebScoreResult) {
   const supabase = getSupabaseAdmin();
   if (!supabase || !session.runId) {
-    return;
+    return { result, duplicate: false };
   }
 
   const { error } = await supabase.from("hosted_web_results").insert({
@@ -477,9 +477,18 @@ async function persistScoreResult(session: AttemptLifecycleSession, result: Host
     evaluators: result.evaluators,
   });
 
-  if (error) {
-    console.error("[hosted-orchestrator] failed to persist score result", error);
+  if (!error) {
+    return { result, duplicate: false };
   }
+
+  if (error.code === "23505") {
+    const existingResult = await loadLatestSessionResult(session.id);
+    if (existingResult) {
+      return { result: existingResult, duplicate: true };
+    }
+  }
+
+  throw error;
 }
 
 async function recoverInitializedAttempt(params: {
