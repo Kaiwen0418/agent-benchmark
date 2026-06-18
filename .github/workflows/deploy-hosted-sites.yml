@@ -342,6 +342,44 @@ jobs:
           GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8081' }}
         run: bash infra/scripts/deploy-hosted-stack.sh
 
+  smoke-development:
+    if: github.ref == 'refs/heads/develop'
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-dev
+    environment: development
+    needs:
+      - deploy-development
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run development lifecycle smoke
+        env:
+          START_LOCAL_SERVICES: 'false'
+          HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
+          HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
+          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
+        run: bash apps/hosted-sites/scripts/orchestrator-smoke-full-pass.sh
+
   deploy-production:
     if: |
       always() &&

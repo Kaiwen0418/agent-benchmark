@@ -88,6 +88,8 @@ Hosted CD 只接受 `develop` 和 `main`：
 
 托管部署 workflow 构建镜像、推送到 GHCR，并通过 Linux 上的 self-hosted GitHub Actions runner 执行服务器部署。该基础设施 agent 与已移除的 benchmark execution runner 无关。服务器根据指定 tag 拉取镜像并重建 Compose 服务。
 
+Development 部署成功后，workflow 会通过公网 development URL 运行动态四应用 lifecycle smoke，验证顺序完成、重复 completion 幂等性、每个已完成 session 只有一个 result，以及每个 attempt 只有一个聚合 score。Production 部署不会创建 smoke-test run。
+
 每个 GitHub Environment 需要配置以下 Variables：
 
 - `GHCR_USERNAME`

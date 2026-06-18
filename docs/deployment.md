@@ -88,6 +88,8 @@ Manual dispatches from any other branch fail before accessing a self-hosted runn
 
 The hosted deployment workflow builds images, pushes them to GHCR, and runs the server deployment through a self-hosted GitHub Actions runner on Linux. This infrastructure agent is unrelated to the removed benchmark execution runner. The server pulls the requested image tag and recreates the Compose services.
 
+After a successful development deployment, the workflow runs the generated four-app lifecycle smoke against the public development URLs. It verifies ordered completion, duplicate completion idempotency, one result per completed session, and one aggregate score per attempt. Production deployment does not create smoke-test runs.
+
 Required variables in each GitHub Environment:
 
 - `GHCR_USERNAME`
