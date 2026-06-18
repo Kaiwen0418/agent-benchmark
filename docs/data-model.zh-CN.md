@@ -162,4 +162,4 @@ stateDiagram-v2
 - 进程内 Map 不是权威数据，可随时丢失。
 - `metadata.appState` 是恢复 snapshot，不是独立可写 domain model。
 - Attempt 推进由 orchestrator metadata 与持久化 session/result rows 共同决定。
-- Session cache key 与 ingest record 相互独立。持久化 command 使用 `agentbench:orchestrator:commands` Stream、`hosted-orchestrator` consumer group、24 小时 command result key 和短期 response list。
+- Session cache key 与 ingest record 相互独立。持久化 command 使用分区 `agentbench:orchestrator:commands:p<N>` Streams、`hosted-orchestrator` consumer group、24 小时 command result key、短期 response list 和 partition lease key。

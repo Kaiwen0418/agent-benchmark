@@ -8,9 +8,10 @@ AgentBench is a hosted-web benchmark platform. The evaluated agent owns its brow
 
 ```mermaid
 flowchart LR
-  Agent["External Agent Browser"] -->|"session URL"| Gateway["Nginx Gateway"]
-  User["User Browser"] --> Web["apps/web"]
-  Web -->|"initialize attempt"| OrchestratorAPI["orchestrator API replicas"]
+  Agent["External Agent Browser"] -->|"session URL"| Edge["Cloudflare Tunnel"]
+  User["User Browser"] --> Web["apps/web on Vercel"]
+  Web -->|"initialize attempt"| Edge
+  Edge --> Gateway["Nginx Gateway"]
   Gateway --> Sites["apps/hosted-sites replicas"]
   Gateway --> OrchestratorAPI
   Sites <--> Redis[("Redis cache + command streams")]
@@ -57,9 +58,15 @@ The service is stateless at the process boundary. Its local map is only a hot co
 - handles timeout and cleanup sweeps
 - forwards terminal run completion to `apps/web`
 
-The same image supports `ORCHESTRATOR_MODE=api|worker|all`. API replicas authenticate, validate, route commands to a stable partition, and serve read models. Worker processes own disjoint partition sets and perform durable writes. Local development defaults to `all`.
+The same image supports `ORCHESTRATOR_MODE=api|worker|all`. The API role authenticates, validates, routes commands to a stable partition, and serves read models. The worker role consumes owned partitions and performs durable writes.
 
-See [Orchestrator Responsibilities TODO](./orchestrator-todo.md) for the planned boundary cleanup.
+The deployment profile matters:
+
+- local `docker-compose.yml` runs one API process and two workers covering partitions `0-7` and `8-15`
+- the current server Compose file runs one `all` process that colocates API and worker roles for all 16 partitions
+- multiple `all` replicas are not a supported scaling mode because they compete for the same partition leases
+
+Restoring isolated production workers is tracked in the [Roadmap](./roadmap.md).
 
 ### Redis
 
@@ -69,9 +76,18 @@ Redis has two isolated responsibilities. Versioned session keys provide the shar
 
 Supabase stores durable control-plane and audit data: runs, attempts, hosted sessions, events, results, aggregate scores, access logs, and artifacts. It stores app state snapshots in session metadata for recovery, but it is not the primary per-request state store.
 
-### Nginx
+### Nginx and Cloudflare
 
-Nginx is the only gateway. It load-balances hosted-sites replicas and routes the orchestrator prefix to the orchestrator service.
+Nginx is the only gateway inside the hosted Compose network. It load-balances hosted-sites replicas and routes the orchestrator prefix to the orchestrator service. Cloudflare Tunnel publishes the environment-specific hosted hostname and forwards it to the corresponding host gateway port; TLS terminates at the Cloudflare edge.
+
+## Deployment Boundaries
+
+| Environment | Source branch | Web | Hosted Compose project | Gateway port | Database target |
+| --- | --- | --- | --- | --- | --- |
+| Development | `develop` | Vercel test project | `agentbench-development` | `8081` | development Supabase branch/database |
+| Production | `main` | Vercel production project | `agentbench-production` | `8080` | production Supabase database |
+
+GitHub `development` and `production` Environments hold separate variables and secrets. Hosted deployments run on separately labelled self-hosted runners. Database migrations must succeed before the matching Compose deployment starts. Pull requests to `main` are accepted only from `develop` or `hotfix/*` by the required CI check.
 
 ## Ownership Rules
 
@@ -85,7 +101,8 @@ Nginx is the only gateway. It load-balances hosted-sites replicas and routes the
 | Durable hosted writes | `apps/hosted-orchestrator` |
 | Durable records and audit history | Supabase |
 | Per-session evaluation functions | hosted app definitions / `packages/scoring` |
-| Public traffic routing | Nginx |
+| Public hosted edge and TLS | Cloudflare Tunnel |
+| Hosted service routing | Nginx |
 
 ## Failure Model
 
@@ -93,5 +110,6 @@ Nginx is the only gateway. It load-balances hosted-sites replicas and routes the
 - Redis failure degrades session availability; hosted-sites can recover persisted app state through read-only Supabase access.
 - Orchestrator failure prevents attempt progression and aggregate completion, but hosted task pages can still render from Redis.
 - Web callback failure delays live observability or final run completion; persisted hosted results remain available for reconciliation.
+- Cloudflare Tunnel or Nginx failure makes hosted URLs unavailable without changing durable run state.
 
 Detailed contracts are documented in [API Reference](./api-reference.md), [Data Model](./data-model.md), and [Data Flow](./data-flow.md).

@@ -56,4 +56,4 @@ sequenceDiagram
 - Redis 不可用时依赖数据库唯一约束完成幂等恢复。
 - 同一 run 的重复 `/connect` 最终只有一个 attempt、四个唯一 session 和四个 `hosted.session.created` 事件。
 
-Orchestrator worker 不参与 attempt 初始化。初始化由 API orchestrator 完成；worker 仅在确有异步 command stream 需求时部署。
+API 入口将 `attempt.init` 写入分区 Redis Stream，并等待拥有该 partition 的 worker 角色执行数据库初始化。角色可以由独立 API/worker 进程承担，也可以像当前服务器 Compose 一样共置在一个 `ORCHESTRATOR_MODE=all` 进程中；两种 profile 都遵守相同的 DB-first 幂等协议。
