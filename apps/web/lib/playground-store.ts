@@ -585,6 +585,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         body: JSON.stringify({
           caseId: BENCHMARK_CASE_IDS[benchmark],
           executionMode: mode,
+          isPublic: true,
         }),
       });
 

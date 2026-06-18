@@ -58,6 +58,7 @@ export async function POST(request: Request) {
     userId: user?.id ?? null,
     guestId: guest?.guestId ?? null,
     executionMode: input.executionMode,
+    isPublic: input.isPublic,
   });
   const nextQuota = {
     ...quota,

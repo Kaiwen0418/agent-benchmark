@@ -190,6 +190,10 @@ export const mockStore = {
       startedAt: null,
       completedAt: null,
       createdAt: now(),
+      metadata: {},
+      agent: null,
+      browserEnvironment: null,
+      isPublic: true,
     };
 
     getStore().runs.push(run);

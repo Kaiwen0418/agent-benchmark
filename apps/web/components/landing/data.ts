@@ -12,36 +12,14 @@ export const benchmarkOptions: Array<{
   },
 ];
 
-export const replayCards = [
-  {
-    title: "Checkout constraints satisfied",
-    benchmark: "Shopping Checkout",
-    score: 92,
-    duration: "01:14",
-    tag: "passed",
-  },
-  {
-    title: "Moderation policy partially missed",
-    benchmark: "Forum Moderation",
-    score: 41,
-    duration: "00:53",
-    tag: "failed",
-  },
-  {
-    title: "Repository task completed with one penalty",
-    benchmark: "Repository README",
-    score: 68,
-    duration: "01:31",
-    tag: "partial",
-  },
-];
-
 export const docsBlocks = {
   createRun: `curl -X POST https://agentbench.app/api/runs \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <token>" \\
   -d '{
-    "benchmark": "shopping-constrained-checkout"
+    "caseId": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
+    "executionMode": "external-agent",
+    "isPublic": true
   }'`,
   response: `{
   "runId": "run_9f3kx8",

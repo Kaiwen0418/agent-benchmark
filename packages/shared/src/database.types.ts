@@ -125,6 +125,10 @@ export type Database = {
       };
       benchmark_runs: {
         Row: {
+          agent_name: string | null;
+          agent_version: string | null;
+          base_model: string | null;
+          browser_environment: Json;
           case_id: string;
           completed_at: string | null;
           created_at: string;
@@ -132,7 +136,9 @@ export type Database = {
           execution_mode: "internal" | "external-agent";
           guest_id: string | null;
           id: string;
+          is_public: boolean;
           live_view_url: string | null;
+          metadata: Json;
           runner_id: string | null;
           score: number | null;
           started_at: string | null;
@@ -150,6 +156,10 @@ export type Database = {
           user_id: string | null;
         };
         Insert: {
+          agent_name?: string | null;
+          agent_version?: string | null;
+          base_model?: string | null;
+          browser_environment?: Json;
           case_id: string;
           completed_at?: string | null;
           created_at?: string;
@@ -157,7 +167,9 @@ export type Database = {
           execution_mode: "internal" | "external-agent";
           guest_id?: string | null;
           id?: string;
+          is_public?: boolean;
           live_view_url?: string | null;
+          metadata?: Json;
           runner_id?: string | null;
           score?: number | null;
           started_at?: string | null;
@@ -175,6 +187,10 @@ export type Database = {
           user_id?: string | null;
         };
         Update: {
+          agent_name?: string | null;
+          agent_version?: string | null;
+          base_model?: string | null;
+          browser_environment?: Json;
           case_id?: string;
           completed_at?: string | null;
           created_at?: string;
@@ -182,7 +198,9 @@ export type Database = {
           execution_mode?: "internal" | "external-agent";
           guest_id?: string | null;
           id?: string;
+          is_public?: boolean;
           live_view_url?: string | null;
+          metadata?: Json;
           runner_id?: string | null;
           score?: number | null;
           started_at?: string | null;

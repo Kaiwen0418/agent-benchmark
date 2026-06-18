@@ -30,11 +30,13 @@ export async function buildRunConnectPayload(params: {
       : null;
   const connectUrl = `${origin}/runs/${run.id}/connect`;
   const configUrl = `${origin}/api/runs/${run.id}/connect`;
+  const metadataUrl = `${origin}/api/runs/${run.id}/metadata`;
   const goal = getGoal(benchmarkCase);
   const title = benchmarkCase?.title ?? "AgentBench Run";
   const prompt = [
     "Open the hosted AgentBench benchmark site below and complete the task.",
     "The site is session-scoped, may contain multiple ordered tasks, and reports telemetry back to AgentBench.",
+    `Before starting, PATCH ${metadataUrl} with JSON fields name, version, and baseModel describing your agent runtime.`,
     "Stop when the active task is completed or clearly blocked.",
     "",
     hostedWeb?.orchestratorUrl ?? connectUrl,
@@ -57,6 +59,7 @@ export async function buildRunConnectPayload(params: {
           `This suite contains ${hostedWeb.sessions.length} hosted session${hostedWeb.sessions.length === 1 ? "" : "s"}.`,
           "Start from the active hosted URL and progress through the ordered suite.",
           "Use only the session URLs allocated for this run.",
+          `Before starting, PATCH ${metadataUrl} with your agent name, agent version, and base model.`,
           "Stop after the active objective is completed or clearly blocked.",
         ]
       : [
@@ -64,11 +67,23 @@ export async function buildRunConnectPayload(params: {
           "Read the benchmark objective and hosted suite details.",
           "Open the allocated hosted session URL for this run.",
           "Use only the tools and sites exposed for this run.",
+          `Before starting, PATCH ${metadataUrl} with your agent name, agent version, and base model.`,
           "Stop after the objective is completed or clearly blocked by policy.",
         ],
     prompt,
     connectUrl,
     configUrl,
+    metadataUrl,
+    metadataSchema: {
+      method: "PATCH",
+      body: {
+        name: "agent or harness name",
+        version: "agent or harness version",
+        baseModel: "base model identifier",
+        metadata: {},
+      },
+      note: "Agent identity is self-reported. AgentBench captures the submitting client browser environment separately.",
+    },
     hostedWeb: hostedWeb
       ? {
           available: true,
