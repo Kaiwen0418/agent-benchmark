@@ -1,18 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildHostedAttemptReadModel } from "@agentbench/shared";
-import { createAttemptLifecycle, type AttemptLifecycleAdvanceSession, type AttemptLifecycleSession } from "./attempt-lifecycle.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildHostedAttemptReadModel, type Database } from "@agentbench/shared";
+import {
+  createAttemptLifecycle,
+  type AttemptLifecycleAdvanceSession,
+  type AttemptLifecycleSession,
+  type PersistScoreResultOutcome,
+} from "./attempt-lifecycle.js";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 
 function createLifecycle(overrides?: {
+  getSupabaseAdmin?: () => SupabaseClient<Database> | null;
   loadAttemptMetadata?: (attemptId: string | null) => Promise<Record<string, unknown>>;
   loadAttemptSessions?: (attemptId: string) => Promise<AttemptLifecycleAdvanceSession[]>;
   loadLatestSessionResult?: (sessionId: string) => Promise<HostedWebScoreResult | null>;
-  persistScoreResult?: (session: AttemptLifecycleSession, result: HostedWebScoreResult) => Promise<void>;
+  persistScoreResult?: (
+    session: AttemptLifecycleSession,
+    result: HostedWebScoreResult,
+  ) => Promise<PersistScoreResultOutcome>;
 }) {
   return createAttemptLifecycle({
     now: () => "2026-06-01T00:00:00.000Z",
-    getSupabaseAdmin: () => null,
+    getSupabaseAdmin: overrides?.getSupabaseAdmin ?? (() => null),
     loadAttemptMetadata: overrides?.loadAttemptMetadata ?? (async () => ({})),
     loadAttemptSessions: overrides?.loadAttemptSessions ?? (async () => []),
     loadAttemptReadModel: async (attemptId) =>
@@ -27,7 +37,8 @@ function createLifecycle(overrides?: {
         })),
       }),
     loadLatestSessionResult: overrides?.loadLatestSessionResult ?? (async () => null),
-    persistScoreResult: overrides?.persistScoreResult ?? (async () => undefined),
+    persistScoreResult:
+      overrides?.persistScoreResult ?? (async (_session, result) => ({ result, duplicate: false })),
     forwardTimeoutCompletion: async () => undefined,
     evictInMemorySessions: () => undefined,
   });
@@ -142,6 +153,7 @@ test("complete-session returns existing result when session already completed", 
     loadLatestSessionResult: async () => existingResult,
     persistScoreResult: async () => {
       persisted = true;
+      return { result: existingResult, duplicate: false };
     },
   });
 
@@ -154,6 +166,140 @@ test("complete-session returns existing result when session already completed", 
   assert.equal(result.duplicate, true);
   assert.equal(result.result.summary, "already done");
   assert.equal(persisted, false);
+});
+
+test("complete-session returns the first persisted result after a uniqueness conflict", async () => {
+  const persistedResult = makeScoreResult({
+    status: "failed",
+    score: 0,
+    summary: "first completion won",
+  });
+  const lifecycle = createLifecycle({
+    persistScoreResult: async () => ({
+      result: persistedResult,
+      duplicate: true,
+    }),
+  });
+
+  const result = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeSession({ persisted: false }),
+    result: makeScoreResult({ summary: "concurrent completion lost" }),
+  });
+
+  assert.equal(result.duplicate, true);
+  assert.equal(result.result.status, "failed");
+  assert.equal(result.result.summary, "first completion won");
+});
+
+test("complete-session recovers the first aggregate score after a uniqueness conflict", async () => {
+  const persistedAggregate = {
+    status: "failed" as const,
+    score: 0.25,
+    summary: "first aggregate won",
+    breakdown: {
+      aggregation: "weighted-required-suite" as const,
+      sessions: [
+        {
+          sessionId: "session-1",
+          app: "shopping-lite",
+          taskSlug: "shopping-constrained-checkout",
+          status: "failed" as const,
+          score: 0.25,
+          weight: 1,
+          required: true,
+        },
+      ],
+    },
+  };
+  let attemptUpdate: Record<string, unknown> | null = null;
+
+  const supabase = {
+    from(table: string) {
+      if (table === "hosted_web_results") {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: async () => ({
+                data: [
+                  {
+                    session_id: "session-1",
+                    app: "shopping-lite",
+                    task_slug: "shopping-constrained-checkout",
+                    score: 1,
+                    status: "passed",
+                    weight: 1,
+                  },
+                ],
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+
+      if (table === "hosted_web_sessions") {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: async () => ({
+                data: [
+                  {
+                    id: "session-1",
+                    app: "shopping-lite",
+                    task_slug: "shopping-constrained-checkout",
+                    weight: 1,
+                    required: true,
+                    sequence_index: 0,
+                  },
+                ],
+                error: null,
+              }),
+            }),
+          }),
+          update: () => ({ eq: async () => ({ error: null }) }),
+        };
+      }
+
+      if (table === "benchmark_attempt_scores") {
+        return {
+          insert: async () => ({ error: { code: "23505" } }),
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: persistedAggregate, error: null }),
+            }),
+          }),
+        };
+      }
+
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: { metadata: {} }, error: null }),
+          }),
+        }),
+        update: (value: Record<string, unknown>) => {
+          attemptUpdate = value;
+          return { eq: async () => ({ error: null }) };
+        },
+      };
+    },
+  } as unknown as SupabaseClient<Database>;
+
+  const lifecycle = createLifecycle({
+    getSupabaseAdmin: () => supabase,
+  });
+  const result = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeSession(),
+    result: makeScoreResult(),
+  });
+
+  assert.equal(result.attemptResult.complete, true);
+  assert.deepEqual(result.attemptResult.aggregate, persistedAggregate);
+  const recordedAttemptUpdate = attemptUpdate as Record<string, unknown> | null;
+  assert.equal(recordedAttemptUpdate?.status, "failed");
+  assert.equal(recordedAttemptUpdate?.aggregate_score, 0.25);
 });
 
 test("complete-session rejects non-active session completion", async () => {

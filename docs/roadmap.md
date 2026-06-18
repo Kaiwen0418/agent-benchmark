@@ -12,12 +12,12 @@ This roadmap starts from the architecture that is already running. Completed wor
 - Redis provides the shared hosted-session cache and 16 partitioned orchestrator command Streams.
 - Supabase is the durable lifecycle, audit, and scoring store.
 - Attempt initialization is database-first and protected by a unique hosted-attempt constraint plus a short Redis lease.
+- Terminal hosted results and aggregate attempt scores are first-writer-wins database invariants with explicit conflict recovery.
 - `develop` deploys to development; `main` deploys to production through separate GitHub Environments, runners, database URLs, image channels, ports, and Compose projects.
 
 ## P0: Lifecycle Correctness and Recovery
 
 - Add database transactions or compare-and-set transitions for active-session promotion, timeout, and terminal completion.
-- Add unique constraints for one terminal result per session and one aggregate score per attempt, then make conflict recovery explicit.
 - Persist Web callback delivery in an outbox, retry with bounded backoff, and reconcile attempts whose durable result exists but run completion is missing.
 - Define command retry limits and add a dead-letter path with command ID, partition, payload type, error code, and inspection tooling.
 - Add lifecycle integration tests against real Postgres for concurrent completion, timeout-versus-completion, duplicate commands, and callback recovery.

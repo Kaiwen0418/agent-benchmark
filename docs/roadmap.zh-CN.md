@@ -12,12 +12,12 @@
 - Redis 提供共享 hosted-session cache 和 16 个分区的 orchestrator command Streams。
 - Supabase 是生命周期、审计和评分的持久存储。
 - Attempt 初始化以数据库为准，并由 hosted-attempt 唯一约束和短期 Redis lease 共同保护。
+- Hosted 终态结果和 attempt 聚合分数采用先写入者获胜的数据库约束，并具备显式冲突恢复。
 - `develop` 部署到 development，`main` 部署到 production；两者使用独立 GitHub Environment、runner、数据库 URL、镜像 channel、端口和 Compose project。
 
 ## P0：生命周期正确性与恢复
 
 - 为 active-session 推进、timeout 和终态完成增加数据库 transaction 或 compare-and-set。
-- 增加“每个 session 一个终态 result”和“每个 attempt 一个聚合 score”的唯一约束，并明确冲突恢复逻辑。
 - 使用 outbox 持久化 Web callback delivery，按有上限的退避策略重试，并对“结果已持久化但 run 未完成”的 attempt 自动对账。
 - 定义 command 重试上限，增加 dead-letter 路径，记录 command ID、partition、payload type、error code，并提供检查工具。
 - 基于真实 Postgres 增加 lifecycle 集成测试，覆盖并发完成、timeout 与完成竞争、重复 command 和 callback 恢复。
@@ -70,4 +70,3 @@
 - 在 Vercel functions 中运行不可信 Agent 代码、浏览器 sandbox 或任意 worker。
 - 在没有独立隔离与威胁模型项目的情况下恢复已移除的 benchmark execution runner。
 - 将 Redis 作为持久生命周期的真相源。
-

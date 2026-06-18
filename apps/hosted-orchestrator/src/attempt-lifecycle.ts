@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, HostedAttemptReadModel, HostedAttemptSessionStatus } from "@agentbench/shared";
 import {
   aggregateSuiteScore,
+  hostedWebSuiteScoreResultSchema,
   type HostedWebScoreResult,
   type HostedWebSuiteScoreResult,
   type HostedWebSuiteSessionScore,
@@ -84,6 +85,11 @@ export type TimeoutAttemptCommandResult = {
   summary: string | null;
 };
 
+export type PersistScoreResultOutcome = {
+  result: HostedWebScoreResult;
+  duplicate: boolean;
+};
+
 type AttemptLifecycleDeps = {
   now: () => string;
   getSupabaseAdmin: () => SupabaseClient<Database> | null | undefined;
@@ -91,7 +97,10 @@ type AttemptLifecycleDeps = {
   loadAttemptSessions: (attemptId: string) => Promise<AttemptLifecycleAdvanceSession[]>;
   loadAttemptReadModel: (attemptId: string) => Promise<HostedAttemptReadModel<AttemptLifecycleAdvanceSession>>;
   loadLatestSessionResult: (sessionId: string) => Promise<HostedWebScoreResult | null>;
-  persistScoreResult: (session: AttemptLifecycleSession, result: HostedWebScoreResult) => Promise<void>;
+  persistScoreResult: (
+    session: AttemptLifecycleSession,
+    result: HostedWebScoreResult,
+  ) => Promise<PersistScoreResultOutcome>;
   forwardTimeoutCompletion: (params: { runId: string; summary: string; score?: number }) => Promise<void>;
   evictInMemorySessions: (sessionIds: string[]) => void;
 };
@@ -222,7 +231,6 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       failSummary: `One or more required hosted sessions for ${session.suiteSlug} failed.`,
     });
     const breakdown = aggregate.breakdown;
-    const status = aggregate.status === "passed" ? "completed" : "failed";
     const completedAt = deps.now();
 
     const { error: scoreError } = await supabase.from("benchmark_attempt_scores").insert({
@@ -234,15 +242,35 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       breakdown,
     });
 
-    if (scoreError) {
-      console.error("[hosted-orchestrator] failed to persist attempt score", scoreError);
+    let persistedAggregate = aggregate;
+    if (scoreError?.code === "23505") {
+      const { data: existingScore, error: existingScoreError } = await supabase
+        .from("benchmark_attempt_scores")
+        .select("status, score, summary, breakdown")
+        .eq("attempt_id", session.attemptId)
+        .maybeSingle();
+
+      if (existingScoreError) {
+        throw existingScoreError;
+      }
+
+      const parsedExistingScore = hostedWebSuiteScoreResultSchema.safeParse(existingScore);
+      if (!parsedExistingScore.success) {
+        throw new Error(`Attempt ${session.attemptId} has an invalid persisted aggregate score.`);
+      }
+      persistedAggregate = parsedExistingScore.data;
+    } else if (scoreError) {
+      throw scoreError;
     }
+
+    const persistedBreakdown = persistedAggregate.breakdown;
+    const persistedStatus = persistedAggregate.status === "passed" ? "completed" : "failed";
 
     const { error: attemptError } = await supabase
       .from("benchmark_attempts")
       .update({
-        status,
-        aggregate_score: aggregate.score,
+        status: persistedStatus,
+        aggregate_score: persistedAggregate.score,
         metadata: {
           ...existingAttemptMetadata,
           activeSessionId: null,
@@ -250,9 +278,9 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
           completedSessionIds: sessionRows.map((row) => row.id),
         },
         scoring_summary: {
-          summary: aggregate.summary,
-          status: aggregate.status,
-          breakdown,
+          summary: persistedAggregate.summary,
+          status: persistedAggregate.status,
+          breakdown: persistedBreakdown,
         },
         completed_at: completedAt,
       })
@@ -262,7 +290,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       console.error("[hosted-orchestrator] failed to update attempt", attemptError);
     }
 
-    return { complete: true, aggregate };
+    return { complete: true, aggregate: persistedAggregate };
   }
 
   async function promoteNextAttemptSession(attemptId: string, completedSessionId: string) {
@@ -307,18 +335,18 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       }
     }
 
-    await deps.persistScoreResult(session, result);
-    session.status = result.status === "passed" ? "completed" : "failed";
-    const attemptResult = await persistAttemptScore(session, result);
+    const persisted = await deps.persistScoreResult(session, result);
+    session.status = persisted.result.status === "passed" ? "completed" : "failed";
+    const attemptResult = await persistAttemptScore(session, persisted.result);
 
     if (!attemptResult.complete && session.attemptId) {
       await promoteNextAttemptSession(session.attemptId, session.id);
     }
 
     return {
-      result,
+      result: persisted.result,
       attemptResult,
-      duplicate: false,
+      duplicate: persisted.duplicate,
     };
   }
 
@@ -469,14 +497,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       } satisfies TimeoutAttemptCommandResult;
     }
 
-    const { data: existingAttemptScore } = await supabase
-      .from("benchmark_attempt_scores")
-      .select("id")
-      .eq("attempt_id", params.attemptId)
-      .limit(1)
-      .maybeSingle();
-
-    if (!existingAttemptScore && params.runId) {
+    if (params.runId) {
       const { error: attemptScoreError } = await supabase.from("benchmark_attempt_scores").insert({
         run_id: params.runId,
         attempt_id: params.attemptId,
@@ -486,8 +507,8 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
         breakdown: scoringSummary.breakdown,
       });
 
-      if (attemptScoreError) {
-        console.error("[hosted-orchestrator] failed to persist timeout attempt score", attemptScoreError);
+      if (attemptScoreError && attemptScoreError.code !== "23505") {
+        throw attemptScoreError;
       }
     }
 
