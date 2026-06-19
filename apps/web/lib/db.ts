@@ -13,13 +13,13 @@ import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { mockStore } from "./mock-store";
 import { buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
+import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
 const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
 const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, metadata, is_public, created_at";
 const benchmarkRunSelect = "id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at, metadata, agent_name, agent_version, base_model, browser_environment, is_public";
-const terminalRunStatuses = new Set(["completed", "failed", "cancelled", "timeout"]);
 
 function getSupabase() {
   return createSupabaseAdminClient();
@@ -528,7 +528,7 @@ export async function completeBenchmarkRun(runId: string, input: CompleteRunInpu
       completed_at: completedAt,
     })
     .eq("id", runId)
-    .in("status", ["queued", "starting", "running", "scoring"])
+    .in("status", [...completableRunStatuses])
     .select(benchmarkRunSelect)
     .maybeSingle();
 

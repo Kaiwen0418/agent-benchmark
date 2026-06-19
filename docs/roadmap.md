@@ -52,6 +52,7 @@ P0 completion criterion: after any single-process failure or command retry, the 
 - Workers claim callbacks with `FOR UPDATE SKIP LOCKED`; HTTP failures use exponential backoff and become `dead` after eight attempts.
 - Maintenance recovers stale claims and recreates missing outbox rows for terminal attempts.
 - The Web completion receiver uses a terminal-status compare-and-set so retries do not refresh completion time or append duplicate terminal events.
+- The receiver accepts every non-terminal run state, including hosted-web `waiting_for_agent` and `agent_connected`, so a successful callback cannot be acknowledged without completing the run.
 - CI covers trigger enqueue, exclusive claim, stale exhaustion, reconciliation, retry, delivery, and dead-letter behavior.
 
 ### P0.5 Implementation Scope
