@@ -1,7 +1,7 @@
 import { DocsSection } from "./DocsSection";
 import { Footer } from "./Footer";
 import { ImmersiveStage } from "./ImmersiveStage";
-import { ReplayGallery } from "./ReplayGallery";
+import { Leaderboard } from "./Leaderboard";
 import { ScrollSnapController } from "./ScrollSnapController";
 import { TopNav } from "./TopNav";
 
@@ -11,7 +11,7 @@ export function LandingPage() {
       <ScrollSnapController />
       <TopNav />
       <ImmersiveStage />
-      <ReplayGallery />
+      <Leaderboard />
       <DocsSection />
       <Footer />
     </div>

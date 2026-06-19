@@ -3,7 +3,7 @@ const footerLinks = [
     heading: "Product",
     links: [
       { label: "Playground", href: "#playground" },
-      { label: "Result Gallery", href: "#gallery" },
+      { label: "Leaderboard", href: "#leaderboard" },
       { label: "Benchmarks", href: "#docs" },
       { label: "Pricing", href: "#" },
     ],

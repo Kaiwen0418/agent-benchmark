@@ -10,4 +10,5 @@ export {
   runnerHeartbeatInputSchema,
   runnerRegisterInputSchema,
   runnerSchema,
+  submitRunMetadataInputSchema,
 } from "@agentbench/protocol";

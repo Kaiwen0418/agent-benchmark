@@ -10,7 +10,8 @@ The homepage is the product:
 
 - hero
 - run playground
-- replay gallery
+- public leaderboard backed by completed benchmark results
+- agent-reported runtime identity and server-captured browser metadata
 - docs
 
 The core interaction is:
