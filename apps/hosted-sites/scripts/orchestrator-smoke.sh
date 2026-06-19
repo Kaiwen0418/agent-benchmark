@@ -76,18 +76,13 @@ curl -fsS "${ORCHESTRATOR_BASE_URL}/health" >/dev/null
 SMOKE_MODE="${SMOKE_MODE}" \
 HOSTED_BASE_URL="${HOSTED_BASE_URL}" \
 ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL}" \
-pnpm --filter hosted-sites exec node <<'NODE'
-const { createClient } = require("@supabase/supabase-js");
-
+node <<'NODE'
 const smokeMode = process.env.SMOKE_MODE;
 const hostedBaseUrl = process.env.HOSTED_BASE_URL;
 const orchestratorBaseUrl = process.env.ORCHESTRATOR_BASE_URL;
 const runnerSecret = process.env.RUNNER_SHARED_SECRET;
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } },
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 async function checkedFetch(url, init = {}) {
   const response = await fetch(url, init);
@@ -108,6 +103,37 @@ async function orchestratorRequest(path, init = {}) {
       "x-runner-secret": runnerSecret,
     },
   });
+}
+
+async function supabaseRequest(table, searchParams, init = {}) {
+  const query = new URLSearchParams(searchParams);
+  return checkedFetch(`${supabaseUrl}/rest/v1/${table}?${query}`, {
+    ...init,
+    headers: {
+      apikey: supabaseServiceRoleKey,
+      Authorization: `Bearer ${supabaseServiceRoleKey}`,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+}
+
+async function selectRows(table, searchParams) {
+  return (await supabaseRequest(table, searchParams)).json();
+}
+
+async function insertRow(table, value) {
+  const rows = await (
+    await supabaseRequest(table, { select: "id" }, {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(value),
+    })
+  ).json();
+  if (!Array.isArray(rows) || rows.length !== 1) {
+    throw new Error(`Expected one inserted ${table} row.`);
+  }
+  return rows[0];
 }
 
 async function postForm(path, token, values) {
@@ -274,28 +300,22 @@ async function loadAttemptState(attemptId) {
 }
 
 async function main() {
-  const { data: benchmarkCase, error: caseError } = await supabase
-    .from("benchmark_cases")
-    .select("id, slug, title, description, metadata")
-    .eq("slug", "shopping-constrained-checkout")
-    .single();
-  if (caseError || !benchmarkCase) {
-    throw caseError ?? new Error("benchmark case not found");
+  const benchmarkCases = await selectRows("benchmark_cases", {
+    select: "id,slug,title,description,metadata",
+    slug: "eq.shopping-constrained-checkout",
+    limit: "1",
+  });
+  if (!Array.isArray(benchmarkCases) || benchmarkCases.length !== 1) {
+    throw new Error("benchmark case not found");
   }
+  const benchmarkCase = benchmarkCases[0];
   const suite = normalizedSessions(benchmarkCase);
 
-  const { data: run, error: runError } = await supabase
-    .from("benchmark_runs")
-    .insert({
+  const run = await insertRow("benchmark_runs", {
       case_id: benchmarkCase.id,
       execution_mode: "external-agent",
       status: "queued",
-    })
-    .select("id")
-    .single();
-  if (runError || !run) {
-    throw runError ?? new Error("run creation failed");
-  }
+  });
 
   const initialized = await (
     await orchestratorRequest("/api/attempts/init", {
@@ -394,13 +414,10 @@ async function main() {
     }
   }
 
-  const { data: resultRows, error: resultError } = await supabase
-    .from("hosted_web_results")
-    .select("session_id")
-    .eq("attempt_id", initialized.attemptId);
-  if (resultError || !resultRows) {
-    throw resultError ?? new Error("Unable to verify hosted results.");
-  }
+  const resultRows = await selectRows("hosted_web_results", {
+    select: "session_id",
+    attempt_id: `eq.${initialized.attemptId}`,
+  });
   if (
     resultRows.length !== completedSessions.length ||
     new Set(resultRows.map((row) => row.session_id)).size !== resultRows.length
@@ -408,13 +425,10 @@ async function main() {
     throw new Error("Hosted result rows are not unique per completed session.");
   }
 
-  const { data: scoreRows, error: scoreError } = await supabase
-    .from("benchmark_attempt_scores")
-    .select("id")
-    .eq("attempt_id", initialized.attemptId);
-  if (scoreError || !scoreRows) {
-    throw scoreError ?? new Error("Unable to verify attempt scores.");
-  }
+  const scoreRows = await selectRows("benchmark_attempt_scores", {
+    select: "id",
+    attempt_id: `eq.${initialized.attemptId}`,
+  });
   if (scoreRows.length !== 1) {
     throw new Error(`Expected one aggregate attempt score, got ${scoreRows.length}.`);
   }
