@@ -1,4 +1,5 @@
-import type { BrowserEnvironment } from "@agentbench/protocol";
+import type { BrowserEnvironment, SubmitRunMetadataInput } from "@agentbench/protocol";
+import type { Database } from "@agentbench/shared";
 
 function browserFromUserAgent(userAgent: string) {
   const candidates = [
@@ -50,5 +51,24 @@ export function captureBrowserEnvironment(headers: Headers): BrowserEnvironment 
   return {
     ...parsed,
     userAgent,
+  };
+}
+
+export function buildRunMetadataUpdate(params: {
+  currentMetadata: Record<string, unknown>;
+  currentStatus: Database["public"]["Tables"]["benchmark_runs"]["Row"]["status"];
+  startedAt: string | null;
+  input: SubmitRunMetadataInput;
+  browserEnvironment: Record<string, unknown>;
+  now: string;
+}): Database["public"]["Tables"]["benchmark_runs"]["Update"] {
+  return {
+    agent_name: params.input.name,
+    agent_version: params.input.version,
+    base_model: params.input.baseModel,
+    browser_environment: params.browserEnvironment,
+    metadata: { ...params.currentMetadata, ...params.input.metadata, identityReportedAt: params.now },
+    started_at: params.startedAt ?? params.now,
+    status: params.currentStatus === "waiting_for_agent" ? "agent_connected" : params.currentStatus,
   };
 }

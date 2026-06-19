@@ -12,7 +12,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { mockStore } from "./mock-store";
-import { parseBrowserEnvironment } from "./run-metadata";
+import { buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
@@ -553,7 +553,7 @@ export async function submitBenchmarkRunMetadata(
     return null;
   }
 
-  const existing = await supabase.from("benchmark_runs").select("metadata, status").eq("id", runId).maybeSingle();
+  const existing = await supabase.from("benchmark_runs").select("metadata, status, started_at").eq("id", runId).maybeSingle();
   if (existing.error) {
     throw existing.error;
   }
@@ -567,21 +567,31 @@ export async function submitBenchmarkRunMetadata(
   const currentMetadata = existing.data.metadata && typeof existing.data.metadata === "object" && !Array.isArray(existing.data.metadata)
     ? existing.data.metadata
     : {};
+  const now = new Date().toISOString();
+  const wasWaiting = existing.data.status === "waiting_for_agent";
   const { data, error } = await supabase
     .from("benchmark_runs")
-    .update({
-      agent_name: input.name,
-      agent_version: input.version,
-      base_model: input.baseModel,
-      browser_environment: browserEnvironment,
-      metadata: { ...currentMetadata, ...input.metadata, identityReportedAt: new Date().toISOString() },
-    })
+    .update(buildRunMetadataUpdate({
+      currentMetadata,
+      currentStatus: existing.data.status,
+      startedAt: existing.data.started_at,
+      input,
+      browserEnvironment,
+      now,
+    }))
     .eq("id", runId)
     .select(benchmarkRunSelect)
     .maybeSingle();
 
   if (error) {
     throw error;
+  }
+  if (data && wasWaiting) {
+    await supabase.from("run_events").insert({
+      run_id: runId,
+      type: "agent.connected",
+      payload: { agentName: input.name, agentVersion: input.version, baseModel: input.baseModel },
+    });
   }
   return data ? mapRunRow(data) : null;
 }
@@ -601,21 +611,134 @@ export type LeaderboardEntry = {
   platform: string | null;
 };
 
-export async function listPublicLeaderboard(limit = 20): Promise<LeaderboardEntry[]> {
+export type PublicBenchmarkResult = {
+  run: BenchmarkRun;
+  benchmark: { title: string; description: string };
+  suite: { slug: string; version: string } | null;
+  tasks: Array<{
+    app: string;
+    taskSlug: string;
+    status: "passed" | "failed" | "error";
+    score: number;
+    summary: string;
+  }>;
+};
+
+export async function getPublicBenchmarkResult(runId: string): Promise<PublicBenchmarkResult | null> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return null;
+  }
+
+  const { data: row, error } = await supabase
+    .from("benchmark_runs")
+    .select(benchmarkRunSelect)
+    .eq("id", runId)
+    .eq("status", "completed")
+    .eq("is_public", true)
+    .maybeSingle();
+  if (error) throw error;
+  if (!row) return null;
+
+  const run = mapRunRow(row);
+  const [{ data: benchmark, error: benchmarkError }, { data: attempt, error: attemptError }, { data: results, error: resultsError }] = await Promise.all([
+    supabase.from("benchmark_cases").select("title, description").eq("id", run.caseId).maybeSingle(),
+    supabase.from("benchmark_attempts").select("suite_slug, suite_version").eq("run_id", runId).eq("status", "completed").maybeSingle(),
+    supabase.from("hosted_web_results").select("app, task_slug, status, score, summary, created_at").eq("run_id", runId).order("created_at", { ascending: true }),
+  ]);
+  if (benchmarkError || attemptError || resultsError) {
+    throw benchmarkError ?? attemptError ?? resultsError;
+  }
+  if (!benchmark) return null;
+
+  return {
+    run,
+    benchmark,
+    suite: attempt ? { slug: attempt.suite_slug, version: attempt.suite_version } : null,
+    tasks: (results ?? []).map((result) => ({
+      app: result.app ?? "hosted-app",
+      taskSlug: result.task_slug ?? "hosted-task",
+      status: result.status,
+      score: result.score,
+      summary: result.summary,
+    })),
+  };
+}
+
+export async function listPublicLeaderboardVersions(): Promise<string[]> {
   const supabase = getSupabase();
   if (!supabase) {
     return [];
   }
 
-  const { data: runs, error } = await supabase
+  const { data: publicRuns, error: runError } = await supabase
+    .from("benchmark_runs")
+    .select("id")
+    .eq("status", "completed")
+    .eq("is_public", true)
+    .not("score", "is", null)
+    .limit(1000);
+
+  if (runError || !publicRuns) {
+    throw runError ?? new Error("Failed to load leaderboard versions");
+  }
+  if (publicRuns.length === 0) {
+    return [];
+  }
+
+  const { data: attempts, error: attemptError } = await supabase
+    .from("benchmark_attempts")
+    .select("suite_version")
+    .eq("status", "completed")
+    .in("run_id", publicRuns.map((run) => run.id))
+    .order("suite_version", { ascending: false });
+
+  if (attemptError || !attempts) {
+    throw attemptError ?? new Error("Failed to load leaderboard versions");
+  }
+
+  return [...new Set(attempts.map((attempt) => attempt.suite_version))]
+    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }));
+}
+
+export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): Promise<LeaderboardEntry[]> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return [];
+  }
+
+  let versionRunIds: string[] | null = null;
+  if (suiteVersion) {
+    const { data: versionAttempts, error: versionError } = await supabase
+      .from("benchmark_attempts")
+      .select("run_id")
+      .eq("status", "completed")
+      .eq("suite_version", suiteVersion)
+      .limit(1000);
+
+    if (versionError || !versionAttempts) {
+      throw versionError ?? new Error("Failed to load leaderboard version");
+    }
+    versionRunIds = [...new Set(versionAttempts.map((attempt) => attempt.run_id))];
+    if (versionRunIds.length === 0) {
+      return [];
+    }
+  }
+
+  let runsQuery = supabase
     .from("benchmark_runs")
     .select("id, case_id, score, started_at, completed_at, agent_name, agent_version, base_model, browser_environment")
     .eq("status", "completed")
     .eq("is_public", true)
     .not("score", "is", null)
     .order("score", { ascending: false })
-    .order("completed_at", { ascending: true })
-    .limit(Math.max(1, Math.min(limit, 100)));
+    .order("completed_at", { ascending: true });
+
+  if (versionRunIds) {
+    runsQuery = runsQuery.in("id", versionRunIds);
+  }
+
+  const { data: runs, error } = await runsQuery.limit(Math.max(1, Math.min(limit, 100)));
 
   if (error || !runs) {
     throw error ?? new Error("Failed to load leaderboard");
