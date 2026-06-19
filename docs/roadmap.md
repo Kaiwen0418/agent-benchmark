@@ -15,25 +15,27 @@ This roadmap starts from the architecture that is already running. Completed wor
 - Terminal hosted results and aggregate attempt scores are first-writer-wins database invariants with explicit conflict recovery.
 - `develop` deploys to development; `main` deploys to production through separate GitHub Environments, runners, database URLs, image channels, ports, and Compose projects.
 
-## P0: Lifecycle Correctness and Recovery
+## P0 Release Gate
 
-- Add database transactions or compare-and-set transitions for active-session promotion, timeout, and terminal completion.
-- Persist Web callback delivery in an outbox, retry with bounded backoff, and reconcile attempts whose durable result exists but run completion is missing.
-- Define command retry limits and add a dead-letter path with command ID, partition, payload type, error code, and inspection tooling.
-- Add lifecycle integration tests against real Postgres for concurrent completion, timeout-versus-completion, duplicate commands, and callback recovery.
+P0 is now organized as ordered, independently verifiable milestones. A milestone is complete only when its implementation, automated checks, deployment behavior, and operator documentation agree.
 
-Completion criteria: the same command can be retried after any process failure without creating a second transition, result, score, or callback side effect.
+| Milestone | Status | Exit criteria |
+| --- | --- | --- |
+| P0.1 Public result integrity | Complete | Public result pages expose sanitized benchmark metadata, completion time, browser environment, agent/base-model identity, and stable scores without leaking private run fields. |
+| P0.2 Production role isolation | In progress | Server Compose runs API and workers separately; deploys validate exact partition ownership; all runtime leases are required for readiness; development deployment and worker-restart verification pass. |
+| P0.3 Atomic lifecycle transitions | Planned | Active promotion, timeout, and terminal completion use database compare-and-set or transactions, including timeout-versus-completion concurrency tests against Postgres. |
+| P0.4 Durable callback recovery | Planned | Web callbacks use a persisted outbox, bounded retry, and reconciliation when a result exists but run completion is absent. |
+| P0.5 Poison-command containment | Planned | Commands have bounded retries, a dead-letter record with diagnostic identity, replay tooling, and integration coverage for duplicate and failed delivery. |
 
-## P0: Production Topology Alignment
+### P0.2 Implementation Scope
 
-The local Compose topology separates one API process from two workers covering partitions `0-7` and `8-15`. The current server Compose runs one `ORCHESTRATOR_MODE=all` service. This is functional for one replica but does not provide worker isolation and cannot safely scale all-mode replicas because partition leases overlap.
+- Production now declares one `ORCHESTRATOR_MODE=api` service and two worker services covering partitions `0-7` and `8-15`.
+- An orchestrator image deployment updates the API and both workers from the same immutable tag without recreating hosted-sites.
+- Static deployment validation rejects missing, duplicate, and out-of-range partition assignments.
+- Runtime readiness requires Redis Streams plus an active lease for every partition.
+- Remaining gate: deploy to development, restart each worker independently, verify public API continuity and queued-command recovery, then document rollback evidence.
 
-- Restore explicit API and worker services in the server Compose file.
-- Update targeted deployment logic so orchestrator image changes recreate the API and every worker without disturbing hosted-sites.
-- Make worker partition coverage and duplicate ownership deployment-time invariants.
-- Add production readiness checks for complete lease coverage and a rollback procedure that preserves command processing.
-
-Completion criteria: API and workers can be deployed independently, every partition has exactly one owner, and a worker restart does not interrupt public API availability.
+P0 completion criterion: after any single-process failure or command retry, the system preserves one lifecycle transition, one result, one score, and one callback side effect while keeping the public API available.
 
 ## P1: Observability and Operations
 

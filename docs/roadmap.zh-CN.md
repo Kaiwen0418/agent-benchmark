@@ -15,25 +15,27 @@
 - Hosted 终态结果和 attempt 聚合分数采用先写入者获胜的数据库约束，并具备显式冲突恢复。
 - `develop` 部署到 development，`main` 部署到 production；两者使用独立 GitHub Environment、runner、数据库 URL、镜像 channel、端口和 Compose project。
 
-## P0：生命周期正确性与恢复
+## P0 发布门槛
 
-- 为 active-session 推进、timeout 和终态完成增加数据库 transaction 或 compare-and-set。
-- 使用 outbox 持久化 Web callback delivery，按有上限的退避策略重试，并对“结果已持久化但 run 未完成”的 attempt 自动对账。
-- 定义 command 重试上限，增加 dead-letter 路径，记录 command ID、partition、payload type、error code，并提供检查工具。
-- 基于真实 Postgres 增加 lifecycle 集成测试，覆盖并发完成、timeout 与完成竞争、重复 command 和 callback 恢复。
+P0 现在按有顺序、可独立验收的里程碑管理。只有实现、自动化检查、部署行为和运维文档一致时，里程碑才算完成。
 
-完成标准：任一进程失败后重试同一 command，都不会产生第二次 transition、result、score 或 callback side effect。
+| 里程碑 | 状态 | 退出标准 |
+| --- | --- | --- |
+| P0.1 公共结果完整性 | 已完成 | 公共结果页展示脱敏后的 benchmark metadata、完成时间、浏览器环境、Agent/base-model 标识和稳定分数，不泄露私有 run 字段。 |
+| P0.2 生产角色隔离 | 进行中 | 服务器 Compose 分离 API 与 workers；部署校验精确 partition 归属；readiness 要求全部运行时 lease；development 部署和 worker 重启验证通过。 |
+| P0.3 原子生命周期转换 | 计划中 | Active 推进、timeout 和终态完成使用数据库 compare-and-set 或 transaction，并包含基于 Postgres 的 timeout 与 completion 并发测试。 |
+| P0.4 持久 callback 恢复 | 计划中 | Web callback 使用持久 outbox、有上限重试，并能对账“结果存在但 run completion 缺失”的状态。 |
+| P0.5 异常 command 隔离 | 计划中 | Command 有重试上限、包含诊断标识的 dead-letter 记录、重放工具，以及重复和失败 delivery 的集成测试。 |
 
-## P0：生产拓扑对齐
+### P0.2 实施范围
 
-本地 Compose 将一个 API 进程和两个 worker 分离，workers 分别负责 partition `0-7` 与 `8-15`。当前服务器 Compose 使用一个 `ORCHESTRATOR_MODE=all` 服务；单副本下可以工作，但没有 worker 隔离，也不能安全扩容多个 all-mode 副本，因为 partition lease 会重叠。
+- 生产环境现在声明一个 `ORCHESTRATOR_MODE=api` service，以及分别覆盖 partition `0-7` 与 `8-15` 的两个 worker services。
+- Orchestrator 镜像部署使用同一个不可变 tag 更新 API 和两个 workers，不重建 hosted-sites。
+- 静态部署校验拒绝缺失、重复和越界的 partition 分配。
+- 运行时 readiness 要求 Redis Streams 可用且每个 partition 都有活跃 lease。
+- 剩余门槛：部署到 development，分别重启两个 workers，验证公网 API 连续性和排队 command 恢复，并记录回滚证据。
 
-- 在服务器 Compose 中恢复显式 API 和 worker services。
-- 更新定向部署逻辑，使 orchestrator 镜像变化会重建 API 和全部 workers，同时不影响 hosted-sites。
-- 将 worker partition 完整覆盖和重复归属检查设为部署不变量。
-- 增加生产 readiness 检查和回滚流程，保证所有 lease 完整且回滚期间 command 仍可处理。
-
-完成标准：API 和 workers 可独立部署，每个 partition 恰好一个 owner，worker 重启不会中断公网 API。
+P0 总完成标准：任一单进程失败或 command 重试后，系统仍只产生一次生命周期转换、一个结果、一个分数和一次 callback side effect，同时保持公网 API 可用。
 
 ## P1：可观测性与运维
 

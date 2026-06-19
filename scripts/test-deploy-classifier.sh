@@ -23,6 +23,7 @@ assert_classification '.github/workflows/deploy-hosted-sites.yml' $'hosted_sites
 assert_classification 'infra/nginx/hosted-sites.conf' $'hosted_sites=false\norchestrator=false\ninfra=true\ntopology=false'
 assert_classification 'infra/docker/docker-compose.server.yml' $'hosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 assert_classification 'infra/scripts/deploy-hosted-stack.sh' $'hosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
+assert_classification 'infra/scripts/validate-orchestrator-partitions.sh' $'hosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 assert_classification 'docs/deployment.md' $'hosted_sites=false\norchestrator=false\ninfra=false\ntopology=false'
 
 echo "deployment classifier tests passed"

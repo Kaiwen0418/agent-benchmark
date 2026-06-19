@@ -63,10 +63,9 @@ The same image supports `ORCHESTRATOR_MODE=api|worker|all`. The API role authent
 The deployment profile matters:
 
 - local `docker-compose.yml` runs one API process and two workers covering partitions `0-7` and `8-15`
-- the current server Compose file runs one `all` process that colocates API and worker roles for all 16 partitions
-- multiple `all` replicas are not a supported scaling mode because they compete for the same partition leases
-
-Restoring isolated production workers is tracked in the [Roadmap](./roadmap.md).
+- server Compose uses the same role split: one API process and two workers with disjoint partition ownership
+- API replicas may scale independently; worker services must not be scaled without redistributing partitions because duplicate leases are rejected
+- deployment validates static partition coverage before startup and requires all 16 dynamic leases before readiness succeeds
 
 ### Redis
 

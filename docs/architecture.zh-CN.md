@@ -63,10 +63,9 @@ flowchart LR
 部署 profile 会影响实际进程边界：
 
 - 本地 `docker-compose.yml` 运行一个 API 进程和两个 workers，分别负责 partition `0-7` 与 `8-15`
-- 当前服务器 Compose 运行一个 `all` 进程，将 API 和 worker 角色共置并负责全部 16 个 partitions
-- 不支持扩容多个 `all` 副本，因为它们会竞争相同的 partition leases
-
-恢复生产 worker 隔离记录在[路线图](./roadmap.zh-CN.md)中。
+- 服务器 Compose 使用相同的角色拆分：一个 API 进程和两个拥有互斥 partition 的 workers
+- API 副本可以独立扩容；worker service 在重新分配 partition 前不能直接扩容，因为重复 lease 会被拒绝
+- 部署在启动前校验静态 partition 覆盖，并要求 16 个动态 lease 全部就绪后才通过 readiness
 
 ### Redis
 
