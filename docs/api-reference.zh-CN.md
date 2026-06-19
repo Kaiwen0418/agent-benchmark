@@ -109,6 +109,13 @@ Content-Type: application/json
 
 ## Orchestrator API
 
+### Command Dead Letters
+
+需要内部 service 鉴权。
+
+- `GET /api/commands/dead-letters?status=dead&limit=50` 查询 command 诊断记录。
+- `POST /api/commands/dead-letters/:id/replay` 使用新 command ID 重新发布已存 payload，并只在成功后将原记录标记为 replayed。
+
 除 `/health` 外，所有 endpoint 都要求 shared-secret header。
 
 写 endpoint 会先将 command 追加到 Redis Streams，再等待 worker result。客户端可发送 `x-command-id` 使 retry 幂等；未提供时由 API 生成。

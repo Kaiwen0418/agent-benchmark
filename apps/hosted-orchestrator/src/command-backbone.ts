@@ -8,6 +8,18 @@ type CommandResponse = {
 
 type CommandHandler = (type: string, payload: Record<string, unknown>) => Promise<CommandResponse>;
 export type CommandBackboneRole = "api" | "worker" | "all";
+export type CommandDeadLetter = {
+  commandId: string;
+  stream: string;
+  messageId: string;
+  partition: number;
+  partitionKey: string | null;
+  payloadType: string;
+  payload: Record<string, unknown>;
+  errorCode: string;
+  errorMessage: string;
+  attempts: number;
+};
 
 type CommandBackboneOptions = {
   redisUrl: string;
@@ -21,6 +33,10 @@ type CommandBackboneOptions = {
   responseTtlSeconds?: number;
   responseTimeoutSeconds?: number;
   maxStreamLength?: number;
+  maxCommandAttempts?: number;
+  retryBaseDelayMs?: number;
+  reclaimIdleMs?: number;
+  onDeadLetter?: (deadLetter: CommandDeadLetter) => Promise<void>;
 };
 
 type StoredResponse = CommandResponse & {
@@ -45,6 +61,9 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
   const responseTtlSeconds = options.responseTtlSeconds ?? 60;
   const responseTimeoutSeconds = options.responseTimeoutSeconds ?? 30;
   const maxStreamLength = options.maxStreamLength ?? 100_000;
+  const maxCommandAttempts = Math.max(1, Math.trunc(options.maxCommandAttempts ?? 3));
+  const retryBaseDelayMs = Math.max(0, Math.trunc(options.retryBaseDelayMs ?? 100));
+  const reclaimIdleMs = Math.max(1, Math.trunc(options.reclaimIdleMs ?? 30_000));
   let running = false;
   let leaseTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -68,6 +87,14 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
 
   function resultKey(commandId: string) {
     return `agentbench:orchestrator:result:${commandId}`;
+  }
+
+  function retryKey(commandId: string) {
+    return `${streamKey}:retry:${commandId}`;
+  }
+
+  function failureKey(commandId: string) {
+    return `${streamKey}:failure:${commandId}`;
   }
 
   function leaseKey(partition: number) {
@@ -142,17 +169,73 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
       return;
     }
 
-    let response: StoredResponse;
-    try {
-      const payload = JSON.parse(message.payload ?? "{}") as Record<string, unknown>;
-      response = { commandId, ...(await options.handler(type, payload)) };
-    } catch (error) {
+    let response: StoredResponse | null = null;
+    let payload: Record<string, unknown> = {};
+    const persistedAttempts = Number(await producer.get(retryKey(commandId)) ?? 0);
+    if (persistedAttempts >= maxCommandAttempts) {
+      try {
+        payload = JSON.parse(message.payload ?? "{}") as Record<string, unknown>;
+      } catch {
+        payload = {};
+      }
+      const storedFailure = JSON.parse(
+        await producer.get(failureKey(commandId)) ?? '{"errorCode":"command_handler_error","errorMessage":"Command failed"}',
+      ) as { errorCode: string; errorMessage: string };
+      await options.onDeadLetter?.({
+        commandId,
+        stream,
+        messageId: id,
+        partition: Number(stream.match(/:p(\d+)$/)?.[1] ?? 0),
+        partitionKey: message.partitionKey ?? null,
+        payloadType: type,
+        payload,
+        errorCode: storedFailure.errorCode,
+        errorMessage: storedFailure.errorMessage,
+        attempts: persistedAttempts,
+      });
       response = {
         commandId,
         statusCode: 500,
-        body: { error: error instanceof Error ? error.message : "Command failed" },
+        body: { error: "orchestrator_command_dead_lettered", commandId, attempts: persistedAttempts },
       };
     }
+    while (!response) {
+      try {
+        payload = JSON.parse(message.payload ?? "{}") as Record<string, unknown>;
+        response = { commandId, ...(await options.handler(type, payload)) };
+        await producer.del([retryKey(commandId), failureKey(commandId)]);
+      } catch (error) {
+        const attempts = await producer.incr(retryKey(commandId));
+        await producer.expire(retryKey(commandId), 24 * 60 * 60);
+        if (attempts < maxCommandAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, retryBaseDelayMs * 2 ** (attempts - 1)));
+          continue;
+        }
+
+        const errorMessage = error instanceof Error ? error.message : "Command failed";
+        const errorCode = error instanceof Error && error.name ? error.name : "command_handler_error";
+        await producer.set(failureKey(commandId), JSON.stringify({ errorCode, errorMessage }), { EX: 24 * 60 * 60 });
+        await options.onDeadLetter?.({
+          commandId,
+          stream,
+          messageId: id,
+          partition: Number(stream.match(/:p(\d+)$/)?.[1] ?? 0),
+          partitionKey: message.partitionKey ?? null,
+          payloadType: type,
+          payload,
+          errorCode,
+          errorMessage,
+          attempts,
+        });
+        response = {
+          commandId,
+          statusCode: 500,
+          body: { error: "orchestrator_command_dead_lettered", commandId, attempts },
+        };
+      }
+    }
+
+    await producer.del([retryKey(commandId), failureKey(commandId)]);
 
     await producer.set(resultKey(commandId), JSON.stringify(response), { EX: 24 * 60 * 60 });
     await publishResponse(response);
@@ -162,7 +245,7 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
   async function reclaimStaleMessages() {
     for (const partition of assignedPartitions) {
       const stream = streamForPartition(partition);
-      const claimed = await consumer.xAutoClaim(stream, groupName, consumerName, 30_000, "0-0", { COUNT: 16 });
+      const claimed = await consumer.xAutoClaim(stream, groupName, consumerName, reclaimIdleMs, "0-0", { COUNT: 16 });
       for (const entry of claimed.messages) {
         if (entry) {
           await processMessage(stream, entry.id, entry.message);

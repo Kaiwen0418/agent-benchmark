@@ -25,7 +25,7 @@ P0 is now organized as ordered, independently verifiable milestones. A milestone
 | P0.2 Production role isolation | In progress | Server Compose runs API and workers separately; deploys validate exact partition ownership; all runtime leases are required for readiness; development deployment and worker-restart verification pass. |
 | P0.3 Atomic lifecycle transitions | Complete | Timeout, terminal completion, and active promotion share an attempt row lock and pass real-Postgres timeout-versus-completion and duplicate-completion race tests. |
 | P0.4 Durable callback recovery | Complete | Web completion callbacks use a transactional outbox, eight-attempt bounded retry, stale-claim recovery, periodic reconciliation, and an idempotent Web receiver. |
-| P0.5 Poison-command containment | Planned | Commands have bounded retries, a dead-letter record with diagnostic identity, replay tooling, and integration coverage for duplicate and failed delivery. |
+| P0.5 Poison-command containment | Complete | Commands retry at most three times, persist diagnostic dead letters before acknowledgement, and support authenticated inspection and replay with a new command ID. |
 
 ### P0.2 Implementation Scope
 
@@ -53,6 +53,14 @@ P0 completion criterion: after any single-process failure or command retry, the 
 - Maintenance recovers stale claims and recreates missing outbox rows for terminal attempts.
 - The Web completion receiver uses a terminal-status compare-and-set so retries do not refresh completion time or append duplicate terminal events.
 - CI covers trigger enqueue, exclusive claim, stale exhaustion, reconciliation, retry, delivery, and dead-letter behavior.
+
+### P0.5 Implementation Scope
+
+- Redis stores retry count and the final error independently from the worker process; handler execution stops after three failures.
+- A command is acknowledged only after its diagnostic record is persisted in `orchestrator_command_dead_letters`.
+- Reclaim retries failed DLQ persistence without re-executing an exhausted handler.
+- Internal authenticated APIs list dead letters and replay a selected record with a new command ID, avoiding the original result cache.
+- CI covers retry limits, DLQ persistence failure recovery, diagnostic schema, and database storage.
 
 ## P1: Observability and Operations
 

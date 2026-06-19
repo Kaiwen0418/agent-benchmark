@@ -109,6 +109,13 @@ All task routes require `?session=<token>` and reject a token belonging to a dif
 
 ## Orchestrator API
 
+### Command Dead Letters
+
+Internal service authentication is required.
+
+- `GET /api/commands/dead-letters?status=dead&limit=50` lists command diagnostics.
+- `POST /api/commands/dead-letters/:id/replay` republishes the stored payload with a new command ID and marks the original record replayed only after success.
+
 Except for `/health`, every endpoint requires the shared-secret header.
 
 Write endpoints append a command to Redis Streams and wait for the worker result. Clients may send `x-command-id` to make retries idempotent; otherwise the API generates one.

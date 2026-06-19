@@ -14,6 +14,10 @@ const callbackMigration = readFileSync(
   new URL("../../../supabase/migrations/20260619000016_callback_outbox.sql", import.meta.url),
   "utf8",
 );
+const commandDlqMigration = readFileSync(
+  new URL("../../../supabase/migrations/20260619000017_orchestrator_command_dlq.sql", import.meta.url),
+  "utf8",
+);
 
 test("attempt timeout migration keeps lifecycle writes under one row lock", () => {
   assert.match(migration, /for update;/i);
@@ -47,4 +51,11 @@ test("callback outbox is transactionally enqueued and claimed with row locking",
   assert.match(callbackMigration, /on conflict \(attempt_id, event_type\) do nothing/i);
   assert.match(callbackMigration, /for update skip locked/i);
   assert.match(callbackMigration, /reconcile_hosted_callback_outbox/i);
+});
+
+test("command DLQ preserves replay and failure diagnostics", () => {
+  assert.match(commandDlqMigration, /command_id text not null unique/i);
+  assert.match(commandDlqMigration, /payload_type text not null/i);
+  assert.match(commandDlqMigration, /error_code text not null/i);
+  assert.match(commandDlqMigration, /status in \('dead', 'replayed', 'resolved'\)/i);
 });

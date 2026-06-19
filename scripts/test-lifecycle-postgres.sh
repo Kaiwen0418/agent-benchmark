@@ -83,6 +83,8 @@ SQL
   < "${ROOT_DIR}/supabase/migrations/20260619000015_atomic_session_completion.sql" >/dev/null
 "${PSQL[@]}" -v ON_ERROR_STOP=1 \
   < "${ROOT_DIR}/supabase/migrations/20260619000016_callback_outbox.sql" >/dev/null
+"${PSQL[@]}" -v ON_ERROR_STOP=1 \
+  < "${ROOT_DIR}/supabase/migrations/20260619000017_orchestrator_command_dlq.sql" >/dev/null
 
 seed_attempt() {
   local attempt_id="$1"
@@ -160,5 +162,17 @@ claimed="$("${PSQL[@]}" -Atqc "select count(*) from public.claim_hosted_callback
 
 "${PSQL[@]}" -Atqc "delete from public.hosted_callback_outbox where attempt_id = '${ATTEMPT_2}'" >/dev/null
 [[ "$("${PSQL[@]}" -Atqc "select public.reconcile_hosted_callback_outbox()")" == "1" ]]
+
+"${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "
+insert into public.orchestrator_command_dead_letters (
+  command_id, stream, message_id, partition, partition_key, payload_type, payload,
+  error_code, error_message, attempts
+) values (
+  'command-1', 'commands:p0', '1-0', 0, 'attempt-1', 'attempt.poison', '{\"attemptId\":\"attempt-1\"}',
+  'Error', 'poison command', 3
+)
+on conflict (command_id) do update set attempts = excluded.attempts;
+" >/dev/null
+[[ "$("${PSQL[@]}" -Atqc "select status || ':' || attempts from public.orchestrator_command_dead_letters where command_id = 'command-1'")" == "dead:3" ]]
 
 echo "lifecycle Postgres integration tests passed"

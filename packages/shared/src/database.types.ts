@@ -165,6 +165,54 @@ export type Database = {
         };
         Relationships: [];
       };
+      orchestrator_command_dead_letters: {
+        Row: {
+          attempts: number;
+          command_id: string;
+          created_at: string;
+          error_code: string;
+          error_message: string;
+          id: string;
+          message_id: string;
+          partition: number;
+          partition_key: string | null;
+          payload: Json;
+          payload_type: string;
+          replay_command_id: string | null;
+          replayed_at: string | null;
+          status: "dead" | "replayed" | "resolved";
+          stream: string;
+          updated_at: string;
+        };
+        Insert: {
+          attempts: number;
+          command_id: string;
+          created_at?: string;
+          error_code: string;
+          error_message: string;
+          id?: string;
+          message_id: string;
+          partition: number;
+          partition_key?: string | null;
+          payload?: Json;
+          payload_type: string;
+          replay_command_id?: string | null;
+          replayed_at?: string | null;
+          status?: "dead" | "replayed" | "resolved";
+          stream: string;
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          error_code?: string;
+          error_message?: string;
+          replay_command_id?: string | null;
+          replayed_at?: string | null;
+          status?: "dead" | "replayed" | "resolved";
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       benchmark_runs: {
         Row: {
           agent_name: string | null;

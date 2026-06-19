@@ -12,7 +12,11 @@ import {
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { createAttemptHandlers } from "./attempt-handlers.js";
 import { resolveHostedSitesUrls } from "./service-urls.js";
-import { createCommandBackbone, type CommandBackboneRole } from "./command-backbone.js";
+import {
+  createCommandBackbone,
+  type CommandBackboneRole,
+  type CommandDeadLetter,
+} from "./command-backbone.js";
 import {
   createAttemptLifecycle,
   type AttemptLifecycleAdvanceSession,
@@ -1113,6 +1117,34 @@ async function dispatchWriteCommand(type: string, input: Record<string, unknown>
   return { statusCode: 400, body: { error: "Unknown command type" } };
 }
 
+async function persistCommandDeadLetter(deadLetter: CommandDeadLetter) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error("Command DLQ persistence requires a database connection.");
+  }
+  const timestamp = now();
+  const { error } = await supabase.from("orchestrator_command_dead_letters").upsert(
+    {
+      command_id: deadLetter.commandId,
+      stream: deadLetter.stream,
+      message_id: deadLetter.messageId,
+      partition: deadLetter.partition,
+      partition_key: deadLetter.partitionKey,
+      payload_type: deadLetter.payloadType,
+      payload: deadLetter.payload,
+      error_code: deadLetter.errorCode,
+      error_message: deadLetter.errorMessage,
+      attempts: deadLetter.attempts,
+      status: "dead",
+      updated_at: timestamp,
+    },
+    { onConflict: "command_id" },
+  );
+  if (error) {
+    throw error;
+  }
+}
+
 if (!orchestratorRedisUrl) {
   throw new Error("ORCHESTRATOR_REDIS_URL or REDIS_URL is required for the orchestrator command backbone.");
 }
@@ -1123,6 +1155,7 @@ const commandBackbone = createCommandBackbone({
   role: orchestratorMode,
   partitionCount: orchestratorPartitionCount,
   assignedPartitions: workerPartitions,
+  onDeadLetter: persistCommandDeadLetter,
 });
 
 async function sweepExpiredSessions() {
@@ -1241,6 +1274,81 @@ const server = createServer(async (request, response) => {
 
     if (!isInternalRunnerRequest(request)) {
       sendJson(response, 401, { error: "Unauthorized" });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/commands/dead-letters") {
+      const supabase = getSupabaseAdmin();
+      if (!supabase) {
+        sendJson(response, 503, { error: "database_unavailable" });
+        return;
+      }
+      const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") ?? 50) || 50, 100));
+      const status = url.searchParams.get("status");
+      let query = supabase
+        .from("orchestrator_command_dead_letters")
+        .select("id, command_id, partition, partition_key, payload_type, error_code, error_message, attempts, status, replay_command_id, replayed_at, created_at")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (status === "dead" || status === "replayed" || status === "resolved") {
+        query = query.eq("status", status);
+      }
+      const { data, error } = await query;
+      if (error) {
+        throw error;
+      }
+      sendJson(response, 200, { deadLetters: data ?? [] });
+      return;
+    }
+
+    const replayDeadLetterMatch = url.pathname.match(/^\/api\/commands\/dead-letters\/([^/]+)\/replay$/);
+    if (request.method === "POST" && replayDeadLetterMatch) {
+      const supabase = getSupabaseAdmin();
+      if (!supabase) {
+        sendJson(response, 503, { error: "database_unavailable" });
+        return;
+      }
+      const deadLetterId = decodeURIComponent(replayDeadLetterMatch[1]);
+      const { data: deadLetter, error: loadError } = await supabase
+        .from("orchestrator_command_dead_letters")
+        .select("id, command_id, partition_key, payload_type, payload, status")
+        .eq("id", deadLetterId)
+        .maybeSingle();
+      if (loadError) {
+        throw loadError;
+      }
+      if (!deadLetter) {
+        sendJson(response, 404, { error: "dead_letter_not_found" });
+        return;
+      }
+      if (deadLetter.status !== "dead") {
+        sendJson(response, 409, { error: "dead_letter_not_replayable", status: deadLetter.status });
+        return;
+      }
+      const replayCommandId = crypto.randomUUID();
+      const payload = deadLetter.payload && typeof deadLetter.payload === "object" && !Array.isArray(deadLetter.payload)
+        ? deadLetter.payload as Record<string, unknown>
+        : {};
+      const replay = await commandBackbone.execute(
+        deadLetter.payload_type,
+        payload,
+        deadLetter.partition_key ?? deadLetter.command_id,
+        replayCommandId,
+      );
+      if (replay.statusCode >= 500) {
+        sendJson(response, 409, { error: "dead_letter_replay_failed", replayCommandId, response: replay });
+        return;
+      }
+      const replayedAt = now();
+      const { error: updateError } = await supabase
+        .from("orchestrator_command_dead_letters")
+        .update({ status: "replayed", replay_command_id: replayCommandId, replayed_at: replayedAt, updated_at: replayedAt })
+        .eq("id", deadLetter.id)
+        .eq("status", "dead");
+      if (updateError) {
+        throw updateError;
+      }
+      sendJson(response, 200, { replayCommandId, response: replay });
       return;
     }
 
