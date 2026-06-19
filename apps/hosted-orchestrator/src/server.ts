@@ -457,40 +457,6 @@ async function forwardTimeoutCompletion(params: {
   }).catch(() => undefined);
 }
 
-async function persistScoreResult(session: AttemptLifecycleSession, result: HostedWebScoreResult) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase || !session.runId) {
-    return { result, duplicate: false };
-  }
-
-  const { error } = await supabase.from("hosted_web_results").insert({
-    session_id: session.id,
-    run_id: session.runId,
-    attempt_id: session.attemptId,
-    app: session.app,
-    task_slug: session.taskSlug,
-    weight: session.weight,
-    status: result.status,
-    score: result.score,
-    summary: result.summary,
-    final_state: session.finalState ?? null,
-    evaluators: result.evaluators,
-  });
-
-  if (!error) {
-    return { result, duplicate: false };
-  }
-
-  if (error.code === "23505") {
-    const existingResult = await loadLatestSessionResult(session.id);
-    if (existingResult) {
-      return { result: existingResult, duplicate: true };
-    }
-  }
-
-  throw error;
-}
-
 async function recoverInitializedAttempt(params: {
   runId: string;
   caseId: string;
@@ -1015,7 +981,6 @@ const attemptLifecycle = createAttemptLifecycle({
   loadAttemptSessions,
   loadAttemptReadModel,
   loadLatestSessionResult,
-  persistScoreResult,
   forwardTimeoutCompletion,
   evictInMemorySessions: () => undefined,
 });

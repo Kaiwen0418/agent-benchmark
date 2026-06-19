@@ -60,6 +60,8 @@ flowchart LR
 
 同一镜像支持 `ORCHESTRATOR_MODE=api|worker|all`。API 角色负责鉴权、校验、稳定分区路由和 read model；worker 角色消费自己拥有的 partitions 并执行持久化写入。
 
+Attempt timeout 和 session completion 通过数据库事务函数跨越持久化边界。两者在修改 sessions、results、聚合分数或 active-session metadata 前都会锁定 attempt row，因此 Redis command 串行化只是优化，而不是生命周期正确性的边界。
+
 部署 profile 会影响实际进程边界：
 
 - 本地 `docker-compose.yml` 运行一个 API 进程和两个 workers，分别负责 partition `0-7` 与 `8-15`

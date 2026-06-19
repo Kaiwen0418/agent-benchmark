@@ -6,6 +6,10 @@ const migration = readFileSync(
   new URL("../../../supabase/migrations/20260619000014_atomic_attempt_timeout.sql", import.meta.url),
   "utf8",
 );
+const completionMigration = readFileSync(
+  new URL("../../../supabase/migrations/20260619000015_atomic_session_completion.sql", import.meta.url),
+  "utf8",
+);
 
 test("attempt timeout migration keeps lifecycle writes under one row lock", () => {
   assert.match(migration, /for update;/i);
@@ -18,4 +22,18 @@ test("attempt timeout migration keeps lifecycle writes under one row lock", () =
 test("attempt timeout RPC is restricted to the service role", () => {
   assert.match(migration, /revoke all .* from authenticated;/i);
   assert.match(migration, /grant execute .* to service_role;/i);
+});
+
+test("session completion migration keeps result, progress, promotion, and score under one lock", () => {
+  assert.match(completionMigration, /for update;/i);
+  assert.match(completionMigration, /insert into public\.hosted_web_results/i);
+  assert.match(completionMigration, /update public\.hosted_web_sessions/i);
+  assert.match(completionMigration, /update public\.benchmark_attempts/i);
+  assert.match(completionMigration, /insert into public\.benchmark_attempt_scores/i);
+});
+
+test("session completion validates active ownership and restricts RPC access", () => {
+  assert.match(completionMigration, /activeSessionId/);
+  assert.match(completionMigration, /session_not_active/);
+  assert.match(completionMigration, /grant execute .* to service_role;/i);
 });

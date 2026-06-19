@@ -23,7 +23,7 @@ P0 is now organized as ordered, independently verifiable milestones. A milestone
 | --- | --- | --- |
 | P0.1 Public result integrity | Complete | Public result pages expose sanitized benchmark metadata, completion time, browser environment, agent/base-model identity, and stable scores without leaking private run fields. |
 | P0.2 Production role isolation | In progress | Server Compose runs API and workers separately; deploys validate exact partition ownership; all runtime leases are required for readiness; development deployment and worker-restart verification pass. |
-| P0.3 Atomic lifecycle transitions | In progress | Timeout is transactional; active promotion and terminal completion still need database compare-and-set or transactions, followed by timeout-versus-completion concurrency tests against Postgres. |
+| P0.3 Atomic lifecycle transitions | Complete | Timeout, terminal completion, and active promotion share an attempt row lock and pass real-Postgres timeout-versus-completion and duplicate-completion race tests. |
 | P0.4 Durable callback recovery | Planned | Web callbacks use a persisted outbox, bounded retry, and reconciliation when a result exists but run completion is absent. |
 | P0.5 Poison-command containment | Planned | Commands have bounded retries, a dead-letter record with diagnostic identity, replay tooling, and integration coverage for duplicate and failed delivery. |
 
@@ -41,8 +41,10 @@ P0 completion criterion: after any single-process failure or command retry, the 
 
 - Expiry sweeps discover candidates without mutating lifecycle state.
 - `timeout_hosted_attempt` locks the attempt and atomically expires open sessions, marks the attempt timed out, and inserts the unique aggregate score.
+- `complete_hosted_attempt_session` uses the same attempt lock to persist the result, close the current session, update attempt progress, and either promote the next session or write the terminal aggregate.
 - A losing or repeated timeout command performs no cache eviction or Web callback.
-- Remaining gate: move session completion and next-session promotion behind the same database concurrency boundary, then run real-Postgres race tests.
+- Duplicate completion returns the first persisted result; completion after a winning timeout is rejected without lifecycle writes.
+- CI runs timeout-versus-completion and duplicate-completion races against an isolated Postgres instance and rejects any cross-table partial state.
 
 ## P1: Observability and Operations
 

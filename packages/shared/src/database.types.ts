@@ -561,6 +561,16 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      complete_hosted_attempt_session: {
+        Args: {
+          p_attempt_id: string;
+          p_attempt_update: Json;
+          p_completed_at: string;
+          p_result: Json;
+          p_session_id: string;
+        };
+        Returns: Json;
+      };
       timeout_hosted_attempt: {
         Args: {
           p_attempt_id: string;

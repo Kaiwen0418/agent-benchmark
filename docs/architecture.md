@@ -60,6 +60,8 @@ The service is stateless at the process boundary. Its local map is only a hot co
 
 The same image supports `ORCHESTRATOR_MODE=api|worker|all`. The API role authenticates, validates, routes commands to a stable partition, and serves read models. The worker role consumes owned partitions and performs durable writes.
 
+Attempt timeout and session completion cross the database boundary through transactional functions. Both lock the attempt row before changing sessions, results, aggregate scores, or active-session metadata, so Redis command serialization is an optimization rather than the lifecycle correctness boundary.
+
 The deployment profile matters:
 
 - local `docker-compose.yml` runs one API process and two workers covering partitions `0-7` and `8-15`

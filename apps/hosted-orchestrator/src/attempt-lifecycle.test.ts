@@ -6,7 +6,6 @@ import {
   createAttemptLifecycle,
   type AttemptLifecycleAdvanceSession,
   type AttemptLifecycleSession,
-  type PersistScoreResultOutcome,
 } from "./attempt-lifecycle.js";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 
@@ -15,10 +14,6 @@ function createLifecycle(overrides?: {
   loadAttemptMetadata?: (attemptId: string | null) => Promise<Record<string, unknown>>;
   loadAttemptSessions?: (attemptId: string) => Promise<AttemptLifecycleAdvanceSession[]>;
   loadLatestSessionResult?: (sessionId: string) => Promise<HostedWebScoreResult | null>;
-  persistScoreResult?: (
-    session: AttemptLifecycleSession,
-    result: HostedWebScoreResult,
-  ) => Promise<PersistScoreResultOutcome>;
   forwardTimeoutCompletion?: (params: { runId: string; summary: string; score?: number }) => Promise<void>;
   evictInMemorySessions?: (sessionIds: string[]) => void;
 }) {
@@ -39,8 +34,6 @@ function createLifecycle(overrides?: {
         })),
       }),
     loadLatestSessionResult: overrides?.loadLatestSessionResult ?? (async () => null),
-    persistScoreResult:
-      overrides?.persistScoreResult ?? (async (_session, result) => ({ result, duplicate: false })),
     forwardTimeoutCompletion: overrides?.forwardTimeoutCompletion ?? (async () => undefined),
     evictInMemorySessions: overrides?.evictInMemorySessions ?? (() => undefined),
   });
@@ -150,13 +143,8 @@ test("complete-session returns existing result when session already completed", 
   const existingResult = makeScoreResult({
     summary: "already done",
   });
-  let persisted = false;
   const lifecycle = createLifecycle({
     loadLatestSessionResult: async () => existingResult,
-    persistScoreResult: async () => {
-      persisted = true;
-      return { result: existingResult, duplicate: false };
-    },
   });
 
   const result = await lifecycle.executeCompleteSessionCommand({
@@ -167,34 +155,9 @@ test("complete-session returns existing result when session already completed", 
 
   assert.equal(result.duplicate, true);
   assert.equal(result.result.summary, "already done");
-  assert.equal(persisted, false);
 });
 
-test("complete-session returns the first persisted result after a uniqueness conflict", async () => {
-  const persistedResult = makeScoreResult({
-    status: "failed",
-    score: 0,
-    summary: "first completion won",
-  });
-  const lifecycle = createLifecycle({
-    persistScoreResult: async () => ({
-      result: persistedResult,
-      duplicate: true,
-    }),
-  });
-
-  const result = await lifecycle.executeCompleteSessionCommand({
-    type: "complete-session",
-    session: makeSession({ persisted: false }),
-    result: makeScoreResult({ summary: "concurrent completion lost" }),
-  });
-
-  assert.equal(result.duplicate, true);
-  assert.equal(result.result.status, "failed");
-  assert.equal(result.result.summary, "first completion won");
-});
-
-test("complete-session recovers the first aggregate score after a uniqueness conflict", async () => {
+test("complete-session recovers the first aggregate score from an atomic duplicate", async () => {
   const persistedAggregate = {
     status: "failed" as const,
     score: 0.25,
@@ -214,8 +177,6 @@ test("complete-session recovers the first aggregate score after a uniqueness con
       ],
     },
   };
-  let attemptUpdate: Record<string, unknown> | null = null;
-
   const supabase = {
     from(table: string) {
       if (table === "hosted_web_results") {
@@ -263,29 +224,25 @@ test("complete-session recovers the first aggregate score after a uniqueness con
         };
       }
 
-      if (table === "benchmark_attempt_scores") {
-        return {
-          insert: async () => ({ error: { code: "23505" } }),
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({ data: persistedAggregate, error: null }),
-            }),
-          }),
-        };
-      }
-
       return {
         select: () => ({
           eq: () => ({
             maybeSingle: async () => ({ data: { metadata: {} }, error: null }),
           }),
         }),
-        update: (value: Record<string, unknown>) => {
-          attemptUpdate = value;
-          return { eq: async () => ({ error: null }) };
-        },
       };
     },
+    rpc: async () => ({
+      data: {
+        transitioned: false,
+        duplicate: true,
+        conflict: null,
+        result: makeScoreResult({ status: "failed", score: 0, summary: "first completion won" }),
+        complete: true,
+        aggregate: persistedAggregate,
+      },
+      error: null,
+    }),
   } as unknown as SupabaseClient<Database>;
 
   const lifecycle = createLifecycle({
@@ -299,9 +256,8 @@ test("complete-session recovers the first aggregate score after a uniqueness con
 
   assert.equal(result.attemptResult.complete, true);
   assert.deepEqual(result.attemptResult.aggregate, persistedAggregate);
-  const recordedAttemptUpdate = attemptUpdate as Record<string, unknown> | null;
-  assert.equal(recordedAttemptUpdate?.status, "failed");
-  assert.equal(recordedAttemptUpdate?.aggregate_score, 0.25);
+  assert.equal(result.duplicate, true);
+  assert.equal(result.result.summary, "first completion won");
 });
 
 test("complete-session rejects non-active session completion", async () => {
@@ -319,6 +275,104 @@ test("complete-session rejects non-active session completion", async () => {
         result: makeScoreResult(),
       }),
     /not the active session/,
+  );
+});
+
+function createAtomicCompletionSupabase(rpcResult: Record<string, unknown>) {
+  const rpcCalls: Record<string, unknown>[] = [];
+  const sessions = [
+    {
+      id: "session-1",
+      app: "shopping-lite",
+      task_slug: "shopping-constrained-checkout",
+      weight: 1,
+      required: true,
+      sequence_index: 0,
+    },
+    {
+      id: "session-2",
+      app: "wiki-lite",
+      task_slug: "wiki-fact-check",
+      weight: 1,
+      required: true,
+      sequence_index: 1,
+    },
+  ];
+  const supabase = {
+    from(table: string) {
+      if (table === "benchmark_attempts") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: { metadata: { activeSessionId: "session-1" } }, error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "hosted_web_results") {
+        return {
+          select: () => ({
+            eq: () => ({ order: async () => ({ data: [], error: null }) }),
+          }),
+        };
+      }
+      if (table === "hosted_web_sessions") {
+        return {
+          select: () => ({
+            eq: () => ({ order: async () => ({ data: sessions, error: null }) }),
+          }),
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    },
+    rpc: async (_name: string, args: Record<string, unknown>) => {
+      rpcCalls.push(args);
+      return { data: rpcResult, error: null };
+    },
+  } as unknown as SupabaseClient<Database>;
+  return { supabase, rpcCalls };
+}
+
+test("complete-session atomically promotes the next session", async () => {
+  const score = makeScoreResult();
+  const { supabase, rpcCalls } = createAtomicCompletionSupabase({
+    transitioned: true,
+    duplicate: false,
+    conflict: null,
+    result: score,
+    complete: false,
+    aggregate: null,
+  });
+  const lifecycle = createLifecycle({ getSupabaseAdmin: () => supabase });
+
+  const completed = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeSession(),
+    result: score,
+  });
+
+  assert.equal(completed.attemptResult.complete, false);
+  const update = rpcCalls[0]?.p_attempt_update as Record<string, unknown>;
+  assert.equal(update.nextSessionId, "session-2");
+  assert.deepEqual((update.metadata as Record<string, unknown>).completedSessionIds, ["session-1"]);
+});
+
+test("complete-session rejects a database lifecycle conflict", async () => {
+  const { supabase } = createAtomicCompletionSupabase({
+    transitioned: false,
+    duplicate: false,
+    conflict: "attempt_terminal",
+  });
+  const lifecycle = createLifecycle({ getSupabaseAdmin: () => supabase });
+
+  await assert.rejects(
+    () =>
+      lifecycle.executeCompleteSessionCommand({
+        type: "complete-session",
+        session: makeSession(),
+        result: makeScoreResult(),
+      }),
+    /attempt_terminal/,
   );
 });
 
