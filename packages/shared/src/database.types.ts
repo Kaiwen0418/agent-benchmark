@@ -123,6 +123,96 @@ export type Database = {
         };
         Relationships: [];
       };
+      hosted_callback_outbox: {
+        Row: {
+          attempt_id: string;
+          attempts: number;
+          created_at: string;
+          delivered_at: string | null;
+          event_type: "run_completion";
+          id: string;
+          last_error: string | null;
+          locked_at: string | null;
+          next_attempt_at: string;
+          payload: Json;
+          run_id: string;
+          status: "pending" | "delivering" | "delivered" | "dead";
+          updated_at: string;
+        };
+        Insert: {
+          attempt_id: string;
+          attempts?: number;
+          created_at?: string;
+          delivered_at?: string | null;
+          event_type?: "run_completion";
+          id?: string;
+          last_error?: string | null;
+          locked_at?: string | null;
+          next_attempt_at?: string;
+          payload: Json;
+          run_id: string;
+          status?: "pending" | "delivering" | "delivered" | "dead";
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          delivered_at?: string | null;
+          last_error?: string | null;
+          locked_at?: string | null;
+          next_attempt_at?: string;
+          status?: "pending" | "delivering" | "delivered" | "dead";
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      orchestrator_command_dead_letters: {
+        Row: {
+          attempts: number;
+          command_id: string;
+          created_at: string;
+          error_code: string;
+          error_message: string;
+          id: string;
+          message_id: string;
+          partition: number;
+          partition_key: string | null;
+          payload: Json;
+          payload_type: string;
+          replay_command_id: string | null;
+          replayed_at: string | null;
+          status: "dead" | "replayed" | "resolved";
+          stream: string;
+          updated_at: string;
+        };
+        Insert: {
+          attempts: number;
+          command_id: string;
+          created_at?: string;
+          error_code: string;
+          error_message: string;
+          id?: string;
+          message_id: string;
+          partition: number;
+          partition_key?: string | null;
+          payload?: Json;
+          payload_type: string;
+          replay_command_id?: string | null;
+          replayed_at?: string | null;
+          status?: "dead" | "replayed" | "resolved";
+          stream: string;
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          error_code?: string;
+          error_message?: string;
+          replay_command_id?: string | null;
+          replayed_at?: string | null;
+          status?: "dead" | "replayed" | "resolved";
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       benchmark_runs: {
         Row: {
           agent_name: string | null;
@@ -560,7 +650,39 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      complete_hosted_attempt_session: {
+        Args: {
+          p_attempt_id: string;
+          p_attempt_update: Json;
+          p_completed_at: string;
+          p_result: Json;
+          p_session_id: string;
+        };
+        Returns: Json;
+      };
+      claim_hosted_callback_outbox: {
+        Args: { p_limit?: number };
+        Returns: Database["public"]["Tables"]["hosted_callback_outbox"]["Row"][];
+      };
+      reconcile_hosted_callback_outbox: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
+      timeout_hosted_attempt: {
+        Args: {
+          p_attempt_id: string;
+          p_scoring_summary: Json;
+          p_timed_out_session_id: string;
+          p_timeout_at: string;
+        };
+        Returns: {
+          attempt_run_id: string | null;
+          expired_session_ids: string[];
+          transitioned: boolean;
+        }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

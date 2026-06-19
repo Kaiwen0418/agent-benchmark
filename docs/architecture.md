@@ -60,13 +60,18 @@ The service is stateless at the process boundary. Its local map is only a hot co
 
 The same image supports `ORCHESTRATOR_MODE=api|worker|all`. The API role authenticates, validates, routes commands to a stable partition, and serves read models. The worker role consumes owned partitions and performs durable writes.
 
+Attempt timeout and session completion cross the database boundary through transactional functions. Both lock the attempt row before changing sessions, results, aggregate scores, or active-session metadata, so Redis command serialization is an optimization rather than the lifecycle correctness boundary.
+
+Terminal attempt transitions enqueue Web completion in `hosted_callback_outbox` within the same database transaction. Orchestrator workers deliver claimed rows, while maintenance retries failures and reconciles missing rows. The Web receiver applies terminal completion once.
+
+Redis command failures retain their retry count and final error outside the worker process. After three failed handler executions, workers persist a Supabase dead-letter record before acknowledging the Stream message. Authenticated internal routes expose inspection and replay; replay always receives a new command ID.
+
 The deployment profile matters:
 
 - local `docker-compose.yml` runs one API process and two workers covering partitions `0-7` and `8-15`
-- the current server Compose file runs one `all` process that colocates API and worker roles for all 16 partitions
-- multiple `all` replicas are not a supported scaling mode because they compete for the same partition leases
-
-Restoring isolated production workers is tracked in the [Roadmap](./roadmap.md).
+- server Compose uses the same role split: one API process and two workers with disjoint partition ownership
+- API replicas may scale independently; worker services must not be scaled without redistributing partitions because duplicate leases are rejected
+- deployment validates static partition coverage before startup and requires all 16 dynamic leases before readiness succeeds
 
 ### Redis
 

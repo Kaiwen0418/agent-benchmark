@@ -60,13 +60,18 @@ flowchart LR
 
 同一镜像支持 `ORCHESTRATOR_MODE=api|worker|all`。API 角色负责鉴权、校验、稳定分区路由和 read model；worker 角色消费自己拥有的 partitions 并执行持久化写入。
 
+Attempt timeout 和 session completion 通过数据库事务函数跨越持久化边界。两者在修改 sessions、results、聚合分数或 active-session metadata 前都会锁定 attempt row，因此 Redis command 串行化只是优化，而不是生命周期正确性的边界。
+
+Attempt 终态转换会在同一个数据库事务内向 `hosted_callback_outbox` 写入 Web completion。Orchestrator worker 投递已 claim 的记录，maintenance 负责失败重试和缺失记录对账；Web 接收端只应用一次终态 completion。
+
+Redis 在 worker 进程之外保存 command failure 的 retry count 和最终错误。Handler 三次失败后，worker 会先持久化 Supabase dead-letter 记录，再 ACK Stream message。内部鉴权 routes 提供查询和重放；每次重放都使用新的 command ID。
+
 部署 profile 会影响实际进程边界：
 
 - 本地 `docker-compose.yml` 运行一个 API 进程和两个 workers，分别负责 partition `0-7` 与 `8-15`
-- 当前服务器 Compose 运行一个 `all` 进程，将 API 和 worker 角色共置并负责全部 16 个 partitions
-- 不支持扩容多个 `all` 副本，因为它们会竞争相同的 partition leases
-
-恢复生产 worker 隔离记录在[路线图](./roadmap.zh-CN.md)中。
+- 服务器 Compose 使用相同的角色拆分：一个 API 进程和两个拥有互斥 partition 的 workers
+- API 副本可以独立扩容；worker service 在重新分配 partition 前不能直接扩容，因为重复 lease 会被拒绝
+- 部署在启动前校验静态 partition 覆盖，并要求 16 个动态 lease 全部就绪后才通过 readiness
 
 ### Redis
 

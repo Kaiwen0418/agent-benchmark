@@ -19,6 +19,7 @@ const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
 const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
 const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, metadata, is_public, created_at";
 const benchmarkRunSelect = "id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at, metadata, agent_name, agent_version, base_model, browser_environment, is_public";
+const terminalRunStatuses = new Set(["completed", "failed", "cancelled", "timeout"]);
 
 function getSupabase() {
   return createSupabaseAdminClient();
@@ -477,6 +478,9 @@ export async function appendRunEvent(runId: string, input: AppendRunEventInput) 
 export async function completeBenchmarkRun(runId: string, input: CompleteRunInput) {
   const localRun = mockStore.getRun(runId);
   if (localRun) {
+    if (terminalRunStatuses.has(localRun.status)) {
+      return localRun;
+    }
     localRun.status = input.status;
     localRun.score = input.score ?? null;
     localRun.errorMessage = input.errorMessage ?? null;
@@ -499,6 +503,21 @@ export async function completeBenchmarkRun(runId: string, input: CompleteRunInpu
     return null;
   }
 
+  const { data: existingRun, error: existingRunError } = await supabase
+    .from("benchmark_runs")
+    .select(benchmarkRunSelect)
+    .eq("id", runId)
+    .maybeSingle();
+  if (existingRunError) {
+    throw existingRunError;
+  }
+  if (!existingRun) {
+    return null;
+  }
+  if (terminalRunStatuses.has(existingRun.status)) {
+    return mapRunRow(existingRun);
+  }
+
   const completedAt = new Date().toISOString();
   const { data, error } = await supabase
     .from("benchmark_runs")
@@ -509,6 +528,7 @@ export async function completeBenchmarkRun(runId: string, input: CompleteRunInpu
       completed_at: completedAt,
     })
     .eq("id", runId)
+    .in("status", ["queued", "starting", "running", "scoring"])
     .select(benchmarkRunSelect)
     .maybeSingle();
 
@@ -517,7 +537,15 @@ export async function completeBenchmarkRun(runId: string, input: CompleteRunInpu
   }
 
   if (!data) {
-    return null;
+    const { data: winner, error: winnerError } = await supabase
+      .from("benchmark_runs")
+      .select(benchmarkRunSelect)
+      .eq("id", runId)
+      .maybeSingle();
+    if (winnerError) {
+      throw winnerError;
+    }
+    return winner ? mapRunRow(winner) : null;
   }
 
   if (input.artifacts.length > 0) {
