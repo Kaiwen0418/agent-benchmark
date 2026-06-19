@@ -23,7 +23,7 @@ P0 is now organized as ordered, independently verifiable milestones. A milestone
 | --- | --- | --- |
 | P0.1 Public result integrity | Complete | Public result pages expose sanitized benchmark metadata, completion time, browser environment, agent/base-model identity, and stable scores without leaking private run fields. |
 | P0.2 Production role isolation | In progress | Server Compose runs API and workers separately; deploys validate exact partition ownership; all runtime leases are required for readiness; development deployment and worker-restart verification pass. |
-| P0.3 Atomic lifecycle transitions | Planned | Active promotion, timeout, and terminal completion use database compare-and-set or transactions, including timeout-versus-completion concurrency tests against Postgres. |
+| P0.3 Atomic lifecycle transitions | In progress | Timeout is transactional; active promotion and terminal completion still need database compare-and-set or transactions, followed by timeout-versus-completion concurrency tests against Postgres. |
 | P0.4 Durable callback recovery | Planned | Web callbacks use a persisted outbox, bounded retry, and reconciliation when a result exists but run completion is absent. |
 | P0.5 Poison-command containment | Planned | Commands have bounded retries, a dead-letter record with diagnostic identity, replay tooling, and integration coverage for duplicate and failed delivery. |
 
@@ -36,6 +36,13 @@ P0 is now organized as ordered, independently verifiable milestones. A milestone
 - Remaining gate: deploy to development, restart each worker independently, verify public API continuity and queued-command recovery, then document rollback evidence.
 
 P0 completion criterion: after any single-process failure or command retry, the system preserves one lifecycle transition, one result, one score, and one callback side effect while keeping the public API available.
+
+### P0.3 Implementation Scope
+
+- Expiry sweeps discover candidates without mutating lifecycle state.
+- `timeout_hosted_attempt` locks the attempt and atomically expires open sessions, marks the attempt timed out, and inserts the unique aggregate score.
+- A losing or repeated timeout command performs no cache eviction or Web callback.
+- Remaining gate: move session completion and next-session promotion behind the same database concurrency boundary, then run real-Postgres race tests.
 
 ## P1: Observability and Operations
 

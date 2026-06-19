@@ -19,6 +19,8 @@ function createLifecycle(overrides?: {
     session: AttemptLifecycleSession,
     result: HostedWebScoreResult,
   ) => Promise<PersistScoreResultOutcome>;
+  forwardTimeoutCompletion?: (params: { runId: string; summary: string; score?: number }) => Promise<void>;
+  evictInMemorySessions?: (sessionIds: string[]) => void;
 }) {
   return createAttemptLifecycle({
     now: () => "2026-06-01T00:00:00.000Z",
@@ -39,8 +41,8 @@ function createLifecycle(overrides?: {
     loadLatestSessionResult: overrides?.loadLatestSessionResult ?? (async () => null),
     persistScoreResult:
       overrides?.persistScoreResult ?? (async (_session, result) => ({ result, duplicate: false })),
-    forwardTimeoutCompletion: async () => undefined,
-    evictInMemorySessions: () => undefined,
+    forwardTimeoutCompletion: overrides?.forwardTimeoutCompletion ?? (async () => undefined),
+    evictInMemorySessions: overrides?.evictInMemorySessions ?? (() => undefined),
   });
 }
 
@@ -318,4 +320,200 @@ test("complete-session rejects non-active session completion", async () => {
       }),
     /not the active session/,
   );
+});
+
+function createTimeoutSupabase(options: {
+  transitioned: boolean;
+  attemptStatus?: string;
+  rpcError?: { message: string } | null;
+  attemptRunId?: string | null;
+  expiredSessionIds?: string[] | null;
+}) {
+  const rpcCalls: Record<string, unknown>[] = [];
+  const supabase = {
+    from(table: string) {
+      if (table === "benchmark_attempts") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { status: options.attemptStatus ?? "running", suite_slug: "hosted-web-suite-v1", metadata: {} },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "hosted_web_sessions") {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: async () => ({
+                data: [
+                  {
+                    id: "session-1",
+                    run_id: "run-1",
+                    app: "shopping-lite",
+                    task_slug: "shopping-constrained-checkout",
+                    sequence_index: 0,
+                    status: "active",
+                  },
+                ],
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    },
+    rpc(_name: string, args: Record<string, unknown>) {
+      rpcCalls.push(args);
+      return {
+        maybeSingle: async () => ({
+          data: {
+            transitioned: options.transitioned,
+            attempt_run_id: options.attemptRunId === undefined ? "run-1" : options.attemptRunId,
+            expired_session_ids:
+              options.expiredSessionIds === undefined
+                ? options.transitioned
+                  ? ["session-1"]
+                  : []
+                : options.expiredSessionIds,
+          },
+          error: options.rpcError ?? null,
+        }),
+      };
+    },
+  } as unknown as SupabaseClient<Database>;
+  return { supabase, rpcCalls };
+}
+
+test("timeout atomically expires sessions and emits completion only for the winning transition", async () => {
+  const { supabase, rpcCalls } = createTimeoutSupabase({ transitioned: true });
+  const evicted: string[][] = [];
+  const callbacks: string[] = [];
+  const lifecycle = createLifecycle({
+    getSupabaseAdmin: () => supabase,
+    evictInMemorySessions: (ids) => evicted.push(ids),
+    forwardTimeoutCompletion: async ({ runId }) => {
+      callbacks.push(runId);
+    },
+  });
+
+  const result = await lifecycle.executeTimeoutAttemptCommand({
+    type: "timeout-attempt",
+    attemptId: "attempt-1",
+    runId: "run-1",
+    expiredSessionId: "session-1",
+    expiredTaskSlug: "shopping-constrained-checkout",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(rpcCalls.length, 1);
+  assert.deepEqual(evicted, [["session-1"]]);
+  assert.deepEqual(callbacks, ["run-1"]);
+});
+
+test("timeout CAS loser produces no cache or callback side effects", async () => {
+  const { supabase } = createTimeoutSupabase({ transitioned: false });
+  let sideEffects = 0;
+  const lifecycle = createLifecycle({
+    getSupabaseAdmin: () => supabase,
+    evictInMemorySessions: () => {
+      sideEffects += 1;
+    },
+    forwardTimeoutCompletion: async () => {
+      sideEffects += 1;
+    },
+  });
+
+  const result = await lifecycle.executeTimeoutAttemptCommand({
+    type: "timeout-attempt",
+    attemptId: "attempt-1",
+    runId: "run-1",
+    expiredSessionId: "session-1",
+    expiredTaskSlug: "shopping-constrained-checkout",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(sideEffects, 0);
+});
+
+test("timeout rejects missing persistence and terminal attempts", async () => {
+  const unavailable = createLifecycle();
+  const input = {
+    type: "timeout-attempt" as const,
+    attemptId: "attempt-1",
+    runId: "run-1",
+    expiredSessionId: "session-1",
+    expiredTaskSlug: "shopping-constrained-checkout",
+  };
+  assert.equal((await unavailable.executeTimeoutAttemptCommand(input)).ok, false);
+
+  const { supabase, rpcCalls } = createTimeoutSupabase({ transitioned: false, attemptStatus: "completed" });
+  const terminal = createLifecycle({ getSupabaseAdmin: () => supabase });
+  assert.equal((await terminal.executeTimeoutAttemptCommand(input)).ok, false);
+  assert.equal(rpcCalls.length, 0);
+});
+
+test("timeout handles RPC failure without downstream side effects", async () => {
+  const { supabase } = createTimeoutSupabase({
+    transitioned: false,
+    rpcError: { message: "transaction failed" },
+  });
+  let sideEffects = 0;
+  const lifecycle = createLifecycle({
+    getSupabaseAdmin: () => supabase,
+    evictInMemorySessions: () => {
+      sideEffects += 1;
+    },
+    forwardTimeoutCompletion: async () => {
+      sideEffects += 1;
+    },
+  });
+
+  const originalError = console.error;
+  console.error = () => undefined;
+  try {
+    const result = await lifecycle.executeTimeoutAttemptCommand({
+      type: "timeout-attempt",
+      attemptId: "attempt-1",
+      runId: "run-1",
+      expiredSessionId: "session-1",
+      expiredTaskSlug: "shopping-constrained-checkout",
+    });
+    assert.equal(result.ok, false);
+    assert.equal(sideEffects, 0);
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("timeout falls back to discovered sessions and omits callback without a run", async () => {
+  const { supabase } = createTimeoutSupabase({
+    transitioned: true,
+    attemptRunId: null,
+    expiredSessionIds: null,
+  });
+  const evicted: string[][] = [];
+  let callbacks = 0;
+  const lifecycle = createLifecycle({
+    getSupabaseAdmin: () => supabase,
+    evictInMemorySessions: (ids) => evicted.push(ids),
+    forwardTimeoutCompletion: async () => {
+      callbacks += 1;
+    },
+  });
+
+  const result = await lifecycle.executeTimeoutAttemptCommand({
+    type: "timeout-attempt",
+    attemptId: "attempt-1",
+    runId: null,
+    expiredSessionId: "session-1",
+    expiredTaskSlug: "shopping-constrained-checkout",
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(evicted, [["session-1"]]);
+  assert.equal(callbacks, 0);
 });

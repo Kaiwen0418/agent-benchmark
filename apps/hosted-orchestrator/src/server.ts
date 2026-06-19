@@ -1184,16 +1184,13 @@ async function sweepExpiredSessions() {
   const sweepStartedAt = now();
   const { data, error } = await supabase
     .from("hosted_web_sessions")
-    .update({
-      status: "expired",
-      completed_at: sweepStartedAt,
-    })
+    .select("id, attempt_id, run_id, task_slug, app")
     .lt("expires_at", sweepStartedAt)
     .in("status", ["created", "active", "scoring"])
-    .select("id, attempt_id, run_id, task_slug, app");
+    .limit(500);
 
   if (error) {
-    console.error("[hosted-orchestrator] failed to sweep expired sessions", error);
+    console.error("[hosted-orchestrator] failed to discover expired sessions", error);
     return 0;
   }
 
@@ -1207,7 +1204,7 @@ async function sweepExpiredSessions() {
       session_id: row.id,
       attempt_id: row.attempt_id,
       run_id: row.run_id,
-      event: "session.expired_swept",
+        event: "session.expiry_detected",
       metadata: {
         app: row.app,
         taskSlug: row.task_slug,

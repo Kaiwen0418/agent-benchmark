@@ -408,11 +408,6 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       } satisfies TimeoutAttemptCommandResult;
     }
 
-    const existingMetadata =
-      attemptRow.metadata && typeof attemptRow.metadata === "object" && !Array.isArray(attemptRow.metadata)
-        ? (attemptRow.metadata as Record<string, unknown>)
-        : {};
-
     const { data: sessionRows, error: sessionsError } = await supabase
       .from("hosted_web_sessions")
       .select("id, run_id, app, task_slug, sequence_index, status")
@@ -435,22 +430,6 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .filter((row) => row.status === "created" || row.status === "active" || row.status === "scoring")
       .map((row) => row.id);
 
-    if (siblingSessionIds.length > 0) {
-      const { error: sessionTimeoutError } = await supabase
-        .from("hosted_web_sessions")
-        .update({
-          status: "expired",
-          completed_at: timeoutAt,
-        })
-        .in("id", siblingSessionIds);
-
-      if (sessionTimeoutError) {
-        console.error("[hosted-orchestrator] failed to expire sibling sessions during timeout", sessionTimeoutError);
-      }
-    }
-
-    deps.evictInMemorySessions(siblingSessionIds);
-
     const summary = `Hosted suite timed out after session ${params.expiredTaskSlug} expired before completion.`;
     const scoringSummary = {
       summary,
@@ -469,25 +448,19 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       },
     };
 
-    const { error: attemptUpdateError } = await supabase
-      .from("benchmark_attempts")
-      .update({
-        status: "timeout",
-        aggregate_score: 0,
-        metadata: {
-          ...existingMetadata,
-          activeSessionId: null,
-          activeSequenceIndex: null,
-          timedOutSessionId: params.expiredSessionId,
-          timedOutAt: timeoutAt,
-        },
-        scoring_summary: scoringSummary,
-        completed_at: timeoutAt,
+    const { data: timeoutTransition, error: timeoutError } = await supabase
+      .rpc("timeout_hosted_attempt", {
+        p_attempt_id: params.attemptId,
+        p_timeout_at: timeoutAt,
+        p_timed_out_session_id: params.expiredSessionId,
+        p_scoring_summary: scoringSummary,
       })
-      .eq("id", params.attemptId);
+      .maybeSingle();
 
-    if (attemptUpdateError) {
-      console.error("[hosted-orchestrator] failed to update timed out attempt", attemptUpdateError);
+    if (timeoutError || !timeoutTransition?.transitioned) {
+      if (timeoutError) {
+        console.error("[hosted-orchestrator] failed to atomically time out attempt", timeoutError);
+      }
       return {
         command: "timeout-attempt",
         ok: false,
@@ -497,24 +470,13 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       } satisfies TimeoutAttemptCommandResult;
     }
 
-    if (params.runId) {
-      const { error: attemptScoreError } = await supabase.from("benchmark_attempt_scores").insert({
-        run_id: params.runId,
-        attempt_id: params.attemptId,
-        status: "error",
-        score: 0,
-        summary,
-        breakdown: scoringSummary.breakdown,
-      });
+    const expiredSessionIds = timeoutTransition.expired_session_ids ?? siblingSessionIds;
+    deps.evictInMemorySessions(expiredSessionIds);
 
-      if (attemptScoreError && attemptScoreError.code !== "23505") {
-        throw attemptScoreError;
-      }
-    }
-
-    if (params.runId) {
+    const runId = timeoutTransition.attempt_run_id ?? params.runId;
+    if (runId) {
       await deps.forwardTimeoutCompletion({
-        runId: params.runId,
+        runId,
         summary,
         score: 0,
       });
@@ -524,7 +486,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       command: "timeout-attempt",
       ok: true,
       attemptId: params.attemptId,
-      runId: params.runId,
+      runId,
       summary,
     } satisfies TimeoutAttemptCommandResult;
   }

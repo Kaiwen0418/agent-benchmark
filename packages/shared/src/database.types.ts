@@ -560,7 +560,21 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      timeout_hosted_attempt: {
+        Args: {
+          p_attempt_id: string;
+          p_scoring_summary: Json;
+          p_timed_out_session_id: string;
+          p_timeout_at: string;
+        };
+        Returns: {
+          attempt_run_id: string | null;
+          expired_session_ids: string[];
+          transitioned: boolean;
+        }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
