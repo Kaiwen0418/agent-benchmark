@@ -245,6 +245,16 @@ Report each area separately:
 
 Classify any private/internal URL returned to the browser as a blocking issue. If live viewer verification cannot be completed, state exactly why; successful hosted scoring alone is not evidence that the viewer works.
 
+## Pull Request Documentation Check
+
+Before creating or updating a pull request:
+
+1. Read the repository TODO and roadmap documents, including matching files such as `TODO*`, `todo/*`, and `docs/*roadmap*` when present.
+2. Determine whether the change affects documented scope, implementation status, verification status, follow-up work, or release sequencing.
+3. Update every affected TODO or roadmap document in the same pull request. If no update is needed, explicitly confirm that the documents were reviewed.
+
+Do not mark roadmap work complete until the implementation and its required verification are complete.
+
 ## Git Commit Convention
 
 All commit subjects must follow Conventional Commits:
