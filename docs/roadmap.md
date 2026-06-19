@@ -24,7 +24,7 @@ P0 is now organized as ordered, independently verifiable milestones. A milestone
 | P0.1 Public result integrity | Complete | Public result pages expose sanitized benchmark metadata, completion time, browser environment, agent/base-model identity, and stable scores without leaking private run fields. |
 | P0.2 Production role isolation | In progress | Server Compose runs API and workers separately; deploys validate exact partition ownership; all runtime leases are required for readiness; development deployment and worker-restart verification pass. |
 | P0.3 Atomic lifecycle transitions | Complete | Timeout, terminal completion, and active promotion share an attempt row lock and pass real-Postgres timeout-versus-completion and duplicate-completion race tests. |
-| P0.4 Durable callback recovery | Planned | Web callbacks use a persisted outbox, bounded retry, and reconciliation when a result exists but run completion is absent. |
+| P0.4 Durable callback recovery | Complete | Web completion callbacks use a transactional outbox, eight-attempt bounded retry, stale-claim recovery, periodic reconciliation, and an idempotent Web receiver. |
 | P0.5 Poison-command containment | Planned | Commands have bounded retries, a dead-letter record with diagnostic identity, replay tooling, and integration coverage for duplicate and failed delivery. |
 
 ### P0.2 Implementation Scope
@@ -45,6 +45,14 @@ P0 completion criterion: after any single-process failure or command retry, the 
 - A losing or repeated timeout command performs no cache eviction or Web callback.
 - Duplicate completion returns the first persisted result; completion after a winning timeout is rejected without lifecycle writes.
 - CI runs timeout-versus-completion and duplicate-completion races against an isolated Postgres instance and rejects any cross-table partial state.
+
+### P0.4 Implementation Scope
+
+- A database trigger enqueues run completion in the same transaction that makes an attempt terminal.
+- Workers claim callbacks with `FOR UPDATE SKIP LOCKED`; HTTP failures use exponential backoff and become `dead` after eight attempts.
+- Maintenance recovers stale claims and recreates missing outbox rows for terminal attempts.
+- The Web completion receiver uses a terminal-status compare-and-set so retries do not refresh completion time or append duplicate terminal events.
+- CI covers trigger enqueue, exclusive claim, stale exhaustion, reconciliation, retry, delivery, and dead-letter behavior.
 
 ## P1: Observability and Operations
 

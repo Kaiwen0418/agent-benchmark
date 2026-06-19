@@ -81,6 +81,8 @@ SQL
   < "${ROOT_DIR}/supabase/migrations/20260619000014_atomic_attempt_timeout.sql" >/dev/null
 "${PSQL[@]}" -v ON_ERROR_STOP=1 \
   < "${ROOT_DIR}/supabase/migrations/20260619000015_atomic_session_completion.sql" >/dev/null
+"${PSQL[@]}" -v ON_ERROR_STOP=1 \
+  < "${ROOT_DIR}/supabase/migrations/20260619000016_callback_outbox.sql" >/dev/null
 
 seed_attempt() {
   local attempt_id="$1"
@@ -146,5 +148,17 @@ second="$("${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "$(completion_sql "${ATTEMPT_2}"
 [[ "${second}" == *'"duplicate": true'* ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.hosted_web_results where attempt_id = '${ATTEMPT_2}'")" == "1" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.benchmark_attempt_scores where attempt_id = '${ATTEMPT_2}'")" == "1" ]]
+[[ "$("${PSQL[@]}" -Atqc "select count(*) from public.hosted_callback_outbox where attempt_id = '${ATTEMPT_2}'")" == "1" ]]
+
+claimed="$("${PSQL[@]}" -Atqc "select count(*) from public.claim_hosted_callback_outbox(20)")"
+[[ "${claimed}" == "2" ]]
+[[ "$("${PSQL[@]}" -Atqc "select count(*) from public.claim_hosted_callback_outbox(20)")" == "0" ]]
+
+"${PSQL[@]}" -Atqc "update public.hosted_callback_outbox set attempts = 8, locked_at = now() - interval '10 minutes' where attempt_id = '${ATTEMPT_1}'" >/dev/null
+"${PSQL[@]}" -Atqc "select count(*) from public.claim_hosted_callback_outbox(20)" >/dev/null
+[[ "$("${PSQL[@]}" -Atqc "select status from public.hosted_callback_outbox where attempt_id = '${ATTEMPT_1}'")" == "dead" ]]
+
+"${PSQL[@]}" -Atqc "delete from public.hosted_callback_outbox where attempt_id = '${ATTEMPT_2}'" >/dev/null
+[[ "$("${PSQL[@]}" -Atqc "select public.reconcile_hosted_callback_outbox()")" == "1" ]]
 
 echo "lifecycle Postgres integration tests passed"

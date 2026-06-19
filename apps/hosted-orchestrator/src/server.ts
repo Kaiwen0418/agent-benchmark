@@ -22,6 +22,7 @@ import {
 import { generateAttemptQuestions } from "./question-generation.js";
 import { createIdempotentInitializer } from "./idempotent-initializer.js";
 import { createSingleFlight } from "./single-flight.js";
+import { createCallbackOutboxProcessor } from "./callback-outbox.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -149,6 +150,20 @@ function getSupabaseAdmin() {
       : null;
 
   return supabaseAdmin;
+}
+
+const callbackOutbox = createCallbackOutboxProcessor({
+  getSupabaseAdmin,
+  webBaseUrl: agentbenchWebUrl || null,
+  sharedSecret: runnerSharedSecret ?? null,
+});
+
+async function flushCallbackOutbox() {
+  try {
+    await callbackOutbox.process();
+  } catch (error) {
+    console.error("[hosted-orchestrator] callback outbox flush failed", error);
+  }
 }
 
 function defaultStartPathForApp(app: string) {
@@ -411,26 +426,10 @@ async function forwardRunEvent(session: AttemptLifecycleSession, type: string, p
 }
 
 async function forwardCompletion(
-  session: AttemptLifecycleSession,
-  result: Pick<HostedWebScoreResult, "status" | "score" | "summary">,
+  _session: AttemptLifecycleSession,
+  _result: Pick<HostedWebScoreResult, "status" | "score" | "summary">,
 ) {
-  if (!agentbenchWebUrl || !session.runId) {
-    return;
-  }
-
-  await fetch(`${agentbenchWebUrl}/api/runs/${encodeURIComponent(session.runId)}/complete`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(runnerSharedSecret ? { "x-runner-secret": runnerSharedSecret } : {}),
-    },
-    body: JSON.stringify({
-      status: result.status === "passed" ? "completed" : "failed",
-      score: result.score,
-      errorMessage: result.status === "passed" ? null : result.summary,
-      artifacts: [],
-    }),
-  }).catch(() => undefined);
+  await flushCallbackOutbox();
 }
 
 async function forwardTimeoutCompletion(params: {
@@ -438,23 +437,8 @@ async function forwardTimeoutCompletion(params: {
   summary: string;
   score?: number;
 }) {
-  if (!agentbenchWebUrl) {
-    return;
-  }
-
-  await fetch(`${agentbenchWebUrl}/api/runs/${encodeURIComponent(params.runId)}/complete`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(runnerSharedSecret ? { "x-runner-secret": runnerSharedSecret } : {}),
-    },
-    body: JSON.stringify({
-      status: "timeout",
-      score: params.score ?? 0,
-      errorMessage: params.summary,
-      artifacts: [],
-    }),
-  }).catch(() => undefined);
+  void params;
+  await flushCallbackOutbox();
 }
 
 async function recoverInitializedAttempt(params: {
@@ -1122,7 +1106,8 @@ async function dispatchWriteCommand(type: string, input: Record<string, unknown>
   if (type === "maintenance.cleanup") {
     const expiredSessions = await sweepExpiredSessions();
     const prunedAccessLogs = await pruneExpiredAccessLogs();
-    return { statusCode: 200, body: { expiredSessions, prunedAccessLogs } };
+    const callbacks = await callbackOutbox.process(20, true);
+    return { statusCode: 200, body: { expiredSessions, prunedAccessLogs, callbacks } };
   }
 
   return { statusCode: 400, body: { error: "Unknown command type" } };
@@ -1219,12 +1204,18 @@ async function runCleanupSweep(trigger: "startup" | "interval") {
       "maintenance",
       `maintenance-cleanup-${sweepBucket}`,
     );
-    const body = result.body as { expiredSessions?: number; prunedAccessLogs?: number };
+    const body = result.body as {
+      expiredSessions?: number;
+      prunedAccessLogs?: number;
+      callbacks?: { reconciled?: number; delivered?: number; retried?: number; dead?: number };
+    };
     const expiredSessions = body.expiredSessions ?? 0;
     const prunedAccessLogs = body.prunedAccessLogs ?? 0;
-    if (expiredSessions > 0 || prunedAccessLogs > 0) {
+    const callbackChanges = (body.callbacks?.reconciled ?? 0) + (body.callbacks?.delivered ?? 0) +
+      (body.callbacks?.retried ?? 0) + (body.callbacks?.dead ?? 0);
+    if (expiredSessions > 0 || prunedAccessLogs > 0 || callbackChanges > 0) {
       console.log(
-        `[hosted-orchestrator] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs}`,
+        `[hosted-orchestrator] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs} callbacks=${JSON.stringify(body.callbacks ?? {})}`,
       );
     }
   } finally {

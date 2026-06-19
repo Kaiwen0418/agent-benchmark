@@ -10,6 +10,10 @@ const completionMigration = readFileSync(
   new URL("../../../supabase/migrations/20260619000015_atomic_session_completion.sql", import.meta.url),
   "utf8",
 );
+const callbackMigration = readFileSync(
+  new URL("../../../supabase/migrations/20260619000016_callback_outbox.sql", import.meta.url),
+  "utf8",
+);
 
 test("attempt timeout migration keeps lifecycle writes under one row lock", () => {
   assert.match(migration, /for update;/i);
@@ -36,4 +40,11 @@ test("session completion validates active ownership and restricts RPC access", (
   assert.match(completionMigration, /activeSessionId/);
   assert.match(completionMigration, /session_not_active/);
   assert.match(completionMigration, /grant execute .* to service_role;/i);
+});
+
+test("callback outbox is transactionally enqueued and claimed with row locking", () => {
+  assert.match(callbackMigration, /after update of status/i);
+  assert.match(callbackMigration, /on conflict \(attempt_id, event_type\) do nothing/i);
+  assert.match(callbackMigration, /for update skip locked/i);
+  assert.match(callbackMigration, /reconcile_hosted_callback_outbox/i);
 });

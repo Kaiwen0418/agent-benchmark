@@ -123,6 +123,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      hosted_callback_outbox: {
+        Row: {
+          attempt_id: string;
+          attempts: number;
+          created_at: string;
+          delivered_at: string | null;
+          event_type: "run_completion";
+          id: string;
+          last_error: string | null;
+          locked_at: string | null;
+          next_attempt_at: string;
+          payload: Json;
+          run_id: string;
+          status: "pending" | "delivering" | "delivered" | "dead";
+          updated_at: string;
+        };
+        Insert: {
+          attempt_id: string;
+          attempts?: number;
+          created_at?: string;
+          delivered_at?: string | null;
+          event_type?: "run_completion";
+          id?: string;
+          last_error?: string | null;
+          locked_at?: string | null;
+          next_attempt_at?: string;
+          payload: Json;
+          run_id: string;
+          status?: "pending" | "delivering" | "delivered" | "dead";
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          delivered_at?: string | null;
+          last_error?: string | null;
+          locked_at?: string | null;
+          next_attempt_at?: string;
+          status?: "pending" | "delivering" | "delivered" | "dead";
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       benchmark_runs: {
         Row: {
           agent_name: string | null;
@@ -570,6 +612,14 @@ export type Database = {
           p_session_id: string;
         };
         Returns: Json;
+      };
+      claim_hosted_callback_outbox: {
+        Args: { p_limit?: number };
+        Returns: Database["public"]["Tables"]["hosted_callback_outbox"]["Row"][];
+      };
+      reconcile_hosted_callback_outbox: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
       };
       timeout_hosted_attempt: {
         Args: {

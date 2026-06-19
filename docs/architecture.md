@@ -62,6 +62,8 @@ The same image supports `ORCHESTRATOR_MODE=api|worker|all`. The API role authent
 
 Attempt timeout and session completion cross the database boundary through transactional functions. Both lock the attempt row before changing sessions, results, aggregate scores, or active-session metadata, so Redis command serialization is an optimization rather than the lifecycle correctness boundary.
 
+Terminal attempt transitions enqueue Web completion in `hosted_callback_outbox` within the same database transaction. Orchestrator workers deliver claimed rows, while maintenance retries failures and reconciles missing rows. The Web receiver applies terminal completion once.
+
 The deployment profile matters:
 
 - local `docker-compose.yml` runs one API process and two workers covering partitions `0-7` and `8-15`

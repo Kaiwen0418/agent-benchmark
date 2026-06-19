@@ -62,6 +62,8 @@ flowchart LR
 
 Attempt timeout 和 session completion 通过数据库事务函数跨越持久化边界。两者在修改 sessions、results、聚合分数或 active-session metadata 前都会锁定 attempt row，因此 Redis command 串行化只是优化，而不是生命周期正确性的边界。
 
+Attempt 终态转换会在同一个数据库事务内向 `hosted_callback_outbox` 写入 Web completion。Orchestrator worker 投递已 claim 的记录，maintenance 负责失败重试和缺失记录对账；Web 接收端只应用一次终态 completion。
+
 部署 profile 会影响实际进程边界：
 
 - 本地 `docker-compose.yml` 运行一个 API 进程和两个 workers，分别负责 partition `0-7` 与 `8-15`
