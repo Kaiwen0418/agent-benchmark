@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { captureBrowserEnvironment, parseBrowserEnvironment } from "./run-metadata";
+import { buildRunMetadataUpdate, captureBrowserEnvironment, parseBrowserEnvironment } from "./run-metadata";
 
 test("captures Chromium browser metadata without exposing it to leaderboard callers", () => {
   const environment = captureBrowserEnvironment(new Headers({
@@ -36,4 +36,36 @@ test("parses a browser observed by the hosted session", () => {
 
   assert.equal(environment.browser, "Chrome");
   assert.equal(environment.platform, "macOS");
+});
+
+test("first agent registration starts and connects a waiting run", () => {
+  const patch = buildRunMetadataUpdate({
+    currentMetadata: { source: "existing" },
+    currentStatus: "waiting_for_agent",
+    startedAt: null,
+    input: { name: "Codex", version: "1.2.3", baseModel: "GPT-5", metadata: { source: "agent" } },
+    browserEnvironment: { browser: "Chrome" },
+    now: "2026-06-19T12:00:00.000Z",
+  });
+
+  assert.equal(patch.started_at, "2026-06-19T12:00:00.000Z");
+  assert.equal(patch.status, "agent_connected");
+  assert.deepEqual(patch.metadata, {
+    source: "agent",
+    identityReportedAt: "2026-06-19T12:00:00.000Z",
+  });
+});
+
+test("repeated registration preserves the original start time", () => {
+  const patch = buildRunMetadataUpdate({
+    currentMetadata: {},
+    currentStatus: "running",
+    startedAt: "2026-06-19T11:59:00.000Z",
+    input: { name: "Codex", version: "1.2.4", baseModel: "GPT-5", metadata: {} },
+    browserEnvironment: {},
+    now: "2026-06-19T12:00:00.000Z",
+  });
+
+  assert.equal(patch.started_at, "2026-06-19T11:59:00.000Z");
+  assert.equal(patch.status, "running");
 });
