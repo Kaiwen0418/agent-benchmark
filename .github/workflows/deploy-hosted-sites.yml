@@ -19,6 +19,8 @@ on:
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'
       - 'infra/scripts/deploy-hosted-stack.sh'
+      - 'infra/scripts/verify-orchestrator-worker-recovery.sh'
+      - 'infra/scripts/validate-orchestrator-partitions.sh'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -331,6 +333,8 @@ jobs:
           ORCHESTRATOR_CHANGED: ${{ needs.detect-changes.outputs.orchestrator }}
           INFRA_CHANGED: ${{ needs.detect-changes.outputs.infra }}
           TOPOLOGY_CHANGED: ${{ needs.detect-changes.outputs.topology }}
+          VERIFY_ORCHESTRATOR_WORKER_RECOVERY: ${{ needs.detect-changes.outputs.orchestrator == 'true' || needs.detect-changes.outputs.topology == 'true' }}
+          ROLLBACK_SOURCE_SHA: ${{ github.event.before }}
           GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
@@ -341,6 +345,37 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8081' }}
         run: bash infra/scripts/deploy-hosted-stack.sh
+
+  smoke-development:
+    if: github.ref == 'refs/heads/develop'
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-dev
+    environment: development
+    needs:
+      - deploy-development
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+
+      - name: Run development lifecycle smoke
+        env:
+          START_LOCAL_SERVICES: 'false'
+          HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
+          HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
+          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
+        run: bash apps/hosted-sites/scripts/orchestrator-smoke-full-pass.sh
 
   deploy-production:
     if: |
@@ -376,6 +411,7 @@ jobs:
           ORCHESTRATOR_CHANGED: ${{ needs.detect-changes.outputs.orchestrator }}
           INFRA_CHANGED: ${{ needs.detect-changes.outputs.infra }}
           TOPOLOGY_CHANGED: ${{ needs.detect-changes.outputs.topology }}
+          VERIFY_ORCHESTRATOR_WORKER_RECOVERY: 'false'
           GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}

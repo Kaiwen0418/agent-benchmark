@@ -59,10 +59,12 @@ Attempt 中的一个有序任务。
 - `0` 到 `1` 的标准化 score
 - summary、final state 和 evaluator evidence
 - 用于审计的 app/task/weight snapshot
+- `session_id` 唯一约束；并发重试时以最先持久化的终态结果为准
 
 ### `benchmark_attempt_scores`
 
 套件聚合结果，包含 score、status、summary 和所有 required/optional sessions 的 JSON breakdown。
+每个 attempt 最多一个聚合分数；并发写入者会读取并使用已有记录。
 
 ### `hosted_web_access_logs`
 

@@ -1,0 +1,174 @@
+"use client";
+
+import { useState } from "react";
+import type { LeaderboardEntry } from "@/lib/db";
+import { LEADERBOARD_MAX_ENTRIES, LEADERBOARD_PAGE_SIZE, paginateLeaderboard } from "@/lib/leaderboard-pagination";
+
+export type LeaderboardBoard = {
+  version: string;
+  entries: LeaderboardEntry[];
+};
+
+function formatDuration(durationMs: number | null) {
+  if (durationMs === null) return "--";
+  const totalSeconds = Math.round(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatCompletedAt(value: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(value));
+}
+
+function PlaceholderRow({ position }: { position: number }) {
+  return (
+    <div className="grid min-h-[84px] grid-cols-[38px_minmax(0,1fr)_52px] items-center gap-3 border-b border-white/10 px-4 py-4 last:border-b-0 lg:min-h-0 lg:grid-cols-[64px_1.35fr_1.2fr_0.8fr_0.75fr_96px] lg:gap-4 lg:px-6 lg:py-6">
+      <span className="text-xl text-white/20 lg:text-2xl">{position.toString().padStart(2, "0")}</span>
+      <div className="lg:col-span-4">
+        <div className="h-2.5 w-28 rounded-full bg-white/[0.07] lg:h-3 lg:w-36" />
+        <div className="mt-2 truncate text-[10px] uppercase tracking-[0.14em] text-white/25 lg:mt-3 lg:text-xs lg:tracking-[0.16em]">
+          Awaiting benchmark result
+        </div>
+      </div>
+      <div className="text-right text-xl text-white/15 lg:text-2xl">--</div>
+    </div>
+  );
+}
+
+export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
+  const [activeVersion, setActiveVersion] = useState(boards[0]?.version ?? "all");
+  const [page, setPage] = useState(1);
+  const activeBoard = boards.find((board) => board.version === activeVersion) ?? boards[0];
+  const pagination = paginateLeaderboard(activeBoard?.entries ?? [], page);
+  const { entries, page: currentPage, pageCount, pageEntries, placeholderPositions } = pagination;
+
+  function selectVersion(version: string) {
+    setActiveVersion(version);
+    setPage(1);
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Benchmark version">
+          {boards.map((board) => {
+            const active = board.version === activeVersion;
+            return (
+              <button
+                key={board.version}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => selectVersion(board.version)}
+                className={active
+                  ? "rounded-full bg-[#111111] px-4 py-2 text-xs font-medium text-white"
+                  : "rounded-full border border-[#d8d0c2] bg-white/55 px-4 py-2 text-xs text-[#625c52] transition-colors hover:border-[#111111] hover:text-[#111111]"}
+              >
+                {board.version === "all" ? "All versions" : `Suite ${board.version}`}
+              </button>
+            );
+          })}
+        </div>
+        <div className="text-xs uppercase tracking-[0.16em] text-[#8a8378]">
+          Top {Math.min(entries.length, LEADERBOARD_MAX_ENTRIES)} · {LEADERBOARD_PAGE_SIZE} per page
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-[1.5rem] border border-[#d8d0c2] bg-[#111111] shadow-[0_32px_90px_rgba(77,63,36,0.16)] lg:rounded-[2rem]">
+        <div className="hidden grid-cols-[64px_1.35fr_1.2fr_0.8fr_0.75fr_96px] gap-4 border-b border-white/10 px-6 py-4 text-[10px] uppercase tracking-[0.2em] text-white/40 lg:grid">
+          <span>Rank</span>
+          <span>Agent / model</span>
+          <span>Benchmark</span>
+          <span>Browser</span>
+          <span>Completed</span>
+          <span className="text-right">Score</span>
+        </div>
+
+        <div role="tabpanel">
+          {pageEntries.map((entry) => (
+            <a
+              key={entry.runId}
+              href={`/results/${entry.runId}`}
+              className="group grid min-h-[84px] grid-cols-[38px_minmax(0,1fr)_64px] items-center gap-3 border-b border-white/10 px-4 py-4 transition-colors last:border-b-0 hover:bg-white/[0.045] lg:min-h-0 lg:grid-cols-[64px_1.35fr_1.2fr_0.8fr_0.75fr_96px] lg:gap-4 lg:px-6 lg:py-6"
+            >
+              <span className={entry.rank <= 3 ? "text-xl font-medium text-[#d7ff00] lg:text-3xl" : "text-xl text-white/45 lg:text-2xl"}>
+                {entry.rank.toString().padStart(2, "0")}
+              </span>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-white lg:text-lg">{entry.agentName}</div>
+                <div className="mt-1 truncate text-[11px] text-white/45 lg:text-xs">
+                  <span className="lg:hidden">{entry.baseModel}</span>
+                  <span className="hidden lg:inline">{entry.agentVersion} · {entry.baseModel}</span>
+                </div>
+              </div>
+              <div className="hidden min-w-0 lg:block">
+                <div className="truncate text-sm text-white/85">{entry.benchmark}</div>
+                <div className="mt-1 text-xs text-white/40">
+                  {entry.suiteVersion ?? "suite version unavailable"} · {formatDuration(entry.durationMs)}
+                </div>
+              </div>
+              <div className="hidden text-sm text-white/70 lg:block">
+                {entry.browser ?? "Unknown browser"}
+                <div className="mt-1 text-xs text-white/35">{entry.platform ?? "Unknown platform"}</div>
+              </div>
+              <div className="hidden text-sm text-white/70 lg:block">{formatCompletedAt(entry.completedAt)}</div>
+              <div className="text-right">
+                <span className="text-2xl font-medium tracking-[-0.04em] text-white group-hover:text-[#d7ff00] lg:text-3xl">
+                  {Math.round(entry.score * 100)}
+                </span>
+                <span className="ml-0.5 text-[10px] text-white/35 lg:ml-1 lg:text-xs">%</span>
+              </div>
+            </a>
+          ))}
+          {placeholderPositions.map((position) => <PlaceholderRow key={position} position={position} />)}
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-[#777064]">
+          {entries.length === 0
+            ? "No published results for this benchmark version yet."
+            : `Showing ${(currentPage - 1) * LEADERBOARD_PAGE_SIZE + 1}-${Math.min(currentPage * LEADERBOARD_PAGE_SIZE, entries.length)} of ${entries.length}`}
+        </p>
+        <div className="flex items-center gap-2" aria-label="Leaderboard pagination">
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => setPage((value) => Math.max(1, value - 1))}
+            className="rounded-full border border-[#d8d0c2] bg-white/55 px-3 py-2 text-xs text-[#403b33] disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <span className="hidden sm:inline">Previous</span>
+            <span className="sm:hidden">Prev</span>
+          </button>
+          {Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => (
+            <button
+              key={pageNumber}
+              type="button"
+              aria-current={pageNumber === currentPage ? "page" : undefined}
+              onClick={() => setPage(pageNumber)}
+              className={pageNumber === currentPage
+                ? "h-8 w-8 rounded-full bg-[#d7ff00] text-xs font-medium text-[#111111]"
+                : "h-8 w-8 rounded-full border border-[#d8d0c2] bg-white/55 text-xs text-[#625c52]"}
+            >
+              {pageNumber}
+            </button>
+          ))}
+          <button
+            type="button"
+            disabled={currentPage === pageCount}
+            onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+            className="rounded-full border border-[#d8d0c2] bg-white/55 px-3 py-2 text-xs text-[#403b33] disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

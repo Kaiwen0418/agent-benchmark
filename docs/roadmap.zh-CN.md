@@ -12,28 +12,57 @@
 - Redis 提供共享 hosted-session cache 和 16 个分区的 orchestrator command Streams。
 - Supabase 是生命周期、审计和评分的持久存储。
 - Attempt 初始化以数据库为准，并由 hosted-attempt 唯一约束和短期 Redis lease 共同保护。
+- Hosted 终态结果和 attempt 聚合分数采用先写入者获胜的数据库约束，并具备显式冲突恢复。
 - `develop` 部署到 development，`main` 部署到 production；两者使用独立 GitHub Environment、runner、数据库 URL、镜像 channel、端口和 Compose project。
 
-## P0：生命周期正确性与恢复
+## P0 发布门槛
 
-- 为 active-session 推进、timeout 和终态完成增加数据库 transaction 或 compare-and-set。
-- 增加“每个 session 一个终态 result”和“每个 attempt 一个聚合 score”的唯一约束，并明确冲突恢复逻辑。
-- 使用 outbox 持久化 Web callback delivery，按有上限的退避策略重试，并对“结果已持久化但 run 未完成”的 attempt 自动对账。
-- 定义 command 重试上限，增加 dead-letter 路径，记录 command ID、partition、payload type、error code，并提供检查工具。
-- 基于真实 Postgres 增加 lifecycle 集成测试，覆盖并发完成、timeout 与完成竞争、重复 command 和 callback 恢复。
+P0 现在按有顺序、可独立验收的里程碑管理。只有实现、自动化检查、部署行为和运维文档一致时，里程碑才算完成。
 
-完成标准：任一进程失败后重试同一 command，都不会产生第二次 transition、result、score 或 callback side effect。
+| 里程碑 | 状态 | 退出标准 |
+| --- | --- | --- |
+| P0.1 公共结果完整性 | 已完成 | 公共结果页展示脱敏后的 benchmark metadata、完成时间、浏览器环境、Agent/base-model 标识和稳定分数，不泄露私有 run 字段。 |
+| P0.2 生产角色隔离 | 已完成 | API/worker 隔离、精确 lease readiness、逐个 worker 恢复、排队 command 重放和回滚证据已通过 development 故障注入。 |
+| P0.3 原子生命周期转换 | 已完成 | Timeout、终态 completion 和 active 推进共享 attempt row lock，并通过真实 Postgres 的 timeout/completion 与重复 completion 竞态测试。 |
+| P0.4 持久 callback 恢复 | 已完成 | Web completion callback 使用事务 outbox、最多八次重试、过期 claim 恢复、周期对账和幂等 Web 接收端。 |
+| P0.5 异常 command 隔离 | 已完成 | Command 最多重试三次，ACK 前持久化诊断 dead letter，并支持使用新 command ID 的鉴权查询和重放。 |
 
-## P0：生产拓扑对齐
+### P0.2 实施范围
 
-本地 Compose 将一个 API 进程和两个 worker 分离，workers 分别负责 partition `0-7` 与 `8-15`。当前服务器 Compose 使用一个 `ORCHESTRATOR_MODE=all` 服务；单副本下可以工作，但没有 worker 隔离，也不能安全扩容多个 all-mode 副本，因为 partition lease 会重叠。
+- 生产环境现在声明一个 `ORCHESTRATOR_MODE=api` service，以及分别覆盖 partition `0-7` 与 `8-15` 的两个 worker services。
+- Orchestrator 镜像部署使用同一个不可变 tag 更新 API 和两个 workers，不重建 hosted-sites。
+- 静态部署校验拒绝缺失、重复和越界的 partition 分配。
+- 运行时 readiness 要求 Redis Streams 可用且每个 partition 都有活跃 lease。
+- Development CD 现在自动执行逐个 worker 重启、公网 API 连续性检查、排队 command 恢复和回滚证据记录。
+- 完成证据：`develop@58cb60f` 已通过 [Hosted deployment run 27900888968](https://github.com/Kaiwen0418/agent-benchmark/actions/runs/27900888968)，其中故障注入部署耗时 52 秒，后续四应用 lifecycle smoke 耗时 52 秒。
 
-- 在服务器 Compose 中恢复显式 API 和 worker services。
-- 更新定向部署逻辑，使 orchestrator 镜像变化会重建 API 和全部 workers，同时不影响 hosted-sites。
-- 将 worker partition 完整覆盖和重复归属检查设为部署不变量。
-- 增加生产 readiness 检查和回滚流程，保证所有 lease 完整且回滚期间 command 仍可处理。
+P0 总完成标准：任一单进程失败或 command 重试后，系统仍只产生一次生命周期转换、一个结果、一个分数和一次 callback side effect，同时保持公网 API 可用。
 
-完成标准：API 和 workers 可独立部署，每个 partition 恰好一个 owner，worker 重启不会中断公网 API。
+### P0.3 实施范围
+
+- Expiry sweep 只发现候选 session，不再提前修改生命周期状态。
+- `timeout_hosted_attempt` 锁定 attempt，并在一个事务内过期开放 sessions、将 attempt 标记为 timeout、插入唯一聚合分数。
+- `complete_hosted_attempt_session` 使用相同的 attempt lock，持久化 result、关闭当前 session、更新 attempt 进度，并推进下一个 session 或写入终态聚合。
+- 失败或重复的 timeout command 不执行 cache eviction 或 Web callback。
+- 重复 completion 返回第一个持久结果；timeout 已获胜后的 completion 会被拒绝且不写生命周期状态。
+- CI 使用隔离 Postgres 实例执行 timeout/completion 与重复 completion 竞态测试，并拒绝任何跨表部分状态。
+
+### P0.4 实施范围
+
+- 数据库 trigger 在 attempt 进入终态的同一事务中写入 run completion outbox。
+- Worker 使用 `FOR UPDATE SKIP LOCKED` claim callback；HTTP 失败采用指数退避，第八次失败后进入 `dead`。
+- Maintenance 恢复过期 claim，并为缺失 outbox 的终态 attempts 重新建记录。
+- Web completion 接收端使用终态 status compare-and-set，重试不会刷新完成时间或追加重复终态 event。
+- 接收端接受全部非终态 run 状态，包括 hosted-web 的 `waiting_for_agent` 与 `agent_connected`，避免 callback 返回成功但 run 未完成。
+- CI 覆盖 trigger enqueue、互斥 claim、过期耗尽、reconciliation、retry、delivery 和 dead-letter 行为。
+
+### P0.5 实施范围
+
+- Redis 独立于 worker 进程保存 retry count 和最终错误；handler 三次失败后停止执行。
+- Command 只有在诊断记录写入 `orchestrator_command_dead_letters` 后才会 ACK。
+- Reclaim 只重试失败的 DLQ 持久化，不重新执行已耗尽的 handler。
+- 内部鉴权 API 可查询 dead letters，并使用新 command ID 重放指定记录，避免命中原 result cache。
+- CI 覆盖 retry 上限、DLQ 持久化失败恢复、诊断 schema 和数据库写入。
 
 ## P1：可观测性与运维
 
@@ -70,4 +99,3 @@
 - 在 Vercel functions 中运行不可信 Agent 代码、浏览器 sandbox 或任意 worker。
 - 在没有独立隔离与威胁模型项目的情况下恢复已移除的 benchmark execution runner。
 - 将 Redis 作为持久生命周期的真相源。
-

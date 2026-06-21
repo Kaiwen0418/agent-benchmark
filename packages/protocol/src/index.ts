@@ -103,6 +103,23 @@ export const runExecutionModeSchema = z.enum(["internal", "external-agent"]);
 
 export type RunExecutionMode = z.infer<typeof runExecutionModeSchema>;
 
+export const agentIdentitySchema = z.object({
+  name: z.string().min(1).max(120),
+  version: z.string().min(1).max(120),
+  baseModel: z.string().min(1).max(160),
+});
+
+export type AgentIdentity = z.infer<typeof agentIdentitySchema>;
+
+export const browserEnvironmentSchema = z.object({
+  browser: z.string().nullable(),
+  browserVersion: z.string().nullable(),
+  platform: z.string().nullable(),
+  mobile: z.boolean(),
+});
+
+export type BrowserEnvironment = z.infer<typeof browserEnvironmentSchema>;
+
 export const benchmarkRunSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid().nullable(),
@@ -117,6 +134,10 @@ export const benchmarkRunSchema = z.object({
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),
   createdAt: z.string(),
+  metadata: z.record(z.any()).default({}),
+  agent: agentIdentitySchema.nullable(),
+  browserEnvironment: browserEnvironmentSchema.nullable(),
+  isPublic: z.boolean().default(true),
 });
 
 export type BenchmarkRun = z.infer<typeof benchmarkRunSchema>;
@@ -160,9 +181,16 @@ export type Artifact = z.infer<typeof artifactSchema>;
 export const createRunInputSchema = z.object({
   caseId: z.string().uuid(),
   executionMode: runExecutionModeSchema.default("external-agent"),
+  isPublic: z.boolean().default(true),
 });
 
 export type CreateRunInput = z.infer<typeof createRunInputSchema>;
+
+export const submitRunMetadataInputSchema = agentIdentitySchema.extend({
+  metadata: z.record(z.any()).default({}),
+});
+
+export type SubmitRunMetadataInput = z.infer<typeof submitRunMetadataInputSchema>;
 
 export const runnerRegisterInputSchema = z.object({
   name: z.string().min(1),

@@ -12,7 +12,11 @@ import {
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { createAttemptHandlers } from "./attempt-handlers.js";
 import { resolveHostedSitesUrls } from "./service-urls.js";
-import { createCommandBackbone, type CommandBackboneRole } from "./command-backbone.js";
+import {
+  createCommandBackbone,
+  type CommandBackboneRole,
+  type CommandDeadLetter,
+} from "./command-backbone.js";
 import {
   createAttemptLifecycle,
   type AttemptLifecycleAdvanceSession,
@@ -22,6 +26,7 @@ import {
 import { generateAttemptQuestions } from "./question-generation.js";
 import { createIdempotentInitializer } from "./idempotent-initializer.js";
 import { createSingleFlight } from "./single-flight.js";
+import { createCallbackOutboxProcessor } from "./callback-outbox.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -149,6 +154,20 @@ function getSupabaseAdmin() {
       : null;
 
   return supabaseAdmin;
+}
+
+const callbackOutbox = createCallbackOutboxProcessor({
+  getSupabaseAdmin,
+  webBaseUrl: agentbenchWebUrl || null,
+  sharedSecret: runnerSharedSecret ?? null,
+});
+
+async function flushCallbackOutbox() {
+  try {
+    await callbackOutbox.process();
+  } catch (error) {
+    console.error("[hosted-orchestrator] callback outbox flush failed", error);
+  }
 }
 
 function defaultStartPathForApp(app: string) {
@@ -411,26 +430,10 @@ async function forwardRunEvent(session: AttemptLifecycleSession, type: string, p
 }
 
 async function forwardCompletion(
-  session: AttemptLifecycleSession,
-  result: Pick<HostedWebScoreResult, "status" | "score" | "summary">,
+  _session: AttemptLifecycleSession,
+  _result: Pick<HostedWebScoreResult, "status" | "score" | "summary">,
 ) {
-  if (!agentbenchWebUrl || !session.runId) {
-    return;
-  }
-
-  await fetch(`${agentbenchWebUrl}/api/runs/${encodeURIComponent(session.runId)}/complete`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(runnerSharedSecret ? { "x-runner-secret": runnerSharedSecret } : {}),
-    },
-    body: JSON.stringify({
-      status: result.status === "passed" ? "completed" : "failed",
-      score: result.score,
-      errorMessage: result.status === "passed" ? null : result.summary,
-      artifacts: [],
-    }),
-  }).catch(() => undefined);
+  await flushCallbackOutbox();
 }
 
 async function forwardTimeoutCompletion(params: {
@@ -438,48 +441,8 @@ async function forwardTimeoutCompletion(params: {
   summary: string;
   score?: number;
 }) {
-  if (!agentbenchWebUrl) {
-    return;
-  }
-
-  await fetch(`${agentbenchWebUrl}/api/runs/${encodeURIComponent(params.runId)}/complete`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(runnerSharedSecret ? { "x-runner-secret": runnerSharedSecret } : {}),
-    },
-    body: JSON.stringify({
-      status: "timeout",
-      score: params.score ?? 0,
-      errorMessage: params.summary,
-      artifacts: [],
-    }),
-  }).catch(() => undefined);
-}
-
-async function persistScoreResult(session: AttemptLifecycleSession, result: HostedWebScoreResult) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase || !session.runId) {
-    return;
-  }
-
-  const { error } = await supabase.from("hosted_web_results").insert({
-    session_id: session.id,
-    run_id: session.runId,
-    attempt_id: session.attemptId,
-    app: session.app,
-    task_slug: session.taskSlug,
-    weight: session.weight,
-    status: result.status,
-    score: result.score,
-    summary: result.summary,
-    final_state: session.finalState ?? null,
-    evaluators: result.evaluators,
-  });
-
-  if (error) {
-    console.error("[hosted-orchestrator] failed to persist score result", error);
-  }
+  void params;
+  await flushCallbackOutbox();
 }
 
 async function recoverInitializedAttempt(params: {
@@ -1006,7 +969,6 @@ const attemptLifecycle = createAttemptLifecycle({
   loadAttemptSessions,
   loadAttemptReadModel,
   loadLatestSessionResult,
-  persistScoreResult,
   forwardTimeoutCompletion,
   evictInMemorySessions: () => undefined,
 });
@@ -1148,10 +1110,39 @@ async function dispatchWriteCommand(type: string, input: Record<string, unknown>
   if (type === "maintenance.cleanup") {
     const expiredSessions = await sweepExpiredSessions();
     const prunedAccessLogs = await pruneExpiredAccessLogs();
-    return { statusCode: 200, body: { expiredSessions, prunedAccessLogs } };
+    const callbacks = await callbackOutbox.process(20, true);
+    return { statusCode: 200, body: { expiredSessions, prunedAccessLogs, callbacks } };
   }
 
   return { statusCode: 400, body: { error: "Unknown command type" } };
+}
+
+async function persistCommandDeadLetter(deadLetter: CommandDeadLetter) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error("Command DLQ persistence requires a database connection.");
+  }
+  const timestamp = now();
+  const { error } = await supabase.from("orchestrator_command_dead_letters").upsert(
+    {
+      command_id: deadLetter.commandId,
+      stream: deadLetter.stream,
+      message_id: deadLetter.messageId,
+      partition: deadLetter.partition,
+      partition_key: deadLetter.partitionKey,
+      payload_type: deadLetter.payloadType,
+      payload: deadLetter.payload,
+      error_code: deadLetter.errorCode,
+      error_message: deadLetter.errorMessage,
+      attempts: deadLetter.attempts,
+      status: "dead",
+      updated_at: timestamp,
+    },
+    { onConflict: "command_id" },
+  );
+  if (error) {
+    throw error;
+  }
 }
 
 if (!orchestratorRedisUrl) {
@@ -1164,6 +1155,7 @@ const commandBackbone = createCommandBackbone({
   role: orchestratorMode,
   partitionCount: orchestratorPartitionCount,
   assignedPartitions: workerPartitions,
+  onDeadLetter: persistCommandDeadLetter,
 });
 
 async function sweepExpiredSessions() {
@@ -1175,16 +1167,13 @@ async function sweepExpiredSessions() {
   const sweepStartedAt = now();
   const { data, error } = await supabase
     .from("hosted_web_sessions")
-    .update({
-      status: "expired",
-      completed_at: sweepStartedAt,
-    })
+    .select("id, attempt_id, run_id, task_slug, app")
     .lt("expires_at", sweepStartedAt)
     .in("status", ["created", "active", "scoring"])
-    .select("id, attempt_id, run_id, task_slug, app");
+    .limit(500);
 
   if (error) {
-    console.error("[hosted-orchestrator] failed to sweep expired sessions", error);
+    console.error("[hosted-orchestrator] failed to discover expired sessions", error);
     return 0;
   }
 
@@ -1198,7 +1187,7 @@ async function sweepExpiredSessions() {
       session_id: row.id,
       attempt_id: row.attempt_id,
       run_id: row.run_id,
-      event: "session.expired_swept",
+        event: "session.expiry_detected",
       metadata: {
         app: row.app,
         taskSlug: row.task_slug,
@@ -1248,12 +1237,18 @@ async function runCleanupSweep(trigger: "startup" | "interval") {
       "maintenance",
       `maintenance-cleanup-${sweepBucket}`,
     );
-    const body = result.body as { expiredSessions?: number; prunedAccessLogs?: number };
+    const body = result.body as {
+      expiredSessions?: number;
+      prunedAccessLogs?: number;
+      callbacks?: { reconciled?: number; delivered?: number; retried?: number; dead?: number };
+    };
     const expiredSessions = body.expiredSessions ?? 0;
     const prunedAccessLogs = body.prunedAccessLogs ?? 0;
-    if (expiredSessions > 0 || prunedAccessLogs > 0) {
+    const callbackChanges = (body.callbacks?.reconciled ?? 0) + (body.callbacks?.delivered ?? 0) +
+      (body.callbacks?.retried ?? 0) + (body.callbacks?.dead ?? 0);
+    if (expiredSessions > 0 || prunedAccessLogs > 0 || callbackChanges > 0) {
       console.log(
-        `[hosted-orchestrator] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs}`,
+        `[hosted-orchestrator] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs} callbacks=${JSON.stringify(body.callbacks ?? {})}`,
       );
     }
   } finally {
@@ -1279,6 +1274,81 @@ const server = createServer(async (request, response) => {
 
     if (!isInternalRunnerRequest(request)) {
       sendJson(response, 401, { error: "Unauthorized" });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/commands/dead-letters") {
+      const supabase = getSupabaseAdmin();
+      if (!supabase) {
+        sendJson(response, 503, { error: "database_unavailable" });
+        return;
+      }
+      const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") ?? 50) || 50, 100));
+      const status = url.searchParams.get("status");
+      let query = supabase
+        .from("orchestrator_command_dead_letters")
+        .select("id, command_id, partition, partition_key, payload_type, error_code, error_message, attempts, status, replay_command_id, replayed_at, created_at")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (status === "dead" || status === "replayed" || status === "resolved") {
+        query = query.eq("status", status);
+      }
+      const { data, error } = await query;
+      if (error) {
+        throw error;
+      }
+      sendJson(response, 200, { deadLetters: data ?? [] });
+      return;
+    }
+
+    const replayDeadLetterMatch = url.pathname.match(/^\/api\/commands\/dead-letters\/([^/]+)\/replay$/);
+    if (request.method === "POST" && replayDeadLetterMatch) {
+      const supabase = getSupabaseAdmin();
+      if (!supabase) {
+        sendJson(response, 503, { error: "database_unavailable" });
+        return;
+      }
+      const deadLetterId = decodeURIComponent(replayDeadLetterMatch[1]);
+      const { data: deadLetter, error: loadError } = await supabase
+        .from("orchestrator_command_dead_letters")
+        .select("id, command_id, partition_key, payload_type, payload, status")
+        .eq("id", deadLetterId)
+        .maybeSingle();
+      if (loadError) {
+        throw loadError;
+      }
+      if (!deadLetter) {
+        sendJson(response, 404, { error: "dead_letter_not_found" });
+        return;
+      }
+      if (deadLetter.status !== "dead") {
+        sendJson(response, 409, { error: "dead_letter_not_replayable", status: deadLetter.status });
+        return;
+      }
+      const replayCommandId = crypto.randomUUID();
+      const payload = deadLetter.payload && typeof deadLetter.payload === "object" && !Array.isArray(deadLetter.payload)
+        ? deadLetter.payload as Record<string, unknown>
+        : {};
+      const replay = await commandBackbone.execute(
+        deadLetter.payload_type,
+        payload,
+        deadLetter.partition_key ?? deadLetter.command_id,
+        replayCommandId,
+      );
+      if (replay.statusCode >= 500) {
+        sendJson(response, 409, { error: "dead_letter_replay_failed", replayCommandId, response: replay });
+        return;
+      }
+      const replayedAt = now();
+      const { error: updateError } = await supabase
+        .from("orchestrator_command_dead_letters")
+        .update({ status: "replayed", replay_command_id: replayCommandId, replayed_at: replayedAt, updated_at: replayedAt })
+        .eq("id", deadLetter.id)
+        .eq("status", "dead");
+      if (updateError) {
+        throw updateError;
+      }
+      sendJson(response, 200, { replayCommandId, response: replay });
       return;
     }
 

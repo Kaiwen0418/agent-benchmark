@@ -7,6 +7,12 @@ cd "${ROOT_DIR}"
 echo "== Deployment classifier =="
 bash scripts/test-deploy-classifier.sh
 
+echo "== Orchestrator topology =="
+bash scripts/test-orchestrator-topology.sh
+
+echo "== Lifecycle Postgres integration =="
+bash scripts/test-lifecycle-postgres.sh
+
 echo "== Web library tests =="
 pnpm --filter web test
 

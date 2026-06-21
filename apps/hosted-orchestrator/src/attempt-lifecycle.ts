@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, HostedAttemptReadModel, HostedAttemptSessionStatus } from "@agentbench/shared";
 import {
   aggregateSuiteScore,
+  hostedWebScoreResultSchema,
+  hostedWebSuiteScoreResultSchema,
   type HostedWebScoreResult,
   type HostedWebSuiteScoreResult,
   type HostedWebSuiteSessionScore,
@@ -91,7 +93,6 @@ type AttemptLifecycleDeps = {
   loadAttemptSessions: (attemptId: string) => Promise<AttemptLifecycleAdvanceSession[]>;
   loadAttemptReadModel: (attemptId: string) => Promise<HostedAttemptReadModel<AttemptLifecycleAdvanceSession>>;
   loadLatestSessionResult: (sessionId: string) => Promise<HostedWebScoreResult | null>;
-  persistScoreResult: (session: AttemptLifecycleSession, result: HostedWebScoreResult) => Promise<void>;
   forwardTimeoutCompletion: (params: { runId: string; summary: string; score?: number }) => Promise<void>;
   evictInMemorySessions: (sessionIds: string[]) => void;
 };
@@ -99,17 +100,15 @@ type AttemptLifecycleDeps = {
 const terminalAttemptStatuses = new Set<AttemptStatus>(["completed", "failed", "cancelled", "timeout"]);
 
 export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
-  async function persistAttemptScore(session: AttemptLifecycleSession, result: HostedWebScoreResult): Promise<{
+  async function completePersistedSession(session: AttemptLifecycleSession, result: HostedWebScoreResult): Promise<{
+    result: HostedWebScoreResult;
+    duplicate: boolean;
     complete: boolean;
     aggregate: HostedWebSuiteScoreResult | null;
   }> {
-    if (!session.persisted || !session.runId || !session.attemptId) {
-      return { complete: false, aggregate: null };
-    }
-
     const supabase = deps.getSupabaseAdmin();
-    if (!supabase) {
-      return { complete: false, aggregate: null };
+    if (!supabase || !session.runId || !session.attemptId) {
+      throw new Error("Persisted session completion requires database-backed run and attempt ids.");
     }
 
     const { data: attemptRow } = await supabase
@@ -129,8 +128,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .order("created_at", { ascending: true });
 
     if (resultsError || !resultRows) {
-      console.error("[hosted-orchestrator] failed to load attempt results for aggregation", resultsError);
-      return { complete: false, aggregate: null };
+      throw resultsError ?? new Error(`Attempt ${session.attemptId} results are unavailable.`);
     }
 
     const { data: sessionRows, error: sessionsError } = await supabase
@@ -140,14 +138,30 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .order("sequence_index", { ascending: true });
 
     if (sessionsError || !sessionRows) {
-      console.error("[hosted-orchestrator] failed to load attempt sessions for aggregation", sessionsError);
-      return { complete: false, aggregate: null };
+      throw sessionsError ?? new Error(`Attempt ${session.attemptId} sessions are unavailable.`);
     }
 
-    const latestResultBySessionId = new Map<string, (typeof resultRows)[number]>();
+    const latestResultBySessionId = new Map<string, HostedWebSuiteSessionScore>();
     for (const row of resultRows) {
-      latestResultBySessionId.set(row.session_id, row);
+      latestResultBySessionId.set(row.session_id, {
+        sessionId: row.session_id,
+        app: row.app ?? "unknown",
+        taskSlug: row.task_slug ?? "unknown",
+        score: row.score,
+        status: row.status,
+        weight: row.weight,
+        required: true,
+      });
     }
+    latestResultBySessionId.set(session.id, {
+      sessionId: session.id,
+      app: session.app,
+      taskSlug: session.taskSlug,
+      score: result.score,
+      status: result.status,
+      weight: session.weight,
+      required: sessionRows.find((row) => row.id === session.id)?.required ?? true,
+    });
 
     const completedSessionIds = new Set(latestResultBySessionId.keys());
 
@@ -171,122 +185,86 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       sessionRows.find((row) => !completedSessionIds.has(row.id) && row.id !== session.id) ??
       sessionRows.find((row) => !completedSessionIds.has(row.id));
 
-    const { error: sessionError } = await supabase
-      .from("hosted_web_sessions")
-      .update({
-        status: result.status === "passed" ? "completed" : "failed",
-        completed_at: deps.now(),
-      })
-      .eq("id", session.id);
-
-    if (sessionError) {
-      console.error("[hosted-orchestrator] failed to update hosted session status", sessionError);
-    }
-
+    let aggregate: HostedWebSuiteScoreResult | null = null;
+    let attemptStatus: AttemptStatus = "running";
+    let scoringSummary: Record<string, unknown>;
+    let metadata: Record<string, unknown>;
     if (pendingSessionIds.length > 0) {
       const completedIds = sessionRows
         .filter((row) => completedSessionIds.has(row.id))
         .map((row) => row.id);
-      const { error: attemptProgressError } = await supabase
-        .from("benchmark_attempts")
-        .update({
-          status: "running",
-          metadata: {
-            ...existingAttemptMetadata,
-            activeSessionId: nextPendingSession?.id ?? null,
-            activeSequenceIndex: nextPendingSession?.sequence_index ?? null,
-            completedSessionIds: completedIds,
-          },
-          scoring_summary: {
-            summary: `Completed ${completedSessionIds.size} of ${sessionRows.length} hosted sessions.`,
-            status: "running",
-            breakdown: {
-              aggregation: "weighted-required-suite",
-              sessions: suiteSessions,
-              pendingSessionIds,
-            },
-          },
-        })
-        .eq("id", session.attemptId);
-
-      if (attemptProgressError) {
-        console.error("[hosted-orchestrator] failed to update attempt progress", attemptProgressError);
-      }
-
-      return { complete: false, aggregate: null };
-    }
-
-    const aggregate = aggregateSuiteScore({
-      sessions: suiteSessions,
-      passSummary: `All required hosted sessions for ${session.suiteSlug} passed.`,
-      failSummary: `One or more required hosted sessions for ${session.suiteSlug} failed.`,
-    });
-    const breakdown = aggregate.breakdown;
-    const status = aggregate.status === "passed" ? "completed" : "failed";
-    const completedAt = deps.now();
-
-    const { error: scoreError } = await supabase.from("benchmark_attempt_scores").insert({
-      run_id: session.runId,
-      attempt_id: session.attemptId,
-      status: aggregate.status,
-      score: aggregate.score,
-      summary: aggregate.summary,
-      breakdown,
-    });
-
-    if (scoreError) {
-      console.error("[hosted-orchestrator] failed to persist attempt score", scoreError);
-    }
-
-    const { error: attemptError } = await supabase
-      .from("benchmark_attempts")
-      .update({
-        status,
-        aggregate_score: aggregate.score,
-        metadata: {
-          ...existingAttemptMetadata,
-          activeSessionId: null,
-          activeSequenceIndex: null,
-          completedSessionIds: sessionRows.map((row) => row.id),
+      metadata = {
+        ...existingAttemptMetadata,
+        activeSessionId: nextPendingSession?.id ?? null,
+        activeSequenceIndex: nextPendingSession?.sequence_index ?? null,
+        completedSessionIds: completedIds,
+      };
+      scoringSummary = {
+        summary: `Completed ${completedSessionIds.size} of ${sessionRows.length} hosted sessions.`,
+        status: "running",
+        breakdown: {
+          aggregation: "weighted-required-suite",
+          sessions: suiteSessions,
+          pendingSessionIds,
         },
-        scoring_summary: {
-          summary: aggregate.summary,
-          status: aggregate.status,
-          breakdown,
-        },
-        completed_at: completedAt,
-      })
-      .eq("id", session.attemptId);
-
-    if (attemptError) {
-      console.error("[hosted-orchestrator] failed to update attempt", attemptError);
+      };
+    } else {
+      aggregate = aggregateSuiteScore({
+        sessions: suiteSessions,
+        passSummary: `All required hosted sessions for ${session.suiteSlug} passed.`,
+        failSummary: `One or more required hosted sessions for ${session.suiteSlug} failed.`,
+      });
+      attemptStatus = aggregate.status === "passed" ? "completed" : "failed";
+      metadata = {
+        ...existingAttemptMetadata,
+        activeSessionId: null,
+        activeSequenceIndex: null,
+        completedSessionIds: sessionRows.map((row) => row.id),
+      };
+      scoringSummary = {
+        summary: aggregate.summary,
+        status: aggregate.status,
+        breakdown: aggregate.breakdown,
+      };
     }
 
-    return { complete: true, aggregate };
-  }
-
-  async function promoteNextAttemptSession(attemptId: string, completedSessionId: string) {
-    const supabase = deps.getSupabaseAdmin();
-    if (!supabase) {
-      return;
+    const { data: transition, error: transitionError } = await supabase.rpc("complete_hosted_attempt_session", {
+      p_attempt_id: session.attemptId,
+      p_session_id: session.id,
+      p_completed_at: deps.now(),
+      p_result: {
+        ...result,
+        finalState: session.finalState ?? null,
+      },
+      p_attempt_update: {
+        complete: aggregate !== null,
+        status: attemptStatus,
+        aggregate,
+        metadata,
+        scoringSummary,
+        nextSessionId: nextPendingSession?.id ?? null,
+      },
+    });
+    if (transitionError) {
+      throw transitionError;
     }
 
-    const metadata = await deps.loadAttemptMetadata(attemptId);
-    const completedSessionIds = Array.isArray(metadata.completedSessionIds)
-      ? metadata.completedSessionIds.filter((value): value is string => typeof value === "string")
-      : [];
-    const nextSessions = await deps.loadAttemptSessions(attemptId);
-    const nextActive = nextSessions.find(
-      (candidate) => !completedSessionIds.includes(candidate.id) && candidate.id !== completedSessionId,
-    );
-
-    if (nextActive && nextActive.status === "created") {
-      nextActive.status = "active";
-      await supabase
-        .from("hosted_web_sessions")
-        .update({ status: "active" })
-        .eq("id", nextActive.id);
+    const payload = transition && typeof transition === "object" && !Array.isArray(transition)
+      ? transition as Record<string, unknown>
+      : null;
+    if (!payload || (!payload.transitioned && !payload.duplicate)) {
+      throw new Error(`Session completion conflict: ${String(payload?.conflict ?? "invalid_response")}.`);
     }
+    const persistedResult = hostedWebScoreResultSchema.parse(payload.result);
+    const persistedAggregate = payload.aggregate === null || payload.aggregate === undefined
+      ? null
+      : hostedWebSuiteScoreResultSchema.parse(payload.aggregate);
+    return {
+      result: persistedResult,
+      duplicate: payload.duplicate === true,
+      complete: payload.complete === true,
+      aggregate: persistedAggregate,
+    };
   }
 
   async function finalizeSession(session: AttemptLifecycleSession, result: HostedWebScoreResult) {
@@ -307,18 +285,20 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       }
     }
 
-    await deps.persistScoreResult(session, result);
-    session.status = result.status === "passed" ? "completed" : "failed";
-    const attemptResult = await persistAttemptScore(session, result);
-
-    if (!attemptResult.complete && session.attemptId) {
-      await promoteNextAttemptSession(session.attemptId, session.id);
-    }
+    const persisted = session.persisted
+      ? await completePersistedSession(session, result)
+      : {
+          result,
+          duplicate: false,
+          complete: false,
+          aggregate: null,
+        };
+    session.status = persisted.result.status === "passed" ? "completed" : "failed";
 
     return {
-      result,
-      attemptResult,
-      duplicate: false,
+      result: persisted.result,
+      attemptResult: { complete: persisted.complete, aggregate: persisted.aggregate },
+      duplicate: persisted.duplicate,
     };
   }
 
@@ -380,11 +360,6 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       } satisfies TimeoutAttemptCommandResult;
     }
 
-    const existingMetadata =
-      attemptRow.metadata && typeof attemptRow.metadata === "object" && !Array.isArray(attemptRow.metadata)
-        ? (attemptRow.metadata as Record<string, unknown>)
-        : {};
-
     const { data: sessionRows, error: sessionsError } = await supabase
       .from("hosted_web_sessions")
       .select("id, run_id, app, task_slug, sequence_index, status")
@@ -407,22 +382,6 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       .filter((row) => row.status === "created" || row.status === "active" || row.status === "scoring")
       .map((row) => row.id);
 
-    if (siblingSessionIds.length > 0) {
-      const { error: sessionTimeoutError } = await supabase
-        .from("hosted_web_sessions")
-        .update({
-          status: "expired",
-          completed_at: timeoutAt,
-        })
-        .in("id", siblingSessionIds);
-
-      if (sessionTimeoutError) {
-        console.error("[hosted-orchestrator] failed to expire sibling sessions during timeout", sessionTimeoutError);
-      }
-    }
-
-    deps.evictInMemorySessions(siblingSessionIds);
-
     const summary = `Hosted suite timed out after session ${params.expiredTaskSlug} expired before completion.`;
     const scoringSummary = {
       summary,
@@ -441,25 +400,19 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       },
     };
 
-    const { error: attemptUpdateError } = await supabase
-      .from("benchmark_attempts")
-      .update({
-        status: "timeout",
-        aggregate_score: 0,
-        metadata: {
-          ...existingMetadata,
-          activeSessionId: null,
-          activeSequenceIndex: null,
-          timedOutSessionId: params.expiredSessionId,
-          timedOutAt: timeoutAt,
-        },
-        scoring_summary: scoringSummary,
-        completed_at: timeoutAt,
+    const { data: timeoutTransition, error: timeoutError } = await supabase
+      .rpc("timeout_hosted_attempt", {
+        p_attempt_id: params.attemptId,
+        p_timeout_at: timeoutAt,
+        p_timed_out_session_id: params.expiredSessionId,
+        p_scoring_summary: scoringSummary,
       })
-      .eq("id", params.attemptId);
+      .maybeSingle();
 
-    if (attemptUpdateError) {
-      console.error("[hosted-orchestrator] failed to update timed out attempt", attemptUpdateError);
+    if (timeoutError || !timeoutTransition?.transitioned) {
+      if (timeoutError) {
+        console.error("[hosted-orchestrator] failed to atomically time out attempt", timeoutError);
+      }
       return {
         command: "timeout-attempt",
         ok: false,
@@ -469,31 +422,13 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       } satisfies TimeoutAttemptCommandResult;
     }
 
-    const { data: existingAttemptScore } = await supabase
-      .from("benchmark_attempt_scores")
-      .select("id")
-      .eq("attempt_id", params.attemptId)
-      .limit(1)
-      .maybeSingle();
+    const expiredSessionIds = timeoutTransition.expired_session_ids ?? siblingSessionIds;
+    deps.evictInMemorySessions(expiredSessionIds);
 
-    if (!existingAttemptScore && params.runId) {
-      const { error: attemptScoreError } = await supabase.from("benchmark_attempt_scores").insert({
-        run_id: params.runId,
-        attempt_id: params.attemptId,
-        status: "error",
-        score: 0,
-        summary,
-        breakdown: scoringSummary.breakdown,
-      });
-
-      if (attemptScoreError) {
-        console.error("[hosted-orchestrator] failed to persist timeout attempt score", attemptScoreError);
-      }
-    }
-
-    if (params.runId) {
+    const runId = timeoutTransition.attempt_run_id ?? params.runId;
+    if (runId) {
       await deps.forwardTimeoutCompletion({
-        runId: params.runId,
+        runId,
         summary,
         score: 0,
       });
@@ -503,7 +438,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       command: "timeout-attempt",
       ok: true,
       attemptId: params.attemptId,
-      runId: params.runId,
+      runId,
       summary,
     } satisfies TimeoutAttemptCommandResult;
   }

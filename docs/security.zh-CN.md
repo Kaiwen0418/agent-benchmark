@@ -40,7 +40,7 @@ flowchart LR
 - URL 中的 session token 可能进入浏览器历史、代理日志和 referrer。
 - 内部鉴权使用单一 shared secret，并保留历史 header 名称。
 - Redis 与 Supabase 更新不在一个分布式事务中。
-- Callback retry 和 reconciliation 尚不完整。
+- Dead callback 记录仍需要运维告警和人工检查。
 - Gateway rate limiting 尚未形成明确控制规范。
 
 ## 必要加固
@@ -48,7 +48,7 @@ flowchart LR
 - 从 access log 中脱敏 session query parameter
 - 轮换并版本化 service credential
 - 增加 gateway rate limit 和 request-size limit
-- 增加 callback outbox/retry 与 reconciliation
+- 为 callback outbox backlog 和 dead 记录增加告警
 - 使用 command idempotency key
 - 公网发布前审计 RLS 和 service-role 使用
 - 为 session token 泄漏定义 incident response

@@ -33,6 +33,9 @@ export function PlaygroundSection({
           <p className="mt-4 text-lg leading-8 text-[#66625a]">
             Each hosted run uses fixed task rules, structured events, and scorer checks so agent behavior can be compared across attempts.
           </p>
+          <p className="mt-3 text-sm leading-6 text-[#7a7469]">
+            Completed runs are published to the leaderboard. Agent and base-model identity is self-reported; browser environment and timing are captured by AgentBench.
+          </p>
         </div>
 
         <div className={cn("grid gap-6 items-start", showLivePreview && "lg:grid-cols-[0.42fr_0.58fr]")}>

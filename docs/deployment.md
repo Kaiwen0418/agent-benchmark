@@ -31,7 +31,7 @@ Redis uses `HOSTED_SESSION_REDIS_URL=redis://redis:6379` for session cache and `
 
 The local Compose topology runs two workers: partitions `0-7` and `8-15`. Do not use `--scale` on a worker service because replicas would claim the same partitions. To add workers, define additional worker services and redistribute all partitions into disjoint sets. Readiness returns `503` while any partition has no active lease.
 
-The server Compose profile is currently different: it runs one `hosted-orchestrator` service with `ORCHESTRATOR_MODE=all`. That process serves the API and owns all 16 partitions. Do not scale this service above one replica. Restoring separate production workers is a [roadmap](./roadmap.md) item.
+Server Compose uses the same API/worker split. `hosted-orchestrator` serves only the API, while `hosted-orchestrator-worker-0` and `hosted-orchestrator-worker-1` own partitions `0-7` and `8-15`. The deploy script rejects missing, duplicate, or out-of-range static assignments before changing containers, and the orchestrator readiness endpoint rejects missing runtime leases.
 
 Useful checks:
 
@@ -49,19 +49,19 @@ Do not publish a fixed host port for each hosted-sites replica. Nginx should rea
 `deploy-hosted-sites.yml` classifies each push before building or pulling images:
 
 - `apps/hosted-sites/**` builds, pulls, and recreates only hosted-sites.
-- `apps/hosted-orchestrator/**` builds, pulls, and recreates the current server orchestrator service.
+- `apps/hosted-orchestrator/**` builds one image, then pulls and recreates the orchestrator API and both workers.
 - shared scoring/runtime packages rebuild both images.
 - Nginx changes recreate only the gateway.
 - Compose topology changes reconcile all services without pulling unaffected application images.
 
-Hosted-sites and orchestrator use independent image tags. Targeted deploys preserve the currently running replica counts, so scaling one service does not restart or resize the other. The current server orchestrator replica count must remain one while it runs in `all` mode.
+Hosted-sites and orchestrator use independent image tags. Targeted deploys preserve the currently running replica counts, so scaling one service does not restart or resize the other. The orchestrator API and workers always use the same immutable image tag within one environment.
 
 ## Production Topology
 
 The production deployment is split into:
 
 - web on Vercel
-- hosted-sites, the all-mode orchestrator, Redis, and Nginx on a private Linux host
+- hosted-sites, orchestrator API/workers, Redis, and Nginx on a private Linux host
 - Supabase for durable application data
 - GHCR for hosted runtime images
 - Cloudflare Tunnel for environment-specific public ingress and TLS
@@ -87,6 +87,12 @@ Hosted CD only accepts `develop` and `main`:
 Manual dispatches from any other branch fail before accessing a self-hosted runner. Required CI also rejects pull requests to `main` unless their source is `develop` or `hotfix/*`. The `production` Environment should require approval and allow deployments only from `main`.
 
 The hosted deployment workflow builds images, pushes them to GHCR, and runs the server deployment through a self-hosted GitHub Actions runner on Linux. This infrastructure agent is unrelated to the removed benchmark execution runner. The server pulls the requested image tag and recreates the Compose services.
+
+When orchestrator code or topology changes, development deployment runs worker fault injection before the generated four-app lifecycle smoke. Each worker is stopped independently; the verifier requires the public API to remain reachable with `503` and the exact missing partition set, queues a `maintenance.cleanup` command into that worker's Redis Stream, restarts the worker, and requires both full readiness and a persisted `statusCode: 200` command result. A trap restarts the stopped worker if verification is interrupted.
+
+The following lifecycle smoke then runs against the public development URLs. It verifies ordered completion, duplicate completion idempotency, one result per completed session, and one aggregate score per attempt. Production deployment performs baseline health checks but does not run fault injection or create smoke-test runs.
+
+The deployment job summary records the previous and deployed orchestrator image references, tested workers, missing partitions, recovered command IDs, and rollback source SHA. To roll back, rerun the hosted deployment workflow at the recorded source SHA or pin the API and both worker services to that SHA's immutable image tag and recreate all three together. Never roll back only one orchestrator role.
 
 Required variables in each GitHub Environment:
 

@@ -127,3 +127,84 @@ test("a partition lease rejects overlapping worker assignments", { skip: !redisU
     await Promise.all([first.stop(), overlapping.stop()]);
   }
 });
+
+test("failed commands retry to the limit before entering the DLQ", { skip: !redisUrl }, async () => {
+  const namespace = crypto.randomUUID();
+  let handled = 0;
+  const deadLetters: Array<{ commandId: string; attempts: number; payloadType: string; partition: number }> = [];
+  const backbone = createCommandBackbone({
+    redisUrl: redisUrl!,
+    streamKey: `test:orchestrator:dlq:${namespace}`,
+    groupName: `test-group:${namespace}`,
+    partitionCount: 1,
+    maxCommandAttempts: 3,
+    retryBaseDelayMs: 1,
+    responseTimeoutSeconds: 3,
+    handler: async () => {
+      handled += 1;
+      throw new Error("poison command");
+    },
+    onDeadLetter: async (deadLetter) => {
+      deadLetters.push(deadLetter);
+    },
+  });
+
+  await backbone.start();
+  try {
+    const commandId = crypto.randomUUID();
+    const response = await backbone.execute("attempt.poison", { attemptId: "attempt-1" }, "attempt-1", commandId);
+    assert.deepEqual(response, {
+      statusCode: 500,
+      body: { error: "orchestrator_command_dead_lettered", commandId, attempts: 3 },
+    });
+    assert.equal(handled, 3);
+    assert.equal(deadLetters.length, 1);
+    assert.deepEqual(
+      {
+        commandId: deadLetters[0]?.commandId,
+        attempts: deadLetters[0]?.attempts,
+        payloadType: deadLetters[0]?.payloadType,
+        partition: deadLetters[0]?.partition,
+      },
+      { commandId, attempts: 3, payloadType: "attempt.poison", partition: 0 },
+    );
+  } finally {
+    await backbone.stop();
+  }
+});
+
+test("DLQ persistence retries do not rerun an exhausted command", { skip: !redisUrl }, async () => {
+  const namespace = crypto.randomUUID();
+  let handled = 0;
+  let deadLetterWrites = 0;
+  const backbone = createCommandBackbone({
+    redisUrl: redisUrl!,
+    streamKey: `test:orchestrator:dlq-recovery:${namespace}`,
+    groupName: `test-group:${namespace}`,
+    partitionCount: 1,
+    maxCommandAttempts: 2,
+    retryBaseDelayMs: 1,
+    reclaimIdleMs: 1,
+    responseTimeoutSeconds: 4,
+    handler: async () => {
+      handled += 1;
+      throw new Error("poison command");
+    },
+    onDeadLetter: async () => {
+      deadLetterWrites += 1;
+      if (deadLetterWrites === 1) {
+        throw new Error("database unavailable");
+      }
+    },
+  });
+
+  await backbone.start();
+  try {
+    const response = await backbone.execute("attempt.poison", {}, "attempt-1");
+    assert.equal(response.statusCode, 500);
+    assert.equal(handled, 2);
+    assert.equal(deadLetterWrites, 2);
+  } finally {
+    await backbone.stop();
+  }
+});

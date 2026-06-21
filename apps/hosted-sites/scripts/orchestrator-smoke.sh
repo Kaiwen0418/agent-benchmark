@@ -9,19 +9,26 @@ HOSTED_BASE_URL="${HOSTED_SITES_PUBLIC_URL:-http://127.0.0.1:${HOSTED_PORT}}"
 ORCHESTRATOR_BASE_URL="${HOSTED_ORCHESTRATOR_PUBLIC_URL:-http://127.0.0.1:${ORCHESTRATOR_PORT}}"
 WEB_URL="${AGENTBENCH_WEB_URL:-http://127.0.0.1:3999}"
 SMOKE_MODE="${SMOKE_MODE:-timeout}"
+START_LOCAL_SERVICES="${START_LOCAL_SERVICES:-true}"
 
-if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "Missing env file: ${ENV_FILE}" >&2
-  exit 1
+if [[ -f "${ENV_FILE}" && -z "${NEXT_PUBLIC_SUPABASE_URL:-}" && -z "${SUPABASE_SERVICE_ROLE_KEY:-}" && -z "${RUNNER_SHARED_SECRET:-}" ]]; then
+  set -a
+  source "${ENV_FILE}"
+  set +a
 fi
-
-set -a
-source "${ENV_FILE}"
-set +a
 
 : "${NEXT_PUBLIC_SUPABASE_URL:?NEXT_PUBLIC_SUPABASE_URL is required}"
 : "${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}"
 : "${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET is required}"
+
+if [[ "${SMOKE_MODE}" != "full-pass" && "${SMOKE_MODE}" != "timeout" ]]; then
+  echo "SMOKE_MODE must be full-pass or timeout." >&2
+  exit 2
+fi
+if [[ "${START_LOCAL_SERVICES}" != "true" && "${START_LOCAL_SERVICES}" != "false" ]]; then
+  echo "START_LOCAL_SERVICES must be true or false." >&2
+  exit 2
+fi
 
 cleanup() {
   for pid in "${ORCHESTRATOR_PID:-}" "${HOSTED_PID:-}"; do
@@ -34,25 +41,27 @@ cleanup() {
 
 trap cleanup EXIT
 
-HOSTED_ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT}" \
-HOSTED_ORCHESTRATOR_PUBLIC_URL="${ORCHESTRATOR_BASE_URL}" \
-HOSTED_SITES_URL="${HOSTED_BASE_URL}" \
-AGENTBENCH_WEB_URL="${WEB_URL}" \
-NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
-SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}" \
-RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
-pnpm --filter hosted-orchestrator exec tsx src/server.ts >/tmp/agentbench-hosted-orchestrator-smoke.log 2>&1 &
-ORCHESTRATOR_PID=$!
+if [[ "${START_LOCAL_SERVICES}" == "true" ]]; then
+  HOSTED_ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT}" \
+  HOSTED_ORCHESTRATOR_PUBLIC_URL="${ORCHESTRATOR_BASE_URL}" \
+  HOSTED_SITES_URL="${HOSTED_BASE_URL}" \
+  AGENTBENCH_WEB_URL="${WEB_URL}" \
+  NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
+  SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}" \
+  RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
+  pnpm --filter hosted-orchestrator exec tsx src/server.ts >/tmp/agentbench-hosted-orchestrator-smoke.log 2>&1 &
+  ORCHESTRATOR_PID=$!
 
-HOSTED_SITES_PORT="${HOSTED_PORT}" \
-HOSTED_SITES_PUBLIC_URL="${HOSTED_BASE_URL}" \
-HOSTED_ORCHESTRATOR_URL="${ORCHESTRATOR_BASE_URL}" \
-AGENTBENCH_WEB_URL="${WEB_URL}" \
-NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
-SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}" \
-RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
-pnpm --filter hosted-sites exec tsx src/server.ts >/tmp/agentbench-hosted-sites-smoke.log 2>&1 &
-HOSTED_PID=$!
+  HOSTED_SITES_PORT="${HOSTED_PORT}" \
+  HOSTED_SITES_PUBLIC_URL="${HOSTED_BASE_URL}" \
+  HOSTED_ORCHESTRATOR_URL="${ORCHESTRATOR_BASE_URL}" \
+  AGENTBENCH_WEB_URL="${WEB_URL}" \
+  NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
+  SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}" \
+  RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
+  pnpm --filter hosted-sites exec tsx src/server.ts >/tmp/agentbench-hosted-sites-smoke.log 2>&1 &
+  HOSTED_PID=$!
+fi
 
 for _ in $(seq 1 30); do
   if curl -fsS "${HOSTED_BASE_URL}/health" >/dev/null && curl -fsS "${ORCHESTRATOR_BASE_URL}/health" >/dev/null; then
@@ -64,39 +73,369 @@ done
 curl -fsS "${HOSTED_BASE_URL}/health" >/dev/null
 curl -fsS "${ORCHESTRATOR_BASE_URL}/health" >/dev/null
 
-SETUP_JSON="$(cd "${ROOT_DIR}" && pnpm --filter hosted-sites exec node <<'NODE'
-const { createClient } = require("@supabase/supabase-js");
+SMOKE_MODE="${SMOKE_MODE}" \
+HOSTED_BASE_URL="${HOSTED_BASE_URL}" \
+ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL}" \
+node <<'NODE'
+const smokeMode = process.env.SMOKE_MODE;
+const hostedBaseUrl = process.env.HOSTED_BASE_URL;
+const orchestratorBaseUrl = process.env.ORCHESTRATOR_BASE_URL;
+const runnerSecret = process.env.RUNNER_SHARED_SECRET;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-async function main() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
+async function checkedFetch(url, init = {}) {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    throw new Error(
+      `${init.method ?? "GET"} ${new URL(url).pathname} failed with HTTP ${response.status}: ${await response.text()}`,
+    );
+  }
+  return response;
+}
 
-  const { data: benchmarkCase, error: caseError } = await supabase
-    .from("benchmark_cases")
-    .select("id, slug")
-    .eq("slug", "shopping-constrained-checkout")
-    .single();
+async function orchestratorRequest(path, init = {}) {
+  const baseUrl = orchestratorBaseUrl.endsWith("/") ? orchestratorBaseUrl : `${orchestratorBaseUrl}/`;
+  return checkedFetch(new URL(path.replace(/^\/+/, ""), baseUrl), {
+    ...init,
+    headers: {
+      ...init.headers,
+      "x-runner-secret": runnerSecret,
+    },
+  });
+}
 
-  if (caseError || !benchmarkCase) {
-    throw caseError ?? new Error("benchmark case not found");
+async function supabaseRequest(table, searchParams, init = {}) {
+  const query = new URLSearchParams(searchParams);
+  return checkedFetch(`${supabaseUrl}/rest/v1/${table}?${query}`, {
+    ...init,
+    headers: {
+      apikey: supabaseServiceRoleKey,
+      Authorization: `Bearer ${supabaseServiceRoleKey}`,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+}
+
+async function selectRows(table, searchParams) {
+  return (await supabaseRequest(table, searchParams)).json();
+}
+
+async function insertRow(table, value) {
+  const rows = await (
+    await supabaseRequest(table, { select: "id" }, {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(value),
+    })
+  ).json();
+  if (!Array.isArray(rows) || rows.length !== 1) {
+    throw new Error(`Expected one inserted ${table} row.`);
+  }
+  return rows[0];
+}
+
+async function postForm(path, token, values) {
+  return checkedFetch(`${hostedBaseUrl}${path}?session=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(values),
+  });
+}
+
+function requireObject(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  return value;
+}
+
+function requireString(value, label) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${label} must be a non-empty string.`);
+  }
+  return value;
+}
+
+function normalizedSessions(benchmarkCase) {
+  const metadata = requireObject(benchmarkCase.metadata, "benchmark metadata");
+  if (!Array.isArray(metadata.sessions) || metadata.sessions.length < 2) {
+    throw new Error("Hosted smoke requires at least two benchmark sessions.");
   }
 
-  const { data: run, error: runError } = await supabase
-    .from("benchmark_runs")
-    .insert({
+  return {
+    suiteSlug: requireString(metadata.suiteSlug, "suiteSlug"),
+    suiteVersion: requireString(metadata.suiteVersion, "suiteVersion"),
+    sessions: [...metadata.sessions]
+      .sort((left, right) => left.sequenceIndex - right.sequenceIndex)
+      .map((session, sequenceIndex) => ({
+        ...session,
+        sequenceIndex,
+        taskVersion: session.taskVersion ?? "v1",
+        weight: session.weight ?? 1,
+        required: session.required ?? true,
+        title: session.title ?? benchmarkCase.title,
+        goal: session.goal ?? benchmarkCase.description,
+        startPath: session.startPath ?? null,
+        seedVersion: session.seedVersion ?? `${session.app}-v1`,
+        metadata: session.metadata ?? {},
+      })),
+  };
+}
+
+function generatedConfig(initialized, sequenceIndex) {
+  const session = initialized.metadata.sessions.find(
+    (candidate) => candidate.sequenceIndex === sequenceIndex,
+  );
+  const generation = requireObject(
+    requireObject(session?.metadata, `session ${sequenceIndex} metadata`).questionGeneration,
+    `session ${sequenceIndex} questionGeneration`,
+  );
+  requireString(generation.variantId, `session ${sequenceIndex} variantId`);
+  requireString(generation.uiVariant, `session ${sequenceIndex} uiVariant`);
+  requireString(generation.uiTheme, `session ${sequenceIndex} uiTheme`);
+  return requireObject(generation.taskConfig, `session ${sequenceIndex} taskConfig`);
+}
+
+async function completeShopping(session, config) {
+  const productByCategory = {
+    charger: "prod-charger-30w",
+    cable: "prod-cable-1m",
+    case: "prod-case",
+  };
+  const productId = productByCategory[config.targetCategory];
+  if (!productId) {
+    throw new Error(`Unsupported shopping category: ${config.targetCategory}`);
+  }
+  const quantity = Number(config.quantity);
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    throw new Error(`Invalid shopping quantity: ${config.quantity}`);
+  }
+
+  await checkedFetch(session.startUrl);
+  for (let count = 0; count < quantity; count += 1) {
+    await postForm("/shopping/cart", session.token, { productId });
+  }
+  await postForm("/shopping/checkout", session.token, {
+    shippingMethod: requireString(config.shippingMethod, "shopping shippingMethod"),
+  });
+}
+
+async function completeForum(session, config) {
+  const threadId = requireString(config.targetThreadId, "forum targetThreadId");
+  await checkedFetch(`${hostedBaseUrl}/forum/thread/${encodeURIComponent(threadId)}?session=${encodeURIComponent(session.token)}`);
+  await postForm(`/forum/thread/${encodeURIComponent(threadId)}/reply`, session.token, {
+    body: requireString(config.expectedReplyValue, "forum expectedReplyValue"),
+  });
+  await postForm(`/forum/thread/${encodeURIComponent(threadId)}/lock`, session.token, {
+    reason: requireString(config.expectedLockReason, "forum expectedLockReason"),
+  });
+}
+
+async function completeRepo(session, config) {
+  const filePath = requireString(config.filePath, "repo filePath");
+  const expectedText = requireString(config.expectedText, "repo expectedText");
+  const content = [
+    "# Demo Project",
+    "",
+    "## Install",
+    "",
+    `Run \`${expectedText}\` to install dependencies.`,
+    "",
+    "## Usage",
+    "",
+    "Start the dev server with `npm run dev`.",
+    "",
+  ].join("\n");
+  await checkedFetch(`${hostedBaseUrl}/repo/file/${encodeURIComponent(filePath)}/edit?session=${encodeURIComponent(session.token)}`);
+  await postForm(`/repo/file/${encodeURIComponent(filePath)}/edit`, session.token, { content });
+  await postForm("/repo/mr/new", session.token, {
+    title: requireString(config.expectedMrTitle, "repo expectedMrTitle"),
+    targetBranch: requireString(config.expectedTargetBranch, "repo expectedTargetBranch"),
+  });
+}
+
+async function completeWiki(session, config) {
+  const articleSlug = requireString(config.targetArticleSlug, "wiki targetArticleSlug");
+  await checkedFetch(`${hostedBaseUrl}/wiki/article/${encodeURIComponent(articleSlug)}?session=${encodeURIComponent(session.token)}`);
+  await postForm("/wiki/answer", session.token, {
+    answer: requireString(config.expectedAnswer, "wiki expectedAnswer"),
+  });
+}
+
+const appCompletion = {
+  "shopping-lite": completeShopping,
+  "forum-lite": completeForum,
+  "repo-lite": completeRepo,
+  "wiki-lite": completeWiki,
+};
+
+async function completeAndVerifySession(session, config) {
+  const completeApp = appCompletion[session.app];
+  if (!completeApp) {
+    throw new Error(`Smoke completion is not implemented for app ${session.app}.`);
+  }
+  await completeApp(session, config);
+
+  const score = await (
+    await checkedFetch(`${hostedBaseUrl}/api/sessions/${encodeURIComponent(session.token)}/score`)
+  ).json();
+  if (score.status !== "passed" || score.score !== 1) {
+    throw new Error(`${session.app} score failed: ${JSON.stringify(score)}`);
+  }
+
+  const completeUrl = `${hostedBaseUrl}/api/sessions/${encodeURIComponent(session.token)}/complete`;
+  const firstCompletion = await (await checkedFetch(completeUrl, { method: "POST" })).json();
+  const duplicateCompletion = await (await checkedFetch(completeUrl, { method: "POST" })).json();
+  if (JSON.stringify(firstCompletion) !== JSON.stringify(duplicateCompletion)) {
+    throw new Error(`${session.app} duplicate completion returned a different result.`);
+  }
+}
+
+async function loadAttemptState(attemptId) {
+  return (
+    await orchestratorRequest(`/api/attempts/${encodeURIComponent(attemptId)}/state`)
+  ).json();
+}
+
+async function main() {
+  const benchmarkCases = await selectRows("benchmark_cases", {
+    select: "id,slug,title,description,metadata",
+    slug: "eq.shopping-constrained-checkout",
+    limit: "1",
+  });
+  if (!Array.isArray(benchmarkCases) || benchmarkCases.length !== 1) {
+    throw new Error("benchmark case not found");
+  }
+  const benchmarkCase = benchmarkCases[0];
+  const suite = normalizedSessions(benchmarkCase);
+
+  const run = await insertRow("benchmark_runs", {
       case_id: benchmarkCase.id,
       execution_mode: "external-agent",
       status: "queued",
-    })
-    .select("id")
-    .single();
+  });
 
-  if (runError || !run) {
-    throw runError ?? new Error("run creation failed");
+  const initialized = await (
+    await orchestratorRequest("/api/attempts/init", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        runId: run.id,
+        caseId: benchmarkCase.id,
+        callbackSecret: runnerSecret,
+        suiteSlug: suite.suiteSlug,
+        suiteVersion: suite.suiteVersion,
+        sessions: suite.sessions,
+      }),
+    })
+  ).json();
+
+  if (initialized.sessions.length !== suite.sessions.length) {
+    throw new Error(`Expected ${suite.sessions.length} initialized sessions, got ${initialized.sessions.length}.`);
+  }
+  const sessions = [...initialized.sessions].sort(
+    (left, right) => left.sequenceIndex - right.sequenceIndex,
+  );
+  const initialState = await loadAttemptState(initialized.attemptId);
+  if (initialState.activeSessionId !== sessions[0].sessionId) {
+    throw new Error("The first generated session is not active.");
   }
 
-  console.log(JSON.stringify({ caseId: benchmarkCase.id, runId: run.id }));
+  const initialAdvance = await (
+    await orchestratorRequest(
+      `/api/attempts/${encodeURIComponent(initialized.attemptId)}/commands/resolve-advance`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentSessionId: sessions[0].sessionId }),
+      },
+    )
+  ).json();
+  if (initialAdvance.complete || initialAdvance.nextSessionId !== sessions[0].sessionId) {
+    throw new Error("Initial advance did not return the active session.");
+  }
+
+  const completedSessions = [];
+  const completionCount = smokeMode === "full-pass" ? sessions.length : 1;
+  for (const session of sessions.slice(0, completionCount)) {
+    await completeAndVerifySession(session, generatedConfig(initialized, session.sequenceIndex));
+    completedSessions.push(session.sessionId);
+  }
+
+  if (smokeMode === "timeout") {
+    const state = await loadAttemptState(initialized.attemptId);
+    const expiredSession = state.sessions.find((session) => session.id === state.activeSessionId);
+    if (!expiredSession) {
+      throw new Error("Timeout smoke could not find the next active session.");
+    }
+    const timeout = await (
+      await orchestratorRequest(
+        `/api/attempts/${encodeURIComponent(initialized.attemptId)}/commands/timeout`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            runId: run.id,
+            expiredSessionId: expiredSession.id,
+            expiredTaskSlug: expiredSession.taskSlug,
+          }),
+        },
+      )
+    ).json();
+    if (!timeout.ok || typeof timeout.summary !== "string" || timeout.summary.length === 0) {
+      throw new Error("Timeout command did not return a usable summary.");
+    }
+    const finalState = await loadAttemptState(initialized.attemptId);
+    if (finalState.activeSessionId !== null) {
+      throw new Error("Timed out attempt retained an active session.");
+    }
+  } else {
+    const finalState = await loadAttemptState(initialized.attemptId);
+    if (
+      finalState.activeSessionId !== null ||
+      finalState.completedSessionIds.length !== sessions.length
+    ) {
+      throw new Error("Completed attempt has inconsistent terminal state.");
+    }
+    const finalAdvance = await (
+      await orchestratorRequest(
+        `/api/attempts/${encodeURIComponent(initialized.attemptId)}/commands/resolve-advance`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentSessionId: sessions.at(-1).sessionId }),
+        },
+      )
+    ).json();
+    if (!finalAdvance.complete || finalAdvance.nextSessionId !== null || finalAdvance.nextStartUrl !== null) {
+      throw new Error("Final advance did not report suite completion.");
+    }
+  }
+
+  const resultRows = await selectRows("hosted_web_results", {
+    select: "session_id",
+    attempt_id: `eq.${initialized.attemptId}`,
+  });
+  if (
+    resultRows.length !== completedSessions.length ||
+    new Set(resultRows.map((row) => row.session_id)).size !== resultRows.length
+  ) {
+    throw new Error("Hosted result rows are not unique per completed session.");
+  }
+
+  const scoreRows = await selectRows("benchmark_attempt_scores", {
+    select: "id",
+    attempt_id: `eq.${initialized.attemptId}`,
+  });
+  if (scoreRows.length !== 1) {
+    throw new Error(`Expected one aggregate attempt score, got ${scoreRows.length}.`);
+  }
+
+  console.log(
+    `orchestrator smoke (${smokeMode}) passed: run=${run.id} attempt=${initialized.attemptId} sessions=${sessions.length}`,
+  );
 }
 
 main().catch((error) => {
@@ -104,236 +443,3 @@ main().catch((error) => {
   process.exit(1);
 });
 NODE
-)"
-
-RUN_ID="$(printf '%s' "${SETUP_JSON}" | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).runId')"
-CASE_ID="$(printf '%s' "${SETUP_JSON}" | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).caseId')"
-
-INIT_PAYLOAD="$(cat <<JSON
-{
-  "runId": "${RUN_ID}",
-  "caseId": "${CASE_ID}",
-  "callbackSecret": "${RUNNER_SHARED_SECRET}",
-  "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v1",
-  "sessions": [
-    {
-      "app": "shopping-lite",
-      "taskSlug": "shopping-constrained-checkout",
-      "taskVersion": "v1",
-      "sequenceIndex": 0,
-      "weight": 1,
-      "required": true,
-      "title": "Shopping checkout",
-      "startPath": "/shopping",
-      "seedVersion": "shopping-lite-v1",
-      "metadata": {
-        "questionVariants": [
-          {
-            "id": "charger-standard-30",
-            "goal": "Buy one unrestricted charger costing at most 30 USD with standard shipping.",
-            "taskConfig": {"targetCategory":"charger","quantity":1,"maxTotal":30,"shippingMethod":"standard","avoidRestricted":true}
-          },
-          {
-            "id": "charger-standard-25",
-            "goal": "Buy one unrestricted charger costing at most 25 USD with standard shipping.",
-            "taskConfig": {"targetCategory":"charger","quantity":1,"maxTotal":25,"shippingMethod":"standard","avoidRestricted":true}
-          }
-        ]
-      }
-    },
-    {
-      "app": "wiki-lite",
-      "taskSlug": "wiki-release-answer",
-      "taskVersion": "v1",
-      "sequenceIndex": 1,
-      "weight": 1,
-      "required": true,
-      "title": "Wiki release history",
-      "startPath": "/wiki",
-      "seedVersion": "wiki-lite-v1",
-      "metadata": {
-        "questionVariants": [
-          {
-            "id": "release-date-exact",
-            "goal": "Find the exact date when wiki-lite followed the hosted-web suite alpha.",
-            "taskConfig": {"targetArticleSlug":"agentbench-release-history","expectedAnswer":"June 1, 2026"}
-          },
-          {
-            "id": "release-date-written",
-            "goal": "Submit the date written in release history for the wiki-lite launch.",
-            "taskConfig": {"targetArticleSlug":"agentbench-release-history","expectedAnswer":"June 1, 2026"}
-          }
-        ]
-      }
-    }
-  ]
-}
-JSON
-)"
-
-INIT_JSON="$(curl -fsS -X POST "${ORCHESTRATOR_BASE_URL}/api/attempts/init" \
-  -H "Content-Type: application/json" \
-  -H "x-runner-secret: ${RUNNER_SHARED_SECRET}" \
-  -d "${INIT_PAYLOAD}")"
-
-printf '%s' "${INIT_JSON}" | node -e '
-const initialized = JSON.parse(require("fs").readFileSync(0, "utf8"));
-const sessions = initialized.metadata && initialized.metadata.sessions;
-if (!Array.isArray(sessions) || sessions.length !== 2) {
-  throw new Error("initialized attempt is missing generated session metadata");
-}
-for (const session of sessions) {
-  const generation = session.metadata && session.metadata.questionGeneration;
-  if (!generation || !generation.uiVariant || !generation.uiTheme) {
-    throw new Error("generated session is missing its UI presentation metadata");
-  }
-}
-'
-
-ATTEMPT_ID="$(printf '%s' "${INIT_JSON}" | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).attemptId')"
-FIRST_TOKEN="$(printf '%s' "${INIT_JSON}" | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).sessions[0].token')"
-FIRST_SESSION_ID="$(printf '%s' "${INIT_JSON}" | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).sessions[0].sessionId')"
-SECOND_SESSION_ID="$(printf '%s' "${INIT_JSON}" | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).sessions[1].sessionId')"
-
-STATE_JSON="$(curl -fsS "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/state" \
-  -H "x-runner-secret: ${RUNNER_SHARED_SECRET}")"
-
-printf '%s' "${STATE_JSON}" | node -e '
-const state = JSON.parse(require("fs").readFileSync(0, "utf8"));
-if (state.activeSessionId !== state.sessions[0].id) {
-  throw new Error("unexpected initial activeSessionId");
-}
-if (state.sessions.length !== 2) {
-  throw new Error("expected two sessions");
-}
-'
-
-ADVANCE_BEFORE_JSON="$(curl -fsS -X POST "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/commands/resolve-advance" \
-  -H "Content-Type: application/json" \
-  -H "x-runner-secret: ${RUNNER_SHARED_SECRET}" \
-  -d "{\"currentSessionId\":\"${FIRST_SESSION_ID}\"}")"
-
-printf '%s' "${ADVANCE_BEFORE_JSON}" | node -e '
-const payload = JSON.parse(require("fs").readFileSync(0, "utf8"));
-if (payload.complete !== false || payload.nextSessionId !== payload.currentSessionId) {
-  throw new Error("resolve-advance should point at the current active session before completion");
-}
-'
-
-curl -fsS "${HOSTED_BASE_URL}/shopping?session=${FIRST_TOKEN}" >/dev/null
-curl -fsS -X POST "${HOSTED_BASE_URL}/shopping/cart?session=${FIRST_TOKEN}" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data "productId=prod-charger-30w" >/dev/null
-curl -fsS -X POST "${HOSTED_BASE_URL}/shopping/checkout?session=${FIRST_TOKEN}" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data "shippingMethod=standard" >/dev/null
-
-SCORE_JSON="$(curl -fsS "${HOSTED_BASE_URL}/api/sessions/${FIRST_TOKEN}/score")"
-
-COMPLETE_JSON="$(curl -fsS -X POST "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/commands/complete-session" \
-  -H "Content-Type: application/json" \
-  -H "x-runner-secret: ${RUNNER_SHARED_SECRET}" \
-  -d "{\"sessionToken\":\"${FIRST_TOKEN}\",\"result\":${SCORE_JSON},\"finalState\":{\"source\":\"smoke\"}}")"
-
-printf '%s' "${COMPLETE_JSON}" | node -e '
-const payload = JSON.parse(require("fs").readFileSync(0, "utf8"));
-if (payload.status !== "passed" || payload.score !== 1) {
-  throw new Error("complete-session command did not return the expected duplicate pass result");
-}
-'
-
-STATE_AFTER_COMPLETE_JSON="$(curl -fsS "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/state" \
-  -H "x-runner-secret: ${RUNNER_SHARED_SECRET}")"
-
-SECOND_TOKEN="$(printf '%s' "${STATE_AFTER_COMPLETE_JSON}" | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).sessions[1].token')"
-
-printf '%s' "${STATE_AFTER_COMPLETE_JSON}" | node -e '
-const state = JSON.parse(require("fs").readFileSync(0, "utf8"));
-if (state.activeSessionId !== state.sessions[1].id) {
-  throw new Error("second session should become active after shopping completion");
-}
-'
-
-ADVANCE_AFTER_JSON="$(curl -fsS -X POST "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/commands/resolve-advance" \
-  -H "Content-Type: application/json" \
-  -H "x-runner-secret: ${RUNNER_SHARED_SECRET}" \
-  -d "{\"currentSessionId\":\"${FIRST_SESSION_ID}\"}")"
-
-printf '%s' "${ADVANCE_AFTER_JSON}" | node -e '
-const payload = JSON.parse(require("fs").readFileSync(0, "utf8"));
-if (payload.complete !== false || !payload.nextStartUrl || !payload.nextStartUrl.includes("/wiki?session=")) {
-  throw new Error("resolve-advance should point to the wiki session after shopping completion");
-}
-'
-
-if [[ "${SMOKE_MODE}" == "full-pass" ]]; then
-  curl -fsS "${HOSTED_BASE_URL}/wiki/article/agentbench-release-history?session=${SECOND_TOKEN}" >/dev/null
-  curl -fsS -X POST "${HOSTED_BASE_URL}/api/telemetry" \
-    -H "Content-Type: application/json" \
-    -d "{\"session\":\"${SECOND_TOKEN}\",\"type\":\"page.load\",\"url\":\"/wiki/article/agentbench-release-history?session=${SECOND_TOKEN}\",\"title\":\"AgentBench Release History\"}" >/dev/null
-  curl -fsS -X POST "${HOSTED_BASE_URL}/wiki/answer?session=${SECOND_TOKEN}" \
-    -H "Content-Type: application/x-www-form-urlencoded" \
-    --data-urlencode "answer=June 1, 2026" >/dev/null
-
-  SECOND_SCORE_JSON="$(curl -fsS "${HOSTED_BASE_URL}/api/sessions/${SECOND_TOKEN}/score")"
-
-  printf '%s' "${SECOND_SCORE_JSON}" | node -e '
-  const payload = JSON.parse(require("fs").readFileSync(0, "utf8"));
-  if (payload.status !== "passed" || payload.score !== 1) {
-    throw new Error("wiki score should pass in full-pass smoke");
-  }
-  '
-
-  FINAL_STATE_JSON="$(curl -fsS "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/state" \
-    -H "x-runner-secret: ${RUNNER_SHARED_SECRET}")"
-
-  printf '%s' "${FINAL_STATE_JSON}" | node -e '
-  const state = JSON.parse(require("fs").readFileSync(0, "utf8"));
-  if (state.activeSessionId !== null) {
-    throw new Error("completed attempt should not retain an active session");
-  }
-  if (!Array.isArray(state.completedSessionIds) || state.completedSessionIds.length !== 2) {
-    throw new Error("completed attempt should contain both completed session ids");
-  }
-  '
-
-  FINAL_ADVANCE_JSON="$(curl -fsS -X POST "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/commands/resolve-advance" \
-    -H "Content-Type: application/json" \
-    -H "x-runner-secret: ${RUNNER_SHARED_SECRET}" \
-    -d "{\"currentSessionId\":\"${SECOND_SESSION_ID}\"}")"
-
-  printf '%s' "${FINAL_ADVANCE_JSON}" | node -e '
-  const payload = JSON.parse(require("fs").readFileSync(0, "utf8"));
-  if (payload.complete !== true || payload.nextSessionId !== null || payload.nextStartUrl !== null) {
-    throw new Error("resolve-advance should report suite completion after full pass");
-  }
-  '
-
-  echo "orchestrator smoke (full-pass) passed: run=${RUN_ID} attempt=${ATTEMPT_ID}"
-  exit 0
-fi
-
-TIMEOUT_JSON="$(curl -fsS -X POST "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/commands/timeout" \
-  -H "Content-Type: application/json" \
-  -H "x-runner-secret: ${RUNNER_SHARED_SECRET}" \
-  -d "{\"runId\":\"${RUN_ID}\",\"expiredSessionId\":\"${SECOND_SESSION_ID}\",\"expiredTaskSlug\":\"wiki-release-answer\"}")"
-
-printf '%s' "${TIMEOUT_JSON}" | node -e '
-const payload = JSON.parse(require("fs").readFileSync(0, "utf8"));
-if (!payload.ok || typeof payload.summary !== "string" || payload.summary.length === 0) {
-  throw new Error("timeout command did not return a usable summary");
-}
-'
-
-FINAL_STATE_JSON="$(curl -fsS "${ORCHESTRATOR_BASE_URL}/api/attempts/${ATTEMPT_ID}/state" \
-  -H "x-runner-secret: ${RUNNER_SHARED_SECRET}")"
-
-printf '%s' "${FINAL_STATE_JSON}" | node -e '
-const state = JSON.parse(require("fs").readFileSync(0, "utf8"));
-if (state.activeSessionId !== null) {
-  throw new Error("timed out attempt should not retain an active session");
-}
-'
-
-echo "orchestrator smoke (timeout) passed: run=${RUN_ID} attempt=${ATTEMPT_ID}"

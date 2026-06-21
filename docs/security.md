@@ -40,7 +40,7 @@ flowchart LR
 - Session tokens in URLs may appear in browser history, proxy logs, and referrers.
 - Internal auth uses a single shared secret and a legacy header name.
 - Redis and Supabase updates are not one distributed transaction.
-- Callback retries and reconciliation are incomplete.
+- Dead callback rows require operational alerting and manual inspection.
 - Rate limiting is not yet documented as a gateway-enforced control.
 
 ## Required Hardening
@@ -48,7 +48,7 @@ flowchart LR
 - redact session query parameters from access logs
 - rotate and version service credentials
 - add gateway rate limits and request-size limits
-- add callback outbox/retry and reconciliation
+- alert on callback outbox backlog and dead rows
 - use command idempotency keys
 - audit RLS and service-role usage before public launch
 - define incident response for leaked session tokens
