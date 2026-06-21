@@ -39,6 +39,7 @@ if matches_any '^infra/nginx/'; then
 fi
 if matches_any '^infra/docker/docker-compose\.server\.yml$' \
   '^infra/scripts/deploy-hosted-stack\.sh$' \
+  '^infra/scripts/verify-orchestrator-worker-recovery\.sh$' \
   '^infra/scripts/validate-orchestrator-partitions\.sh$'; then
   topology=true
 fi

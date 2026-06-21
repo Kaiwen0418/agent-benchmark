@@ -54,7 +54,7 @@ Do not publish a fixed host port for each hosted-sites replica. Nginx should rea
 - Nginx changes recreate only the gateway.
 - Compose topology changes reconcile all services without pulling unaffected application images.
 
-Hosted-sites and orchestrator use independent image tags. Targeted deploys preserve the currently running replica counts, so scaling one service does not restart or resize the other. The current server orchestrator replica count must remain one while it runs in `all` mode.
+Hosted-sites and orchestrator use independent image tags. Targeted deploys preserve the currently running replica counts, so scaling one service does not restart or resize the other. The orchestrator API and workers always use the same immutable image tag within one environment.
 
 ## Production Topology
 
@@ -88,7 +88,11 @@ Manual dispatches from any other branch fail before accessing a self-hosted runn
 
 The hosted deployment workflow builds images, pushes them to GHCR, and runs the server deployment through a self-hosted GitHub Actions runner on Linux. This infrastructure agent is unrelated to the removed benchmark execution runner. The server pulls the requested image tag and recreates the Compose services.
 
-After a successful development deployment, the workflow runs the generated four-app lifecycle smoke against the public development URLs. It verifies ordered completion, duplicate completion idempotency, one result per completed session, and one aggregate score per attempt. Production deployment does not create smoke-test runs.
+When orchestrator code or topology changes, development deployment runs worker fault injection before the generated four-app lifecycle smoke. Each worker is stopped independently; the verifier requires the public API to remain reachable with `503` and the exact missing partition set, queues a `maintenance.cleanup` command into that worker's Redis Stream, restarts the worker, and requires both full readiness and a persisted `statusCode: 200` command result. A trap restarts the stopped worker if verification is interrupted.
+
+The following lifecycle smoke then runs against the public development URLs. It verifies ordered completion, duplicate completion idempotency, one result per completed session, and one aggregate score per attempt. Production deployment performs baseline health checks but does not run fault injection or create smoke-test runs.
+
+The deployment job summary records the previous and deployed orchestrator image references, tested workers, missing partitions, recovered command IDs, and rollback source SHA. To roll back, rerun the hosted deployment workflow at the recorded source SHA or pin the API and both worker services to that SHA's immutable image tag and recreate all three together. Never roll back only one orchestrator role.
 
 Required variables in each GitHub Environment:
 

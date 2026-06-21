@@ -22,7 +22,7 @@ P0 is now organized as ordered, independently verifiable milestones. A milestone
 | Milestone | Status | Exit criteria |
 | --- | --- | --- |
 | P0.1 Public result integrity | Complete | Public result pages expose sanitized benchmark metadata, completion time, browser environment, agent/base-model identity, and stable scores without leaking private run fields. |
-| P0.2 Production role isolation | In progress | Server Compose runs API and workers separately; deploys validate exact partition ownership; all runtime leases are required for readiness; development deployment and worker-restart verification pass. |
+| P0.2 Production role isolation | In progress | API/worker isolation and automated recovery verification are implemented; successful development fault-injection evidence is pending. |
 | P0.3 Atomic lifecycle transitions | Complete | Timeout, terminal completion, and active promotion share an attempt row lock and pass real-Postgres timeout-versus-completion and duplicate-completion race tests. |
 | P0.4 Durable callback recovery | Complete | Web completion callbacks use a transactional outbox, eight-attempt bounded retry, stale-claim recovery, periodic reconciliation, and an idempotent Web receiver. |
 | P0.5 Poison-command containment | Complete | Commands retry at most three times, persist diagnostic dead letters before acknowledgement, and support authenticated inspection and replay with a new command ID. |
@@ -33,7 +33,8 @@ P0 is now organized as ordered, independently verifiable milestones. A milestone
 - An orchestrator image deployment updates the API and both workers from the same immutable tag without recreating hosted-sites.
 - Static deployment validation rejects missing, duplicate, and out-of-range partition assignments.
 - Runtime readiness requires Redis Streams plus an active lease for every partition.
-- Remaining gate: deploy to development, restart each worker independently, verify public API continuity and queued-command recovery, then document rollback evidence.
+- Development CD now automates independent worker restarts, public API continuity checks, queued-command recovery, and rollback evidence capture.
+- Remaining gate: merge the verifier to `develop` and retain the successful fault-injection and lifecycle-smoke run as completion evidence.
 
 P0 completion criterion: after any single-process failure or command retry, the system preserves one lifecycle transition, one result, one score, and one callback side effect while keeping the public API available.
 
