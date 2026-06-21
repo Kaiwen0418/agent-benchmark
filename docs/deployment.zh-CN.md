@@ -54,7 +54,7 @@ docker-compose logs -f --tail=200 hosted-sites hosted-orchestrator hosted-orches
 - Nginx 变更只 recreate gateway。
 - Compose 拓扑变更会 reconcile 全部服务，但不会 pull 未变更的应用镜像。
 
-Hosted-sites 与 orchestrator 使用独立 image tag。定向部署会保留当前副本数，因此扩容或部署一个服务不会重启或缩放另一个服务。服务器 orchestrator 处于 `all` mode 时，副本数必须保持为一。
+Hosted-sites 与 orchestrator 使用独立 image tag。定向部署会保留当前副本数，因此扩容或部署一个服务不会重启或缩放另一个服务。同一环境中的 orchestrator API 与 workers 始终使用相同的不可变 image tag。
 
 ## 生产拓扑
 
@@ -88,7 +88,11 @@ Hosted CD 只接受 `develop` 和 `main`：
 
 托管部署 workflow 构建镜像、推送到 GHCR，并通过 Linux 上的 self-hosted GitHub Actions runner 执行服务器部署。该基础设施 agent 与已移除的 benchmark execution runner 无关。服务器根据指定 tag 拉取镜像并重建 Compose 服务。
 
-Development 部署成功后，workflow 会通过公网 development URL 运行动态四应用 lifecycle smoke，验证顺序完成、重复 completion 幂等性、每个已完成 session 只有一个 result，以及每个 attempt 只有一个聚合 score。Production 部署不会创建 smoke-test run。
+当 orchestrator 代码或拓扑发生变化时，development 部署会先执行 worker 故障注入，再运行动态四应用 lifecycle smoke。验证程序逐个停止 worker，要求公网 API 持续可达并返回 `503` 及精确的缺失 partition 集合；随后向该 worker 的 Redis Stream 排队一个 `maintenance.cleanup` command，重启 worker，并要求恢复完整 readiness 且 command result 持久化为 `statusCode: 200`。验证中断时 trap 会重启被停止的 worker。
+
+后续 lifecycle smoke 通过公网 development URL 验证顺序完成、重复 completion 幂等性、每个已完成 session 只有一个 result，以及每个 attempt 只有一个聚合 score。Production 部署只执行基线健康检查，不执行故障注入，也不创建 smoke-test run。
+
+部署 job summary 会记录升级前和部署后的 orchestrator image、已测试 worker、缺失 partitions、恢复后的 command ID 与回滚 source SHA。回滚时应在记录的 source SHA 重新运行 hosted deployment workflow，或将 API 和两个 worker 一起固定到该 SHA 的不可变 image tag 后重建；不能只回滚单个 orchestrator role。
 
 每个 GitHub Environment 需要配置以下 Variables：
 

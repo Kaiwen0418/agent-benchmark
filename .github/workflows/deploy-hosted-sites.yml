@@ -19,6 +19,7 @@ on:
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'
       - 'infra/scripts/deploy-hosted-stack.sh'
+      - 'infra/scripts/verify-orchestrator-worker-recovery.sh'
       - 'infra/scripts/validate-orchestrator-partitions.sh'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -332,6 +333,8 @@ jobs:
           ORCHESTRATOR_CHANGED: ${{ needs.detect-changes.outputs.orchestrator }}
           INFRA_CHANGED: ${{ needs.detect-changes.outputs.infra }}
           TOPOLOGY_CHANGED: ${{ needs.detect-changes.outputs.topology }}
+          VERIFY_ORCHESTRATOR_WORKER_RECOVERY: ${{ needs.detect-changes.outputs.orchestrator == 'true' || needs.detect-changes.outputs.topology == 'true' }}
+          ROLLBACK_SOURCE_SHA: ${{ github.event.before }}
           GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
@@ -408,6 +411,7 @@ jobs:
           ORCHESTRATOR_CHANGED: ${{ needs.detect-changes.outputs.orchestrator }}
           INFRA_CHANGED: ${{ needs.detect-changes.outputs.infra }}
           TOPOLOGY_CHANGED: ${{ needs.detect-changes.outputs.topology }}
+          VERIFY_ORCHESTRATOR_WORKER_RECOVERY: 'false'
           GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}

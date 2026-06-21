@@ -38,6 +38,7 @@ HOSTED_SITES_CHANGED="${HOSTED_SITES_CHANGED:-false}"
 ORCHESTRATOR_CHANGED="${ORCHESTRATOR_CHANGED:-false}"
 INFRA_CHANGED="${INFRA_CHANGED:-false}"
 TOPOLOGY_CHANGED="${TOPOLOGY_CHANGED:-false}"
+VERIFY_ORCHESTRATOR_WORKER_RECOVERY="${VERIFY_ORCHESTRATOR_WORKER_RECOVERY:-false}"
 ORCHESTRATOR_PARTITION_COUNT=16
 ORCHESTRATOR_WORKER_0_PARTITIONS='0,1,2,3,4,5,6,7'
 ORCHESTRATOR_WORKER_1_PARTITIONS='8,9,10,11,12,13,14,15'
@@ -110,6 +111,17 @@ compose() {
   "${COMPOSE[@]}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+service_image_evidence() {
+  local service="$1"
+  local container_id
+  container_id="$(compose ps -q "${service}" 2>/dev/null)"
+  if [[ -z "${container_id}" ]]; then
+    printf 'unavailable'
+    return
+  fi
+  docker inspect "${container_id}" --format '{{.Config.Image}}@{{.Image}}'
+}
+
 test -f infra/nginx/hosted-sites.conf
 bash infra/scripts/validate-orchestrator-partitions.sh \
   "${ORCHESTRATOR_PARTITION_COUNT}" \
@@ -139,6 +151,8 @@ dump_deploy_logs() {
 
 deploy_status=0
 trap 'deploy_status=$?; if [[ "${deploy_status}" -ne 0 ]]; then dump_deploy_logs; fi; rm -f "${ENV_FILE}"' EXIT
+
+PREVIOUS_ORCHESTRATOR_IMAGE="$(service_image_evidence hosted-orchestrator)"
 
 printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 HOSTED_REPLICAS="$(compose ps -q hosted-sites 2>/dev/null | wc -l | tr -d ' ')"
@@ -191,9 +205,11 @@ orchestrator_smoke_check() {
   compose exec -T hosted-sites node -e "fetch('http://gateway/orchestrator').then(async (response) => { const body = await response.json(); const complete = Array.isArray(body.missingPartitions) && body.missingPartitions.length === 0; process.exit(response.ok && body.ok === true && body.commandBackbone === 'redis-streams' && body.mode === 'api' && complete ? 0 : 1); }).catch((error) => { console.error(error); process.exit(1); })"
 }
 
+smoke_ready=false
 for attempt in $(seq 1 30); do
   if internal_smoke_check && orchestrator_smoke_check; then
-    exit 0
+    smoke_ready=true
+    break
   fi
   echo "Smoke check failed; retrying (${attempt}/30)."
   if ! gateway_running; then
@@ -203,4 +219,16 @@ for attempt in $(seq 1 30); do
   sleep 2
 done
 
-exit 1
+if [[ "${smoke_ready}" != "true" ]]; then
+  exit 1
+fi
+
+if [[ "${VERIFY_ORCHESTRATOR_WORKER_RECOVERY}" == "true" ]]; then
+  WORKER_RECOVERY_ENV_FILE="${ENV_FILE}" \
+  WORKER_RECOVERY_COMPOSE_FILE="${COMPOSE_FILE}" \
+  PREVIOUS_ORCHESTRATOR_IMAGE="${PREVIOUS_ORCHESTRATOR_IMAGE}" \
+  ORCHESTRATOR_PARTITION_COUNT="${ORCHESTRATOR_PARTITION_COUNT}" \
+  ORCHESTRATOR_WORKER_0_PARTITIONS="${ORCHESTRATOR_WORKER_0_PARTITIONS}" \
+  ORCHESTRATOR_WORKER_1_PARTITIONS="${ORCHESTRATOR_WORKER_1_PARTITIONS}" \
+    bash infra/scripts/verify-orchestrator-worker-recovery.sh
+fi
