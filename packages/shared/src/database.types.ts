@@ -649,7 +649,22 @@ export type Database = {
         Relationships: [];
       };
     };
-    Views: Record<string, never>;
+    Views: {
+      public_benchmark_cases: {
+        Row: {
+          category: string | null;
+          created_at: string | null;
+          description: string | null;
+          difficulty: string | null;
+          id: string | null;
+          metadata: Json | null;
+          provider: "native" | "hosted-web" | "webarena" | null;
+          slug: string | null;
+          title: string | null;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
       complete_hosted_attempt_session: {
         Args: {

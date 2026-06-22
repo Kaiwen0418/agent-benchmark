@@ -24,6 +24,7 @@ P0 is now organized as ordered, independently verifiable milestones. A milestone
 | P0.3 Atomic lifecycle transitions | Complete | Timeout, terminal completion, and active promotion share an attempt row lock and pass real-Postgres timeout-versus-completion and duplicate-completion race tests. |
 | P0.4 Durable callback recovery | Complete | Web completion callbacks use a transactional outbox, eight-attempt bounded retry, stale-claim recovery, periodic reconciliation, and an idempotent Web receiver. |
 | P0.5 Poison-command containment | Complete | Commands retry at most three times, persist diagnostic dead letters before acknowledgement, and support authenticated inspection and replay with a new command ID. |
+| P0.6 Evaluator confidentiality | In progress | Public case discovery exposes only display-safe metadata while suite manifests, generated variant pools, canonical answers, and evaluator parameters remain service-role-only. |
 
 ### P0.2 Implementation Scope
 
@@ -62,6 +63,13 @@ P0 completion criterion: after any single-process failure or command retry, the 
 - Internal authenticated APIs list dead letters and replay a selected record with a new command ID, avoiding the original result cache.
 - CI covers retry limits, DLQ persistence failure recovery, diagnostic schema, and database storage.
 
+### P0.6 Implementation Scope
+
+- Anonymous and authenticated database clients read benchmark cases through an explicit public projection rather than the base table.
+- The public projection exposes suite identity and display-safe session summaries, but never variant pools, generated task configuration, canonical answers, or evaluator parameters.
+- Server-side control-plane and hosted services retain private manifest access through service-role credentials.
+- Real-Postgres CI verifies both denied base-table access and sanitized public projection output.
+
 ## P1: Observability and Operations
 
 - Emit structured logs with request ID, command ID, run ID, attempt ID, session ID, partition, and deployment environment.
@@ -91,6 +99,8 @@ Detailed scoring and coverage rules are defined in [Benchmark Scoring And Testin
 | BQ.1 Scorer and task contract | Complete | Every information-retrieval variant has an unambiguous canonical answer, declared normalization, valid source evidence, and positive/negative tests. |
 | BQ.2 Terminal score consistency | In progress | Terminal sessions reject mutation and every API, UI projection, and database row returns the first persisted result. |
 | BQ.3 Testcase expansion | In progress | CI enumerates every app variant across positive/negative paths and development E2E proves one consistent aggregate. |
+| BQ.4 Typed testcase catalog | Planned | Hosted task definitions and suite composition have one discriminated, validated TypeScript source used by tests, local data, and publishing. |
+| BQ.5 Immutable benchmark releases | Planned | Every attempt references an immutable case revision, and changing the current release cannot alter historical interpretation. |
 
 Complete BQ.1 and BQ.2 before expanding the hosted app catalog so new applications do not inherit ambiguous or mutable terminal scoring.
 

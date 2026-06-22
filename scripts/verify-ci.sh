@@ -13,6 +13,9 @@ bash scripts/test-orchestrator-topology.sh
 echo "== Lifecycle Postgres integration =="
 bash scripts/test-lifecycle-postgres.sh
 
+echo "== Benchmark case privacy =="
+bash scripts/test-benchmark-case-privacy.sh
+
 echo "== Web library tests =="
 pnpm --filter web test
 
