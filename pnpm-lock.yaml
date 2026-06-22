@@ -28,8 +28,8 @@ importers:
         version: 6.0.0
     devDependencies:
       '@types/node':
-        specifier: ^22.19.21
-        version: 22.19.21
+        specifier: ^22.20.0
+        version: 22.20.0
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
@@ -53,8 +53,8 @@ importers:
         version: 6.0.0
     devDependencies:
       '@types/node':
-        specifier: ^22.19.21
-        version: 22.19.21
+        specifier: ^22.20.0
+        version: 22.20.0
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
@@ -105,8 +105,8 @@ importers:
         version: 5.0.14(@types/react@19.2.17)(react@19.2.7)
     devDependencies:
       '@types/node':
-        specifier: ^22.19.21
-        version: 22.19.21
+        specifier: ^22.20.0
+        version: 22.20.0
       '@types/react':
         specifier: ^19.2.17
         version: 19.2.17
@@ -142,8 +142,8 @@ importers:
         version: 3.25.76
     devDependencies:
       '@types/node':
-        specifier: ^22.19.21
-        version: 22.19.21
+        specifier: ^22.20.0
+        version: 22.20.0
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
@@ -640,8 +640,8 @@ packages:
   '@types/cookie@0.6.0':
     resolution: {integrity: sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA==}
 
-  '@types/node@22.19.21':
-    resolution: {integrity: sha512-VMeFBSCKQKmm2swI2kW51SFusDqekC6q9trBCvJ/JliDchFSuoYYKN7yVNjPthP1HKZcx3U1gI/wTcEBjEFKTA==}
+  '@types/node@22.20.0':
+    resolution: {integrity: sha512-QWlFW2wf3nTjC13/DqRnBpR4ZO36VJH/JVBkA/vcnmbTBNQIlnObqyqZE1tUR7+Ni23Lda8R1BxMfbXRpCUx5g==}
 
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
@@ -1435,7 +1435,7 @@ snapshots:
 
   '@types/cookie@0.6.0': {}
 
-  '@types/node@22.19.21':
+  '@types/node@22.20.0':
     dependencies:
       undici-types: 6.21.0
 
