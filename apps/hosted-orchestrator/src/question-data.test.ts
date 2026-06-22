@@ -5,10 +5,10 @@ import test from "node:test";
 
 const root = path.resolve(import.meta.dirname, "../../..");
 const seedSql = fs.readFileSync(path.join(root, "supabase/seed.sql"), "utf8");
-const migrationSql = fs.readFileSync(
-  path.join(root, "supabase/migrations/20260611000010_add_hosted_question_variants.sql"),
-  "utf8",
-);
+const migrationSql = [
+  "20260611000010_add_hosted_question_variants.sql",
+  "20260622000018_add_wiki_answer_contracts.sql",
+].map((file) => fs.readFileSync(path.join(root, "supabase/migrations", file), "utf8")).join("\n");
 
 function readHostedSuiteSeed() {
   const jsonValues = [...seedSql.matchAll(/'(\{[\s\S]*?\})'::jsonb/g)].map((match) =>
@@ -50,5 +50,27 @@ test("production data migration contains every seeded question variant", () => {
     for (const value of metadata.questionVariants as Array<Record<string, unknown>>) {
       assert.match(migrationSql, new RegExp(`"id"\\s*:\\s*"${String(value.id)}"`));
     }
+  }
+});
+
+test("wiki question variants declare typed answer contracts", () => {
+  const suite = readHostedSuiteSeed();
+  assert.equal(suite.suiteVersion, "v2");
+  const sessions = suite.sessions as Array<Record<string, unknown>>;
+  const wiki = sessions.find((session) => session.app === "wiki-lite");
+  assert.ok(wiki);
+  assert.equal(wiki.taskVersion, "v2");
+  assert.equal(wiki.seedVersion, "wiki-lite-v2");
+  const metadata = wiki.metadata as Record<string, unknown>;
+  const variants = metadata.questionVariants as Array<Record<string, unknown>>;
+  assert.equal(variants.length, 3);
+  for (const variant of variants) {
+    const config = variant.taskConfig as Record<string, unknown>;
+    assert.equal("expectedAnswer" in config, false);
+    const contract = config.answerContract as Record<string, unknown>;
+    assert.match(String(contract.kind), /^(date|duration|currency)$/);
+    assert.equal(typeof contract.canonicalValue, "string");
+    assert.match(String(contract.normalization), /^(trim|trim-casefold|trim-casefold-punctuation)$/);
+    assert.equal(contract.sourceArticleSlug, config.targetArticleSlug);
   }
 });

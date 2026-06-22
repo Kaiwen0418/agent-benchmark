@@ -40,7 +40,7 @@ flowchart TD
 
 ## Current Hosted Testcases
 
-The production `shopping-constrained-checkout` case runs `hosted-web-suite-v1`. All four sessions are required and have weight 1.
+The production `shopping-constrained-checkout` case runs `hosted-web-suite-v1` version `v2`. All four sessions are required and have weight 1.
 
 | App | Variants |
 | --- | --- |
@@ -79,10 +79,15 @@ Question pools belong in `benchmark_cases.metadata.sessions[].metadata.questionV
     "questionVariants": [
       {
         "id": "shipping-window",
-        "goal": "Find the dispatch window and submit only the duration.",
+        "goal": "Find the dispatch window and submit only the duration without surrounding words.",
         "taskConfig": {
           "targetArticleSlug": "shipping-policy",
-          "expectedAnswer": "two business days"
+          "answerContract": {
+            "kind": "duration",
+            "canonicalValue": "two business days",
+            "normalization": "trim-casefold",
+            "sourceArticleSlug": "shipping-policy"
+          }
         }
       }
     ]
@@ -102,7 +107,12 @@ After selection, the orchestrator removes the pool and persists only the selecte
     "uiTheme": "dark",
     "taskConfig": {
       "targetArticleSlug": "shipping-policy",
-      "expectedAnswer": "two business days"
+      "answerContract": {
+        "kind": "duration",
+        "canonicalValue": "two business days",
+        "normalization": "trim-casefold",
+        "sourceArticleSlug": "shipping-policy"
+      }
     }
   }
 }

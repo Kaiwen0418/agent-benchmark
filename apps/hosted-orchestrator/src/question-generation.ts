@@ -113,7 +113,7 @@ export function generateAttemptQuestions<TSession extends QuestionSession>(
         metadata: {
           ...sourceMetadata,
           questionGeneration: {
-            schemaVersion: 2,
+            schemaVersion: 3,
             generationSeed,
             variantId: variant.id,
             uiVariant: selectedUiVariant,

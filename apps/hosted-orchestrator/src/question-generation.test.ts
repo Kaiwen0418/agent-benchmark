@@ -30,6 +30,7 @@ test("question generation persists the selected hidden task config", () => {
   assert.equal(typeof generated.goal, "string");
   assert.notEqual(generated.goal, session.goal);
   assert.equal(selection.generationSeed, "another-seed");
+  assert.equal(selection.schemaVersion, 3);
   assert.equal(typeof selection.variantId, "string");
   assert.match(String(selection.uiVariant), /^(workspace|sidebar|compact|dashboard|editorial)$/);
   assert.match(String(selection.uiTheme), /^(light|dark)$/);

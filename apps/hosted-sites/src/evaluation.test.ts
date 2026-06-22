@@ -4,16 +4,34 @@ import { evaluateForum, type ForumEvaluationSession } from "./apps/forum-lite/ev
 import { evaluateRepo, type RepoEvaluationSession } from "./apps/repo-lite/evaluate.js";
 import { evaluateShopping, type ShoppingEvaluationSession } from "./apps/shopping-lite/evaluate.js";
 import { evaluateWiki, type WikiEvaluationSession } from "./apps/wiki-lite/evaluate.js";
+import { wikiSeedArticles } from "./apps/wiki-lite/seed.js";
 
-function generatedTaskConfig(taskConfig: Record<string, unknown>) {
+function generatedTaskConfig(taskConfig: Record<string, unknown>, schemaVersion = 3) {
   return {
     questionGeneration: {
-      schemaVersion: 1,
+      schemaVersion,
       generationSeed: "test-seed",
       variantId: "test-variant",
       taskConfig,
     },
   };
+}
+
+function wikiTaskConfig(params: {
+  targetArticleSlug: string;
+  kind: "date" | "duration" | "currency";
+  canonicalValue: string;
+  normalization: "trim" | "trim-casefold" | "trim-casefold-punctuation";
+}) {
+  return generatedTaskConfig({
+    targetArticleSlug: params.targetArticleSlug,
+    answerContract: {
+      kind: params.kind,
+      canonicalValue: params.canonicalValue,
+      normalization: params.normalization,
+      sourceArticleSlug: params.targetArticleSlug,
+    },
+  });
 }
 
 const defaultTaskConfigs = {
@@ -67,6 +85,7 @@ function makeShoppingSession(
 function makeWikiSession(overrides?: {
   metadata?: Record<string, unknown>;
   events?: Array<Record<string, unknown>>;
+  wikiArticles?: WikiEvaluationSession["state"]["wikiArticles"];
   wikiAnswerSubmissions?: WikiEvaluationSession["state"]["wikiAnswerSubmissions"];
 }): WikiEvaluationSession {
   return {
@@ -74,9 +93,15 @@ function makeWikiSession(overrides?: {
     taskSlug: "wiki-release-answer",
     metadata:
       overrides?.metadata ??
-      generatedTaskConfig({ targetArticleSlug: "agentbench-release-history", expectedAnswer: "June 1, 2026" }),
+      wikiTaskConfig({
+        targetArticleSlug: "agentbench-release-history",
+        kind: "date",
+        canonicalValue: "June 1, 2026",
+        normalization: "trim-casefold-punctuation",
+      }),
     events: overrides?.events ?? [],
     state: {
+      wikiArticles: overrides?.wikiArticles ?? wikiSeedArticles,
       wikiAnswerSubmissions: overrides?.wikiAnswerSubmissions ?? [],
     },
   };
@@ -364,11 +389,125 @@ test("generated shopping config changes the accepted category and shipping metho
 
 test("generated wiki config changes both the target article and answer", () => {
   const result = evaluateWiki(makeWikiSession({
-    metadata: generatedTaskConfig({ targetArticleSlug: "shipping-policy", expectedAnswer: "two business days" }),
+    metadata: wikiTaskConfig({
+      targetArticleSlug: "shipping-policy",
+      kind: "duration",
+      canonicalValue: "two business days",
+      normalization: "trim-casefold",
+    }),
     events: [{ type: "page.load", url: "/wiki/article/shipping-policy?session=tok" }],
     wikiAnswerSubmissions: [{ answer: "two business days", submittedAt: "2026-06-01T00:00:00.000Z" }],
   }));
   assert.equal(result.status, "passed");
+});
+
+test("generated wiki contracts score every current answer kind", () => {
+  const variants = [
+    {
+      targetArticleSlug: "agentbench-release-history",
+      kind: "date" as const,
+      canonicalValue: "June 1, 2026",
+      normalization: "trim-casefold-punctuation" as const,
+      submittedAnswer: "june 1 2026",
+    },
+    {
+      targetArticleSlug: "shipping-policy",
+      kind: "duration" as const,
+      canonicalValue: "two business days",
+      normalization: "trim-casefold" as const,
+      submittedAnswer: "TWO BUSINESS DAYS",
+    },
+    {
+      targetArticleSlug: "usb-c-charger-faq",
+      kind: "currency" as const,
+      canonicalValue: "$24.99",
+      normalization: "trim" as const,
+      submittedAnswer: " $24.99 ",
+    },
+  ];
+
+  for (const variant of variants) {
+    const result = evaluateWiki(makeWikiSession({
+      metadata: wikiTaskConfig(variant),
+      events: [{ type: "page.load", url: `/wiki/article/${variant.targetArticleSlug}?session=tok` }],
+      wikiAnswerSubmissions: [{ answer: variant.submittedAnswer, submittedAt: "2026-06-01T00:00:00.000Z" }],
+    }));
+    assert.equal(result.status, "passed", variant.kind);
+  }
+});
+
+test("generated wiki duration rejects surrounding words", () => {
+  const result = evaluateWiki(makeWikiSession({
+    metadata: wikiTaskConfig({
+      targetArticleSlug: "shipping-policy",
+      kind: "duration",
+      canonicalValue: "two business days",
+      normalization: "trim-casefold",
+    }),
+    events: [{ type: "page.load", url: "/wiki/article/shipping-policy?session=tok" }],
+    wikiAnswerSubmissions: [{ answer: "within two business days", submittedAt: "2026-06-01T00:00:00.000Z" }],
+  }));
+  assert.equal(result.status, "failed");
+  assert.match(result.evaluators[0]?.errorMessage ?? "", /expected duration/);
+});
+
+test("generated wiki contract rejects empty answers", () => {
+  const result = evaluateWiki(makeWikiSession({
+    wikiAnswerSubmissions: [{ answer: "   ", submittedAt: "2026-06-01T00:00:00.000Z" }],
+  }));
+  assert.equal(result.status, "failed");
+  assert.equal(result.evaluators[0]?.status, "failed");
+});
+
+test("legacy wiki metadata remains scoreable", () => {
+  const result = evaluateWiki(makeWikiSession({
+    metadata: generatedTaskConfig(
+      { targetArticleSlug: "agentbench-release-history", expectedAnswer: "June 1, 2026" },
+      2,
+    ),
+    events: [{ type: "page.load", url: "/wiki/article/agentbench-release-history?session=tok" }],
+    wikiAnswerSubmissions: [{ answer: "june 1 2026", submittedAt: "2026-06-01T00:00:00.000Z" }],
+  }));
+  assert.equal(result.status, "passed");
+});
+
+test("generated wiki config rejects missing or inconsistent source evidence", () => {
+  assert.throws(
+    () => evaluateWiki(makeWikiSession({
+      metadata: wikiTaskConfig({
+        targetArticleSlug: "missing-article",
+        kind: "duration",
+        canonicalValue: "two business days",
+        normalization: "trim-casefold",
+      }),
+    })),
+    /source article does not exist/,
+  );
+  assert.throws(
+    () => evaluateWiki(makeWikiSession({
+      metadata: wikiTaskConfig({
+        targetArticleSlug: "shipping-policy",
+        kind: "duration",
+        canonicalValue: "three business days",
+        normalization: "trim-casefold",
+      }),
+    })),
+    /does not contain canonical answer/,
+  );
+  assert.throws(
+    () => evaluateWiki(makeWikiSession({
+      metadata: generatedTaskConfig({
+        targetArticleSlug: "shipping-policy",
+        answerContract: {
+          kind: "duration",
+          canonicalValue: "two business days",
+          normalization: "trim-casefold",
+          sourceArticleSlug: "agentbench-release-history",
+        },
+      }),
+    })),
+    /sourceArticleSlug must match targetArticleSlug/,
+  );
 });
 
 test("generated forum config changes the target thread, reply value, and lock reason", () => {
