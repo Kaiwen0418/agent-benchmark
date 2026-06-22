@@ -4,8 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-if rg -n '@supabase|SUPABASE_URL|SUPABASE_SERVICE_ROLE_KEY' apps/hosted-sites \
-  --glob '!**/scripts/orchestrator-smoke.sh'; then
+if rg -n '@supabase|SUPABASE_URL|SUPABASE_SERVICE_ROLE_KEY' apps/hosted-sites; then
   echo "hosted-sites must not import Supabase or receive database credentials." >&2
   exit 1
 fi

@@ -12,6 +12,7 @@ This roadmap starts from the architecture that is already running. Completed wor
 - Hosted-orchestrator is the sole hosted lifecycle database owner; hosted-sites has no database credential and Web uses orchestrator APIs or public read models for hosted data.
 - Attempt initialization is database-first and protected by a unique hosted-attempt constraint plus a short Redis lease.
 - Terminal hosted results and aggregate attempt scores are first-writer-wins database invariants with explicit conflict recovery.
+- Unit tests are separated from production source under workspace `tests/unit`; cross-service smoke scenarios live under root `tests/e2e`, with CI enforcing the layout and explicit discovery.
 - `develop` deploys to development; `main` deploys to production through separate GitHub Environments, runners, database URLs, image channels, ports, and Compose projects.
 
 ## P0 Release Gate

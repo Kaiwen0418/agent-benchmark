@@ -193,14 +193,14 @@ Do not create one business-table set per app.
 pnpm --filter hosted-sites test
 pnpm --filter hosted-sites build
 pnpm --filter hosted-orchestrator build
-bash apps/hosted-sites/scripts/orchestrator-smoke.sh
+bash tests/e2e/hosted-lifecycle-smoke.sh
 ```
 
 Apps entering the default suite also run:
 
 ```bash
 HOSTED_SITES_PORT=4011 HOSTED_ORCHESTRATOR_PORT=5011 \
-  bash apps/hosted-sites/scripts/orchestrator-smoke-full-pass.sh
+  bash tests/e2e/hosted-lifecycle-full-pass.sh
 ```
 
 Acceptance requires registered typed state, evaluator breakdowns, at least one required `backend_state` unless purely informational, redacted final evidence, no app-specific tables, no server browser, and successful initialization/operation/scoring as an orchestrated session.

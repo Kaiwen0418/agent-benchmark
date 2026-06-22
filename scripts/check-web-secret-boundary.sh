@@ -26,7 +26,7 @@ service_role_web_files="$(rg -l 'SUPABASE_SERVICE_ROLE_KEY' apps/web --glob '*.{
 while IFS= read -r service_role_file; do
   [[ -z "${service_role_file}" ]] && continue
   case "${service_role_file}" in
-    apps/web/lib/supabase/admin.ts | apps/web/lib/supabase-admin.test.ts)
+    apps/web/lib/supabase/admin.ts | apps/web/tests/unit/supabase-admin.test.ts)
       ;;
     *)
       echo "Service-role credentials referenced outside the Web admin boundary: ${service_role_file}" >&2

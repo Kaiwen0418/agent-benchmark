@@ -17,6 +17,7 @@
 - [Hosted Web Benchmarks](./hosted-web-benchmark.md)
 - [Benchmark Specification](./benchmark-spec.md)
 - [Benchmark Scoring and Testing](./benchmark-testing.md)
+- [Repository Testing](./testing.md)
 
 ## Development
 

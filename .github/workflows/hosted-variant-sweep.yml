@@ -46,4 +46,4 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
-        run: bash apps/hosted-sites/scripts/orchestrator-smoke.sh
+        run: bash tests/e2e/hosted-lifecycle-smoke.sh

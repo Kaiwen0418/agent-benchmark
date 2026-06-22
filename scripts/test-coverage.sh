@@ -36,7 +36,7 @@ pnpm --filter @agentbench/test-cases build
     --test-coverage-lines=65 \
     --test-coverage-branches=75 \
     --test-coverage-functions=70 \
-    src/*.test.ts src/**/*.test.ts
+    $(find tests/unit -type f -name '*.test.ts' | sort)
 )
 
 (
@@ -46,15 +46,15 @@ pnpm --filter @agentbench/test-cases build
     --test-coverage-lines=70 \
     --test-coverage-branches=80 \
     --test-coverage-functions=70 \
-    src/*.test.ts src/**/*.test.ts
+    $(find tests/unit -type f -name '*.test.ts' | sort)
 )
 
 (
   cd packages/scoring
-  node --test \
+  node --import tsx --test \
     --experimental-test-coverage \
     --test-coverage-lines=75 \
     --test-coverage-branches=90 \
     --test-coverage-functions=80 \
-    dist/*.test.js
+    tests/unit/*.test.ts
 )
