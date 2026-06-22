@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { generateAttemptQuestions } from "./question-generation.js";
 
 const root = path.resolve(import.meta.dirname, "../../..");
 const seedSql = fs.readFileSync(path.join(root, "supabase/seed.sql"), "utf8");
@@ -72,5 +73,32 @@ test("wiki question variants declare typed answer contracts", () => {
     assert.equal(typeof contract.canonicalValue, "string");
     assert.match(String(contract.normalization), /^(trim|trim-casefold|trim-casefold-punctuation)$/);
     assert.equal(contract.sourceArticleSlug, config.targetArticleSlug);
+  }
+});
+
+test("scheduled development seeds cover every declared variant", () => {
+  const suite = readHostedSuiteSeed();
+  const sessions = suite.sessions as Array<Record<string, unknown>>;
+  const selectedByApp = new Map<string, Set<string>>();
+  for (const seed of ["full-pool-0", "full-pool-1", "full-pool-2", "full-pool-4"]) {
+    const generated = generateAttemptQuestions(
+      sessions as Parameters<typeof generateAttemptQuestions>[0],
+      seed,
+    );
+    for (const session of generated.sessions) {
+      const generation = session.metadata.questionGeneration as Record<string, unknown>;
+      const selected = selectedByApp.get(session.app) ?? new Set<string>();
+      selected.add(String(generation.variantId));
+      selectedByApp.set(session.app, selected);
+    }
+  }
+
+  for (const session of sessions) {
+    const variants = (session.metadata as Record<string, unknown>).questionVariants as Array<Record<string, unknown>>;
+    assert.deepEqual(
+      selectedByApp.get(String(session.app)),
+      new Set(variants.map((variant) => String(variant.id))),
+      String(session.app),
+    );
   }
 });

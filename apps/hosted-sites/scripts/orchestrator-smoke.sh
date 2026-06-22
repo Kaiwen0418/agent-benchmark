@@ -10,6 +10,7 @@ ORCHESTRATOR_BASE_URL="${HOSTED_ORCHESTRATOR_PUBLIC_URL:-http://127.0.0.1:${ORCH
 WEB_URL="${AGENTBENCH_WEB_URL:-http://127.0.0.1:3999}"
 SMOKE_MODE="${SMOKE_MODE:-timeout}"
 START_LOCAL_SERVICES="${START_LOCAL_SERVICES:-true}"
+GENERATION_SEED="${GENERATION_SEED:-}"
 
 if [[ -f "${ENV_FILE}" && -z "${NEXT_PUBLIC_SUPABASE_URL:-}" && -z "${SUPABASE_SERVICE_ROLE_KEY:-}" && -z "${RUNNER_SHARED_SECRET:-}" ]]; then
   set -a
@@ -74,10 +75,12 @@ curl -fsS "${HOSTED_BASE_URL}/health" >/dev/null
 curl -fsS "${ORCHESTRATOR_BASE_URL}/health" >/dev/null
 
 SMOKE_MODE="${SMOKE_MODE}" \
+GENERATION_SEED="${GENERATION_SEED}" \
 HOSTED_BASE_URL="${HOSTED_BASE_URL}" \
 ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL}" \
 node <<'NODE'
 const smokeMode = process.env.SMOKE_MODE;
+const generationSeed = process.env.GENERATION_SEED || undefined;
 const hostedBaseUrl = process.env.HOSTED_BASE_URL;
 const orchestratorBaseUrl = process.env.ORCHESTRATOR_BASE_URL;
 const runnerSecret = process.env.RUNNER_SHARED_SECRET;
@@ -328,6 +331,7 @@ async function main() {
         callbackSecret: runnerSecret,
         suiteSlug: suite.suiteSlug,
         suiteVersion: suite.suiteVersion,
+        generationSeed,
         sessions: suite.sessions,
       }),
     })
@@ -434,8 +438,11 @@ async function main() {
     throw new Error(`Expected one aggregate attempt score, got ${scoreRows.length}.`);
   }
 
+  const selectedVariants = initialized.metadata.sessions
+    .map((session) => `${session.app}:${session.metadata.questionGeneration.variantId}`)
+    .join(",");
   console.log(
-    `orchestrator smoke (${smokeMode}) passed: run=${run.id} attempt=${initialized.attemptId} sessions=${sessions.length}`,
+    `orchestrator smoke (${smokeMode}) passed: run=${run.id} attempt=${initialized.attemptId} sessions=${sessions.length} variants=${selectedVariants}`,
   );
 }
 
