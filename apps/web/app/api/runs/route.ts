@@ -13,19 +13,32 @@ export async function POST(request: Request) {
   const input = createRunInputSchema.parse(json);
   const user = await getCurrentUser();
   const guest = user ? null : await getOrCreateGuestId();
-  const quota = isDevQuotaBypassed(request)
-    ? {
-        mode: user ? "user" : "guest",
-        isAuthenticated: Boolean(user),
-        used: 0,
-        limit: 999,
-        remaining: 999,
-        resetAt: null,
-      }
-    : await getQuotaStatus({
-        userId: user?.id ?? null,
-        guestId: guest?.guestId ?? null,
-      });
+  let quota;
+  try {
+    quota = isDevQuotaBypassed(request)
+      ? {
+          mode: user ? "user" : "guest",
+          isAuthenticated: Boolean(user),
+          used: 0,
+          limit: 999,
+          remaining: 999,
+          resetAt: null,
+        }
+      : await getQuotaStatus({
+          userId: user?.id ?? null,
+          guestId: guest?.guestId ?? null,
+        });
+  } catch (error) {
+    console.error("[web] benchmark database unavailable during quota check", error);
+    return NextResponse.json(
+      {
+        error: "service_unavailable",
+        message: "The benchmark service is temporarily unavailable. Please try again shortly.",
+        retryable: true,
+      },
+      { status: 503 },
+    );
+  }
 
   if (quota.remaining <= 0) {
     const response = NextResponse.json(
@@ -69,7 +82,15 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
-    throw error;
+    console.error("[web] benchmark database unavailable during run creation", error);
+    return NextResponse.json(
+      {
+        error: "service_unavailable",
+        message: "The benchmark service is temporarily unavailable. Please try again shortly.",
+        retryable: true,
+      },
+      { status: 503 },
+    );
   }
   const nextQuota = {
     ...quota,

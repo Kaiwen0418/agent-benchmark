@@ -60,10 +60,6 @@ type HostedWebAttempt = {
   metadata: Record<string, unknown>;
 };
 
-type HostedWebStore = {
-  attemptsByRunId: Map<string, HostedWebAttempt | null>;
-};
-
 export class HostedWebSessionError extends Error {
   code = "hosted_session_create_failed" as const;
   status: number;
@@ -83,20 +79,6 @@ export class HostedWebSessionError extends Error {
     this.hostedSitesUrl = params.hostedSitesUrl;
     this.retryable = params.retryable ?? true;
   }
-}
-
-declare global {
-  var __agentbenchHostedWebStore: HostedWebStore | undefined;
-}
-
-function getStore() {
-  if (!global.__agentbenchHostedWebStore) {
-    global.__agentbenchHostedWebStore = {
-      attemptsByRunId: new Map(),
-    };
-  }
-
-  return global.__agentbenchHostedWebStore;
 }
 
 function getHostedSitesBaseUrl() {
@@ -234,9 +216,6 @@ async function findExistingHostedWebAttempt(params: {
   benchmarkCase: BenchmarkCase;
 }) {
   const supabase = createSupabaseAdminClient();
-  if (!supabase) {
-    return null;
-  }
 
   const { data, error } = await supabase
     .from("benchmark_attempts")
@@ -248,7 +227,10 @@ async function findExistingHostedWebAttempt(params: {
     .limit(1)
     .maybeSingle();
 
-  if (error || !data) {
+  if (error) {
+    throw error;
+  }
+  if (!data) {
     return null;
   }
 
@@ -283,9 +265,6 @@ async function findExistingHostedWebAttempt(params: {
 
 async function listExistingHostedWebSessions(attemptId: string) {
   const supabase = createSupabaseAdminClient();
-  if (!supabase) {
-    return [];
-  }
 
   const { data, error } = await supabase
     .from("hosted_web_sessions")
@@ -293,7 +272,10 @@ async function listExistingHostedWebSessions(attemptId: string) {
     .eq("attempt_id", attemptId)
     .order("sequence_index", { ascending: true });
 
-  if (error || !data) {
+  if (error) {
+    throw error;
+  }
+  if (!data) {
     return [];
   }
 
@@ -472,111 +454,40 @@ async function getOrCreateHostedWebAttempt(params: {
   run: BenchmarkRun;
   benchmarkCase: BenchmarkCase;
 }) {
-  const store = getStore();
-  const cached = store.attemptsByRunId.get(params.run.id);
   const supabase = createSupabaseAdminClient();
-
-  if (!supabase && cached) {
-    return cached;
-  }
 
   const existing = await findExistingHostedWebAttempt(params);
   if (existing) {
-    store.attemptsByRunId.set(params.run.id, existing);
     return existing;
   }
 
-  let benchmarkDefinition = params.benchmarkCase;
-  if (supabase) {
-    if (!params.benchmarkCase.currentRevisionId) {
-      throw new Error("Hosted benchmark case has no current revision.");
-    }
-    const { data: revision, error } = await supabase
-      .from("benchmark_case_revisions")
-      .select("manifest")
-      .eq("id", params.benchmarkCase.currentRevisionId)
-      .eq("case_id", params.benchmarkCase.id)
-      .maybeSingle();
-    if (error || !revision) {
-      throw error ?? new Error("Hosted benchmark case revision is unavailable.");
-    }
-    benchmarkDefinition = {
-      ...params.benchmarkCase,
-      metadata: revision.manifest as Record<string, unknown>,
-    };
+  if (!params.benchmarkCase.currentRevisionId) {
+    throw new Error("Hosted benchmark case has no current revision.");
   }
+  const { data: revision, error } = await supabase
+    .from("benchmark_case_revisions")
+    .select("manifest")
+    .eq("id", params.benchmarkCase.currentRevisionId)
+    .eq("case_id", params.benchmarkCase.id)
+    .maybeSingle();
+  if (error || !revision) {
+    throw error ?? new Error("Hosted benchmark case revision is unavailable.");
+  }
+  const benchmarkDefinition = {
+    ...params.benchmarkCase,
+    metadata: revision.manifest as Record<string, unknown>,
+  };
 
   const { suiteSlug, suiteVersion, sessionDefinitions } = normalizeSessionDefinitions(benchmarkDefinition);
   const localAttempt: HostedWebAttempt = {
-    id: supabase ? null : `${params.run.id}:local-hosted-suite`,
+    id: null,
     caseRevisionId: params.benchmarkCase.currentRevisionId,
     suiteSlug,
     suiteVersion,
     sessionDefinitions,
     metadata: {},
   };
-  store.attemptsByRunId.set(params.run.id, localAttempt);
   return localAttempt;
-}
-
-async function createHostedWebSession(params: {
-  run: BenchmarkRun;
-  benchmarkCase: BenchmarkCase;
-  attempt: HostedWebAttempt;
-  session: HostedWebSuiteSession;
-}) {
-  const baseUrl = getHostedSitesBaseUrl();
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}/api/sessions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        runId: params.run.id,
-        caseId: params.benchmarkCase.id,
-        attemptId: params.attempt.id ?? null,
-        callbackSecret: process.env.RUNNER_SHARED_SECRET ?? null,
-        suiteSlug: params.attempt.suiteSlug,
-        suiteVersion: params.attempt.suiteVersion,
-        app: params.session.app,
-        taskSlug: params.session.taskSlug,
-        taskVersion: params.session.taskVersion,
-        sequenceIndex: params.session.sequenceIndex,
-        weight: params.session.weight,
-        required: params.session.required,
-        title: params.session.title ?? null,
-        goal: params.session.goal ?? null,
-        startPath: params.session.startPath ?? null,
-        seedVersion: params.session.seedVersion ?? null,
-        metadata: params.session.metadata ?? {},
-      }),
-      cache: "no-store",
-    });
-  } catch (error) {
-    throw new HostedWebSessionError({
-      message: "Hosted benchmark site is not reachable. Check HOSTED_SITES_URL and the hosted-sites deployment.",
-      hostedSitesUrl: baseUrl,
-      cause: error,
-    });
-  }
-
-  if (!response.ok) {
-    throw new HostedWebSessionError({
-      message: `Hosted benchmark site rejected session creation with HTTP ${response.status}.`,
-      status: response.status >= 500 ? 502 : 400,
-      hostedSitesUrl: baseUrl,
-      retryable: response.status >= 500,
-    });
-  }
-
-  const session = (await response.json()) as HostedWebSessionConnection;
-  return {
-    ...session,
-    token: session.token,
-    status: "created" as HostedSessionStatus,
-  };
 }
 
 type HostedAttemptInitResponse = {
@@ -714,17 +625,15 @@ export async function getOrCreateHostedWebAttemptConnection(params: {
       return toAttemptConnection({ attempt, sessions: existingSessions });
     }
 
-    if (createSupabaseAdminClient()) {
-      throw new HostedWebSessionError({
-        message: "Hosted attempt exists but could not be recovered from orchestrator or database state.",
-        hostedSitesUrl: getHostedOrchestratorBaseUrl(),
-        retryable: true,
-        status: 502,
-      });
-    }
+    throw new HostedWebSessionError({
+      message: "Hosted attempt exists but could not be recovered from orchestrator or database state.",
+      hostedSitesUrl: getHostedOrchestratorBaseUrl(),
+      retryable: true,
+      status: 502,
+    });
   }
 
-  if (!attempt.id && createSupabaseAdminClient()) {
+  if (!attempt.id) {
     if (!attempt.caseRevisionId) {
       throw new HostedWebSessionError({
         message: "Hosted benchmark case has no published revision.",
@@ -737,21 +646,12 @@ export async function getOrCreateHostedWebAttemptConnection(params: {
       ...params,
       attempt,
     });
-    getStore().attemptsByRunId.set(params.run.id, initialized.attempt);
     return toAttemptConnection(initialized);
   }
 
-  // Local non-DB fallback only. DB-backed hosted runs should always initialize via orchestrator APIs.
-  const sessions = await Promise.all(
-    attempt.sessionDefinitions.map((session) =>
-      createHostedWebSession({
-        run: params.run,
-        benchmarkCase: params.benchmarkCase,
-        attempt,
-        session,
-      }),
-    ),
-  );
-
-  return toAttemptConnection({ attempt, sessions });
+  throw new HostedWebSessionError({
+    message: "Hosted attempt initialization did not return a durable attempt.",
+    hostedSitesUrl: getHostedOrchestratorBaseUrl(),
+    retryable: true,
+  });
 }

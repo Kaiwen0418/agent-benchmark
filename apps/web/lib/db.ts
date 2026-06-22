@@ -11,7 +11,6 @@ import type { Database } from "@agentbench/shared";
 import path from "node:path";
 import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
-import { mockStore } from "./mock-store";
 import { buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 
@@ -34,10 +33,6 @@ function getGuestRunLimit() {
   return process.env.VERCEL_ENV === "preview" || process.env.VERCEL_GIT_COMMIT_REF === "develop"
     ? DEVELOPMENT_GUEST_RUN_LIMIT
     : PRODUCTION_GUEST_RUN_LIMIT;
-}
-
-export function isMockMode() {
-  return !getSupabase();
 }
 
 export class BenchmarkCaseUnavailableError extends Error {
@@ -107,9 +102,6 @@ export function resolveLocalArtifactFile(runId: string, storagePath: string) {
 
 export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.listCases();
-  }
 
   const { data, error } = await supabase
     .from("benchmark_cases")
@@ -137,15 +129,16 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
 
 export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.getCase(caseId);
-  }
 
   const byId = await supabase
     .from("benchmark_cases")
     .select(benchmarkCaseSelect)
     .eq("id", caseId)
     .maybeSingle();
+
+  if (byId.error) {
+    throw byId.error;
+  }
 
   if (byId.data) {
     return {
@@ -168,6 +161,10 @@ export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | 
     .select(benchmarkCaseSelect)
     .eq("slug", caseId)
     .maybeSingle();
+
+  if (bySlug.error) {
+    throw bySlug.error;
+  }
 
   if (!bySlug.data) {
     return null;
@@ -254,10 +251,6 @@ export async function createBenchmarkRun(params: {
   if (!isRunnableBenchmarkCase(benchmarkCase)) {
     throw new BenchmarkCaseUnavailableError();
   }
-  if (!supabase) {
-    return mockStore.createRun(benchmarkCase.id, params.userId, params.guestId, params.executionMode);
-  }
-
   const initialStatus = params.executionMode === "external-agent" ? "waiting_for_agent" : "queued";
 
   const { data, error } = await supabase
@@ -288,9 +281,6 @@ export async function createBenchmarkRun(params: {
 
 export async function listBenchmarkRuns(): Promise<BenchmarkRun[]> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.listRuns();
-  }
 
   const { data, error } = await supabase
     .from("benchmark_runs")
@@ -305,15 +295,7 @@ export async function listBenchmarkRuns(): Promise<BenchmarkRun[]> {
 }
 
 export async function getBenchmarkRun(runId: string): Promise<BenchmarkRun | null> {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    return localRun;
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return null;
-  }
 
   const { data, error } = await supabase
     .from("benchmark_runs")
@@ -329,15 +311,7 @@ export async function getBenchmarkRun(runId: string): Promise<BenchmarkRun | nul
 }
 
 export async function listRunEvents(runId: string) {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    return mockStore.listEvents(runId);
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return [];
-  }
 
   const { data, error } = await supabase
     .from("run_events")
@@ -359,18 +333,7 @@ export async function listRunEvents(runId: string) {
 }
 
 export async function listArtifacts(runId: string): Promise<Artifact[]> {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    return mockStore.listArtifacts(runId).map((artifact) => ({
-      ...artifact,
-      url: toLocalArtifactUrl(runId, artifact.storagePath, artifact.url),
-    }));
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return [];
-  }
 
   const { data, error } = await supabase
     .from("artifacts")
@@ -393,33 +356,7 @@ export async function listArtifacts(runId: string): Promise<Artifact[]> {
 }
 
 export async function appendRunEvent(runId: string, input: AppendRunEventInput) {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    const updatedRun =
-      input.type === "agent.connected"
-        ? mockStore.setRunStatus(runId, "agent_connected")
-        : input.type === "run.running"
-          ? (() => {
-              const run = mockStore.setRunStatus(runId, "running");
-              if (run && typeof input.payload.liveViewUrl === "string") {
-                mockStore.setRunLiveViewUrl(runId, input.payload.liveViewUrl);
-              }
-              return run;
-            })()
-          : input.type === "run.completed"
-            ? mockStore.setRunStatus(runId, "completed")
-            : input.type === "run.failed"
-              ? mockStore.setRunStatus(runId, "failed")
-              : null;
-
-    const event = mockStore.appendEvent(runId, input.type, input.payload);
-    return { event, run: updatedRun };
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return { event: mockStore.appendEvent(runId, input.type, input.payload), run: null };
-  }
 
   const { data: eventRow, error: eventError } = await supabase
     .from("run_events")
@@ -486,32 +423,7 @@ export async function appendRunEvent(runId: string, input: AppendRunEventInput) 
 }
 
 export async function completeBenchmarkRun(runId: string, input: CompleteRunInput) {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    if (terminalRunStatuses.has(localRun.status)) {
-      return localRun;
-    }
-    localRun.status = input.status;
-    localRun.score = input.score ?? null;
-    localRun.errorMessage = input.errorMessage ?? null;
-    localRun.completedAt = new Date().toISOString();
-
-    input.artifacts.forEach((artifact) => {
-      mockStore.createArtifact(runId, artifact);
-    });
-
-    mockStore.appendEvent(runId, input.status === "completed" ? "run.completed" : "run.failed", {
-      score: input.score ?? null,
-      errorMessage: input.errorMessage ?? null,
-    });
-
-    return localRun;
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return null;
-  }
 
   const { data: existingRun, error: existingRunError } = await supabase
     .from("benchmark_runs")
@@ -587,9 +499,6 @@ export async function submitBenchmarkRunMetadata(
   browserEnvironment: Record<string, unknown>,
 ) {
   const supabase = getSupabase();
-  if (!supabase) {
-    return null;
-  }
 
   const existing = await supabase.from("benchmark_runs").select("metadata, status, started_at").eq("id", runId).maybeSingle();
   if (existing.error) {
@@ -664,9 +573,6 @@ export type PublicBenchmarkResult = {
 
 export async function getPublicBenchmarkResult(runId: string): Promise<PublicBenchmarkResult | null> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return null;
-  }
 
   const { data: row, error } = await supabase
     .from("benchmark_runs")
@@ -705,9 +611,6 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
 
 export async function listPublicLeaderboardVersions(): Promise<string[]> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return [];
-  }
 
   const { data: publicRuns, error: runError } = await supabase
     .from("benchmark_runs")
@@ -741,9 +644,6 @@ export async function listPublicLeaderboardVersions(): Promise<string[]> {
 
 export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): Promise<LeaderboardEntry[]> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return [];
-  }
 
   let versionRunIds: string[] | null = null;
   if (suiteVersion) {
@@ -839,10 +739,7 @@ export async function getQuotaStatus(params: {
     let limit = DEFAULT_USER_DAILY_RUN_LIMIT;
     let used = 0;
 
-    if (!supabase) {
-      used = mockStore.countRunsForUserSince(params.userId, startOfUtcDay());
-    } else {
-      const [profileResult, countResult] = await Promise.all([
+    const [profileResult, countResult] = await Promise.all([
         supabase
           .from("profiles")
           .select("daily_run_limit")
@@ -853,18 +750,17 @@ export async function getQuotaStatus(params: {
           .select("*", { count: "exact", head: true })
           .eq("user_id", params.userId)
           .gte("created_at", startOfUtcDay()),
-      ]);
+    ]);
 
-      if (profileResult.data?.daily_run_limit) {
-        limit = profileResult.data.daily_run_limit;
-      }
-
-      if (countResult.error) {
-        throw countResult.error;
-      }
-
-      used = countResult.count ?? 0;
+    if (profileResult.data?.daily_run_limit) {
+      limit = profileResult.data.daily_run_limit;
     }
+
+    if (countResult.error) {
+      throw countResult.error;
+    }
+
+    used = countResult.count ?? 0;
 
     return {
       mode: "user",
@@ -878,16 +774,17 @@ export async function getQuotaStatus(params: {
 
   const guestId = params.guestId;
   const limit = getGuestRunLimit();
-  const used = guestId
-    ? getSupabase()
-      ? (
-          await getSupabase()!
-            .from("benchmark_runs")
-            .select("*", { count: "exact", head: true })
-            .eq("guest_id", guestId)
-        ).count ?? 0
-      : mockStore.countRunsForGuest(guestId)
-    : 0;
+  let used = 0;
+  if (guestId) {
+    const countResult = await getSupabase()
+      .from("benchmark_runs")
+      .select("*", { count: "exact", head: true })
+      .eq("guest_id", guestId);
+    if (countResult.error) {
+      throw countResult.error;
+    }
+    used = countResult.count ?? 0;
+  }
 
   return {
     mode: "guest",
