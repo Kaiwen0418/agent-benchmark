@@ -27,6 +27,7 @@ for _ in $(seq 1 30); do
 done
 
 pnpm --filter @agentbench/scoring build
+pnpm --filter @agentbench/test-cases build
 
 (
   cd apps/hosted-orchestrator

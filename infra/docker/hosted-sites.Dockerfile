@@ -8,9 +8,11 @@ COPY scripts ./scripts
 COPY apps/hosted-sites ./apps/hosted-sites
 COPY packages/scoring ./packages/scoring
 COPY packages/shared ./packages/shared
+COPY packages/test-cases ./packages/test-cases
 
 RUN pnpm install --filter hosted-sites... --frozen-lockfile
 RUN pnpm --filter @agentbench/scoring build
+RUN pnpm --filter @agentbench/test-cases build
 RUN pnpm --filter hosted-sites build
 
 FROM node:22-alpine AS runtime
@@ -23,8 +25,10 @@ COPY scripts ./scripts
 COPY apps/hosted-sites ./apps/hosted-sites
 COPY packages/scoring ./packages/scoring
 COPY packages/shared ./packages/shared
+COPY packages/test-cases ./packages/test-cases
 COPY --from=build /app/apps/hosted-sites/dist ./apps/hosted-sites/dist
 COPY --from=build /app/packages/scoring/dist ./packages/scoring/dist
+COPY --from=build /app/packages/test-cases/dist ./packages/test-cases/dist
 
 RUN pnpm install --filter hosted-sites... --prod --frozen-lockfile
 
