@@ -96,7 +96,7 @@ docs/                   architecture and operational documentation
 - [Getting Started](./docs/getting-started.md)
 - [Architecture](./docs/architecture.md)
 - [Hosted Web Benchmarks](./docs/hosted-web-benchmark.md)
-- [Hosted Site App Authoring](./docs/hosted-site-app-authoring.zh-CN.md)
+- [Hosted Site App Authoring](./docs/hosted-site-app-authoring.md)
 - [Deployment and Scaling](./docs/deployment.md)
 - [Benchmark Specification](./docs/benchmark-spec.md)
 - [API Reference](./docs/api-reference.md)

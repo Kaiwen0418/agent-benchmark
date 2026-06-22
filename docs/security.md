@@ -1,7 +1,5 @@
 # Security
 
-> [中文](./security.zh-CN.md) | English
-
 ## Trust Boundaries
 
 The external agent and its browser are untrusted. AgentBench exposes only benchmark task pages and opaque session URLs; it does not grant host, Docker, filesystem, Supabase, or Redis access to the agent.

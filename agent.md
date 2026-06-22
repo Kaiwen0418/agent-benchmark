@@ -97,7 +97,7 @@ App authoring rules:
 - register new apps in `runtime/app-registry.ts`
 - avoid one database table set per hosted app
 
-Detailed guidance is in `docs/hosted-site-app-authoring.zh-CN.md`.
+Detailed guidance is in `docs/hosted-site-app-authoring.md`.
 
 ### 6. Scoring Principles
 
@@ -180,6 +180,17 @@ For hosted-web, telemetry should be lightweight and generic:
 - do not add hosted app-specific database tables unless there is a clear persistence requirement that cannot fit session snapshots or final result evidence
 - do not make hosted-sites responsible for attempt lifecycle; use hosted-orchestrator for attempt init/state/commands
 
+## Documentation Policy
+
+- `docs/roadmap.md` is the only roadmap. It contains milestone priority, status, sequencing, and exit criteria, but not step-by-step implementation plans.
+- Topic documents under `docs/` contain durable architecture decisions, behavioral contracts, testing principles, and operational guidance that remain useful after an issue closes.
+- GitHub Issues contain executable implementation details: task breakdowns, acceptance checklists, dependencies, ownership, and progress. Split independently deliverable milestones into separate issues and link the relevant roadmap milestone and topic document.
+- Pull requests contain the actual implementation, verification evidence, compatibility or deployment impact, and links that close or advance the corresponding issue.
+- Do not create additional roadmap or TODO documents. Do not leave durable design contracts only in GitHub Issues, because closed issues are not the canonical documentation surface.
+- Repository documentation is canonical in English. Do not create or maintain translated copies under `docs/` or app directories.
+- The only maintained translated document is the root `README.zh-CN.md`; its documentation links point to canonical English files.
+- Before a pull request, review `docs/roadmap.md` and update affected milestone status or scope. Do not mark a milestone complete until implementation and required verification both pass.
+
 ## Preview Environment Network Smoke Test
 
 Run this smoke test after changes to hosted-web lifecycle, telemetry, live viewing, quota, deployment configuration, or cross-service URLs. Use the test environment only. A full smoke creates and mutates test run data and consumes one guest run.
@@ -249,9 +260,9 @@ Classify any private/internal URL returned to the browser as a blocking issue. I
 
 Before creating or updating a pull request:
 
-1. Read the repository TODO and roadmap documents, including matching files such as `TODO*`, `todo/*`, and `docs/*roadmap*` when present.
-2. Determine whether the change affects documented scope, implementation status, verification status, follow-up work, or release sequencing.
-3. Update every affected TODO or roadmap document in the same pull request. If no update is needed, explicitly confirm that the documents were reviewed.
+1. Read `docs/roadmap.md`, the repository's only milestone-status source, plus topic documents affected by the change.
+2. Determine whether the change affects documented scope, milestone status, verification status, follow-up work, or release sequencing.
+3. Update `docs/roadmap.md` when milestone scope or status changes. Keep implementation details and test contracts in the relevant topic document without duplicating roadmap status. If no update is needed, explicitly confirm that the roadmap was reviewed.
 
 Do not mark roadmap work complete until the implementation and its required verification are complete.
 

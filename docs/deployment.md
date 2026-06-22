@@ -1,7 +1,5 @@
 # Deployment and Scaling
 
-> [中文](./deployment.zh-CN.md) | English
-
 ## Local Docker Stack
 
 The default stack is defined by:

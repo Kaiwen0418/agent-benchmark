@@ -44,7 +44,7 @@ Maintainers may request that a large pull request be split before review.
 - Keep task state and evaluation deterministic.
 - Do not expose evaluator answers or privileged metadata to the hosted page.
 - Add tests for question variants, completion behavior, and scoring changes.
-- Follow [Hosted Site App Authoring](./docs/hosted-site-app-authoring.zh-CN.md) for new hosted applications.
+- Follow [Hosted Site App Authoring](./docs/hosted-site-app-authoring.md) for new hosted applications.
 
 ## Contribution License Grant
 

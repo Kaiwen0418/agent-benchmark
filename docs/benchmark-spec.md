@@ -1,7 +1,5 @@
 # Benchmark Specification
 
-> [中文](./benchmark-spec.zh-CN.md) | English
-
 ## Definition Layers
 
 A hosted benchmark is defined across two explicit layers:

@@ -1,7 +1,5 @@
 # Getting Started
 
-> [中文](./getting-started.zh-CN.md) | English
-
 ## Prerequisites
 
 - Node.js and pnpm

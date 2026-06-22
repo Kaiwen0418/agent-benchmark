@@ -1,7 +1,5 @@
 # Data Flow
 
-> [中文](./data-flow.zh-CN.md) | English
-
 ## 1. Run Creation and Attempt Allocation
 
 ```mermaid
