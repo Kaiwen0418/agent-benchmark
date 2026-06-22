@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hostedSuiteMetadataSchema, hostedWebSuiteMetadata } from "./index.js";
+import { hostedSuiteMetadataSchema, hostedWebSuiteCase, hostedWebSuiteMetadata } from "./index.js";
 import { createHostedWebCatalogRelease } from "./release.js";
 
 test("hosted catalog is valid and has unique app/task definitions", () => {
+  assert.equal(hostedWebSuiteCase.slug, "hosted-web-suite");
+  assert.deepEqual(hostedWebSuiteCase.metadata, {});
   const suite = hostedSuiteMetadataSchema.parse(hostedWebSuiteMetadata);
   assert.equal(suite.sessions.length, 4);
   assert.equal(new Set(suite.sessions.map((session) => session.app)).size, suite.sessions.length);

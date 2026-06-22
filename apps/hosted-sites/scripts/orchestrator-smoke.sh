@@ -306,7 +306,7 @@ async function loadAttemptState(attemptId) {
 async function main() {
   const benchmarkCases = await selectRows("benchmark_cases", {
     select: "id,slug,title,description,current_revision_id",
-    slug: "eq.shopping-constrained-checkout",
+    slug: "eq.hosted-web-suite",
     limit: "1",
   });
   if (!Array.isArray(benchmarkCases) || benchmarkCases.length !== 1) {

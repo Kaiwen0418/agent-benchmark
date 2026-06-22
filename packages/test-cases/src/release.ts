@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { hostedWebSuiteCase, hostedWebSuiteRevision } from "./index.js";
+import { hostedWebSuiteCase, hostedWebSuiteMetadata, hostedWebSuiteRevision } from "./index.js";
 
 export function createHostedWebCatalogRelease() {
-  const manifest = hostedWebSuiteCase.metadata;
+  const manifest = hostedWebSuiteMetadata;
   return {
     caseId: hostedWebSuiteCase.id,
     revision: hostedWebSuiteRevision,

@@ -19,12 +19,12 @@ export const hostedWebSuiteRevision = "hosted-web-suite-v2";
 
 export const hostedWebSuiteCase = {
   id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
-  slug: "shopping-constrained-checkout",
+  slug: "hosted-web-suite",
   title: "Hosted Web Suite",
   description: "Run a four-step hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite.",
   category: "browser",
   difficulty: "easy",
   provider: "hosted-web" as const,
-  metadata: hostedWebSuiteMetadata,
+  metadata: {},
   isPublic: true,
 };

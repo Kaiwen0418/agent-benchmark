@@ -26,11 +26,11 @@ erDiagram
 
 ### `benchmark_cases` and `public_benchmark_cases`
 
-`benchmark_cases` is the private control-plane definition of a benchmark case. Its `metadata` may contain suite manifests, variant pools, canonical answers, and evaluator parameters, so only service-role code can read the base table.
+`benchmark_cases` stores benchmark identity, public display fields, provider, visibility, and the current revision pointer. Its `metadata` is display-only and is constrained from containing suite sessions, question variants, or evaluator task configuration.
 
 `public_benchmark_cases` is the anonymous/authenticated discovery boundary. It contains display fields plus a sanitized metadata projection with suite identity and ordered app/task summaries. It never contains question variants, generated task configuration, canonical answers, or evaluator parameters.
 
-`benchmark_cases.current_revision_id` points to the release used for new attempts. `metadata` remains a service-role compatibility copy of that current manifest and is not the historical source of truth.
+`benchmark_cases.current_revision_id` points to the release used for new attempts. The base table never duplicates the private manifest.
 
 ### `benchmark_case_revisions`
 
