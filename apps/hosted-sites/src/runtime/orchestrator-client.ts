@@ -76,6 +76,15 @@ export function createOrchestratorClient(deps: OrchestratorClientDeps) {
     );
   }
 
+  async function getSessionResult(session: HostedSession) {
+    if (!session.persisted) {
+      return null;
+    }
+    return getOrchestratorState<HostedWebScoreResult>(
+      `/api/sessions/${encodeURIComponent(session.id)}/result`,
+    );
+  }
+
   async function persistSessionSnapshot(session: HostedSession, metadata: Record<string, unknown>) {
     if (!session.persisted) {
       return null;
@@ -171,6 +180,7 @@ export function createOrchestratorClient(deps: OrchestratorClientDeps) {
 
   return {
     completeSession,
+    getSessionResult,
     persistSessionSnapshot,
     recordSessionAccess,
     recordHostedEvent,

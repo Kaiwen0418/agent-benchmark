@@ -15,6 +15,8 @@ type WikiRoutesDeps = {
   forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
   completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
   evaluateSession: (session: HostedSession) => HostedWebScoreResult;
+  resolveSessionResult: (session: HostedSession) => Promise<HostedWebScoreResult>;
+  rejectTerminalMutation: (session: HostedSession, response: ServerResponse) => boolean;
   readForm: (request: IncomingMessage) => Promise<URLSearchParams>;
   badRequest: (response: ServerResponse, message: string) => void;
   notFound: (response: ServerResponse) => void;
@@ -53,7 +55,7 @@ export function createWikiRoutes(deps: WikiRoutesDeps) {
         return true;
       }
 
-      if (markArticleViewed(session, articleSlug)) {
+      if (session.status === "active" && markArticleViewed(session, articleSlug)) {
         await deps.persistSessionSnapshot(session);
       }
 
@@ -67,6 +69,7 @@ export function createWikiRoutes(deps: WikiRoutesDeps) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
+      if (deps.rejectTerminalMutation(session, response)) return true;
 
       const form = await deps.readForm(request);
       const answer = form.get("answer");

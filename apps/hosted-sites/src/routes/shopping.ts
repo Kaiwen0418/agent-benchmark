@@ -16,6 +16,8 @@ type ShoppingRoutesDeps = {
   forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
   completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
   evaluateSession: (session: HostedSession) => HostedWebScoreResult;
+  resolveSessionResult: (session: HostedSession) => Promise<HostedWebScoreResult>;
+  rejectTerminalMutation: (session: HostedSession, response: ServerResponse) => boolean;
   readForm: (request: IncomingMessage) => Promise<URLSearchParams>;
   badRequest: (response: ServerResponse, message: string) => void;
   notFound: (response: ServerResponse) => void;
@@ -45,6 +47,7 @@ export function createShoppingRoutes(deps: ShoppingRoutesDeps) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
+      if (deps.rejectTerminalMutation(session, response)) return true;
 
       const form = await deps.readForm(request);
       const productId = form.get("productId");
@@ -84,6 +87,7 @@ export function createShoppingRoutes(deps: ShoppingRoutesDeps) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
+      if (deps.rejectTerminalMutation(session, response)) return true;
       if (session.state.cart.length === 0) {
         deps.badRequest(response, "Cart is empty");
         return true;
@@ -129,7 +133,14 @@ export function createShoppingRoutes(deps: ShoppingRoutesDeps) {
         return true;
       }
 
-      renderOrder(session, order, response, deps.publicBaseUrl, deps.defaultStartPathForApp, deps.evaluateSession);
+      renderOrder(
+        session,
+        order,
+        response,
+        deps.publicBaseUrl,
+        deps.defaultStartPathForApp,
+        await deps.resolveSessionResult(session),
+      );
       return true;
     }
 

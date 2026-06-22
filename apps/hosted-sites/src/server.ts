@@ -3,7 +3,11 @@ import crypto from "node:crypto";
 import { hostname } from "node:os";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@agentbench/shared";
-import type { HostedAttemptOverviewSession, HostedSession } from "./runtime/types.js";
+import {
+  isTerminalHostedSessionStatus,
+  type HostedAttemptOverviewSession,
+  type HostedSession,
+} from "./runtime/types.js";
 import { redirect, readForm, readJson, sendJson, notFound, badRequest } from "./runtime/http.js";
 import { createAttemptsRoutes } from "./routes/attempts.js";
 import { createApiRoutes } from "./routes/api.js";
@@ -117,7 +121,7 @@ const sessionStore = createSessionStore({
   onSessionExpired: orchestratorClient.timeoutAttempt,
 });
 
-const { createHostedSession, getSession, getSessionByToken, persistSessionSnapshot } = sessionStore;
+const { createHostedSession, getSession, getSessionByToken, persistSessionSnapshot, markSessionTerminal } = sessionStore;
 const telemetryRuntime = createTelemetryRuntime({
   now,
   agentbenchWebUrl,
@@ -128,9 +132,37 @@ const telemetryRuntime = createTelemetryRuntime({
 const { recordEvent, forwardRunEvent, telemetryRunEventType } = telemetryRuntime;
 const {
   completeSession: completeSessionViaOrchestrator,
+  getSessionResult: getSessionResultViaOrchestrator,
   getAttemptOverview: getAttemptOverviewViaOrchestrator,
   resolveAdvance: resolveAdvanceViaOrchestrator,
 } = orchestratorClient;
+
+async function completeSession(session: HostedSession, result: ReturnType<typeof evaluateSession>) {
+  const persistedResult = await completeSessionViaOrchestrator(session, result);
+  if (persistedResult) {
+    await markSessionTerminal(session, persistedResult);
+  }
+  return persistedResult;
+}
+
+async function resolveSessionResult(session: HostedSession) {
+  if (isTerminalHostedSessionStatus(session.status)) {
+    const persistedResult = await getSessionResultViaOrchestrator(session);
+    if (persistedResult) {
+      return persistedResult;
+    }
+    throw new Error("Persisted terminal session result is unavailable.");
+  }
+  return evaluateSession(session);
+}
+
+function rejectTerminalMutation(session: HostedSession, response: ServerResponse) {
+  if (!isTerminalHostedSessionStatus(session.status)) {
+    return false;
+  }
+  sendJson(response, 409, { error: "session_terminal", status: session.status });
+  return true;
+}
 
 const attemptsRoutes = createAttemptsRoutes({
   publicBaseUrl,
@@ -150,7 +182,9 @@ const apiRoutes = createApiRoutes({
   forwardRunEvent,
   telemetryRunEventType,
   evaluateSession,
-  completeSession: completeSessionViaOrchestrator,
+  completeSession,
+  resolveSessionResult,
+  rejectTerminalMutation,
   readJson,
   badRequest,
   notFound,
@@ -165,8 +199,10 @@ const appRouteHandlers = createAppRouteHandlers({
   persistSessionSnapshot,
   recordEvent,
   forwardRunEvent,
-  completeSession: completeSessionViaOrchestrator,
+  completeSession,
   evaluateSession,
+  resolveSessionResult,
+  rejectTerminalMutation,
   readForm,
   badRequest,
   notFound,

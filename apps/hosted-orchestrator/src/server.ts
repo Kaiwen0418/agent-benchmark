@@ -395,8 +395,6 @@ async function loadLatestSessionResult(sessionId: string) {
     .from("hosted_web_results")
     .select("status, score, summary, evaluators")
     .eq("session_id", sessionId)
-    .order("created_at", { ascending: false })
-    .limit(1)
     .maybeSingle();
 
   if (!data) {
@@ -849,6 +847,7 @@ async function persistHostedSessionSnapshot(token: string, metadata: Record<stri
     .from("hosted_web_sessions")
     .update({ metadata })
     .eq("session_token_hash", hashToken(token))
+    .eq("status", "active")
     .select("id")
     .maybeSingle();
 
@@ -921,7 +920,7 @@ async function persistHostedEvent(token: string, payload: Record<string, unknown
   }
 
   const session = await loadSessionByToken(token);
-  if (!session || !session.run_id) {
+  if (!session || !session.run_id || session.status !== "active") {
     return false;
   }
 
@@ -1385,6 +1384,17 @@ const server = createServer(async (request, response) => {
           : [],
       }, typeof input.runId === "string" ? input.runId : typeof input.caseId === "string" ? input.caseId : "attempt.init", commandIdFromRequest(request));
       sendJson(response, initialized.statusCode, initialized.body);
+      return;
+    }
+
+    const sessionResultMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/result$/);
+    if (request.method === "GET" && sessionResultMatch) {
+      const result = await loadLatestSessionResult(decodeURIComponent(sessionResultMatch[1]));
+      if (!result) {
+        sendJson(response, 404, { error: "Session result not found" });
+        return;
+      }
+      sendJson(response, 200, result);
       return;
     }
 

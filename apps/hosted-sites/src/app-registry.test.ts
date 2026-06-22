@@ -92,6 +92,8 @@ function makeRouteDeps(): HostedAppRouteDeps {
     forwardRunEvent: async () => undefined,
     completeSession: async () => null,
     evaluateSession,
+    resolveSessionResult: async (session) => evaluateSession(session),
+    rejectTerminalMutation: () => false,
     readForm: async () => new URLSearchParams(),
     badRequest: () => undefined,
     notFound: () => undefined,

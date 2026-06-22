@@ -40,7 +40,7 @@ export function renderThread(
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
-  evaluateSession: (session: ForumSession) => { status: string; score: number; summary: string },
+  score: { status: string; score: number; summary: string },
 ) {
   const postsHtml = thread.posts
     .map(
@@ -83,7 +83,6 @@ export function renderThread(
         </form>
       </section>`;
 
-  const score = evaluateSession(session);
 
   sendHtml(
     response,

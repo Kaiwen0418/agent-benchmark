@@ -15,6 +15,8 @@ type ForumRoutesDeps = {
   forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
   completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
   evaluateSession: (session: HostedSession) => HostedWebScoreResult;
+  resolveSessionResult: (session: HostedSession) => Promise<HostedWebScoreResult>;
+  rejectTerminalMutation: (session: HostedSession, response: ServerResponse) => boolean;
   readForm: (request: IncomingMessage) => Promise<URLSearchParams>;
   badRequest: (response: ServerResponse, message: string) => void;
   notFound: (response: ServerResponse) => void;
@@ -53,7 +55,14 @@ export function createForumRoutes(deps: ForumRoutesDeps) {
         return true;
       }
 
-      renderThread(session, thread, response, deps.publicBaseUrl, deps.defaultStartPathForApp, deps.evaluateSession);
+      renderThread(
+        session,
+        thread,
+        response,
+        deps.publicBaseUrl,
+        deps.defaultStartPathForApp,
+        await deps.resolveSessionResult(session),
+      );
       return true;
     }
 
@@ -64,6 +73,7 @@ export function createForumRoutes(deps: ForumRoutesDeps) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
+      if (deps.rejectTerminalMutation(session, response)) return true;
 
       const threadId = decodeURIComponent(replyMatch[1]);
       const form = await deps.readForm(request);
@@ -107,6 +117,7 @@ export function createForumRoutes(deps: ForumRoutesDeps) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
+      if (deps.rejectTerminalMutation(session, response)) return true;
 
       const threadId = decodeURIComponent(lockMatch[1]);
       const form = await deps.readForm(request);

@@ -44,6 +44,8 @@ type ApiRoutesDeps = {
   forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
   telemetryRunEventType: (type: string) => string;
   evaluateSession: (session: HostedSession) => HostedWebScoreResult;
+  resolveSessionResult: (session: HostedSession) => Promise<HostedWebScoreResult>;
+  rejectTerminalMutation: (session: HostedSession, response: ServerResponse) => boolean;
   completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
   readJson: (request: IncomingMessage) => Promise<Record<string, unknown>>;
   badRequest: (response: ServerResponse, message: string) => void;
@@ -141,6 +143,9 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
         sendJson(response, 403, { error: "Viewer sessions are read-only" });
         return true;
       }
+      if (deps.rejectTerminalMutation(session, response)) {
+        return true;
+      }
       const telemetryType = typeof input.type === "string" ? input.type : "hosted.event";
       const payload = {
         type: telemetryType,
@@ -167,7 +172,7 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
         deps.notFound(response);
         return true;
       }
-      sendJson(response, 200, deps.evaluateSession(session));
+      sendJson(response, 200, await deps.resolveSessionResult(session));
       return true;
     }
 
@@ -181,6 +186,13 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
       }
       if (session.accessMode === "viewer") {
         sendJson(response, 403, { error: "Viewer sessions are read-only" });
+        return true;
+      }
+      if (session.status === "completed" || session.status === "failed") {
+        sendJson(response, 200, await deps.resolveSessionResult(session));
+        return true;
+      }
+      if (deps.rejectTerminalMutation(session, response)) {
         return true;
       }
       const result = deps.evaluateSession(session);

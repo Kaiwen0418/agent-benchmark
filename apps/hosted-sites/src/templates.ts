@@ -35,6 +35,7 @@ export function layout(params: {
   const uiVariant = readUiVariant(params.session.metadata);
   const uiTheme = readUiTheme(params.session.metadata);
   const isViewer = params.session.accessMode === "viewer";
+  const isTerminal = params.session.status === "completed" || params.session.status === "failed" || params.session.status === "expired";
   const appNav =
     params.session.app === "wiki-lite"
       ? `<a href="/wiki?session=${encodeURIComponent(params.session.token)}">Knowledge base</a>`
@@ -44,7 +45,7 @@ export function layout(params: {
           ? `<a href="/repo?session=${encodeURIComponent(params.session.token)}">Repository</a>`
           : `<a href="/shopping?session=${encodeURIComponent(params.session.token)}">Catalog</a>
              <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>`;
-  const telemetry = isViewer ? "" : `
+  const telemetry = isViewer || isTerminal ? "" : `
     <script>
       window.AgentBenchHostedSession = ${JSON.stringify({
         token: params.session.token,
@@ -174,6 +175,8 @@ export function layout(params: {
       .layout-badge { display: inline-block; margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
       .viewer-banner { margin: 0 24px; padding: 10px 14px; border: 1px solid var(--line); background: var(--accent-soft); color: var(--ink); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
       .viewer-readonly form, .viewer-readonly a { pointer-events: none; }
+      .terminal-readonly form { pointer-events: none; opacity: .58; }
+      .terminal-readonly button, .terminal-readonly input, .terminal-readonly textarea, .terminal-readonly select { cursor: not-allowed; }
       .viewer-readonly form { opacity: .58; }
       .viewer-readonly button, .viewer-readonly input, .viewer-readonly textarea, .viewer-readonly select { cursor: not-allowed; }
       .viewer-readonly a { cursor: default; }
@@ -333,9 +336,10 @@ export function layout(params: {
     </style>
     ${telemetry}
   </head>
-  <body class="ui-${uiVariant} theme-${uiTheme}${isViewer ? " viewer-readonly" : ""}" data-ui-variant="${uiVariant}" data-ui-theme="${uiTheme}">
+  <body class="ui-${uiVariant} theme-${uiTheme}${isViewer ? " viewer-readonly" : ""}${isTerminal ? " terminal-readonly" : ""}" data-ui-variant="${uiVariant}" data-ui-theme="${uiTheme}">
     <div class="shell">
     ${isViewer ? '<div class="viewer-banner">Live read-only session view</div>' : ""}
+    ${isTerminal ? `<div class="viewer-banner">Session ${escapeHtml(params.session.status)} · persisted result is read-only</div>` : ""}
     <header>
       <div class="heading">
         <span class="layout-badge">${escapeHtml(params.session.app)} · ${uiVariant} · ${uiTheme}</span>

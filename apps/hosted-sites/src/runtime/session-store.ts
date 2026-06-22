@@ -198,6 +198,11 @@ export function createSessionStore(deps: SessionStoreDeps) {
     await deps.persistSessionSnapshotDurably?.(session, buildSessionMetadata(session));
   }
 
+  async function markSessionTerminal(session: HostedSession, result: { status: string }) {
+    session.status = result.status === "passed" ? "completed" : "failed";
+    await cacheSession(session);
+  }
+
   async function markSessionExpired(session: HostedSession, request: IncomingMessage) {
     session.status = "expired";
     await deleteCachedSession(session.token);
@@ -441,5 +446,6 @@ export function createSessionStore(deps: SessionStoreDeps) {
     getSession,
     getSessionByToken,
     persistSessionSnapshot,
+    markSessionTerminal,
   };
 }
