@@ -4,7 +4,9 @@
 
 - [Getting Started](./getting-started.md)
 - [Architecture](./architecture.md)
+- [Data Ownership](./data-ownership.md)
 - [Data Flow](./data-flow.md)
+- [Consistency and Failure](./consistency-and-failure.md)
 - [Frontend Runtime State Machine](./frontend-state-machine.md)
 - [Hosted Attempt Consistency](./attempt-consistency.md)
 

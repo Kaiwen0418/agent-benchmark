@@ -7,10 +7,18 @@ The external agent and its browser are untrusted. AgentBench exposes only benchm
 ```mermaid
 flowchart LR
   Untrusted["External agent/browser"] -->|"opaque session token"| Gateway["Nginx"]
+  User["User browser"] --> Web["apps/web"]
   Gateway --> Sites["hosted-sites"]
-  Sites --> Redis[("Redis")]
-  Sites --> DB[("Supabase service role")]
-  Sites -->|"shared-secret callback"| Web["apps/web"]
+  Web -->|"shared-secret init"| Gateway
+  Gateway --> OrchestratorAPI["orchestrator API"]
+  Sites --> SessionRedis[("Redis session runtime")]
+  Sites -.->|"service-role read recovery"| DB[("Supabase")]
+  Sites -->|"shared-secret commands"| OrchestratorAPI
+  OrchestratorAPI --> CommandRedis[("Redis command Streams")]
+  CommandRedis --> Workers["orchestrator workers"]
+  Workers -->|"service-role hosted writes"| DB
+  Sites -->|"shared-secret run events"| Web
+  Workers -->|"shared-secret outbox delivery"| Web
 ```
 
 ## Controls
@@ -38,6 +46,8 @@ flowchart LR
 - Session tokens in URLs may appear in browser history, proxy logs, and referrers.
 - Internal auth uses a single shared secret and a legacy header name.
 - Redis and Supabase updates are not one distributed transaction.
+- Session Redis currently stores raw bearer tokens, private task configuration, and callback material.
+- Redis currently has no per-service ACL boundary; all hosted services share the private Compose network.
 - Dead callback rows require operational alerting and manual inspection.
 - Rate limiting is not yet documented as a gateway-enforced control.
 
@@ -50,3 +60,5 @@ flowchart LR
 - use command idempotency keys
 - audit RLS and service-role usage before public launch
 - define incident response for leaked session tokens
+- hash Redis session-token key suffixes and remove reusable callback credentials from session envelopes
+- introduce per-service Redis ACL identities and command/key restrictions

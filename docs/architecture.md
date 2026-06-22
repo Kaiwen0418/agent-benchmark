@@ -12,15 +12,16 @@ flowchart LR
   Edge --> Gateway["Nginx Gateway"]
   Gateway --> Sites["apps/hosted-sites replicas"]
   Gateway --> OrchestratorAPI
-  Sites <--> Redis[("Redis cache + command streams")]
+  Sites <--> SessionRedis[("Redis session runtime")]
   Web <--> DB[("Supabase")]
   Sites -.->|"read-only recovery"| DB
-  Sites -->|"durable commands"| OrchestratorAPI
-  OrchestratorAPI --> Streams[("partitioned Redis Streams")]
+  Sites -->|"authenticated commands"| OrchestratorAPI
+  OrchestratorAPI --> Streams[("Redis command Streams")]
   Streams --> Workers["orchestrator workers"]
   Workers -->|"only hosted writers"| DB
   Sites -->|"run events"| Web
-  Workers -->|"aggregate completion"| Web
+  DB -->|"claim callback outbox"| Workers
+  Workers -->|"deliver completion"| Web
 ```
 
 ## Components
@@ -73,7 +74,9 @@ The deployment profile matters:
 
 ### Redis
 
-Redis has two isolated responsibilities. Versioned session keys provide the shared runtime cache used by hosted-sites replicas. Sixteen partitioned Streams form the orchestrator command backbone. Stable entity hashing preserves order for one attempt/session while disjoint workers process partitions concurrently. Redis leases prevent overlapping worker ownership.
+Redis has two logically separate responsibilities. Versioned session keys provide the shared runtime state used by hosted-sites replicas. Sixteen partitioned Streams form the orchestrator command transport. Stable entity hashing preserves order for one attempt/session while disjoint workers process partitions concurrently. Redis leases prevent overlapping worker ownership.
+
+The current deployment places both responsibilities in one Redis instance and separates them only by key namespace. It does not yet configure a persistent volume, AOF, independent memory policies, replication, or failover. Redis therefore provides shared runtime coordination, not a durable system of record. See [Consistency and Failure](./consistency-and-failure.md) for the exact guarantees and [Roadmap](./roadmap.md) for planned hardening.
 
 ### Supabase
 
@@ -104,7 +107,7 @@ GitHub `development` and `production` Environments hold separate variables and s
 | Attempt lifecycle and ordered progression | `apps/hosted-orchestrator` |
 | Task UI and app-state mutation | `apps/hosted-sites` |
 | Shared mutable session state | Redis |
-| Durable command ingest and worker coordination | Redis Streams |
+| Runtime command transport and worker coordination | Redis Streams |
 | Durable hosted writes | `apps/hosted-orchestrator` |
 | Durable records and audit history | Supabase |
 | Per-session evaluation functions | hosted app definitions / `packages/scoring` |
@@ -113,10 +116,10 @@ GitHub `development` and `production` Environments hold separate variables and s
 
 ## Failure Model
 
-- A hosted-sites replica may disappear between requests; Redis allows another replica to continue.
-- Redis failure degrades session availability; hosted-sites can recover persisted app state through read-only Supabase access.
+- A hosted-sites replica may disappear between requests; another replica can continue from Redis when no concurrent session write was lost.
+- Redis failure degrades session availability. Hosted-sites can recover the latest successfully persisted app-state snapshot through read-only Supabase access; commands or snapshots that had not reached Supabase are outside that recovery point.
 - Orchestrator failure prevents attempt progression and aggregate completion, but hosted task pages can still render from Redis.
 - Web callback failure delays live observability or final run completion; persisted hosted results remain available for reconciliation.
 - Cloudflare Tunnel or Nginx failure makes hosted URLs unavailable without changing durable run state.
 
-Detailed contracts are documented in [API Reference](./api-reference.md), [Data Model](./data-model.md), and [Data Flow](./data-flow.md).
+Detailed contracts are documented in [API Reference](./api-reference.md), [Data Model](./data-model.md), [Data Ownership](./data-ownership.md), [Data Flow](./data-flow.md), and [Consistency and Failure](./consistency-and-failure.md).
