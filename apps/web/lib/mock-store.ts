@@ -7,15 +7,16 @@ import type {
   RunEvent,
   RunStatus,
 } from "@agentbench/protocol";
-import { hostedWebSuiteCase, nativeBenchmarkCases } from "@agentbench/test-cases";
+import { hostedWebSuiteCase, hostedWebSuiteMetadata } from "@agentbench/test-cases";
 
 const now = () => new Date().toISOString();
 
-const seedCases: BenchmarkCase[] = [...nativeBenchmarkCases, hostedWebSuiteCase].map((item) => ({
-  ...item,
-  currentRevisionId: null,
+const seedCases: BenchmarkCase[] = [{
+  ...hostedWebSuiteCase,
+  metadata: hostedWebSuiteMetadata,
+  currentRevisionId: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0105",
   createdAt: now(),
-}));
+}];
 
 type Store = {
   cases: BenchmarkCase[];

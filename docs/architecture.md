@@ -82,7 +82,7 @@ The current deployment places both responsibilities in one Redis instance and se
 
 Supabase stores durable control-plane and audit data: runs, attempts, hosted sessions, events, results, aggregate scores, access logs, and artifacts. It stores app state snapshots in session metadata for recovery, but it is not the primary per-request state store.
 
-`benchmark_cases` is a private control-plane table because its metadata contains suite manifests and evaluator inputs. Anonymous and authenticated database clients can discover public cases only through `public_benchmark_cases`, which projects display-safe suite and session fields. Service-role code must not return the private manifest through a public API or read model.
+`benchmark_cases` stores case identity, display fields, visibility, and the current revision pointer. Private suite manifests and evaluator inputs exist only in immutable `benchmark_case_revisions`. Anonymous and authenticated database clients discover cases through `public_benchmark_cases`, which projects display-safe suite and session fields from the current revision. Service-role code must not return the private manifest through a public API or read model.
 
 Typed catalog releases are stored in immutable `benchmark_case_revisions`. A case points to the release selected for new attempts, while every attempt retains its own revision foreign key and generated question snapshot. The orchestrator, not Web input, is authoritative for loading and validating the private manifest during initialization.
 

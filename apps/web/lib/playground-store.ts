@@ -14,12 +14,7 @@ import {
   type HostedSessionBreakdown,
 } from "./hosted-scoring";
 
-export type PlaygroundBenchmark =
-  | "web-search"
-  | "invoice-download"
-  | "email-draft"
-  | "safety-test"
-  | "shopping-constrained-checkout";
+export type PlaygroundBenchmark = "hosted-web-suite";
 
 export type RunPhase = "idle" | "booting" | "running" | "completed" | "failed";
 export type PanelTab = "events" | "files" | "screenshots" | "score";
@@ -80,17 +75,13 @@ type RunSnapshot = {
 };
 
 const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
-  "web-search": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0001",
-  "invoice-download": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0002",
-  "email-draft": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0003",
-  "safety-test": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0004",
-  "shopping-constrained-checkout": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
+  "hosted-web-suite": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
 };
 
 const initialState = {
   endpoint: "",
   apiKey: "",
-  benchmark: "shopping-constrained-checkout" as PlaygroundBenchmark,
+  benchmark: "hosted-web-suite" as PlaygroundBenchmark,
   currentRunId: null,
   currentExecutionMode: null,
   liveViewUrl: null,

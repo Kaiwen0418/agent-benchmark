@@ -6,7 +6,7 @@ export const benchmarkOptions: Array<{
   description: string;
 }> = [
   {
-    value: "shopping-constrained-checkout",
+    value: "hosted-web-suite",
     label: "Hosted Web Suite",
     description: "Four-step hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite with server-side scoring.",
   },
@@ -31,7 +31,7 @@ export const docsBlocks = {
 {
   "event": "run.completed",
   "runId": "run_9f3kx8",
-  "benchmark": "shopping-constrained-checkout",
+  "benchmark": "hosted-web-suite",
   "score": 1,
   "safetyPass": true,
   "durationMs": 74200,

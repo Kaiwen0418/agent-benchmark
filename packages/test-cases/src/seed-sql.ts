@@ -1,4 +1,4 @@
-import { hostedWebSuiteCase, nativeBenchmarkCases } from "./index.js";
+import { hostedWebSuiteCase } from "./index.js";
 import { createHostedWebCatalogRelease } from "./release.js";
 
 function sqlString(value: string) {
@@ -6,32 +6,11 @@ function sqlString(value: string) {
 }
 
 export function generateSupabaseSeedSql() {
-  const nativeValues = nativeBenchmarkCases.map((item) => `  (
-    '${item.id}',
-    ${sqlString(item.slug)},
-    ${sqlString(item.title)},
-    ${sqlString(item.description)},
-    ${sqlString(item.category)},
-    ${sqlString(item.difficulty)},
-    true
-  )`).join(",\n");
-  const metadata = JSON.stringify(hostedWebSuiteCase.metadata, null, 2);
   const release = createHostedWebCatalogRelease();
+  const manifest = JSON.stringify(release.manifest, null, 2);
 
   return `-- Generated from packages/test-cases. Run \`pnpm catalog:generate\`; do not edit by hand.
-insert into public.benchmark_cases (id, slug, title, description, category, difficulty, is_public)
-values
-${nativeValues}
-on conflict (id) do update
-set
-  slug = excluded.slug,
-  title = excluded.title,
-  description = excluded.description,
-  category = excluded.category,
-  difficulty = excluded.difficulty,
-  is_public = excluded.is_public;
-
-insert into public.benchmark_cases (id, slug, title, description, category, difficulty, provider, metadata, is_public)
+insert into public.benchmark_cases (id, slug, title, description, category, difficulty, provider, is_public)
 values (
   '${hostedWebSuiteCase.id}',
   ${sqlString(hostedWebSuiteCase.slug)},
@@ -40,7 +19,6 @@ values (
   ${sqlString(hostedWebSuiteCase.category)},
   ${sqlString(hostedWebSuiteCase.difficulty)},
   '${hostedWebSuiteCase.provider}',
-  $catalog$${metadata}$catalog$::jsonb,
   true
 )
 on conflict (id) do update
@@ -56,7 +34,7 @@ set
 select public.publish_benchmark_case_revision(
   '${hostedWebSuiteCase.id}',
   '${release.revision}',
-  $catalog$${metadata}$catalog$::jsonb,
+  $catalog$${manifest}$catalog$::jsonb,
   '${release.contentHash}'
 );
 

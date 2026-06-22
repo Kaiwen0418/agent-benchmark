@@ -19,7 +19,8 @@ Fixed questions become memorization tests. AgentBench does not generate question
 
 ```mermaid
 flowchart TD
-  Case["benchmark_cases.metadata"] --> Suite["Ordered suite sessions"]
+  Case["benchmark_cases.current_revision_id"] --> Revision["benchmark_case_revisions.manifest"]
+  Revision --> Suite["Ordered suite sessions"]
   Suite --> Pool["Per-app questionVariants"]
   Attempt["Benchmark attempt"] --> Seed["generationSeed"]
   Seed --> QuestionHash["Question hash"]
@@ -40,7 +41,7 @@ flowchart TD
 
 ## Current Hosted Testcases
 
-The production `shopping-constrained-checkout` case runs `hosted-web-suite-v1` version `v2`. All four sessions are required and have weight 1.
+The production `hosted-web-suite` case runs `hosted-web-suite-v1` version `v2`. All four sessions are required and have weight 1. `shopping-constrained-checkout` is the first session task slug, not the benchmark case slug.
 
 | App | Variants |
 | --- | --- |
@@ -69,7 +70,7 @@ WebArena domains may inspire tasks, but these apps are `hosted-web` or `webarena
 - `apps/hosted-orchestrator`: attempt initialization, ordered advancement, aggregation, timeout, cleanup.
 - `apps/web`: run creation, connection payload, progress, live view, public result.
 
-Question pools belong in `benchmark_cases.metadata.sessions[].metadata.questionVariants`. Generic selection belongs in the orchestrator. Apps must not call random generators at runtime.
+Question pools belong in `benchmark_case_revisions.manifest.sessions[].metadata.questionVariants`. Generic selection belongs in the orchestrator. Apps must not call random generators at runtime.
 
 ## Generation Contract
 

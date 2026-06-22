@@ -6,7 +6,7 @@ import {
   GUEST_COOKIE_NAME,
   isDevQuotaBypassed,
 } from "@/lib/auth";
-import { createBenchmarkRun, getQuotaStatus } from "@/lib/db";
+import { BenchmarkCaseUnavailableError, createBenchmarkRun, getQuotaStatus } from "@/lib/db";
 
 export async function POST(request: Request) {
   const json = await request.json();
@@ -53,13 +53,24 @@ export async function POST(request: Request) {
     return response;
   }
 
-  const run = await createBenchmarkRun({
-    caseId: input.caseId,
-    userId: user?.id ?? null,
-    guestId: guest?.guestId ?? null,
-    executionMode: input.executionMode,
-    isPublic: input.isPublic,
-  });
+  let run;
+  try {
+    run = await createBenchmarkRun({
+      caseId: input.caseId,
+      userId: user?.id ?? null,
+      guestId: guest?.guestId ?? null,
+      executionMode: input.executionMode,
+      isPublic: input.isPublic,
+    });
+  } catch (error) {
+    if (error instanceof BenchmarkCaseUnavailableError) {
+      return NextResponse.json(
+        { error: error.code, message: error.message },
+        { status: 404 },
+      );
+    }
+    throw error;
+  }
   const nextQuota = {
     ...quota,
     used: quota.used + 1,

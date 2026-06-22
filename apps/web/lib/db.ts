@@ -40,14 +40,22 @@ export function isMockMode() {
   return !getSupabase();
 }
 
-function shouldUseLocalExternalAgentStore(params: {
-  executionMode?: BenchmarkRun["executionMode"];
-  benchmarkCase?: BenchmarkCase | null;
-}) {
-  return (
-    process.env.NODE_ENV !== "production" &&
-    params.executionMode === "external-agent" &&
-    params.benchmarkCase?.provider !== "hosted-web"
+export class BenchmarkCaseUnavailableError extends Error {
+  code = "benchmark_case_unavailable" as const;
+
+  constructor() {
+    super("Benchmark case is not available for hosted execution.");
+    this.name = "BenchmarkCaseUnavailableError";
+  }
+}
+
+export function isRunnableBenchmarkCase(
+  benchmarkCase: BenchmarkCase | null,
+): benchmarkCase is BenchmarkCase & { currentRevisionId: string } {
+  return Boolean(
+    benchmarkCase?.isPublic &&
+    benchmarkCase.provider === "hosted-web" &&
+    benchmarkCase.currentRevisionId,
   );
 }
 
@@ -242,13 +250,12 @@ export async function createBenchmarkRun(params: {
   isPublic: boolean;
 }): Promise<BenchmarkRun> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.createRun(params.caseId, params.userId, params.guestId, params.executionMode);
-  }
-
   const benchmarkCase = await getBenchmarkCase(params.caseId);
-  if (shouldUseLocalExternalAgentStore({ executionMode: params.executionMode, benchmarkCase })) {
-    return mockStore.createRun(params.caseId, params.userId, params.guestId, params.executionMode);
+  if (!isRunnableBenchmarkCase(benchmarkCase)) {
+    throw new BenchmarkCaseUnavailableError();
+  }
+  if (!supabase) {
+    return mockStore.createRun(benchmarkCase.id, params.userId, params.guestId, params.executionMode);
   }
 
   const initialStatus = params.executionMode === "external-agent" ? "waiting_for_agent" : "queued";
@@ -256,7 +263,7 @@ export async function createBenchmarkRun(params: {
   const { data, error } = await supabase
     .from("benchmark_runs")
     .insert({
-      case_id: params.caseId,
+      case_id: benchmarkCase.id,
       user_id: params.userId,
       guest_id: params.guestId,
       execution_mode: params.executionMode,

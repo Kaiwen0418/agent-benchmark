@@ -117,20 +117,6 @@ function resolveHostedUrl(baseUrl: string, path: string) {
   return base.toString();
 }
 
-function metadataString(metadata: Record<string, unknown>, key: string, fallback: string) {
-  return typeof metadata[key] === "string" ? metadata[key] : fallback;
-}
-
-function metadataNumber(metadata: Record<string, unknown>, key: string, fallback: number) {
-  const value = metadata[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function metadataBoolean(metadata: Record<string, unknown>, key: string, fallback: boolean) {
-  const value = metadata[key];
-  return typeof value === "boolean" ? value : fallback;
-}
-
 function tokenFromStartUrl(startUrl: string) {
   try {
     const url = new URL(startUrl);
@@ -154,35 +140,17 @@ function defaultHostedStartPathForApp(app: string) {
 }
 
 function getHostedWebSuiteMetadata(benchmarkCase: BenchmarkCase): HostedWebSuiteMetadata {
-  const metadata = benchmarkCase.metadata;
-  const parsed = hostedWebSuiteMetadataSchema.safeParse(metadata);
+  const parsed = hostedWebSuiteMetadataSchema.safeParse(benchmarkCase.metadata);
 
   if (parsed.success && parsed.data.sessions.length > 0) {
     return parsed.data;
   }
 
-  return hostedWebSuiteMetadataSchema.parse({
-    ...metadata,
-    suiteSlug: metadataString(metadata, "suiteSlug", benchmarkCase.slug),
-    suiteVersion: metadataString(metadata, "suiteVersion", "v1"),
-    taskSlug: metadataString(metadata, "taskSlug", benchmarkCase.slug),
-    taskVersion: metadataString(metadata, "taskVersion", "v1"),
-    seedVersion: metadataString(metadata, "seedVersion", "seed-v1"),
-    sessions: [
-      {
-        app: metadataString(metadata, "app", "shopping-lite"),
-        taskSlug: metadataString(metadata, "taskSlug", benchmarkCase.slug),
-        title: typeof metadata.title === "string" ? metadata.title : benchmarkCase.title,
-        goal: typeof metadata.goal === "string" ? metadata.goal : benchmarkCase.description,
-        startPath: typeof metadata.startPath === "string" ? metadata.startPath : undefined,
-        taskVersion: metadataString(metadata, "taskVersion", "v1"),
-        seedVersion: metadataString(metadata, "seedVersion", "seed-v1"),
-        sequenceIndex: 0,
-        weight: metadataNumber(metadata, "weight", 1),
-        required: metadataBoolean(metadata, "required", true),
-        metadata: {},
-      },
-    ],
+  throw new HostedWebSessionError({
+    message: "Hosted benchmark case has no valid published suite manifest.",
+    hostedSitesUrl: getHostedOrchestratorBaseUrl(),
+    retryable: false,
+    status: 500,
   });
 }
 
@@ -284,22 +252,22 @@ async function findExistingHostedWebAttempt(params: {
     return null;
   }
 
-  let normalized = normalizeSessionDefinitions(params.benchmarkCase);
-  if (data.case_revision_id) {
-    const { data: revision, error: revisionError } = await supabase
-      .from("benchmark_case_revisions")
-      .select("manifest")
-      .eq("id", data.case_revision_id)
-      .eq("case_id", params.benchmarkCase.id)
-      .maybeSingle();
-    if (revisionError || !revision) {
-      throw revisionError ?? new Error("Hosted attempt references an unavailable benchmark revision.");
-    }
-    normalized = normalizeSessionDefinitions({
-      ...params.benchmarkCase,
-      metadata: revision.manifest as Record<string, unknown>,
-    });
+  if (!data.case_revision_id) {
+    throw new Error("Hosted attempt does not reference a benchmark revision.");
   }
+  const { data: revision, error: revisionError } = await supabase
+    .from("benchmark_case_revisions")
+    .select("manifest")
+    .eq("id", data.case_revision_id)
+    .eq("case_id", params.benchmarkCase.id)
+    .maybeSingle();
+  if (revisionError || !revision) {
+    throw revisionError ?? new Error("Hosted attempt references an unavailable benchmark revision.");
+  }
+  const normalized = normalizeSessionDefinitions({
+    ...params.benchmarkCase,
+    metadata: revision.manifest as Record<string, unknown>,
+  });
   return {
     id: data.id,
     caseRevisionId: data.case_revision_id,
@@ -518,7 +486,27 @@ async function getOrCreateHostedWebAttempt(params: {
     return existing;
   }
 
-  const { suiteSlug, suiteVersion, sessionDefinitions } = normalizeSessionDefinitions(params.benchmarkCase);
+  let benchmarkDefinition = params.benchmarkCase;
+  if (supabase) {
+    if (!params.benchmarkCase.currentRevisionId) {
+      throw new Error("Hosted benchmark case has no current revision.");
+    }
+    const { data: revision, error } = await supabase
+      .from("benchmark_case_revisions")
+      .select("manifest")
+      .eq("id", params.benchmarkCase.currentRevisionId)
+      .eq("case_id", params.benchmarkCase.id)
+      .maybeSingle();
+    if (error || !revision) {
+      throw error ?? new Error("Hosted benchmark case revision is unavailable.");
+    }
+    benchmarkDefinition = {
+      ...params.benchmarkCase,
+      metadata: revision.manifest as Record<string, unknown>,
+    };
+  }
+
+  const { suiteSlug, suiteVersion, sessionDefinitions } = normalizeSessionDefinitions(benchmarkDefinition);
   const localAttempt: HostedWebAttempt = {
     id: supabase ? null : `${params.run.id}:local-hosted-suite`,
     caseRevisionId: params.benchmarkCase.currentRevisionId,

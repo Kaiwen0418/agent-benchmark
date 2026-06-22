@@ -7,7 +7,7 @@ This document defines who may read, mutate, and recover each state family. Owner
 | Data | Domain owner | Writers | Readers | Authority and notes |
 | --- | --- | --- | --- | --- |
 | `profiles`, Supabase Auth identity | Web control plane | Supabase Auth / Web | Web | User identity and plan data |
-| `benchmark_cases` | Web control plane | release/admin workflow | Web, orchestrator service-role code | Private current-case compatibility record |
+| `benchmark_cases` | Web control plane | release/admin workflow | Web, orchestrator service-role code | Case identity, visibility, display fields, and current revision pointer |
 | `public_benchmark_cases` | Web control plane | database projection | anonymous/authenticated clients, Web | Display-safe discovery only |
 | `benchmark_case_revisions` | benchmark release workflow | `publish_benchmark_case_revision` | orchestrator, Web service-role recovery | Immutable private manifest for historical interpretation |
 | `benchmark_runs` | Web control plane | Web | Web, public read models | User-facing run lifecycle |
