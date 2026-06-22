@@ -98,7 +98,7 @@ Required variables in each GitHub Environment:
 - `AGENTBENCH_WEB_URL`
 - `HOSTED_SITES_PUBLIC_URL`
 - `HOSTED_ORCHESTRATOR_PUBLIC_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
+- `SUPABASE_URL`
 - `GATEWAY_HTTP_PORT`
 
 Required secrets in each GitHub Environment:
@@ -120,8 +120,8 @@ Optional web deployment secret:
 
 Each Vercel Web project must independently configure:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
@@ -129,6 +129,8 @@ Each Vercel Web project must independently configure:
 - optional `GUEST_RUN_LIMIT`
 
 Development values must point to the test hosted hostname and development Supabase target; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
+
+All Supabase variables are server-only. Web browser bundles communicate through same-origin API routes and do not require or receive Supabase environment variables.
 
 The self-hosted GitHub Actions runners must have `self-hosted` and `linux`, plus `agentbench-dev` for development or `agentbench-prod` for production. They need Docker access, Docker Compose, enough disk space for images, and network access to GHCR and Supabase.
 

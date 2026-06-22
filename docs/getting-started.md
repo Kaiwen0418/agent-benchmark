@@ -15,12 +15,14 @@ cp apps/web/.env.example apps/web/.env.local
 
 Configure these values in `apps/web/.env.local`:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
+
+Supabase variables are server-only. Browser components use same-origin `/api/*` routes and must not initialize a Supabase client.
 
 Copy the database target example and configure the root `.env.local`:
 

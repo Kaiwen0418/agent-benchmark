@@ -27,6 +27,7 @@ flowchart LR
 - Keep raw tokens in URLs/Redis only for their active lifetime.
 - Require the shared service secret for internal Web and orchestrator writes.
 - Keep Supabase service-role keys server-side.
+- Browser components must use same-origin Web APIs and must not import Supabase clients or browser-facing Supabase environment variables.
 - Use RLS for user-owned read paths.
 - Validate app/state shape when decoding Redis payloads.
 - Reject a session token on routes for another app.

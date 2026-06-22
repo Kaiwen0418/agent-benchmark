@@ -5,8 +5,8 @@ import crypto from "node:crypto";
 export const GUEST_COOKIE_NAME = "agentbench_guest_id";
 
 function getSupabaseEnv() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
     return null;
@@ -56,8 +56,7 @@ export async function getOrCreateGuestId() {
 
 export function isSupabaseEnabled() {
   return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY,
   );
 }
 
