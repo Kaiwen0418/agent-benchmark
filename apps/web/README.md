@@ -52,8 +52,4 @@ Default startup uses Docker runtime for backend services:
 
 For normal `Start Agent Session` testing, `web + hosted-sites + hosted-orchestrator` is the default path.
 
-## Next Recommended Steps
-
-1. Replace the lightweight attempt overview with a server-owned orchestrator state machine.
-2. Persist richer session progress so `advance` no longer depends on in-memory state.
-3. Tighten per-run auth and isolation before public rollout.
+The Web control plane always requires Supabase server credentials. It has no process-local database or run fallback. Missing credentials and unavailable database requests return `503 service_unavailable`; attempt connection failures are shown as a retryable modal in the playground.

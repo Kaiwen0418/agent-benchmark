@@ -6,7 +6,7 @@ export function createSupabaseAdminClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceRoleKey) {
-    return null;
+    throw new SupabaseServiceUnavailableError("Supabase server credentials are not configured.");
   }
 
   return createClient<Database>(url, serviceRoleKey, {
@@ -15,4 +15,14 @@ export function createSupabaseAdminClient() {
       autoRefreshToken: false,
     },
   });
+}
+
+export class SupabaseServiceUnavailableError extends Error {
+  code = "service_unavailable" as const;
+  status = 503 as const;
+
+  constructor(message = "The benchmark service is temporarily unavailable.", options?: ErrorOptions) {
+    super(message, options);
+    this.name = "SupabaseServiceUnavailableError";
+  }
 }

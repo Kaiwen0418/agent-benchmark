@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { selectVisibleHostedSessions } from "@/lib/hosted-progress";
 import { usePlaygroundStore } from "@/lib/playground-store";
 import { RunDetailTabs } from "./RunDetailTabs";
+import { ServiceUnavailableDialog } from "./ServiceUnavailableDialog";
 
 type RunConnectPayload = {
   runId: string;
@@ -157,37 +158,43 @@ export function RunConnectionCard() {
 
   if (!payload) {
     return (
-      <div className={`mt-4 rounded-[1.6rem] border p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)] ${
-        connectError ? "border-[#d7a39a] bg-[#fff7f5]" : "border-[#d7d0c4] bg-white"
-      }`}>
-        <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Run Ready</div>
+      <>
         {connectError ? (
-          <div className="mt-3">
-            <h3 className="text-[1.05rem] font-medium text-[#7d241b]">Hosted site connection failed.</h3>
-            <p className="mt-2 text-sm leading-7 text-[#5b3d37]">{connectError.message}</p>
-            {connectError.hostedSitesUrl ? (
-              <p className="mt-2 text-xs text-[#80534b]">
-                Hosted URL: <span className="font-medium">{connectError.hostedSitesUrl}</span>
-              </p>
-            ) : null}
-            <p className="mt-3 text-xs leading-6 text-[#80534b]">
-              Check that `HOSTED_ORCHESTRATOR_URL` is configured in Vercel and that the orchestrator API path is reachable.
-            </p>
-            <button
-              type="button"
-              onClick={() => setRetryNonce((value) => value + 1)}
-              className="mt-4 rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
-            >
-              Retry connection
-            </button>
-          </div>
-        ) : (
-          <div className="mt-3 space-y-2">
-            <div className="h-4 w-3/4 animate-pulse rounded-full bg-[#efede6]" />
-            <div className="h-4 w-1/2 animate-pulse rounded-full bg-[#efede6]" />
-          </div>
-        )}
-      </div>
+          <ServiceUnavailableDialog
+            message={connectError.message}
+            onClose={() => setConnectError(null)}
+            onRetry={() => setRetryNonce((value) => value + 1)}
+          />
+        ) : null}
+        <div className={`mt-4 rounded-[1.6rem] border p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)] ${
+          connectError ? "border-[#d7a39a] bg-[#fff7f5]" : "border-[#d7d0c4] bg-white"
+        }`}>
+          <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Run Ready</div>
+          {connectError ? (
+            <div className="mt-3">
+              <h3 className="text-[1.05rem] font-medium text-[#7d241b]">Hosted site connection failed.</h3>
+              <p className="mt-2 text-sm leading-7 text-[#5b3d37]">{connectError.message}</p>
+              {connectError.hostedSitesUrl ? (
+                <p className="mt-2 text-xs text-[#80534b]">
+                  Hosted URL: <span className="font-medium">{connectError.hostedSitesUrl}</span>
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setRetryNonce((value) => value + 1)}
+                className="mt-4 rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
+              >
+                Retry connection
+              </button>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2">
+              <div className="h-4 w-3/4 animate-pulse rounded-full bg-[#efede6]" />
+              <div className="h-4 w-1/2 animate-pulse rounded-full bg-[#efede6]" />
+            </div>
+          )}
+        </div>
+      </>
     );
   }
 
