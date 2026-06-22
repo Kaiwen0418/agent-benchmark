@@ -81,16 +81,31 @@ for role in anon authenticated; do
     exit 1
   fi
 
-  public_case="$("${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "set role ${role}; select row_to_json(cases) from public.public_benchmark_cases cases;")"
-  [[ "${public_case}" == *'"suiteVersion":"v2"'* ]]
-  [[ "${public_case}" == *'"app":"wiki-lite"'* ]]
-  [[ "${public_case}" != *'taskConfig'* ]]
-  [[ "${public_case}" != *'canonicalValue'* ]]
-  [[ "${public_case}" != *'June 1, 2026'* ]]
+  public_projection_valid="$("${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "
+    set role ${role};
+    select count(*) = 1
+      and bool_and(metadata ->> 'suiteVersion' = 'v2')
+      and bool_and(metadata -> 'sessions' -> 0 ->> 'app' = 'wiki-lite')
+      and bool_and(metadata::text not like '%taskConfig%')
+      and bool_and(metadata::text not like '%canonicalValue%')
+      and bool_and(metadata::text not like '%June 1, 2026%')
+    from public.public_benchmark_cases;
+  ")"
+  if [[ "${public_projection_valid}" != "t" ]]; then
+    echo "${role} received an invalid public benchmark case projection: ${public_projection_valid}" >&2
+    exit 1
+  fi
 done
 
-private_metadata="$("${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "set role service_role; select metadata from public.benchmark_cases;")"
-[[ "${private_metadata}" == *'taskConfig'* ]]
-[[ "${private_metadata}" == *'June 1, 2026'* ]]
+private_manifest_valid="$("${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "
+  set role service_role;
+  select bool_and(metadata::text like '%taskConfig%')
+    and bool_and(metadata::text like '%June 1, 2026%')
+  from public.benchmark_cases;
+")"
+if [[ "${private_manifest_valid}" != "t" ]]; then
+  echo "service_role could not read the private benchmark case manifest: ${private_manifest_valid}" >&2
+  exit 1
+fi
 
 echo "benchmark case privacy tests passed"
