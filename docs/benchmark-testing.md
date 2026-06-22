@@ -48,3 +48,12 @@ CI should enumerate declared variants directly instead of relying on a few rando
 - A development-only scheduled sweep covers the complete pool without consuming production guest quota.
 
 CI must fail when a declared variant lacks both positive and negative scorer coverage. Development E2E must show that Web, hosted-sites, orchestrator, Redis, and Supabase converge on one terminal score.
+
+## Commands And Scheduled Coverage
+
+- `pnpm --filter hosted-sites test` reads the canonical suite from `supabase/seed.sql`, executes positive and negative scoring for all 12 current variants, and repeats each passing state across all five layouts and both themes.
+- `pnpm verify:ci` runs the complete repository gate, including Redis command tests, PostgreSQL lifecycle races, local hosted smoke, and production builds.
+- `Hosted Variant Sweep` runs four deterministic full-pass attempts against the development environment every Monday and on demand. Seeds `full-pool-0`, `full-pool-1`, `full-pool-2`, and `full-pool-4` cover every current variant without using Web guest quota.
+- Each lifecycle smoke logs selected variant IDs and requires four unique `hosted_web_results` rows plus one `benchmark_attempt_scores` row.
+
+The seed list is versioned with the suite. Recompute it whenever variant IDs, session order, app slug, or task slug changes; CI remains the immediate guard against an uncovered variant.

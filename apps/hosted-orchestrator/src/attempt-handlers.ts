@@ -15,6 +15,7 @@ type AttemptHandlersDeps<TReadModel extends HostedAttemptReadModel> = {
     callbackSecret: string | null;
     suiteSlug: string;
     suiteVersion: string;
+    generationSeed?: string;
     sessions: Array<{
       app: string;
       taskSlug: string;
@@ -32,6 +33,7 @@ type AttemptHandlersDeps<TReadModel extends HostedAttemptReadModel> = {
     attemptId: string;
     suiteSlug: string;
     suiteVersion: string;
+    generationSeed?: string;
     metadata: Record<string, unknown>;
     sessions: Array<{
       sessionId: string;

@@ -613,6 +613,7 @@ async function initializeAttempt(params: {
   callbackSecret: string | null;
   suiteSlug: string;
   suiteVersion: string;
+  generationSeed?: string;
   sessions: Array<{
     app: string;
     taskSlug: string;
@@ -633,7 +634,7 @@ async function initializeAttempt(params: {
   }
   const runId = params.runId;
   const caseId = params.caseId;
-  const generated = generateAttemptQuestions(params.sessions);
+  const generated = generateAttemptQuestions(params.sessions, params.generationSeed);
   const generatedSessions = generated.sessions;
 
   const metadata = {
@@ -1359,6 +1360,7 @@ const server = createServer(async (request, response) => {
         callbackSecret: typeof input.callbackSecret === "string" ? input.callbackSecret : null,
         suiteSlug: typeof input.suiteSlug === "string" ? input.suiteSlug : "hosted-web-suite",
         suiteVersion: typeof input.suiteVersion === "string" ? input.suiteVersion : "v1",
+        generationSeed: typeof input.generationSeed === "string" ? input.generationSeed : undefined,
         sessions: Array.isArray(input.sessions)
           ? input.sessions
               .filter((session): session is Record<string, unknown> => Boolean(session && typeof session === "object"))
