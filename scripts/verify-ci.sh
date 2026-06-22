@@ -16,6 +16,9 @@ bash scripts/check-web-secret-boundary.sh
 echo "== Database ownership =="
 bash scripts/check-database-ownership.sh
 
+echo "== Test layout =="
+bash scripts/check-test-layout.sh
+
 echo "== Lifecycle Postgres integration =="
 bash scripts/test-lifecycle-postgres.sh
 
@@ -39,7 +42,7 @@ echo "== Coverage-gated tests =="
 bash scripts/test-coverage.sh
 
 echo "== Local service smoke =="
-bash scripts/smoke-local.sh
+bash tests/e2e/smoke-local.sh
 
 echo "== Production builds =="
 pnpm --filter web build
