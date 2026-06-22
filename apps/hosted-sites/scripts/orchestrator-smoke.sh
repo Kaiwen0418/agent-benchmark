@@ -57,8 +57,6 @@ if [[ "${START_LOCAL_SERVICES}" == "true" ]]; then
   HOSTED_SITES_PUBLIC_URL="${HOSTED_BASE_URL}" \
   HOSTED_ORCHESTRATOR_URL="${ORCHESTRATOR_BASE_URL}" \
   AGENTBENCH_WEB_URL="${WEB_URL}" \
-  SUPABASE_URL="${SUPABASE_URL}" \
-  SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}" \
   RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
   pnpm --filter hosted-sites exec tsx src/server.ts >/tmp/agentbench-hosted-sites-smoke.log 2>&1 &
   HOSTED_PID=$!

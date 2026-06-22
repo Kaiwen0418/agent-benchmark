@@ -12,8 +12,8 @@ This document defines who may read, mutate, and recover each state family. Owner
 | `benchmark_case_revisions` | benchmark release workflow | `publish_benchmark_case_revision` | orchestrator, Web service-role recovery | Immutable private manifest for historical interpretation |
 | `benchmark_runs` | Web control plane | Web | Web, public read models | User-facing run lifecycle |
 | `run_events`, `artifacts` | Web control plane | Web internal APIs | Web UI and public read models | Live observability and output artifacts |
-| `benchmark_attempts` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator, Web read/recovery paths | Canonical hosted attempt lifecycle and active-session pointer |
-| `hosted_web_sessions` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator, hosted-sites recovery, Web read fallback | Durable lifecycle plus latest successful app-state snapshot |
+| `benchmark_attempts` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; Web uses orchestrator APIs/public read models | Canonical hosted attempt lifecycle and active-session pointer |
+| `hosted_web_sessions` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; hosted-sites recovery uses an internal API | Durable lifecycle plus latest successful app-state snapshot |
 | `hosted_web_events` | hosted orchestrator | orchestrator workers | orchestrator and result/read-model code | Durable hosted telemetry |
 | `hosted_web_access_logs` | hosted orchestrator | orchestrator workers | maintenance and operations | Retained operational audit, not permanent evidence |
 | `hosted_web_results` | hosted orchestrator | transactional completion RPC | orchestrator and result/read-model code | One terminal result per session |
@@ -21,7 +21,7 @@ This document defines who may read, mutate, and recover each state family. Owner
 | `hosted_callback_outbox` | hosted orchestrator | database trigger and orchestrator processor | orchestrator workers/maintenance | Durable handoff from hosted terminal state to Web |
 | `orchestrator_command_dead_letters` | hosted orchestrator | orchestrator workers | authenticated operator APIs | Durable diagnostics after command retry exhaustion |
 
-`apps/hosted-sites` has service-role access only for read-only session recovery. It must not write hosted lifecycle tables. Removing this direct database credential is tracked separately; until then, database grants and code review enforce the writer boundary.
+`apps/hosted-sites` has no Supabase SDK or credential. Token and viewer recovery use an authenticated orchestrator contract. Web owns its control-plane tables and consumes hosted result data through filtered public read-model views.
 
 ## Redis and Process State
 
@@ -55,6 +55,7 @@ Session keys and command keys currently share one Redis instance but are separat
 
 - Browser clients never receive Supabase service-role or Redis credentials.
 - Web does not submit private suite manifests to orchestrator; it submits a revision ID.
+- Web does not query hosted lifecycle tables directly; attempt state comes from orchestrator APIs and public completed results come from read-model views.
 - Hosted-sites owns task actions and evaluation, but not durable attempt progression.
 - Orchestrator workers are the only application writers for hosted lifecycle and scoring tables.
 - Redis cannot override a terminal PostgreSQL transition.

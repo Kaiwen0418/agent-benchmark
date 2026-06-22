@@ -14,8 +14,7 @@ flowchart LR
   Gateway --> OrchestratorAPI
   Sites <--> SessionRedis[("Redis session runtime")]
   Web <--> DB[("Supabase")]
-  Sites -.->|"read-only recovery"| DB
-  Sites -->|"authenticated commands"| OrchestratorAPI
+  Sites -->|"commands and recovery"| OrchestratorAPI
   OrchestratorAPI --> Streams[("Redis command Streams")]
   Streams --> Workers["orchestrator workers"]
   Workers -->|"only hosted writers"| DB
@@ -43,7 +42,7 @@ flowchart LR
 - evaluates individual sessions
 - delegates lifecycle progression and aggregate completion to the orchestrator
 
-The service is stateless at the process boundary. Its local map is only a hot copy; Redis is the shared runtime cache across replicas, and Supabase is a read-only recovery fallback. Durable hosted writes are sent to the orchestrator.
+The service is stateless at the process boundary. Its local map is only a hot copy, Redis is the shared runtime cache across replicas, and authenticated orchestrator APIs provide durable recovery. Hosted-sites has no database SDK or credential; durable hosted reads and writes are owned by the orchestrator.
 
 ### `apps/hosted-orchestrator`
 

@@ -13,6 +13,9 @@ bash scripts/test-orchestrator-topology.sh
 echo "== Web secret boundary =="
 bash scripts/check-web-secret-boundary.sh
 
+echo "== Database ownership =="
+bash scripts/check-database-ownership.sh
+
 echo "== Lifecycle Postgres integration =="
 bash scripts/test-lifecycle-postgres.sh
 
@@ -21,6 +24,9 @@ bash scripts/test-benchmark-case-privacy.sh
 
 echo "== Benchmark case revisions =="
 bash scripts/test-case-revisions-postgres.sh
+
+echo "== Hosted public read models =="
+bash scripts/test-hosted-read-models-postgres.sh
 
 echo "== Benchmark catalog =="
 pnpm --filter @agentbench/test-cases test

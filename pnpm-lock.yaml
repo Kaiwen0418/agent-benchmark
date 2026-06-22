@@ -51,9 +51,6 @@ importers:
       '@agentbench/test-cases':
         specifier: workspace:*
         version: link:../../packages/test-cases
-      '@supabase/supabase-js':
-        specifier: ^2.108.2
-        version: 2.108.2
       redis:
         specifier: ^6.0.0
         version: 6.0.0

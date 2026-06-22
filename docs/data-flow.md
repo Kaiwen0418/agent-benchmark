@@ -39,19 +39,19 @@ Write-session and viewer tokens follow different paths.
 ```mermaid
 flowchart TD
   Request["Hosted request"] --> Token{"Viewer token?"}
-  Token -->|"yes"| ViewerDB["Load session by viewer session ID from Supabase"]
-  ViewerDB --> Viewer["Render read-only viewer state"]
+  Token -->|"yes"| ViewerRecovery["Recover viewer session through orchestrator"]
+  ViewerRecovery --> Viewer["Render read-only viewer state"]
   Token -->|"no"| Redis["Read hosted-sites:session:&lt;token&gt;"]
   Redis -->|"hit"| Handle["Validate app, expiry, and handle route"]
   Redis -->|"miss/error"| Local{"Process-local Map hit?"}
   Local -->|"yes"| Handle
-  Local -->|"no"| Recovery["Load by token hash from Supabase"]
+  Local -->|"no"| Recovery["Recover by token through orchestrator"]
   Recovery --> Rehydrate["Hydrate persisted appState snapshot"]
   Rehydrate --> Cache["Write Redis and local Map"]
   Cache --> Handle
 ```
 
-Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy. A database recovery returns only the latest successfully persisted `metadata.appState` snapshot, not necessarily the latest state that had existed in Redis.
+Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy. Hosted-sites has no database credential. Its authenticated recovery request is resolved by the orchestrator from the latest successfully persisted `metadata.appState` snapshot, which may lag state that had existed only in Redis.
 
 The current local-Map fallback can serve stale state after a Redis miss, and Redis session writes are not revision-checked. These are known horizontal-scaling gaps, not guarantees supplied by the diagram.
 
@@ -159,7 +159,7 @@ When hosted-sites observes an expired write session, it evicts its runtime cache
 Recovery boundaries:
 
 - process-local Map loss is expected and recoverable from Redis
-- Redis session loss falls back to the latest successful Supabase app-state snapshot
+- Redis session loss uses orchestrator recovery from the latest successful Supabase app-state snapshot
 - Redis Stream loss can discard commands that had not produced durable database effects
 - duplicate terminal commands recover from PostgreSQL constraints and transactional functions
 - Web callback loss recovers through `hosted_callback_outbox`

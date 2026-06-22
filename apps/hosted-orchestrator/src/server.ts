@@ -75,6 +75,12 @@ type PersistedSessionRow = Pick<
   | "start_url"
   | "expires_at"
   | "created_at"
+  | "access_count"
+  | "last_accessed_at"
+  | "first_seen_ip"
+  | "last_seen_ip"
+  | "first_seen_user_agent"
+  | "last_seen_user_agent"
 > & {
   metadata: HostedWebSessionMetadata | null;
 };
@@ -847,7 +853,7 @@ async function loadSessionByToken(token: string) {
   const { data, error } = await supabase
     .from("hosted_web_sessions")
     .select(
-      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at",
+      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at, access_count, last_accessed_at, first_seen_ip, last_seen_ip, first_seen_user_agent, last_seen_user_agent",
     )
     .eq("session_token_hash", hashToken(token))
     .maybeSingle();
@@ -857,6 +863,31 @@ async function loadSessionByToken(token: string) {
   }
 
   return data as PersistedSessionRow;
+}
+
+async function recoverHostedSession(params: { token?: string; sessionId?: string }) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return null;
+  }
+
+  let query = supabase
+    .from("hosted_web_sessions")
+    .select(
+      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at, access_count, last_accessed_at, first_seen_ip, last_seen_ip, first_seen_user_agent, last_seen_user_agent",
+    );
+  if (params.token) {
+    query = query.eq("session_token_hash", hashToken(params.token));
+  } else if (params.sessionId) {
+    query = query.eq("id", params.sessionId);
+  } else {
+    return null;
+  }
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return data;
 }
 
 async function persistHostedSessionSnapshot(token: string, metadata: Record<string, unknown>) {
@@ -1383,6 +1414,20 @@ const server = createServer(async (request, response) => {
         generationSeed: typeof input.generationSeed === "string" ? input.generationSeed : undefined,
       }, typeof input.runId === "string" ? input.runId : typeof input.caseId === "string" ? input.caseId : "attempt.init", commandIdFromRequest(request));
       sendJson(response, initialized.statusCode, initialized.body);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/sessions/recover") {
+      const input = await readJson(request);
+      const recovered = await recoverHostedSession({
+        token: typeof input.token === "string" ? input.token : undefined,
+        sessionId: typeof input.sessionId === "string" ? input.sessionId : undefined,
+      });
+      if (!recovered) {
+        sendJson(response, 404, { error: "session_not_found" });
+        return;
+      }
+      sendJson(response, 200, recovered);
       return;
     }
 

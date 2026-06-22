@@ -9,6 +9,7 @@ This roadmap starts from the architecture that is already running. Completed wor
 - The hosted stack runs behind Nginx and Cloudflare Tunnel on a private Linux host.
 - Redis provides the shared hosted-session cache and 16 partitioned orchestrator command Streams.
 - Supabase is the durable lifecycle, audit, and scoring store.
+- Hosted-orchestrator is the sole hosted lifecycle database owner; hosted-sites has no database credential and Web uses orchestrator APIs or public read models for hosted data.
 - Attempt initialization is database-first and protected by a unique hosted-attempt constraint plus a short Redis lease.
 - Terminal hosted results and aggregate attempt scores are first-writer-wins database invariants with explicit conflict recovery.
 - `develop` deploys to development; `main` deploys to production through separate GitHub Environments, runners, database URLs, image channels, ports, and Compose projects.

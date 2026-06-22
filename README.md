@@ -61,8 +61,7 @@ flowchart LR
   Gateway --> Orchestrator["orchestrator API"]
   Sites <--> SessionRedis[("Redis session runtime")]
   Web <--> DB[("Supabase")]
-  Sites -.->|"read-only recovery"| DB
-  Sites -->|"authenticated commands"| Orchestrator
+  Sites -->|"commands and recovery"| Orchestrator
   Orchestrator --> Streams[("Redis Streams")]
   Streams --> Worker["orchestrator worker role"]
   Worker -->|"hosted writes"| DB
