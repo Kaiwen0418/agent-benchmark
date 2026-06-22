@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { selectVisibleHostedSessions } from "@/lib/hosted-progress";
 import { usePlaygroundStore } from "@/lib/playground-store";
 import { RunDetailTabs } from "./RunDetailTabs";
-
-type ConnectMethod = "link" | "browser" | "advanced";
 
 type RunConnectPayload = {
   runId: string;
@@ -92,7 +90,6 @@ export function RunConnectionCard() {
         (entry) => entry.label === "hosted.page.load" || entry.label === "hosted.score",
       ).length,
   );
-  const [method, setMethod] = useState<ConnectMethod>("link");
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
   const [connectError, setConnectError] = useState<RunConnectError | null>(null);
   const [copyState, setCopyState] = useState<string | null>(null);
@@ -153,24 +150,6 @@ export function RunConnectionCard() {
       cancelled = true;
     };
   }, [connectionRefreshKey, runId, retryNonce]);
-
-  const browserPrompt = useMemo(() => {
-    if (!payload) {
-      return "";
-    }
-
-    if (payload.hostedWeb.available && payload.hostedWeb.orchestratorUrl) {
-      return [
-        "Open the hosted AgentBench benchmark suite and complete the current objective.",
-        payload.hostedWeb.orchestratorUrl,
-      ].join("\n");
-    }
-
-    return [
-      "Open the current AgentBench connection page and follow the instructions on it.",
-      payload.connectUrl,
-    ].join("\n");
-  }, [payload]);
 
   if (!runId || executionMode !== "external-agent") {
     return null;
@@ -275,156 +254,28 @@ export function RunConnectionCard() {
             </div>
           ) : null}
 
-          <div className="mt-5 grid gap-2 sm:grid-cols-3">
-            <button
-              type="button"
-              onClick={() => setMethod("link")}
-              className={`rounded-[1rem] border px-4 py-3 text-left text-sm transition ${
-                method === "link"
-                  ? "border-[#111111] bg-[#111111] text-white"
-                  : "border-[#d8d1c4] bg-[#faf7f1] text-[#111111]"
-              }`}
-            >
-              <div className="font-medium">Agent Link</div>
-              <div className={`mt-1 text-xs ${method === "link" ? "text-[#d9d9d9]" : "text-[#6a655c]"}`}>
-                Recommended
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMethod("browser")}
-              className={`rounded-[1rem] border px-4 py-3 text-left text-sm transition ${
-                method === "browser"
-                  ? "border-[#111111] bg-[#111111] text-white"
-                  : "border-[#d8d1c4] bg-[#faf7f1] text-[#111111]"
-              }`}
-            >
-              <div className="font-medium">This Browser</div>
-              <div className={`mt-1 text-xs ${method === "browser" ? "text-[#d9d9d9]" : "text-[#6a655c]"}`}>
-                Agent controls page
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMethod("advanced")}
-              className={`rounded-[1rem] border px-4 py-3 text-left text-sm transition ${
-                method === "advanced"
-                  ? "border-[#111111] bg-[#111111] text-white"
-                  : "border-[#d8d1c4] bg-[#faf7f1] text-[#111111]"
-              }`}
-            >
-              <div className="font-medium">Advanced</div>
-              <div className={`mt-1 text-xs ${method === "advanced" ? "text-[#d9d9d9]" : "text-[#6a655c]"}`}>
-                Raw hosted config
-              </div>
-            </button>
-          </div>
-
           <div className="mt-5 rounded-[1.2rem] bg-[#f6f3ed] p-4">
-            {method === "link" ? (
-              <>
-                <div className="text-sm font-medium text-[#111111]">Send to your agent</div>
-                <p className="mt-2 text-sm leading-7 text-[#585248]">
-                  One prompt, one URL. The agent opens the page and reads the embedded run context.
-                </p>
-                <pre className="mt-4 whitespace-pre-wrap rounded-[1rem] bg-white p-4 text-sm leading-7 text-[#25221d]">
-                  {payload.prompt}
-                </pre>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => void copyText(payload.prompt).then(() => setCopyState("Prompt copied"))}
-                    className="rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
-                  >
-                    Copy Prompt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void copyText(payload.connectUrl).then(() => setCopyState("Link copied"))}
-                    className="rounded-full border border-[#d8d1c4] bg-white px-4 py-2.5 text-sm text-[#111111]"
-                  >
-                    Copy Agent Link
-                  </button>
-                </div>
-                {!payload.hostedWeb.orchestratorUrl && payload.hostedWeb.available ? (
-                  <p className="mt-3 text-xs leading-6 text-[#80534b]">
-                    This hosted suite no longer has an active session URL. Review the run status and summary above.
-                  </p>
-                ) : null}
-              </>
-            ) : null}
-
-            {method === "browser" ? (
-              <>
-                <div className="text-sm font-medium text-[#111111]">Browser agent</div>
-                <p className="mt-2 text-sm leading-7 text-[#585248]">
-                  Tell the agent controlling this browser to open the active hosted session for this suite.
-                </p>
-                <pre className="mt-4 whitespace-pre-wrap rounded-[1rem] bg-white p-4 text-sm leading-7 text-[#25221d]">
-                  {browserPrompt}
-                </pre>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <a
-                    href={payload.hostedWeb.orchestratorUrl ?? payload.connectUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
-                  >
-                    Open Connection Page
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => void copyText(browserPrompt).then(() => setCopyState("Browser prompt copied"))}
-                    className="rounded-full border border-[#d8d1c4] bg-white px-4 py-2.5 text-sm text-[#111111]"
-                  >
-                    Copy Browser Prompt
-                  </button>
-                </div>
-                {!payload.hostedWeb.orchestratorUrl && payload.hostedWeb.available ? (
-                  <p className="mt-3 text-xs leading-6 text-[#80534b]">
-                    There is no active hosted session to open for this run.
-                  </p>
-                ) : null}
-              </>
-            ) : null}
-
-            {method === "advanced" ? (
-              <>
-                <div className="text-sm font-medium text-[#111111]">Raw config</div>
-                <p className="mt-2 text-sm leading-7 text-[#585248]">
-                  Full JSON payload for the run context. Hosted-web runs use the hosted URL as the primary agent target.
-                  Full JSON payload for the run context. Hosted-web runs use the hosted URL as the primary agent target.
-                </p>
-                <pre className="mt-4 overflow-x-auto rounded-[1rem] bg-[#111111] p-4 text-xs leading-6 text-[#d7ff00]">
-                  {JSON.stringify(payload, null, 2)}
-                </pre>
-                <div className="mt-4 rounded-[1rem] bg-white px-4 py-3 text-sm leading-7 text-[#3f3b34]">
-                  Suite: <span className="font-medium">{payload.hostedWeb.suiteSlug ?? "not available"}</span>
-                  <br />
-                  Attempt id: <span className="font-medium">{payload.hostedWeb.attemptId ?? "not allocated"}</span>
-                  <br />
-                  Active session: <span className="font-medium">{payload.hostedWeb.activeSessionId ?? "not allocated"}</span>
-                  <br />
-                  Hosted-web URL: <span className="font-medium">{payload.hostedWeb.orchestratorUrl ?? "not available"}</span>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => void copyText(JSON.stringify(payload, null, 2)).then(() => setCopyState("Config copied"))}
-                    className="rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
-                  >
-                    Copy JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void copyText(payload.configUrl).then(() => setCopyState("Config URL copied"))}
-                    className="rounded-full border border-[#d8d1c4] bg-white px-4 py-2.5 text-sm text-[#111111]"
-                  >
-                    Copy Config URL
-                  </button>
-                </div>
-              </>
-            ) : null}
+            <div className="text-sm font-medium text-[#111111]">Browser agent</div>
+            <p className="mt-2 text-sm leading-7 text-[#585248]">
+              Open the connection page to register the agent and continue into the benchmark, or copy a short prompt for the agent controlling this browser.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <a
+                href={payload.connectUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
+              >
+                Open Connection Page
+              </a>
+              <button
+                type="button"
+                onClick={() => void copyText(payload.prompt).then(() => setCopyState("Browser prompt copied"))}
+                className="rounded-full border border-[#d8d1c4] bg-white px-4 py-2.5 text-sm text-[#111111]"
+              >
+                Copy Browser Prompt
+              </button>
+            </div>
           </div>
 
           {copyState ? <div className="mt-3 text-xs uppercase tracking-[0.18em] text-[#6f695f]">{copyState}</div> : null}
