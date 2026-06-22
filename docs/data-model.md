@@ -1,7 +1,5 @@
 # Data Model
 
-> [中文](./data-model.zh-CN.md) | English
-
 ## Entity Relationships
 
 ```mermaid

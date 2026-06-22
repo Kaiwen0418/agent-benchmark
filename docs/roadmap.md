@@ -1,7 +1,5 @@
 # Roadmap
 
-> [中文](./roadmap.zh-CN.md) | English
-
 This roadmap starts from the architecture that is already running. Completed work is documented in [Architecture](./architecture.md) and is not repeated as TODO items here.
 
 ## Current Baseline
@@ -83,6 +81,18 @@ Completion criteria: an operator can identify a stuck attempt and its last durab
 - Remove duplicated app-specific defaults from the orchestrator; hosted app definitions and benchmark case metadata should own task semantics.
 
 Completion criteria: transport changes do not require lifecycle changes, and incompatible command payloads fail validation before entering Redis Streams.
+
+## P1: Benchmark Quality
+
+Detailed scoring and coverage rules are defined in [Benchmark Scoring And Testing](./benchmark-testing.md). Roadmap status remains here.
+
+| Milestone | Status | Exit criteria |
+| --- | --- | --- |
+| BQ.1 Scorer and task contract | Planned | Every information-retrieval variant has an unambiguous canonical answer, declared normalization, valid source evidence, and positive/negative tests. |
+| BQ.2 Terminal score consistency | Planned | Terminal sessions reject mutation and every API, UI projection, and database row returns the first persisted result. |
+| BQ.3 Testcase expansion | Planned | CI enumerates every app variant across positive/negative paths and development E2E proves one consistent aggregate. |
+
+Complete BQ.1 and BQ.2 before expanding the hosted app catalog so new applications do not inherit ambiguous or mutable terminal scoring.
 
 ## P2: Benchmark and Product Depth
 

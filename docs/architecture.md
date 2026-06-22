@@ -1,7 +1,5 @@
 # Architecture
 
-> [中文](./architecture.zh-CN.md) | English
-
 ## System Boundary
 
 AgentBench is a hosted-web benchmark platform. The evaluated agent owns its browser. AgentBench owns run creation, benchmark websites, session state, telemetry, and scoring.

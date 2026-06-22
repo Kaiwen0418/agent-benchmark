@@ -1,7 +1,5 @@
 # API Reference
 
-> [中文](./api-reference.zh-CN.md) | English
-
 ## Authentication
 
 Public web reads use the current Supabase user or an HTTP-only guest cookie. Service-to-service writes require `x-runner-secret: <RUNNER_SHARED_SECRET>`. The header and environment variable retain a legacy name; they now authenticate hosted services, not a runner component.

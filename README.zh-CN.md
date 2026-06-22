@@ -33,7 +33,7 @@ pnpm dev:web
 - 托管网关：`http://localhost:8080`
 - 健康检查：`http://localhost:8080/health`
 
-环境配置和开发方式参见[快速上手](./docs/getting-started.zh-CN.md)。
+环境配置和开发方式参见[快速上手](./docs/getting-started.md)。
 
 ## 验证
 
@@ -92,18 +92,18 @@ docs/                   架构和运维文档
 - [贡献指南](./CONTRIBUTING.md)
 - [安全报告策略](./SECURITY.md)
 - [行为准则](./CODE_OF_CONDUCT.md)
-- [文档索引](./docs/README.zh-CN.md)
-- [快速上手](./docs/getting-started.zh-CN.md)
-- [架构](./docs/architecture.zh-CN.md)
-- [托管 Web 基准](./docs/hosted-web-benchmark.zh-CN.md)
-- [托管站点应用开发](./docs/hosted-site-app-authoring.zh-CN.md)
-- [部署与扩容](./docs/deployment.zh-CN.md)
-- [基准规范](./docs/benchmark-spec.zh-CN.md)
-- [API 参考](./docs/api-reference.zh-CN.md)
-- [数据模型](./docs/data-model.zh-CN.md)
-- [数据流](./docs/data-flow.zh-CN.md)
-- [安全](./docs/security.zh-CN.md)
-- [路线图](./docs/roadmap.zh-CN.md)
+- [文档索引](./docs/README.md)
+- [快速上手](./docs/getting-started.md)
+- [架构](./docs/architecture.md)
+- [托管 Web 基准](./docs/hosted-web-benchmark.md)
+- [托管站点应用开发](./docs/hosted-site-app-authoring.md)
+- [部署与扩容](./docs/deployment.md)
+- [基准规范](./docs/benchmark-spec.md)
+- [API 参考](./docs/api-reference.md)
+- [数据模型](./docs/data-model.md)
+- [数据流](./docs/data-flow.md)
+- [安全](./docs/security.md)
+- [路线图](./docs/roadmap.md)
 
 ## 许可证
 
