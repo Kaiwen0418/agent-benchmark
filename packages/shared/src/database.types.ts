@@ -690,6 +690,29 @@ export type Database = {
         };
         Relationships: [];
       };
+      public_hosted_run_summaries: {
+        Row: {
+          benchmark_title: string | null;
+          case_id: string | null;
+          observed_user_agent: string | null;
+          run_id: string | null;
+          suite_slug: string | null;
+          suite_version: string | null;
+        };
+        Relationships: [];
+      };
+      public_hosted_run_tasks: {
+        Row: {
+          app: string | null;
+          created_at: string | null;
+          run_id: string | null;
+          score: number | null;
+          status: "passed" | "failed" | "error" | null;
+          summary: string | null;
+          task_slug: string | null;
+        };
+        Relationships: [];
+      };
     };
     Functions: {
       complete_hosted_attempt_session: {

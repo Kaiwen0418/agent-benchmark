@@ -585,26 +585,28 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
   if (!row) return null;
 
   const run = mapRunRow(row);
-  const [{ data: benchmark, error: benchmarkError }, { data: attempt, error: attemptError }, { data: results, error: resultsError }] = await Promise.all([
+  const [{ data: benchmark, error: benchmarkError }, { data: summary, error: summaryError }, { data: results, error: resultsError }] = await Promise.all([
     supabase.from("benchmark_cases").select("title, description").eq("id", run.caseId).maybeSingle(),
-    supabase.from("benchmark_attempts").select("suite_slug, suite_version").eq("run_id", runId).eq("status", "completed").maybeSingle(),
-    supabase.from("hosted_web_results").select("app, task_slug, status, score, summary, created_at").eq("run_id", runId).order("created_at", { ascending: true }),
+    supabase.from("public_hosted_run_summaries").select("suite_slug, suite_version").eq("run_id", runId).maybeSingle(),
+    supabase.from("public_hosted_run_tasks").select("app, task_slug, status, score, summary, created_at").eq("run_id", runId).order("created_at", { ascending: true }),
   ]);
-  if (benchmarkError || attemptError || resultsError) {
-    throw benchmarkError ?? attemptError ?? resultsError;
+  if (benchmarkError || summaryError || resultsError) {
+    throw benchmarkError ?? summaryError ?? resultsError;
   }
   if (!benchmark) return null;
 
   return {
     run,
     benchmark,
-    suite: attempt ? { slug: attempt.suite_slug, version: attempt.suite_version } : null,
+    suite: summary && summary.suite_slug && summary.suite_version
+      ? { slug: summary.suite_slug, version: summary.suite_version }
+      : null,
     tasks: (results ?? []).map((result) => ({
       app: result.app ?? "hosted-app",
       taskSlug: result.task_slug ?? "hosted-task",
-      status: result.status,
-      score: result.score,
-      summary: result.summary,
+      status: result.status!,
+      score: result.score!,
+      summary: result.summary!,
     })),
   };
 }
@@ -628,9 +630,8 @@ export async function listPublicLeaderboardVersions(): Promise<string[]> {
   }
 
   const { data: attempts, error: attemptError } = await supabase
-    .from("benchmark_attempts")
+    .from("public_hosted_run_summaries")
     .select("suite_version")
-    .eq("status", "completed")
     .in("run_id", publicRuns.map((run) => run.id))
     .order("suite_version", { ascending: false });
 
@@ -638,7 +639,7 @@ export async function listPublicLeaderboardVersions(): Promise<string[]> {
     throw attemptError ?? new Error("Failed to load leaderboard versions");
   }
 
-  return [...new Set(attempts.map((attempt) => attempt.suite_version))]
+  return [...new Set(attempts.map((attempt) => attempt.suite_version).filter((version): version is string => Boolean(version)))]
     .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }));
 }
 
@@ -648,16 +649,15 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
   let versionRunIds: string[] | null = null;
   if (suiteVersion) {
     const { data: versionAttempts, error: versionError } = await supabase
-      .from("benchmark_attempts")
+      .from("public_hosted_run_summaries")
       .select("run_id")
-      .eq("status", "completed")
       .eq("suite_version", suiteVersion)
       .limit(1000);
 
     if (versionError || !versionAttempts) {
       throw versionError ?? new Error("Failed to load leaderboard version");
     }
-    versionRunIds = [...new Set(versionAttempts.map((attempt) => attempt.run_id))];
+    versionRunIds = [...new Set(versionAttempts.map((attempt) => attempt.run_id).filter((id): id is string => Boolean(id)))];
     if (versionRunIds.length === 0) {
       return [];
     }
@@ -682,35 +682,23 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
     throw error ?? new Error("Failed to load leaderboard");
   }
 
-  const caseIds = [...new Set(runs.map((run) => run.case_id))];
-  const [{ data: cases, error: caseError }, { data: attempts, error: attemptError }, { data: sessions, error: sessionError }] = await Promise.all([
-    caseIds.length > 0
-      ? supabase.from("benchmark_cases").select("id, title").in("id", caseIds)
-      : Promise.resolve({ data: [], error: null }),
-    runs.length > 0
-      ? supabase.from("benchmark_attempts").select("run_id, suite_version").in("run_id", runs.map((run) => run.id))
-      : Promise.resolve({ data: [], error: null }),
-    runs.length > 0
-      ? supabase.from("hosted_web_sessions").select("run_id, first_seen_user_agent, sequence_index").in("run_id", runs.map((run) => run.id)).order("sequence_index", { ascending: true })
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-  if (caseError || attemptError || sessionError) {
-    throw caseError ?? attemptError ?? sessionError;
+  const { data: summaries, error: summaryError } = runs.length > 0
+    ? await supabase
+      .from("public_hosted_run_summaries")
+      .select("run_id, benchmark_title, suite_version, observed_user_agent")
+      .in("run_id", runs.map((run) => run.id))
+    : { data: [], error: null };
+  if (summaryError) {
+    throw summaryError;
   }
 
-  const caseTitles = new Map((cases ?? []).map((item) => [item.id, item.title]));
-  const suiteVersions = new Map((attempts ?? []).map((item) => [item.run_id, item.suite_version]));
-  const sessionBrowsers = new Map<string, ReturnType<typeof parseBrowserEnvironment>>();
-  for (const session of sessions ?? []) {
-    if (!sessionBrowsers.has(session.run_id) && session.first_seen_user_agent) {
-      sessionBrowsers.set(session.run_id, parseBrowserEnvironment(session.first_seen_user_agent));
-    }
-  }
+  const summaryByRun = new Map((summaries ?? []).map((item) => [item.run_id, item]));
   return runs.map((run, index) => {
     const browser = run.browser_environment && typeof run.browser_environment === "object" && !Array.isArray(run.browser_environment)
       ? run.browser_environment as Record<string, unknown>
       : {};
-    const observedBrowser = sessionBrowsers.get(run.id);
+    const summary = summaryByRun.get(run.id);
+    const observedBrowser = parseBrowserEnvironment(summary?.observed_user_agent ?? null);
     return {
       runId: run.id,
       rank: index + 1,
@@ -719,8 +707,8 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
       durationMs: run.started_at && run.completed_at
         ? Math.max(0, new Date(run.completed_at).getTime() - new Date(run.started_at).getTime())
         : null,
-      benchmark: caseTitles.get(run.case_id) ?? "Hosted benchmark",
-      suiteVersion: suiteVersions.get(run.id) ?? null,
+      benchmark: summary?.benchmark_title ?? "Hosted benchmark",
+      suiteVersion: summary?.suite_version ?? null,
       agentName: run.agent_name ?? "Unreported agent",
       agentVersion: run.agent_version ?? "unknown",
       baseModel: run.base_model ?? "Unreported model",

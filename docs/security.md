@@ -12,7 +12,7 @@ flowchart LR
   Web -->|"shared-secret init"| Gateway
   Gateway --> OrchestratorAPI["orchestrator API"]
   Sites --> SessionRedis[("Redis session runtime")]
-  Sites -.->|"service-role read recovery"| DB[("Supabase")]
+  Sites -->|"authenticated recovery"| Orchestrator
   Sites -->|"shared-secret commands"| OrchestratorAPI
   OrchestratorAPI --> CommandRedis[("Redis command Streams")]
   CommandRedis --> Workers["orchestrator workers"]

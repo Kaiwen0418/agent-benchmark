@@ -1,8 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import { hostname } from "node:os";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@agentbench/shared";
 import {
   isTerminalHostedSessionStatus,
   type HostedAttemptOverviewSession,
@@ -35,14 +33,11 @@ const orchestratorBaseUrl = process.env.HOSTED_ORCHESTRATOR_URL ?? "http://local
 const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000";
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const instanceId = process.env.HOSTED_SITES_INSTANCE_ID ?? `${hostname()}:${process.pid}`;
 const redisUrl = process.env.HOSTED_SESSION_REDIS_URL ?? process.env.REDIS_URL;
 const sessionRedisTtlMs = Number(process.env.HOSTED_SESSION_REDIS_TTL_MS ?? 1000 * 60 * 60 * 6);
 
 const sessions = new Map<string, HostedSession>();
-let supabaseAdmin: SupabaseClient<Database> | null | undefined;
 const sessionCache = redisUrl
   ? createRedisSessionCache({
       url: redisUrl,
@@ -56,28 +51,6 @@ function now() {
 
 function makeId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-}
-
-function getSupabaseAdmin() {
-  if (supabaseAdmin !== undefined) {
-    return supabaseAdmin;
-  }
-
-  supabaseAdmin =
-    supabaseUrl && supabaseServiceRoleKey
-      ? createClient(supabaseUrl, supabaseServiceRoleKey, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        })
-      : null;
-
-  return supabaseAdmin;
-}
-
-function hashToken(token: string) {
-  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 function clientIp(request: IncomingMessage) {
@@ -105,9 +78,8 @@ const sessionStore = createSessionStore({
   publicBaseUrl,
   now,
   makeId,
-  hashToken,
   viewerTokenSecret,
-  getSupabaseAdmin,
+  recoverSession: orchestratorClient.recoverSession,
   persistSessionSnapshotDurably: orchestratorClient.persistSessionSnapshot,
   persistSessionAccess: orchestratorClient.recordSessionAccess,
   defaultStartPathForApp,

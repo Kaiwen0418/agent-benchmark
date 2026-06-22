@@ -64,7 +64,7 @@ Hosted events, Web run events, snapshots, and access records travel through sepa
 | one orchestrator API exits | gateway/API retry can use another replica when deployed | in-flight HTTP response | retry with stable `x-command-id` where supported |
 | one worker exits | pending entries remain in the consumer group | command latency | restart worker; stale entries are reclaimed |
 | partition lease disappears | readiness reports missing partition; worker exits after lost renewal | command availability for that partition | restore one owner for the partition |
-| Redis connection interruption | session requests may use local/DB fallback; command API can fail or time out | latest runtime state and unpersisted commands | restore Redis, then reconcile against PostgreSQL |
+| Redis connection interruption | session requests may use a local copy or orchestrator-mediated database recovery; command API can fail or time out | latest runtime state and unpersisted commands | restore Redis, then reconcile against PostgreSQL |
 | Redis container replacement | no configured persistent-volume guarantee | active sessions, Streams, replies, retry state | recover persisted snapshots; manually assess missing commands |
 | snapshot command fails | Redis request may still complete | newest app-state recovery point | retry/reconcile; do not claim zero-RPO recovery |
 | terminal command repeats | PostgreSQL transaction/unique constraints return the winner | none after first commit | safe retry |
@@ -75,7 +75,7 @@ Hosted events, Web run events, snapshots, and access records travel through sepa
 
 1. PostgreSQL terminal invariants take precedence over Redis and local state.
 2. Redis active state takes precedence over a process-local Map when present.
-3. A database app-state snapshot is a recovery checkpoint, not a live-session replica.
+3. An orchestrator-provided database app-state snapshot is a recovery checkpoint, not a live-session replica.
 4. Callback and telemetry freshness must never be interpreted as terminal commit status.
 5. Redis transport success does not imply that a durable database side effect occurred; the worker response does.
 

@@ -32,6 +32,7 @@ function createMemorySessionCache(): SessionCache {
 function createStore(params: {
   sessions: Map<string, HostedSession>;
   sessionCache: SessionCache;
+  recoverSession?: Parameters<typeof createSessionStore>[0]["recoverSession"];
 }) {
   return createSessionStore({
     sessions: params.sessions,
@@ -39,8 +40,7 @@ function createStore(params: {
     publicBaseUrl: "http://localhost:3003",
     now: () => "2026-06-01T00:00:00.000Z",
     makeId: (prefix) => `${prefix}_1`,
-    hashToken: (token) => `hashed:${token}`,
-    getSupabaseAdmin: () => null,
+    recoverSession: params.recoverSession ?? (async () => null),
     persistSessionSnapshotDurably: async () => undefined,
     persistSessionAccess: async () => undefined,
     defaultStartPathForApp,
@@ -77,6 +77,39 @@ test("session store reads sessions from shared cache without Supabase", async ()
   assert.equal(loaded.id, created.id);
   assert.equal(loaded.token, created.token);
   assert.equal(loaded.accessCount, 1);
+});
+
+test("session store recovers a cache miss through the orchestrator contract", async () => {
+  const recovered = await createStore({
+    sessions: new Map(),
+    sessionCache: createMemorySessionCache(),
+    recoverSession: async ({ token }) => token === "durable-token" ? {
+      id: "session-1",
+      run_id: "run-1",
+      case_id: "case-1",
+      attempt_id: "attempt-1",
+      app: "shopping-lite",
+      task_slug: "shopping-constrained-checkout",
+      task_version: "v1",
+      sequence_index: 0,
+      weight: 1,
+      required: true,
+      seed_version: "shopping-lite-v1",
+      status: "active",
+      metadata: null,
+      created_at: "2026-06-01T00:00:00.000Z",
+      expires_at: null,
+      access_count: 0,
+      last_accessed_at: null,
+      first_seen_ip: null,
+      last_seen_ip: null,
+      first_seen_user_agent: null,
+      last_seen_user_agent: null,
+    } : null,
+  }).getSessionByToken("durable-token", {} as IncomingMessage);
+
+  assert.equal(recovered?.id, "session-1");
+  assert.equal(recovered?.persisted, true);
 });
 
 test("session snapshots update the shared cache", async () => {
