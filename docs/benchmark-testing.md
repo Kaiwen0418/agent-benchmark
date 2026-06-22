@@ -55,9 +55,16 @@ CI must fail when a declared variant lacks both positive and negative scorer cov
 
 Tests and local Web data import the catalog directly. `supabase/seed.sql` is generated from it with `pnpm catalog:generate`; CI runs `pnpm catalog:check` and rejects manual or stale SQL. Production schema migrations remain immutable historical records and are not parsed as testcase source code.
 
+## Immutable Releases
+
+Publishing converts the validated catalog into an immutable `benchmark_case_revisions` row identified by a revision name and SHA-256 content hash. `pnpm catalog:publish` uses the service-role-only publication RPC; repeating the same revision or content is idempotent, while reusing an identity with different content is rejected.
+
+`benchmark_cases.current_revision_id` selects the release for new runs. The Web sends only this revision ID during attempt initialization. The orchestrator loads the private manifest directly, validates it again, generates the seeded question snapshot, and writes `benchmark_attempts.case_revision_id`. Updating the current release therefore does not change the manifest associated with an earlier attempt.
+
 ## Commands And Scheduled Coverage
 
-- `pnpm --filter hosted-sites test` reads the canonical suite from `supabase/seed.sql`, executes positive and negative scoring for all 12 current variants, and repeats each passing state across all five layouts and both themes.
+- `pnpm --filter hosted-sites test` imports the canonical catalog, executes positive and negative scoring for all 12 current variants, and repeats each passing state across all five layouts and both themes.
+- `pnpm catalog:publish` validates and publishes the current catalog release with service-role credentials.
 - `pnpm verify:ci` runs the complete repository gate, including Redis command tests, PostgreSQL lifecycle races, local hosted smoke, and production builds.
 - `Hosted Variant Sweep` runs four deterministic full-pass attempts against the development environment every Monday and on demand. Seeds `full-pool-0`, `full-pool-1`, `full-pool-2`, and `full-pool-4` cover every current variant without using Web guest quota.
 - Each lifecycle smoke logs selected variant IDs and requires four unique `hosted_web_results` rows plus one `benchmark_attempt_scores` row.

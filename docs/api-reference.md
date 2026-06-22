@@ -136,20 +136,13 @@ Write endpoints append a command to Redis Streams and wait for the worker result
 {
   "runId": "uuid",
   "caseId": "uuid",
+  "caseRevisionId": "uuid",
   "callbackSecret": "optional",
-  "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v1",
-  "sessions": [
-    {
-      "app": "shopping-lite",
-      "taskSlug": "shopping-constrained-checkout",
-      "sequenceIndex": 0,
-      "weight": 1,
-      "required": true
-    }
-  ]
+  "generationSeed": "optional deterministic seed"
 }
 ```
+
+The orchestrator loads the service-role-only manifest identified by `caseRevisionId`, verifies that it belongs to `caseId`, validates the typed suite schema, and rejects missing or invalid revisions before creating sessions. Clients cannot supply or override suite sessions.
 
 ### Complete Session Command
 

@@ -1,4 +1,5 @@
 import { hostedWebSuiteCase, nativeBenchmarkCases } from "./index.js";
+import { createHostedWebCatalogRelease } from "./release.js";
 
 function sqlString(value: string) {
   return `'${value.replaceAll("'", "''")}'`;
@@ -15,6 +16,7 @@ export function generateSupabaseSeedSql() {
     true
   )`).join(",\n");
   const metadata = JSON.stringify(hostedWebSuiteCase.metadata, null, 2);
+  const release = createHostedWebCatalogRelease();
 
   return `-- Generated from packages/test-cases. Run \`pnpm catalog:generate\`; do not edit by hand.
 insert into public.benchmark_cases (id, slug, title, description, category, difficulty, is_public)
@@ -49,8 +51,14 @@ set
   category = excluded.category,
   difficulty = excluded.difficulty,
   provider = excluded.provider,
-  metadata = excluded.metadata,
   is_public = excluded.is_public;
+
+select public.publish_benchmark_case_revision(
+  '${hostedWebSuiteCase.id}',
+  '${release.revision}',
+  $catalog$${metadata}$catalog$::jsonb,
+  '${release.contentHash}'
+);
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)
 values (

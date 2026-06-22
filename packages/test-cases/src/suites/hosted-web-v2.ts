@@ -15,6 +15,8 @@ export const hostedWebSuiteMetadata = hostedSuiteMetadataSchema.parse({
   ],
 });
 
+export const hostedWebSuiteRevision = "hosted-web-suite-v2";
+
 export const hostedWebSuiteCase = {
   id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
   slug: "shopping-constrained-checkout",

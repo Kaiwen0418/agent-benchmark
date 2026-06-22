@@ -12,14 +12,15 @@ sequenceDiagram
   U->>W: POST /api/runs
   W->>D: insert benchmark_run
   U->>W: GET /api/runs/:id/connect
-  W->>O: POST /api/attempts/init
+  W->>O: POST /api/attempts/init with caseRevisionId
+  O->>D: load and validate immutable revision
   O->>D: insert benchmark_attempt
   O->>D: insert ordered hosted_web_sessions
   O-->>W: attempt and session URLs
   W-->>U: connection payload
 ```
 
-The first session is `active`; later sessions are `created`. Raw session tokens are returned to the client but only token hashes are stored durably.
+The Web never sends the private suite manifest. The orchestrator loads the selected revision with service-role access, validates it against the typed catalog schema, generates the seeded question snapshot, and binds the attempt to that revision before creating sessions. The first session is `active`; later sessions are `created`. Raw session tokens are returned to the client but only token hashes are stored durably.
 
 ## 2. Task Request Across Replicas
 

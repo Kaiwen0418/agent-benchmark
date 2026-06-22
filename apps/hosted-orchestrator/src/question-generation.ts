@@ -16,7 +16,7 @@ type QuestionSession = {
   taskSlug: string;
   sequenceIndex: number;
   title: string | null;
-  goal: string | null;
+  goal?: string | null;
   seedVersion: string | null;
   metadata: Record<string, unknown>;
 };
