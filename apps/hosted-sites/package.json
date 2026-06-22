@@ -13,6 +13,7 @@
   "dependencies": {
     "@agentbench/scoring": "workspace:*",
     "@agentbench/shared": "workspace:*",
+    "@agentbench/test-cases": "workspace:*",
     "@supabase/supabase-js": "^2.108.2",
     "redis": "^6.0.0"
   },

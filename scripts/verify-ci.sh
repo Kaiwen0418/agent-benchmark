@@ -16,6 +16,10 @@ bash scripts/test-lifecycle-postgres.sh
 echo "== Benchmark case privacy =="
 bash scripts/test-benchmark-case-privacy.sh
 
+echo "== Benchmark catalog =="
+pnpm --filter @agentbench/test-cases test
+pnpm catalog:check
+
 echo "== Web library tests =="
 pnpm --filter web test
 

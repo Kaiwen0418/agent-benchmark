@@ -1,23 +1,10 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
+import { hostedWebSuiteMetadata } from "@agentbench/test-cases";
 import { generateAttemptQuestions } from "./question-generation.js";
 
-const root = path.resolve(import.meta.dirname, "../../..");
-const seedSql = fs.readFileSync(path.join(root, "supabase/seed.sql"), "utf8");
-const migrationSql = [
-  "20260611000010_add_hosted_question_variants.sql",
-  "20260622000018_add_wiki_answer_contracts.sql",
-].map((file) => fs.readFileSync(path.join(root, "supabase/migrations", file), "utf8")).join("\n");
-
 function readHostedSuiteSeed() {
-  const jsonValues = [...seedSql.matchAll(/'(\{[\s\S]*?\})'::jsonb/g)].map((match) =>
-    JSON.parse(match[1].replaceAll("''", "'")) as Record<string, unknown>,
-  );
-  const suite = jsonValues.find((value) => value.suiteSlug === "hosted-web-suite-v1");
-  assert.ok(suite, "hosted-web suite metadata must exist in supabase/seed.sql");
-  return suite;
+  return hostedWebSuiteMetadata;
 }
 
 test("fresh database seed contains generated question pools without fixed session goals", () => {
@@ -40,17 +27,6 @@ test("fresh database seed contains generated question pools without fixed sessio
       return question.id;
     });
     assert.equal(new Set(ids).size, ids.length);
-  }
-});
-
-test("production data migration contains every seeded question variant", () => {
-  const suite = readHostedSuiteSeed();
-  const sessions = suite.sessions as Array<Record<string, unknown>>;
-  for (const session of sessions) {
-    const metadata = session.metadata as Record<string, unknown>;
-    for (const value of metadata.questionVariants as Array<Record<string, unknown>>) {
-      assert.match(migrationSql, new RegExp(`"id"\\s*:\\s*"${String(value.id)}"`));
-    }
   }
 });
 

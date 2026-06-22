@@ -49,6 +49,12 @@ CI should enumerate declared variants directly instead of relying on a few rando
 
 CI must fail when a declared variant lacks both positive and negative scorer coverage. Development E2E must show that Web, hosted-sites, orchestrator, Redis, and Supabase converge on one terminal score.
 
+## Typed Testcase Catalog
+
+`packages/test-cases` is the canonical authoring source for benchmark cases, hosted task variants, app-specific private task configuration, and suite composition. App task schemas form a discriminated union on the session `app`, so an evaluator configuration cannot be assigned to the wrong hosted application.
+
+Tests and local Web data import the catalog directly. `supabase/seed.sql` is generated from it with `pnpm catalog:generate`; CI runs `pnpm catalog:check` and rejects manual or stale SQL. Production schema migrations remain immutable historical records and are not parsed as testcase source code.
+
 ## Commands And Scheduled Coverage
 
 - `pnpm --filter hosted-sites test` reads the canonical suite from `supabase/seed.sql`, executes positive and negative scoring for all 12 current variants, and repeats each passing state across all five layouts and both themes.

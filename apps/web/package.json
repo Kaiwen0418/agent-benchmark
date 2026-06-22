@@ -13,6 +13,7 @@
   "dependencies": {
     "@agentbench/protocol": "workspace:*",
     "@agentbench/shared": "workspace:*",
+    "@agentbench/test-cases": "workspace:*",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.108.2",
     "@tanstack/react-query": "^5.101.0",

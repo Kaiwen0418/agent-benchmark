@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { parseQuestionVariants } from "@agentbench/test-cases";
 
 export type QuestionVariant = {
   id: string;
@@ -29,45 +30,6 @@ type GeneratedQuestionSession<TSession extends QuestionSession> = Omit<
   seedVersion: string | null;
   metadata: Record<string, unknown>;
 };
-
-function readQuestionVariants(metadata: Record<string, unknown>): QuestionVariant[] {
-  if (!Array.isArray(metadata.questionVariants)) {
-    throw new Error("Hosted session is missing metadata.questionVariants.");
-  }
-
-  const variants = metadata.questionVariants.map((value, index): QuestionVariant => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw new Error(`Question variant at index ${index} must be an object.`);
-    }
-    const variant = value as Record<string, unknown>;
-    if (typeof variant.id !== "string" || variant.id.trim().length === 0) {
-      throw new Error(`Question variant at index ${index} must have a non-empty id.`);
-    }
-    if (typeof variant.goal !== "string" || variant.goal.trim().length === 0) {
-      throw new Error(`Question variant ${variant.id} must have a non-empty goal.`);
-    }
-    if (!variant.taskConfig || typeof variant.taskConfig !== "object" || Array.isArray(variant.taskConfig)) {
-      throw new Error(`Question variant ${variant.id} must have a taskConfig object.`);
-    }
-    if (Object.keys(variant.taskConfig).length === 0) {
-      throw new Error(`Question variant ${variant.id} must not have an empty taskConfig.`);
-    }
-    return {
-      id: variant.id,
-      goal: variant.goal,
-      title: typeof variant.title === "string" ? variant.title : null,
-      taskConfig: variant.taskConfig as Record<string, unknown>,
-    };
-  });
-
-  if (variants.length < 2) {
-    throw new Error("Hosted session must define at least two question variants.");
-  }
-  if (new Set(variants.map((variant) => variant.id)).size !== variants.length) {
-    throw new Error("Hosted session question variant ids must be unique.");
-  }
-  return variants;
-}
 
 function variantIndex(seed: string, session: QuestionSession, count: number) {
   const digest = crypto
@@ -100,7 +62,7 @@ export function generateAttemptQuestions<TSession extends QuestionSession>(
   return {
     generationSeed,
     sessions: sessions.map((session) => {
-      const variants = readQuestionVariants(session.metadata);
+      const variants = parseQuestionVariants(session.app, session.metadata.questionVariants) as QuestionVariant[];
       const selectedUiVariant = uiVariant(generationSeed, session);
       const selectedUiTheme = uiTheme(generationSeed, session);
       const variant = variants[variantIndex(generationSeed, session, variants.length)];

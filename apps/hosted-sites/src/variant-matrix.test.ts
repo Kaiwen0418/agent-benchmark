@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
+import { hostedWebSuiteMetadata } from "@agentbench/test-cases";
 import { buildInitialSessionState, evaluateSession } from "./runtime/app-registry.js";
 import type { HostedAppId, HostedSession } from "./runtime/types.js";
 
@@ -18,18 +17,11 @@ type DeclaredSession = {
   metadata: { questionVariants: DeclaredVariant[] };
 };
 
-const root = path.resolve(import.meta.dirname, "../../..");
-const seedSql = fs.readFileSync(path.join(root, "supabase/seed.sql"), "utf8");
 const uiVariants = ["workspace", "sidebar", "compact", "dashboard", "editorial"] as const;
 const uiThemes = ["light", "dark"] as const;
 
 function readDeclaredSessions() {
-  const values = [...seedSql.matchAll(/'(\{[\s\S]*?\})'::jsonb/g)].map((match) =>
-    JSON.parse(match[1].replaceAll("''", "'")) as Record<string, unknown>,
-  );
-  const suite = values.find((value) => value.suiteSlug === "hosted-web-suite-v1");
-  assert.ok(suite && Array.isArray(suite.sessions));
-  return suite.sessions as DeclaredSession[];
+  return hostedWebSuiteMetadata.sessions as DeclaredSession[];
 }
 
 function configString(config: Record<string, unknown>, key: string) {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { wikiQuestionVariants } from "@agentbench/test-cases";
 import { generateAttemptQuestions } from "./question-generation.js";
 
 const session = {
@@ -10,10 +11,7 @@ const session = {
   goal: "Legacy fixed question that must never be used",
   seedVersion: "wiki-v1",
   metadata: {
-    questionVariants: [
-      { id: "alpha", goal: "Question A", taskConfig: { answer: "A" } },
-      { id: "beta", goal: "Question B", taskConfig: { answer: "B" } },
-    ],
+    questionVariants: wikiQuestionVariants,
   },
 };
 
@@ -45,7 +43,7 @@ test("different attempt seeds can select different variants", () => {
       return selection.variantId;
     }),
   );
-  assert.deepEqual(selected, new Set(["alpha", "beta"]));
+  assert.deepEqual(selected, new Set(wikiQuestionVariants.map((variant) => variant.id)));
 });
 
 test("UI presentation selection is deterministic and covers every layout and theme", () => {
