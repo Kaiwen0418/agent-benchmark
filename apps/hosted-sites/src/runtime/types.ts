@@ -6,6 +6,10 @@ import type { WikiAnswerSubmission, WikiArticle } from "../apps/wiki-lite/types.
 
 export type HostedSessionStatus = HostedAttemptSessionStatus;
 
+export function isTerminalHostedSessionStatus(status: HostedSessionStatus) {
+  return status === "completed" || status === "failed" || status === "expired";
+}
+
 export type HostedAppId = "shopping-lite" | "wiki-lite" | "forum-lite" | "repo-lite";
 
 export type ShoppingAppSessionState = {

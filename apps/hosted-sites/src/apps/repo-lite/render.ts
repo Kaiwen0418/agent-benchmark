@@ -137,9 +137,8 @@ export function renderMRDetail(
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
-  evaluateSession: (session: RepoSession) => { status: string; score: number; summary: string },
+  score: { status: string; score: number; summary: string },
 ) {
-  const score = evaluateSession(session);
   const changedFilesHtml = mr.changedFiles
     .map(
       (file) => `<div style="margin-top:12px;">

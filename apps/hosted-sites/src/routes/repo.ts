@@ -15,6 +15,8 @@ type RepoRoutesDeps = {
   forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
   completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
   evaluateSession: (session: HostedSession) => HostedWebScoreResult;
+  resolveSessionResult: (session: HostedSession) => Promise<HostedWebScoreResult>;
+  rejectTerminalMutation: (session: HostedSession, response: ServerResponse) => boolean;
   readForm: (request: IncomingMessage) => Promise<URLSearchParams>;
   badRequest: (response: ServerResponse, message: string) => void;
   notFound: (response: ServerResponse) => void;
@@ -45,7 +47,6 @@ export function createRepoRoutes(deps: RepoRoutesDeps) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
-
       const filePath = decodeURIComponent(fileEditMatch[1]);
       const file = session.state.files.find((candidate) => candidate.path === filePath);
       if (!file) {
@@ -63,6 +64,7 @@ export function createRepoRoutes(deps: RepoRoutesDeps) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
+      if (deps.rejectTerminalMutation(session, response)) return true;
 
       const filePath = decodeURIComponent(fileEditMatch[1]);
       const form = await deps.readForm(request);
@@ -109,6 +111,7 @@ export function createRepoRoutes(deps: RepoRoutesDeps) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
+      if (deps.rejectTerminalMutation(session, response)) return true;
 
       const form = await deps.readForm(request);
       const title = form.get("title");
@@ -164,7 +167,14 @@ export function createRepoRoutes(deps: RepoRoutesDeps) {
         return true;
       }
 
-      renderMRDetail(session, mr, response, deps.publicBaseUrl, deps.defaultStartPathForApp, deps.evaluateSession);
+      renderMRDetail(
+        session,
+        mr,
+        response,
+        deps.publicBaseUrl,
+        deps.defaultStartPathForApp,
+        await deps.resolveSessionResult(session),
+      );
       return true;
     }
 

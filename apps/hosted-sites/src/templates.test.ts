@@ -63,3 +63,19 @@ test("viewer layout disables navigation and mutations while retaining the read-o
   assert.match(html, /\.viewer-readonly form, \.viewer-readonly a \{ pointer-events: none; \}/);
   assert.doesNotMatch(html, /window\.AgentBenchHostedSession/);
 });
+
+test("terminal layout disables forms and does not emit telemetry", () => {
+  const session = makeSession("workspace", "light");
+  session.status = "failed";
+  const html = layout({
+    title: "Terminal task",
+    session,
+    body: '<form method="post"><button>Retry</button></form>',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+
+  assert.match(html, /terminal-readonly/);
+  assert.match(html, /persisted result is read-only/);
+  assert.doesNotMatch(html, /abTelemetry/);
+});

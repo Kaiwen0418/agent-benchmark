@@ -124,3 +124,15 @@ test("shared cache stays authoritative over stale local sessions", async () => {
 
   assert.deepEqual(loaded.state.cart, [{ productId: "prod-charger-30w", quantity: 1 }]);
 });
+
+test("terminal status propagates through the shared cache", async () => {
+  const sessionCache = createMemorySessionCache();
+  const firstStore = createStore({ sessions: new Map<string, HostedSession>(), sessionCache });
+  const secondStore = createStore({ sessions: new Map<string, HostedSession>(), sessionCache });
+  const session = await firstStore.createHostedSession({ app: "wiki-lite" });
+
+  await firstStore.markSessionTerminal(session, { status: "failed" });
+  const loaded = await secondStore.getSessionByToken(session.token, {} as IncomingMessage);
+
+  assert.equal(loaded?.status, "failed");
+});
