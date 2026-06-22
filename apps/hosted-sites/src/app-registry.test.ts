@@ -20,13 +20,21 @@ const expectedApps = ["shopping-lite", "wiki-lite", "forum-lite", "repo-lite"] a
 function taskConfigForApp(app: HostedAppId) {
   const configs = {
     "shopping-lite": { targetCategory: "charger", quantity: 1, maxTotal: 30, shippingMethod: "standard", avoidRestricted: true },
-    "wiki-lite": { targetArticleSlug: "agentbench-release-history", expectedAnswer: "June 1, 2026" },
+    "wiki-lite": {
+      targetArticleSlug: "agentbench-release-history",
+      answerContract: {
+        kind: "date",
+        canonicalValue: "June 1, 2026",
+        normalization: "trim-casefold-punctuation",
+        sourceArticleSlug: "agentbench-release-history",
+      },
+    },
     "forum-lite": { targetThreadId: "thr-battery", expectedReplyValue: "https://support.example.com/recall/battery-2026", expectedLockReason: "safety escalation" },
     "repo-lite": { filePath: "README.md", expectedText: "pnpm install", forbiddenText: "npm install", expectedMrTitle: "Fix install instructions", expectedTargetBranch: "main" },
   } satisfies Record<HostedAppId, Record<string, unknown>>;
   return {
     questionGeneration: {
-      schemaVersion: 1,
+      schemaVersion: 3,
       generationSeed: "registry-test",
       variantId: `${app}-test`,
       uiVariant: "workspace",

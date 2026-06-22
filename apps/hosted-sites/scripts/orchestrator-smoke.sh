@@ -258,9 +258,10 @@ async function completeRepo(session, config) {
 
 async function completeWiki(session, config) {
   const articleSlug = requireString(config.targetArticleSlug, "wiki targetArticleSlug");
+  const answerContract = requireObject(config.answerContract, "wiki answerContract");
   await checkedFetch(`${hostedBaseUrl}/wiki/article/${encodeURIComponent(articleSlug)}?session=${encodeURIComponent(session.token)}`);
   await postForm("/wiki/answer", session.token, {
-    answer: requireString(config.expectedAnswer, "wiki expectedAnswer"),
+    answer: requireString(answerContract.canonicalValue, "wiki canonicalValue"),
   });
 }
 

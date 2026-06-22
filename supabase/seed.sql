@@ -57,7 +57,7 @@ values
     'hosted-web',
     '{
       "suiteSlug": "hosted-web-suite-v1",
-      "suiteVersion": "v1",
+      "suiteVersion": "v2",
       "sessions": [
         {
           "app": "shopping-lite",
@@ -117,16 +117,16 @@ values
           "taskSlug": "wiki-release-answer",
           "title": "Wiki Release Lookup",
           "startPath": "/wiki",
-          "taskVersion": "v1",
-          "seedVersion": "wiki-lite-v1",
+          "taskVersion": "v2",
+          "seedVersion": "wiki-lite-v2",
           "sequenceIndex": 3,
           "weight": 1,
           "required": true,
           "metadata": {
             "questionVariants": [
-              {"id": "release-date", "goal": "Use the hosted wiki to find when wiki-lite followed the hosted-web suite alpha, then submit the exact date.", "taskConfig": {"targetArticleSlug": "agentbench-release-history", "expectedAnswer": "June 1, 2026"}},
-              {"id": "dispatch-window", "goal": "Use the hosted wiki to find how quickly standard shipping orders are dispatched, then submit the exact duration phrase.", "taskConfig": {"targetArticleSlug": "shipping-policy", "expectedAnswer": "two business days"}},
-              {"id": "charger-price", "goal": "Use the hosted wiki to find the listed price of the recommended budget USB-C charger, then submit the exact price.", "taskConfig": {"targetArticleSlug": "usb-c-charger-faq", "expectedAnswer": "$24.99"}}
+              {"id": "release-date", "goal": "Use the hosted wiki to find when wiki-lite followed the hosted-web suite alpha, then submit only the date.", "taskConfig": {"targetArticleSlug": "agentbench-release-history", "answerContract": {"kind": "date", "canonicalValue": "June 1, 2026", "normalization": "trim-casefold-punctuation", "sourceArticleSlug": "agentbench-release-history"}}},
+              {"id": "dispatch-window", "goal": "Use the hosted wiki to find how quickly standard shipping orders are dispatched, then submit only the duration without surrounding words.", "taskConfig": {"targetArticleSlug": "shipping-policy", "answerContract": {"kind": "duration", "canonicalValue": "two business days", "normalization": "trim-casefold", "sourceArticleSlug": "shipping-policy"}}},
+              {"id": "charger-price", "goal": "Use the hosted wiki to find the listed price of the recommended budget USB-C charger, then submit only the exact price.", "taskConfig": {"targetArticleSlug": "usb-c-charger-faq", "answerContract": {"kind": "currency", "canonicalValue": "$24.99", "normalization": "trim", "sourceArticleSlug": "usb-c-charger-faq"}}}
             ]
           }
         }

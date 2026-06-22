@@ -88,7 +88,7 @@ Detailed scoring and coverage rules are defined in [Benchmark Scoring And Testin
 
 | Milestone | Status | Exit criteria |
 | --- | --- | --- |
-| BQ.1 Scorer and task contract | Planned | Every information-retrieval variant has an unambiguous canonical answer, declared normalization, valid source evidence, and positive/negative tests. |
+| BQ.1 Scorer and task contract | Complete | Every information-retrieval variant has an unambiguous canonical answer, declared normalization, valid source evidence, and positive/negative tests. |
 | BQ.2 Terminal score consistency | Planned | Terminal sessions reject mutation and every API, UI projection, and database row returns the first persisted result. |
 | BQ.3 Testcase expansion | Planned | CI enumerates every app variant across positive/negative paths and development E2E proves one consistent aggregate. |
 
