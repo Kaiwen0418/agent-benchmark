@@ -5,6 +5,8 @@
 ```mermaid
 erDiagram
   BENCHMARK_CASES ||--o{ BENCHMARK_RUNS : selects
+  BENCHMARK_CASES ||--o{ BENCHMARK_CASE_REVISIONS : publishes
+  BENCHMARK_CASE_REVISIONS ||--o{ BENCHMARK_ATTEMPTS : defines
   BENCHMARK_RUNS ||--o{ BENCHMARK_ATTEMPTS : contains
   BENCHMARK_ATTEMPTS ||--o{ HOSTED_WEB_SESSIONS : orders
   HOSTED_WEB_SESSIONS ||--o{ HOSTED_WEB_EVENTS : emits
@@ -23,6 +25,12 @@ erDiagram
 
 `public_benchmark_cases` is the anonymous/authenticated discovery boundary. It contains display fields plus a sanitized metadata projection with suite identity and ordered app/task summaries. It never contains question variants, generated task configuration, canonical answers, or evaluator parameters.
 
+`benchmark_cases.current_revision_id` points to the release used for new attempts. `metadata` remains a service-role compatibility copy of that current manifest and is not the historical source of truth.
+
+### `benchmark_case_revisions`
+
+An immutable, service-role-only release record containing `revision`, SHA-256 `content_hash`, and the complete validated private `manifest`. Publication is atomic and idempotent through `publish_benchmark_case_revision`; normal updates and deletes are rejected. Historical attempts keep their revision foreign key when the case's current revision changes.
+
 ### `benchmark_runs`
 
 The user-facing execution record. Important fields include owner (`user_id` or `guest_id`), `case_id`, `execution_mode`, lifecycle `status`, final `score`, timestamps, and error information.
@@ -35,6 +43,7 @@ One execution of a hosted suite under a run.
 
 - status: `created | running | scoring | completed | failed | cancelled | timeout`
 - suite identity: `suite_slug`, `suite_version`
+- immutable definition: `case_revision_id`
 - `aggregate_score` and `scoring_summary`
 - metadata control fields: `activeSessionId`, `activeSequenceIndex`, `completedSessionIds`
 
@@ -164,6 +173,7 @@ stateDiagram-v2
 
 - Redis is authoritative for mutable task state during an active session.
 - Supabase is authoritative for durable lifecycle, audit, and scoring records.
+- `benchmark_case_revisions` is authoritative for the suite manifest used by an attempt; its generated question snapshot remains in attempt/session metadata.
 - The orchestrator is the only application writer for attempts, hosted sessions, and hosted results; hosted-sites may read session rows only for cache recovery.
 - The process-local Map is not authoritative and may be lost at any time.
 - `metadata.appState` is a recovery snapshot, not a separately writable domain model.

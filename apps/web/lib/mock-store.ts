@@ -13,6 +13,7 @@ const now = () => new Date().toISOString();
 
 const seedCases: BenchmarkCase[] = [...nativeBenchmarkCases, hostedWebSuiteCase].map((item) => ({
   ...item,
+  currentRevisionId: null,
   createdAt: now(),
 }));
 

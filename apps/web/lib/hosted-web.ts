@@ -53,6 +53,7 @@ export type HostedWebAttemptConnection = {
 
 type HostedWebAttempt = {
   id: string | null;
+  caseRevisionId: string | null;
   suiteSlug: string;
   suiteVersion: string;
   sessionDefinitions: HostedWebSuiteSession[];
@@ -271,7 +272,7 @@ async function findExistingHostedWebAttempt(params: {
 
   const { data, error } = await supabase
     .from("benchmark_attempts")
-    .select("id, suite_slug, suite_version, metadata")
+    .select("id, case_revision_id, suite_slug, suite_version, metadata")
     .eq("run_id", params.run.id)
     .eq("case_id", params.benchmarkCase.id)
     .eq("provider", "hosted-web")
@@ -283,9 +284,25 @@ async function findExistingHostedWebAttempt(params: {
     return null;
   }
 
-  const normalized = normalizeSessionDefinitions(params.benchmarkCase);
+  let normalized = normalizeSessionDefinitions(params.benchmarkCase);
+  if (data.case_revision_id) {
+    const { data: revision, error: revisionError } = await supabase
+      .from("benchmark_case_revisions")
+      .select("manifest")
+      .eq("id", data.case_revision_id)
+      .eq("case_id", params.benchmarkCase.id)
+      .maybeSingle();
+    if (revisionError || !revision) {
+      throw revisionError ?? new Error("Hosted attempt references an unavailable benchmark revision.");
+    }
+    normalized = normalizeSessionDefinitions({
+      ...params.benchmarkCase,
+      metadata: revision.manifest as Record<string, unknown>,
+    });
+  }
   return {
     id: data.id,
+    caseRevisionId: data.case_revision_id,
     suiteSlug: data.suite_slug,
     suiteVersion: data.suite_version,
     sessionDefinitions: normalized.sessionDefinitions,
@@ -504,6 +521,7 @@ async function getOrCreateHostedWebAttempt(params: {
   const { suiteSlug, suiteVersion, sessionDefinitions } = normalizeSessionDefinitions(params.benchmarkCase);
   const localAttempt: HostedWebAttempt = {
     id: supabase ? null : `${params.run.id}:local-hosted-suite`,
+    caseRevisionId: params.benchmarkCase.currentRevisionId,
     suiteSlug,
     suiteVersion,
     sessionDefinitions,
@@ -581,6 +599,20 @@ type HostedAttemptInitResponse = {
   sessions: HostedWebSessionConnection[];
 };
 
+export function buildHostedAttemptInitPayload(params: {
+  runId: string;
+  caseId: string;
+  caseRevisionId: string | null;
+  callbackSecret: string;
+}) {
+  return {
+    runId: params.runId,
+    caseId: params.caseId,
+    caseRevisionId: params.caseRevisionId,
+    callbackSecret: params.callbackSecret,
+  };
+}
+
 async function initializeHostedWebAttempt(params: {
   run: BenchmarkRun;
   benchmarkCase: BenchmarkCase;
@@ -598,26 +630,12 @@ async function initializeHostedWebAttempt(params: {
         "Content-Type": "application/json",
         "x-runner-secret": runnerSecret,
       },
-      body: JSON.stringify({
+      body: JSON.stringify(buildHostedAttemptInitPayload({
         runId: params.run.id,
         caseId: params.benchmarkCase.id,
+        caseRevisionId: params.attempt.caseRevisionId,
         callbackSecret: runnerSecret,
-        suiteSlug: params.attempt.suiteSlug,
-        suiteVersion: params.attempt.suiteVersion,
-        sessions: params.attempt.sessionDefinitions.map((session) => ({
-          app: session.app,
-          taskSlug: session.taskSlug,
-          taskVersion: session.taskVersion,
-          sequenceIndex: session.sequenceIndex,
-          weight: session.weight,
-          required: session.required,
-          title: session.title ?? null,
-          goal: session.goal ?? null,
-          startPath: session.startPath ?? null,
-          seedVersion: session.seedVersion ?? null,
-          metadata: session.metadata ?? {},
-        })),
-      }),
+      })),
       cache: "no-store",
     });
   } catch (error) {
@@ -719,6 +737,14 @@ export async function getOrCreateHostedWebAttemptConnection(params: {
   }
 
   if (!attempt.id && createSupabaseAdminClient()) {
+    if (!attempt.caseRevisionId) {
+      throw new HostedWebSessionError({
+        message: "Hosted benchmark case has no published revision.",
+        hostedSitesUrl: getHostedOrchestratorBaseUrl(),
+        retryable: false,
+        status: 409,
+      });
+    }
     const initialized = await initializeHostedWebAttempt({
       ...params,
       attempt,

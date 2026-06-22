@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hostedSuiteMetadataSchema, hostedWebSuiteMetadata } from "./index.js";
+import { createHostedWebCatalogRelease } from "./release.js";
 
 test("hosted catalog is valid and has unique app/task definitions", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebSuiteMetadata);
@@ -21,4 +22,13 @@ test("hosted catalog rejects cross-app task config", () => {
     expectedLockReason: "wrong app",
   } as never;
   assert.throws(() => hostedSuiteMetadataSchema.parse(invalid));
+});
+
+test("hosted catalog release has a stable revision identity and content hash", () => {
+  const first = createHostedWebCatalogRelease();
+  const second = createHostedWebCatalogRelease();
+
+  assert.equal(first.revision, "hosted-web-suite-v2");
+  assert.match(first.contentHash, /^[0-9a-f]{64}$/);
+  assert.deepEqual(second, first);
 });

@@ -81,6 +81,8 @@ Supabase stores durable control-plane and audit data: runs, attempts, hosted ses
 
 `benchmark_cases` is a private control-plane table because its metadata contains suite manifests and evaluator inputs. Anonymous and authenticated database clients can discover public cases only through `public_benchmark_cases`, which projects display-safe suite and session fields. Service-role code must not return the private manifest through a public API or read model.
 
+Typed catalog releases are stored in immutable `benchmark_case_revisions`. A case points to the release selected for new attempts, while every attempt retains its own revision foreign key and generated question snapshot. The orchestrator, not Web input, is authoritative for loading and validating the private manifest during initialization.
+
 ### Nginx and Cloudflare
 
 Nginx is the only gateway inside the hosted Compose network. It load-balances hosted-sites replicas and routes the orchestrator prefix to the orchestrator service. Cloudflare Tunnel publishes the environment-specific hosted hostname and forwards it to the corresponding host gateway port; TLS terminates at the Cloudflare edge.

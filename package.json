@@ -18,6 +18,7 @@
     "test:coverage": "bash scripts/test-coverage.sh",
     "catalog:generate": "pnpm --filter @agentbench/test-cases generate-seed",
     "catalog:check": "pnpm --filter @agentbench/test-cases check-seed",
+    "catalog:publish": "pnpm --filter @agentbench/test-cases publish",
     "smoke:local": "bash scripts/smoke-local.sh",
     "smoke:lifecycle": "bash apps/hosted-sites/scripts/orchestrator-smoke-full-pass.sh",
     "db:migrate:test": "bash scripts/db-migrate.sh test",

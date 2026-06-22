@@ -15,7 +15,8 @@
     "build": "tsc -p tsconfig.json",
     "test": "pnpm run build && node --import tsx --test src/*.test.ts",
     "generate-seed": "tsx scripts/generate-seed.ts",
-    "check-seed": "tsx scripts/generate-seed.ts --check"
+    "check-seed": "tsx scripts/generate-seed.ts --check",
+    "publish": "tsx scripts/publish.ts"
   },
   "dependencies": {
     "zod": "^3.24.1"

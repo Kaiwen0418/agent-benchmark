@@ -27,6 +27,7 @@ import { generateAttemptQuestions } from "./question-generation.js";
 import { createIdempotentInitializer } from "./idempotent-initializer.js";
 import { createSingleFlight } from "./single-flight.js";
 import { createCallbackOutboxProcessor } from "./callback-outbox.js";
+import { resolveBenchmarkCaseRevision } from "./case-revisions.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -563,7 +564,7 @@ async function findExistingInitializedAttempt(
   }
   const { data, error } = await supabase
     .from("benchmark_attempts")
-    .select("id")
+    .select("id, case_revision_id")
     .eq("run_id", params.runId)
     .eq("case_id", params.caseId)
     .eq("provider", "hosted-web")
@@ -574,10 +575,14 @@ async function findExistingInitializedAttempt(
     throw error;
   }
   if (data) {
+    if (data.case_revision_id !== params.caseRevisionId) {
+      throw new Error("Existing hosted attempt is bound to a different benchmark revision.");
+    }
+    const revision = await loadBenchmarkCaseRevision(params.caseId, params.caseRevisionId);
     return recoverInitializedAttempt({
       runId: params.runId,
       caseId: params.caseId,
-      expectedSessionCount: params.sessions.length,
+      expectedSessionCount: revision.sessions.length,
     });
   }
   return null;
@@ -607,38 +612,50 @@ async function acquireInitializationLease(key: string) {
   };
 }
 
-async function initializeAttempt(params: {
+type InitializeAttemptParams = {
   runId: string | null;
   caseId: string | null;
+  caseRevisionId: string | null;
   callbackSecret: string | null;
-  suiteSlug: string;
-  suiteVersion: string;
   generationSeed?: string;
-  sessions: Array<{
-    app: string;
-    taskSlug: string;
-    taskVersion: string;
-    sequenceIndex: number;
-    weight: number;
-    required: boolean;
-    title: string | null;
-    goal: string | null;
-    startPath: string | null;
-    seedVersion: string | null;
-    metadata: Record<string, unknown>;
-  }>;
-}) {
+};
+
+async function loadBenchmarkCaseRevision(caseId: string, caseRevisionId: string | null) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error("Hosted attempt initialization requires a database connection.");
+  }
+  return resolveBenchmarkCaseRevision({
+    caseId,
+    caseRevisionId,
+    loadRevision: async (revisionId) => {
+      const { data, error } = await supabase
+        .from("benchmark_case_revisions")
+        .select("id, case_id, revision, content_hash, manifest")
+        .eq("id", revisionId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+async function initializeAttempt(params: InitializeAttemptParams) {
   const supabase = getSupabaseAdmin();
   if (!supabase || !params.runId || !params.caseId) {
     throw new Error("Hosted attempt initialization requires database-backed run and case ids.");
   }
   const runId = params.runId;
   const caseId = params.caseId;
-  const generated = generateAttemptQuestions(params.sessions, params.generationSeed);
+  const revision = await loadBenchmarkCaseRevision(caseId, params.caseRevisionId);
+  const generated = generateAttemptQuestions(revision.sessions, params.generationSeed);
   const generatedSessions = generated.sessions;
 
   const metadata = {
     generationSeed: generated.generationSeed,
+    caseRevisionId: revision.id,
+    caseRevision: revision.revision,
+    caseRevisionContentHash: revision.contentHash,
     sessions: generatedSessions.map((session) => ({
       app: session.app,
       taskSlug: session.taskSlug,
@@ -661,9 +678,10 @@ async function initializeAttempt(params: {
     .insert({
       run_id: runId,
       case_id: caseId,
+      case_revision_id: revision.id,
       provider: "hosted-web",
-      suite_slug: params.suiteSlug,
-      suite_version: params.suiteVersion,
+      suite_slug: revision.suiteSlug,
+      suite_version: revision.suiteVersion,
       status: "running",
       metadata,
       started_at: now(),
@@ -692,8 +710,11 @@ async function initializeAttempt(params: {
     const sessionMetadata = {
       ...session.metadata,
       schemaVersion: 1,
-      suiteSlug: params.suiteSlug,
-      suiteVersion: params.suiteVersion,
+      suiteSlug: revision.suiteSlug,
+      suiteVersion: revision.suiteVersion,
+      caseRevisionId: revision.id,
+      caseRevision: revision.revision,
+      caseRevisionContentHash: revision.contentHash,
       title: session.title,
       goal: session.goal,
       startPath,
@@ -785,7 +806,7 @@ async function initializeAttempt(params: {
           attemptId: attemptRow.id,
           app: session.app,
           taskSlug: session.taskSlug,
-          suiteSlug: params.suiteSlug,
+          suiteSlug: revision.suiteSlug,
           sequenceIndex: session.sequenceIndex,
           weight: session.weight,
           status: session.status === "scoring" ? "active" : session.status,
@@ -974,16 +995,16 @@ const attemptLifecycle = createAttemptLifecycle({
 });
 
 const initializeAttemptIdempotently = createIdempotentInitializer({
-  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
+  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}:${params.caseRevisionId}`,
   findExisting: findExistingInitializedAttempt,
-  waitForExisting: (params) => {
+  waitForExisting: async (params) => {
     if (!params.runId || !params.caseId) {
       throw new Error("Hosted attempt recovery requires run and case ids.");
     }
     return recoverInitializedAttempt({
       runId: params.runId,
       caseId: params.caseId,
-      expectedSessionCount: params.sessions.length,
+      expectedSessionCount: (await loadBenchmarkCaseRevision(params.caseId, params.caseRevisionId)).sessions.length,
     });
   },
   acquireLock: acquireInitializationLease,
@@ -991,7 +1012,7 @@ const initializeAttemptIdempotently = createIdempotentInitializer({
 });
 
 const initializeAttemptSingleFlight = createSingleFlight({
-  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
+  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}:${params.caseRevisionId}`,
   run: initializeAttemptIdempotently,
 });
 
@@ -1357,33 +1378,9 @@ const server = createServer(async (request, response) => {
       const initialized = await commandBackbone.execute("attempt.init", {
         runId: typeof input.runId === "string" ? input.runId : null,
         caseId: typeof input.caseId === "string" ? input.caseId : null,
+        caseRevisionId: typeof input.caseRevisionId === "string" ? input.caseRevisionId : null,
         callbackSecret: typeof input.callbackSecret === "string" ? input.callbackSecret : null,
-        suiteSlug: typeof input.suiteSlug === "string" ? input.suiteSlug : "hosted-web-suite",
-        suiteVersion: typeof input.suiteVersion === "string" ? input.suiteVersion : "v1",
         generationSeed: typeof input.generationSeed === "string" ? input.generationSeed : undefined,
-        sessions: Array.isArray(input.sessions)
-          ? input.sessions
-              .filter((session): session is Record<string, unknown> => Boolean(session && typeof session === "object"))
-              .map((session, index) => ({
-                app: typeof session.app === "string" ? session.app : "shopping-lite",
-                taskSlug: typeof session.taskSlug === "string" ? session.taskSlug : `hosted-task-${index + 1}`,
-                taskVersion: typeof session.taskVersion === "string" ? session.taskVersion : "v1",
-                sequenceIndex:
-                  typeof session.sequenceIndex === "number" && Number.isFinite(session.sequenceIndex)
-                    ? session.sequenceIndex
-                    : index,
-                weight: typeof session.weight === "number" ? session.weight : 1,
-                required: typeof session.required === "boolean" ? session.required : true,
-                title: typeof session.title === "string" ? session.title : null,
-                goal: typeof session.goal === "string" ? session.goal : null,
-                startPath: typeof session.startPath === "string" ? session.startPath : null,
-                seedVersion: typeof session.seedVersion === "string" ? session.seedVersion : null,
-                metadata:
-                  session.metadata && typeof session.metadata === "object" && !Array.isArray(session.metadata)
-                    ? (session.metadata as Record<string, unknown>)
-                    : {},
-              }))
-          : [],
       }, typeof input.runId === "string" ? input.runId : typeof input.caseId === "string" ? input.caseId : "attempt.init", commandIdFromRequest(request));
       sendJson(response, initialized.statusCode, initialized.body);
       return;

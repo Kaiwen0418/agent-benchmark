@@ -48,6 +48,7 @@ export const benchmarkCaseSchema = z.object({
   category: z.string(),
   difficulty: z.string(),
   provider: z.enum(["native", "hosted-web", "webarena"]).default("native"),
+  currentRevisionId: z.string().uuid().nullable().default(null),
   metadata: z.record(z.any()).default({}),
   isPublic: z.boolean(),
   createdAt: z.string(),

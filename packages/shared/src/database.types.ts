@@ -7,6 +7,7 @@ export type Database = {
         Row: {
           category: string;
           created_at: string;
+          current_revision_id: string | null;
           description: string;
           difficulty: string;
           id: string;
@@ -19,6 +20,7 @@ export type Database = {
         Insert: {
           category: string;
           created_at?: string;
+          current_revision_id?: string | null;
           description: string;
           difficulty: string;
           id?: string;
@@ -31,6 +33,7 @@ export type Database = {
         Update: {
           category?: string;
           created_at?: string;
+          current_revision_id?: string | null;
           description?: string;
           difficulty?: string;
           id?: string;
@@ -40,6 +43,26 @@ export type Database = {
           slug?: string;
           title?: string;
         };
+        Relationships: [];
+      };
+      benchmark_case_revisions: {
+        Row: {
+          case_id: string;
+          content_hash: string;
+          created_at: string;
+          id: string;
+          manifest: Json;
+          revision: string;
+        };
+        Insert: {
+          case_id: string;
+          content_hash: string;
+          created_at?: string;
+          id?: string;
+          manifest: Json;
+          revision: string;
+        };
+        Update: never;
         Relationships: [];
       };
       benchmark_attempt_scores: {
@@ -78,6 +101,7 @@ export type Database = {
       benchmark_attempts: {
         Row: {
           aggregate_score: number | null;
+          case_revision_id: string | null;
           case_id: string;
           completed_at: string | null;
           created_at: string;
@@ -93,6 +117,7 @@ export type Database = {
         };
         Insert: {
           aggregate_score?: number | null;
+          case_revision_id?: string | null;
           case_id: string;
           completed_at?: string | null;
           created_at?: string;
@@ -108,6 +133,7 @@ export type Database = {
         };
         Update: {
           aggregate_score?: number | null;
+          case_revision_id?: string | null;
           case_id?: string;
           completed_at?: string | null;
           created_at?: string;

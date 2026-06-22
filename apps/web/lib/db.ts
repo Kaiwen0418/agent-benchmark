@@ -18,7 +18,7 @@ import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
 const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
-const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, metadata, is_public, created_at";
+const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, current_revision_id, metadata, is_public, created_at";
 const benchmarkRunSelect = "id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at, metadata, agent_name, agent_version, base_model, browser_environment, is_public";
 
 function getSupabase() {
@@ -120,6 +120,7 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
     category: item.category,
     difficulty: item.difficulty,
     provider: item.provider ?? "native",
+    currentRevisionId: item.current_revision_id,
     metadata: item.metadata ?? {},
     isPublic: item.is_public,
     createdAt: item.created_at,
@@ -147,6 +148,7 @@ export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | 
       category: byId.data.category,
       difficulty: byId.data.difficulty,
       provider: byId.data.provider ?? "native",
+      currentRevisionId: byId.data.current_revision_id,
       metadata: byId.data.metadata ?? {},
       isPublic: byId.data.is_public,
       createdAt: byId.data.created_at,
@@ -171,6 +173,7 @@ export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | 
     category: bySlug.data.category,
     difficulty: bySlug.data.difficulty,
     provider: bySlug.data.provider ?? "native",
+    currentRevisionId: bySlug.data.current_revision_id,
     metadata: bySlug.data.metadata ?? {},
     isPublic: bySlug.data.is_public,
     createdAt: bySlug.data.created_at,

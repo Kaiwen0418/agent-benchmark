@@ -12,23 +12,9 @@ type AttemptHandlersDeps<TReadModel extends HostedAttemptReadModel> = {
   initializeAttempt: (params: {
     runId: string | null;
     caseId: string | null;
+    caseRevisionId: string | null;
     callbackSecret: string | null;
-    suiteSlug: string;
-    suiteVersion: string;
     generationSeed?: string;
-    sessions: Array<{
-      app: string;
-      taskSlug: string;
-      taskVersion: string;
-      sequenceIndex: number;
-      weight: number;
-      required: boolean;
-      title: string | null;
-      goal: string | null;
-      startPath: string | null;
-      seedVersion: string | null;
-      metadata: Record<string, unknown>;
-    }>;
   }) => Promise<{
     attemptId: string;
     suiteSlug: string;
@@ -149,22 +135,9 @@ export function createAttemptHandlers<TReadModel extends HostedAttemptReadModel>
   async function handleInitializeAttempt(params: {
     runId: string | null;
     caseId: string | null;
+    caseRevisionId: string | null;
     callbackSecret: string | null;
-    suiteSlug: string;
-    suiteVersion: string;
-    sessions: Array<{
-      app: string;
-      taskSlug: string;
-      taskVersion: string;
-      sequenceIndex: number;
-      weight: number;
-      required: boolean;
-      title: string | null;
-      goal: string | null;
-      startPath: string | null;
-      seedVersion: string | null;
-      metadata: Record<string, unknown>;
-    }>;
+    generationSeed?: string;
   }): Promise<InitializeAttemptHandlerResponse> {
     return {
       statusCode: 201,

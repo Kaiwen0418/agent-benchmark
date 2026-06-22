@@ -100,12 +100,14 @@ Detailed scoring and coverage rules are defined in [Benchmark Scoring And Testin
 | BQ.1 Scorer and task contract | Complete | Every information-retrieval variant has an unambiguous canonical answer, declared normalization, valid source evidence, and positive/negative tests. |
 | BQ.2 Terminal score consistency | Complete | Terminal sessions reject mutation and every API, UI projection, and database row returns the first persisted result. |
 | BQ.3 Testcase expansion | Complete | CI enumerates every app variant across positive/negative paths and development E2E proves one consistent aggregate. |
-| BQ.4 Typed testcase catalog | In progress | Hosted task definitions and suite composition have one discriminated, validated TypeScript source used by tests, local data, and publishing. |
-| BQ.5 Immutable benchmark releases | Planned | Every attempt references an immutable case revision, and changing the current release cannot alter historical interpretation. |
+| BQ.4 Typed testcase catalog | Complete | Hosted task definitions and suite composition have one discriminated, validated TypeScript source used by tests, local data, and publishing. |
+| BQ.5 Immutable benchmark releases | In progress | Every attempt references an immutable case revision, and changing the current release cannot alter historical interpretation. |
 
 Complete BQ.1 and BQ.2 before expanding the hosted app catalog so new applications do not inherit ambiguous or mutable terminal scoring.
 
 BQ.1-BQ.3 completion evidence: `develop@3ca9329` passed [Hosted deployment run 27937799988](https://github.com/Kaiwen0418/agent-benchmark/actions/runs/27937799988), including generated variant checks, first-result terminal consistency, one result per session, one aggregate score, and the four-app lifecycle smoke.
+
+BQ.4 completion evidence: `develop@8e24b02` passed [Hosted deployment run 27941406084](https://github.com/Kaiwen0418/agent-benchmark/actions/runs/27941406084), including catalog validation, generated-seed drift checks, both hosted image builds, development deployment, and the four-app lifecycle smoke.
 
 ## P2: Benchmark and Product Depth
 
