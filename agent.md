@@ -179,6 +179,8 @@ For hosted-web, telemetry should be lightweight and generic:
 - design every run so it can be debugged after the fact
 - do not add hosted app-specific database tables unless there is a clear persistence requirement that cannot fit session snapshots or final result evidence
 - do not make hosted-sites responsible for attempt lifecycle; use hosted-orchestrator for attempt init/state/commands
+- keep production source directories free of test files; use workspace `tests/unit` or `tests/integration`, and root `tests/e2e` for cross-service scenarios
+- update explicit test discovery and `scripts/check-test-layout.sh` when introducing a new test category
 
 ## Documentation Policy
 
