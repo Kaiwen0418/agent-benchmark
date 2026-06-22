@@ -86,7 +86,7 @@ export function LiveMacScreenContent() {
           <iframe
             src={embeddedLiveViewUrl}
             title="Embedded live run viewer"
-            className="absolute left-0 top-0 h-[220%] w-[220%] origin-top-left scale-[0.455] border-0 bg-[#111111]"
+            className="absolute left-0 top-0 h-[300%] w-[300%] origin-top-left scale-[0.334] border-0 bg-[#111111]"
           />
         </div>
       ) : liveFrameUrl ? (

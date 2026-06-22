@@ -34,12 +34,11 @@ export async function buildRunConnectPayload(params: {
   const goal = getGoal(benchmarkCase);
   const title = benchmarkCase?.title ?? "AgentBench Run";
   const prompt = [
-    "Open the hosted AgentBench benchmark site below and complete the task.",
-    "The site is session-scoped, may contain multiple ordered tasks, and reports telemetry back to AgentBench.",
-    `Before starting, PATCH ${metadataUrl} with JSON fields name, version, and baseModel describing your agent runtime.`,
-    "Stop when the active task is completed or clearly blocked.",
+    "Open the AgentBench connection page below.",
+    "Register the agent identity in the form, then open the active hosted benchmark and complete the current objective.",
+    "Follow the ordered suite instructions and stop when the active task is completed or clearly blocked.",
     "",
-    hostedWeb?.orchestratorUrl ?? connectUrl,
+    connectUrl,
   ].join("\n");
 
   return {
@@ -57,17 +56,17 @@ export async function buildRunConnectPayload(params: {
       ? [
           `Open the hosted benchmark site for run ${run.id}.`,
           `This suite contains ${hostedWeb.sessions.length} hosted session${hostedWeb.sessions.length === 1 ? "" : "s"}.`,
+          "Register the agent name, version, base model, and optional metadata in the form on this page.",
           "Start from the active hosted URL and progress through the ordered suite.",
           "Use only the session URLs allocated for this run.",
-          `Before starting, PATCH ${metadataUrl} with your agent name, agent version, and base model.`,
           "Stop after the active objective is completed or clearly blocked.",
         ]
       : [
           `Open the connection page for run ${run.id}.`,
+          "Register the agent name, version, base model, and optional metadata in the form on this page.",
           "Read the benchmark objective and hosted suite details.",
           "Open the allocated hosted session URL for this run.",
           "Use only the tools and sites exposed for this run.",
-          `Before starting, PATCH ${metadataUrl} with your agent name, agent version, and base model.`,
           "Stop after the objective is completed or clearly blocked by policy.",
         ],
     prompt,

@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { RunMetadataForm } from "@/components/run/RunMetadataForm";
 import { getBenchmarkCase, getBenchmarkRun } from "@/lib/db";
 import { buildRunConnectPayload } from "@/lib/run-connect";
 
@@ -31,6 +32,9 @@ export default async function RunConnectPage({
     benchmarkCase,
     origin,
   });
+  const metadata = { ...run.metadata };
+  delete metadata.identityReportedAt;
+  const metadataLocked = ["completed", "failed", "cancelled", "timeout"].includes(run.status);
 
   return (
     <main className="min-h-screen bg-[#f5f0e6] px-6 py-10 text-[#111111] md:px-10">
@@ -52,6 +56,13 @@ export default async function RunConnectPage({
             </div>
           ) : null}
 
+          <RunMetadataForm
+            runId={run.id}
+            initialAgent={run.agent}
+            initialMetadata={metadata}
+            locked={metadataLocked}
+          />
+
           <div className="mt-8 grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
             <section className="rounded-[1.4rem] border border-[#ddd6ca] bg-white p-5">
               <div className="text-xs uppercase tracking-[0.18em] text-[#756e62]">Instructions For Agents</div>
@@ -72,8 +83,6 @@ export default async function RunConnectPage({
                   <>
                     Suite: <span className="font-medium">{payload.hostedWeb.suiteSlug ?? "hosted-web"}</span>
                     <br />
-                    URL: <span className="font-medium">{payload.hostedWeb.orchestratorUrl ?? "not allocated"}</span>
-                    <br />
                     Attempt: <span className="font-medium">{payload.hostedWeb.attemptId ?? "not allocated"}</span>
                     <br />
                     Active Session: <span className="font-medium">{payload.hostedWeb.activeSessionId ?? "not allocated"}</span>
@@ -86,12 +95,20 @@ export default async function RunConnectPage({
                   </>
                 ) : (
                   <>
-                    Hosted URL: <span className="font-medium">{payload.connectUrl}</span>
-                    <br />
                     Status: <span className="font-medium">{payload.status}</span>
                   </>
                 )}
               </div>
+              {payload.hostedWeb.orchestratorUrl ? (
+                <a
+                  href={payload.hostedWeb.orchestratorUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-flex rounded-full bg-[#111111] px-5 py-2.5 text-sm font-medium text-white"
+                >
+                  Open Active Benchmark
+                </a>
+              ) : null}
             </section>
           </div>
 
