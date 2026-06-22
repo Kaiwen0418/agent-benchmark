@@ -79,6 +79,8 @@ Redis has two isolated responsibilities. Versioned session keys provide the shar
 
 Supabase stores durable control-plane and audit data: runs, attempts, hosted sessions, events, results, aggregate scores, access logs, and artifacts. It stores app state snapshots in session metadata for recovery, but it is not the primary per-request state store.
 
+`benchmark_cases` is a private control-plane table because its metadata contains suite manifests and evaluator inputs. Anonymous and authenticated database clients can discover public cases only through `public_benchmark_cases`, which projects display-safe suite and session fields. Service-role code must not return the private manifest through a public API or read model.
+
 ### Nginx and Cloudflare
 
 Nginx is the only gateway inside the hosted Compose network. It load-balances hosted-sites replicas and routes the orchestrator prefix to the orchestrator service. Cloudflare Tunnel publishes the environment-specific hosted hostname and forwards it to the corresponding host gateway port; TLS terminates at the Cloudflare edge.

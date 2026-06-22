@@ -17,6 +17,12 @@ erDiagram
 
 ## Durable Supabase Records
 
+### `benchmark_cases` and `public_benchmark_cases`
+
+`benchmark_cases` is the private control-plane definition of a benchmark case. Its `metadata` may contain suite manifests, variant pools, canonical answers, and evaluator parameters, so only service-role code can read the base table.
+
+`public_benchmark_cases` is the anonymous/authenticated discovery boundary. It contains display fields plus a sanitized metadata projection with suite identity and ordered app/task summaries. It never contains question variants, generated task configuration, canonical answers, or evaluator parameters.
+
 ### `benchmark_runs`
 
 The user-facing execution record. Important fields include owner (`user_id` or `guest_id`), `case_id`, `execution_mode`, lifecycle `status`, final `score`, timestamps, and error information.
