@@ -12,13 +12,13 @@ SMOKE_MODE="${SMOKE_MODE:-timeout}"
 START_LOCAL_SERVICES="${START_LOCAL_SERVICES:-true}"
 GENERATION_SEED="${GENERATION_SEED:-}"
 
-if [[ -f "${ENV_FILE}" && -z "${NEXT_PUBLIC_SUPABASE_URL:-}" && -z "${SUPABASE_SERVICE_ROLE_KEY:-}" && -z "${RUNNER_SHARED_SECRET:-}" ]]; then
+if [[ -f "${ENV_FILE}" && -z "${SUPABASE_URL:-}" && -z "${SUPABASE_SERVICE_ROLE_KEY:-}" && -z "${RUNNER_SHARED_SECRET:-}" ]]; then
   set -a
   source "${ENV_FILE}"
   set +a
 fi
 
-: "${NEXT_PUBLIC_SUPABASE_URL:?NEXT_PUBLIC_SUPABASE_URL is required}"
+: "${SUPABASE_URL:?SUPABASE_URL is required}"
 : "${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}"
 : "${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET is required}"
 
@@ -47,7 +47,7 @@ if [[ "${START_LOCAL_SERVICES}" == "true" ]]; then
   HOSTED_ORCHESTRATOR_PUBLIC_URL="${ORCHESTRATOR_BASE_URL}" \
   HOSTED_SITES_URL="${HOSTED_BASE_URL}" \
   AGENTBENCH_WEB_URL="${WEB_URL}" \
-  NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
+  SUPABASE_URL="${SUPABASE_URL}" \
   SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}" \
   RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
   pnpm --filter hosted-orchestrator exec tsx src/server.ts >/tmp/agentbench-hosted-orchestrator-smoke.log 2>&1 &
@@ -57,7 +57,7 @@ if [[ "${START_LOCAL_SERVICES}" == "true" ]]; then
   HOSTED_SITES_PUBLIC_URL="${HOSTED_BASE_URL}" \
   HOSTED_ORCHESTRATOR_URL="${ORCHESTRATOR_BASE_URL}" \
   AGENTBENCH_WEB_URL="${WEB_URL}" \
-  NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}" \
+  SUPABASE_URL="${SUPABASE_URL}" \
   SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}" \
   RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
   pnpm --filter hosted-sites exec tsx src/server.ts >/tmp/agentbench-hosted-sites-smoke.log 2>&1 &
@@ -84,7 +84,7 @@ const generationSeed = process.env.GENERATION_SEED || undefined;
 const hostedBaseUrl = process.env.HOSTED_BASE_URL;
 const orchestratorBaseUrl = process.env.ORCHESTRATOR_BASE_URL;
 const runnerSecret = process.env.RUNNER_SHARED_SECRET;
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 async function checkedFetch(url, init = {}) {

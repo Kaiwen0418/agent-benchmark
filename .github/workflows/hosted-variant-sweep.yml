@@ -43,7 +43,7 @@ jobs:
           HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
           HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
           AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
         run: bash apps/hosted-sites/scripts/orchestrator-smoke.sh
