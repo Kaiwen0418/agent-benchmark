@@ -59,15 +59,16 @@ flowchart LR
   Edge --> Gateway["Nginx Gateway"]
   Gateway --> Sites["apps/hosted-sites replicas"]
   Gateway --> Orchestrator["orchestrator API"]
-  Sites <--> Redis[("Redis cache + command streams")]
+  Sites <--> SessionRedis[("Redis session runtime")]
   Web <--> DB[("Supabase")]
   Sites -.->|"read-only recovery"| DB
-  Sites -->|"durable commands"| Orchestrator
+  Sites -->|"authenticated commands"| Orchestrator
   Orchestrator --> Streams[("Redis Streams")]
   Streams --> Worker["orchestrator worker role"]
   Worker -->|"hosted writes"| DB
   Sites -->|"run events"| Web
-  Worker -->|"aggregate completion"| Web
+  DB -->|"callback outbox"| Worker
+  Worker -->|"completion delivery"| Web
 ```
 
 ## Repository Layout
@@ -95,6 +96,8 @@ docs/                   architecture and operational documentation
 - [Documentation Index](./docs/README.md)
 - [Getting Started](./docs/getting-started.md)
 - [Architecture](./docs/architecture.md)
+- [Data Ownership](./docs/data-ownership.md)
+- [Consistency and Failure](./docs/consistency-and-failure.md)
 - [Hosted Web Benchmarks](./docs/hosted-web-benchmark.md)
 - [Hosted Site App Authoring](./docs/hosted-site-app-authoring.md)
 - [Deployment and Scaling](./docs/deployment.md)
