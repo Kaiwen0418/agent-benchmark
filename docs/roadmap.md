@@ -101,7 +101,7 @@ Detailed scoring and coverage rules are defined in [Benchmark Scoring And Testin
 | BQ.2 Terminal score consistency | Complete | Terminal sessions reject mutation and every API, UI projection, and database row returns the first persisted result. |
 | BQ.3 Testcase expansion | Complete | CI enumerates every app variant across positive/negative paths and development E2E proves one consistent aggregate. |
 | BQ.4 Typed testcase catalog | Complete | Hosted task definitions and suite composition have one discriminated, validated TypeScript source used by tests, local data, and publishing. |
-| BQ.5 Immutable benchmark releases | In progress | Every attempt references an immutable case revision, and changing the current release cannot alter historical interpretation. |
+| BQ.5 Immutable benchmark releases | Complete | Every attempt references an immutable case revision, and changing the current release cannot alter historical interpretation. |
 
 Complete BQ.1 and BQ.2 before expanding the hosted app catalog so new applications do not inherit ambiguous or mutable terminal scoring.
 

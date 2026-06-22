@@ -305,7 +305,7 @@ async function loadAttemptState(attemptId) {
 
 async function main() {
   const benchmarkCases = await selectRows("benchmark_cases", {
-    select: "id,slug,title,description,metadata",
+    select: "id,slug,title,description,current_revision_id",
     slug: "eq.shopping-constrained-checkout",
     limit: "1",
   });
@@ -313,7 +313,19 @@ async function main() {
     throw new Error("benchmark case not found");
   }
   const benchmarkCase = benchmarkCases[0];
-  const suite = normalizedSessions(benchmarkCase);
+  const caseRevisionId = requireString(benchmarkCase.current_revision_id, "current benchmark revision");
+  const revisions = await selectRows("benchmark_case_revisions", {
+    select: "id,case_id,manifest",
+    id: `eq.${caseRevisionId}`,
+    case_id: `eq.${benchmarkCase.id}`,
+    limit: "1",
+  });
+  if (!Array.isArray(revisions) || revisions.length !== 1) {
+    throw new Error("current benchmark revision not found");
+  }
+  const revision = revisions[0];
+  const revisionManifest = requireObject(revision.manifest, "benchmark revision manifest");
+  const suite = normalizedSessions({ ...benchmarkCase, metadata: revisionManifest });
 
   const run = await insertRow("benchmark_runs", {
       case_id: benchmarkCase.id,
@@ -328,17 +340,23 @@ async function main() {
       body: JSON.stringify({
         runId: run.id,
         caseId: benchmarkCase.id,
+        caseRevisionId,
         callbackSecret: runnerSecret,
-        suiteSlug: suite.suiteSlug,
-        suiteVersion: suite.suiteVersion,
         generationSeed,
-        sessions: suite.sessions,
       }),
     })
   ).json();
 
   if (initialized.sessions.length !== suite.sessions.length) {
     throw new Error(`Expected ${suite.sessions.length} initialized sessions, got ${initialized.sessions.length}.`);
+  }
+  const attempts = await selectRows("benchmark_attempts", {
+    select: "id,case_revision_id",
+    id: `eq.${initialized.attemptId}`,
+    limit: "1",
+  });
+  if (!Array.isArray(attempts) || attempts.length !== 1 || attempts[0].case_revision_id !== caseRevisionId) {
+    throw new Error("Initialized attempt did not retain the selected benchmark revision.");
   }
   const sessions = [...initialized.sessions].sort(
     (left, right) => left.sequenceIndex - right.sequenceIndex,
