@@ -29,7 +29,7 @@ export const repoTaskConfigSchema = z.object({
 });
 
 export const wikiAnswerContractSchema = z.object({
-  kind: z.enum(["date", "duration", "currency"]),
+  kind: z.enum(["date", "duration", "currency", "text"]),
   canonicalValue: z.string().min(1),
   normalization: z.enum(["trim", "trim-casefold", "trim-casefold-punctuation"]),
   sourceArticleSlug: z.string().min(1),

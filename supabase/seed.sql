@@ -4,7 +4,7 @@ values (
   '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
   'hosted-web-suite',
   'Hosted Web Suite',
-  'Run a four-step hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite.',
+  'Run a five-step hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite.',
   'browser',
   'easy',
   'hosted-web',
@@ -22,10 +22,10 @@ set
 
 select public.publish_benchmark_case_revision(
   '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
-  'hosted-web-suite-v2',
+  'hosted-web-suite-v3',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v2",
+  "suiteVersion": "v3",
   "sessions": [
     {
       "app": "shopping-lite",
@@ -217,10 +217,64 @@ select public.publish_benchmark_case_revision(
           }
         ]
       }
+    },
+    {
+      "app": "wiki-lite",
+      "taskSlug": "wiki-policy-answer",
+      "title": "Wiki Policy Lookup",
+      "startPath": "/wiki",
+      "taskVersion": "v1",
+      "seedVersion": "wiki-lite-v3",
+      "sequenceIndex": 4,
+      "weight": 1,
+      "required": true,
+      "metadata": {
+        "questionVariants": [
+          {
+            "id": "adapter-restriction",
+            "goal": "Use the hosted wiki to find who restricted lab power adapters are reserved for, then submit only the group name.",
+            "taskConfig": {
+              "targetArticleSlug": "power-adapters",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "internal certification teams",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "power-adapters"
+              }
+            }
+          },
+          {
+            "id": "standard-dispatch",
+            "goal": "Use the hosted wiki to find the standard shipping dispatch window, then submit only the duration.",
+            "taskConfig": {
+              "targetArticleSlug": "shipping-policy",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "two business days",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "shipping-policy"
+              }
+            }
+          },
+          {
+            "id": "express-cutoff",
+            "goal": "Use the hosted wiki to find the express order same-day shipping cutoff time, then submit only the time.",
+            "taskConfig": {
+              "targetArticleSlug": "shipping-policy",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "3pm",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "shipping-policy"
+              }
+            }
+          }
+        ]
+      }
     }
   ]
 }$catalog$::jsonb,
-  '2ca49e204251e7d55ceead92ab6ffa98ff854d38fbb1e9dc448eeaf66245f406'
+  '1800ad49697562245e84fda67dc306f0790c86bc892284a7a9bb7f928bcf7be3'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

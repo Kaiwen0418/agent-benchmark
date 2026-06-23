@@ -6,7 +6,7 @@ import { resolveBenchmarkCaseRevision } from "../../src/case-revisions.js";
 const row = {
   id: "revision-1",
   case_id: "case-1",
-  revision: "hosted-web-suite-v2",
+  revision: "hosted-web-suite-v3",
   content_hash: "a".repeat(64),
   manifest: hostedWebSuiteMetadata,
 };

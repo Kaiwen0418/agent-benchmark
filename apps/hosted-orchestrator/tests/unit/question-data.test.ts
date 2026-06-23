@@ -32,7 +32,7 @@ test("fresh database seed contains generated question pools without fixed sessio
 
 test("wiki question variants declare typed answer contracts", () => {
   const suite = readHostedSuiteSeed();
-  assert.equal(suite.suiteVersion, "v2");
+  assert.equal(suite.suiteVersion, "v3");
   const sessions = suite.sessions as Array<Record<string, unknown>>;
   const wiki = sessions.find((session) => session.app === "wiki-lite");
   assert.ok(wiki);
@@ -45,7 +45,7 @@ test("wiki question variants declare typed answer contracts", () => {
     const config = variant.taskConfig as Record<string, unknown>;
     assert.equal("expectedAnswer" in config, false);
     const contract = config.answerContract as Record<string, unknown>;
-    assert.match(String(contract.kind), /^(date|duration|currency)$/);
+    assert.match(String(contract.kind), /^(date|duration|currency|text)$/);
     assert.equal(typeof contract.canonicalValue, "string");
     assert.match(String(contract.normalization), /^(trim|trim-casefold|trim-casefold-punctuation)$/);
     assert.equal(contract.sourceArticleSlug, config.targetArticleSlug);
@@ -55,7 +55,7 @@ test("wiki question variants declare typed answer contracts", () => {
 test("scheduled development seeds cover every declared variant", () => {
   const suite = readHostedSuiteSeed();
   const sessions = suite.sessions as Array<Record<string, unknown>>;
-  const selectedByApp = new Map<string, Set<string>>();
+  const selectedBySession = new Map<string, Set<string>>();
   for (const seed of ["full-pool-0", "full-pool-1", "full-pool-2", "full-pool-4"]) {
     const generated = generateAttemptQuestions(
       sessions as Parameters<typeof generateAttemptQuestions>[0],
@@ -63,18 +63,20 @@ test("scheduled development seeds cover every declared variant", () => {
     );
     for (const session of generated.sessions) {
       const generation = session.metadata.questionGeneration as Record<string, unknown>;
-      const selected = selectedByApp.get(session.app) ?? new Set<string>();
+      const key = `${session.app}/${session.taskSlug}`;
+      const selected = selectedBySession.get(key) ?? new Set<string>();
       selected.add(String(generation.variantId));
-      selectedByApp.set(session.app, selected);
+      selectedBySession.set(key, selected);
     }
   }
 
   for (const session of sessions) {
     const variants = (session.metadata as Record<string, unknown>).questionVariants as Array<Record<string, unknown>>;
+    const key = `${String(session.app)}/${String(session.taskSlug)}`;
     assert.deepEqual(
-      selectedByApp.get(String(session.app)),
+      selectedBySession.get(key),
       new Set(variants.map((variant) => String(variant.id))),
-      String(session.app),
+      key,
     );
   }
 });
