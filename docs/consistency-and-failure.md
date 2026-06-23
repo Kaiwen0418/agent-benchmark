@@ -64,8 +64,9 @@ Hosted events, Web run events, snapshots, and access records travel through sepa
 | one orchestrator API exits | gateway/API retry can use another replica when deployed | in-flight HTTP response | retry with stable `x-command-id` where supported |
 | one worker exits | pending entries remain in the consumer group | command latency | restart worker; stale entries are reclaimed |
 | partition lease disappears | readiness reports missing partition; worker exits after lost renewal | command availability for that partition | restore one owner for the partition |
-| Redis connection interruption | session requests may use a local copy or orchestrator-mediated database recovery; command API can fail or time out | latest runtime state and unpersisted commands | restore Redis, then reconcile against PostgreSQL |
-| Redis container replacement | no configured persistent-volume guarantee | active sessions, Streams, replies, retry state | recover persisted snapshots; manually assess missing commands |
+| Session Redis interruption | session requests may use a local copy or orchestrator-mediated database recovery | latest runtime session state not yet snapshotted | restore session Redis, then recover from PostgreSQL snapshots where possible |
+| Orchestrator Redis interruption | command API can fail or time out; workers stop consuming Streams | unpersisted commands, replies, retry state | restore orchestrator Redis, then reconcile against PostgreSQL |
+| Redis container replacement | no configured persistent-volume guarantee for either Redis workload | active sessions, Streams, replies, retry state | recover persisted snapshots; manually assess missing commands |
 | snapshot command fails | Redis request may still complete | newest app-state recovery point | retry/reconcile; do not claim zero-RPO recovery |
 | terminal command repeats | PostgreSQL transaction/unique constraints return the winner | none after first commit | safe retry |
 | Web completion callback fails | outbox remains pending/dead after retries | Web status freshness | maintenance retry, inspect dead outbox row |
@@ -81,9 +82,9 @@ Hosted events, Web run events, snapshots, and access records travel through sepa
 
 ## Planned Hardening
 
-- [Issue #60](https://github.com/Kaiwen0418/agent-benchmark/issues/60): persistence, capacity policy, workload separation, observability, and HA.
+- [Issue #60](https://github.com/Kaiwen0418/agent-benchmark/issues/60): workload separation is complete; persistence, capacity policy, observability, and HA remain future hardening.
 - [Issue #61](https://github.com/Kaiwen0418/agent-benchmark/issues/61): revisioned atomic session mutation and stale-snapshot rejection.
 - [Issue #62](https://github.com/Kaiwen0418/agent-benchmark/issues/62): ACLs, token hashing, credential minimization, and network isolation.
 - [Issue #59](https://github.com/Kaiwen0418/agent-benchmark/issues/59): final service/database ownership boundaries.
 
-Until these issues are complete, documentation must describe Redis as shared runtime state and command transport, not as a zero-loss durable backbone.
+Until the remaining Redis hardening issues are complete, documentation must describe Redis as runtime state and command transport, not as a zero-loss durable backbone.

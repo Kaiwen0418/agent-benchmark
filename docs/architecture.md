@@ -73,9 +73,9 @@ The deployment profile matters:
 
 ### Redis
 
-Redis has two logically separate responsibilities. Versioned session keys provide the shared runtime state used by hosted-sites replicas. Sixteen partitioned Streams form the orchestrator command transport. Stable entity hashing preserves order for one attempt/session while disjoint workers process partitions concurrently. Redis leases prevent overlapping worker ownership.
+Redis has two separate workload contracts. `HOSTED_SESSION_REDIS_URL` points hosted-sites at the session runtime cache, while `ORCHESTRATOR_REDIS_URL` points orchestrator API/workers at the command Stream deployment. Versioned session keys provide the shared runtime state used by hosted-sites replicas. Sixteen partitioned Streams form the orchestrator command transport. Stable entity hashing preserves order for one attempt/session while disjoint workers process partitions concurrently. Redis leases prevent overlapping worker ownership.
 
-The current deployment places both responsibilities in one Redis instance and separates them only by key namespace. It does not yet configure a persistent volume, AOF, independent memory policies, replication, or failover. Redis therefore provides shared runtime coordination, not a durable system of record. See [Consistency and Failure](./consistency-and-failure.md) for the exact guarantees and [Roadmap](./roadmap.md) for planned hardening.
+Local and server Compose run `session-redis` and `orchestrator-redis` as distinct services by default. The server Compose file keeps an explicit `redis-compat` profile for one-instance operator experiments, but production deployments do not use `REDIS_URL` fallback. The Redis services still do not configure AOF, independent memory policies, replication, or failover. Redis therefore provides runtime coordination, not a durable system of record. See [Consistency and Failure](./consistency-and-failure.md) for the exact guarantees and [Roadmap](./roadmap.md) for planned hardening.
 
 ### Supabase
 

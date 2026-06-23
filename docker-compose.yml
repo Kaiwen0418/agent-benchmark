@@ -14,11 +14,11 @@ services:
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
-      ORCHESTRATOR_REDIS_URL: redis://redis:6379
+      ORCHESTRATOR_REDIS_URL: redis://orchestrator-redis:6379
       ORCHESTRATOR_MODE: api
       ORCHESTRATOR_PARTITION_COUNT: 16
     depends_on:
-      - redis
+      - orchestrator-redis
     restart: unless-stopped
 
   hosted-orchestrator-worker-0:
@@ -29,12 +29,12 @@ services:
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
-      ORCHESTRATOR_REDIS_URL: redis://redis:6379
+      ORCHESTRATOR_REDIS_URL: redis://orchestrator-redis:6379
       ORCHESTRATOR_MODE: worker
       ORCHESTRATOR_PARTITION_COUNT: 16
       ORCHESTRATOR_WORKER_PARTITIONS: 0,1,2,3,4,5,6,7
     depends_on:
-      - redis
+      - orchestrator-redis
     restart: unless-stopped
 
   hosted-orchestrator-worker-1:
@@ -45,12 +45,12 @@ services:
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
-      ORCHESTRATOR_REDIS_URL: redis://redis:6379
+      ORCHESTRATOR_REDIS_URL: redis://orchestrator-redis:6379
       ORCHESTRATOR_MODE: worker
       ORCHESTRATOR_PARTITION_COUNT: 16
       ORCHESTRATOR_WORKER_PARTITIONS: 8,9,10,11,12,13,14,15
     depends_on:
-      - redis
+      - orchestrator-redis
     restart: unless-stopped
 
   hosted-sites:
@@ -63,12 +63,16 @@ services:
       HOSTED_ORCHESTRATOR_URL: http://hosted-orchestrator:3004
       AGENTBENCH_WEB_URL: ${AGENTBENCH_WEB_URL:-}
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-}
-      HOSTED_SESSION_REDIS_URL: redis://redis:6379
+      HOSTED_SESSION_REDIS_URL: redis://session-redis:6379
     depends_on:
-      - redis
+      - session-redis
     restart: unless-stopped
 
-  redis:
+  session-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  orchestrator-redis:
     image: redis:7-alpine
     restart: unless-stopped
 
@@ -83,5 +87,6 @@ services:
       - hosted-orchestrator-worker-0
       - hosted-orchestrator-worker-1
       - hosted-sites
-      - redis
+      - session-redis
+      - orchestrator-redis
     restart: unless-stopped

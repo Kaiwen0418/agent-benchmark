@@ -25,7 +25,7 @@ Run multiple hosted-sites and orchestrator API replicas locally:
 docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=2
 ```
 
-Redis uses `HOSTED_SESSION_REDIS_URL=redis://redis:6379` for session cache and `ORCHESTRATOR_REDIS_URL=redis://redis:6379` for command Streams. Supabase remains the durable persistence store; orchestrator workers are its hosted-data writers.
+Redis workloads are configured independently. Hosted-sites uses `HOSTED_SESSION_REDIS_URL=redis://session-redis:6379` for the session cache. Orchestrator API/workers use `ORCHESTRATOR_REDIS_URL=redis://orchestrator-redis:6379` for command Streams, locks, and response envelopes. Supabase remains the durable persistence store; orchestrator workers are its hosted-data writers.
 
 The local Compose topology runs two workers: partitions `0-7` and `8-15`. Do not use `--scale` on a worker service because replicas would claim the same partitions. To add workers, define additional worker services and redistribute all partitions into disjoint sets. Readiness returns `503` while any partition has no active lease.
 
@@ -46,20 +46,22 @@ Do not publish a fixed host port for each hosted-sites replica. Nginx should rea
 
 `deploy-hosted-sites.yml` classifies each push before building or pulling images:
 
-- `apps/hosted-sites/**` builds, pulls, and recreates only hosted-sites.
-- `apps/hosted-orchestrator/**` builds one image, then pulls and recreates the orchestrator API and both workers.
+- `apps/hosted-sites/**` builds, pulls, and recreates only hosted-sites and the session-cache client path.
+- `apps/hosted-orchestrator/**` builds one image, then pulls and recreates only the orchestrator API and both command workers.
 - shared scoring/runtime packages rebuild both images.
 - Nginx changes recreate only the gateway.
-- Compose topology changes reconcile all services without pulling unaffected application images.
+- Compose topology changes pre-pull every required target image, then reconcile all services.
 
 Hosted-sites and orchestrator use independent image tags. Targeted deploys preserve the currently running replica counts, so scaling one service does not restart or resize the other. The orchestrator API and workers always use the same immutable image tag within one environment.
+
+Before replacing any running service, the deploy script authenticates to GHCR and pulls every required target image with bounded exponential-backoff retries. Transient registry/network failures such as timeouts, DNS failures, connection resets, 429s, and 5xx responses retry. Permanent authentication failures and missing manifests fail promptly. If the retry budget is exhausted, the script exits before `docker compose up`, leaving the previous healthy stack serving traffic.
 
 ## Production Topology
 
 The production deployment is split into:
 
 - web on Vercel
-- hosted-sites, orchestrator API/workers, Redis, and Nginx on a private Linux host
+- hosted-sites, orchestrator API/workers, session Redis, orchestrator Redis, and Nginx on a private Linux host
 - Supabase for durable application data
 - GHCR for hosted runtime images
 - Cloudflare Tunnel for environment-specific public ingress and TLS
@@ -158,3 +160,11 @@ Normal application deployments should not require SSH access. Manual interventio
 - broken host networking or unavailable external dependencies
 
 Inspect the self-hosted Actions job and container logs before changing server state manually.
+
+If GHCR remains unavailable after the retry budget:
+
+- confirm whether the final classification is `registry-auth`, `registry-missing-image`, or `registry-transient`;
+- for `registry-auth`, rotate or restore `GHCR_PAT`/`GHCR_USERNAME` before rerunning the workflow;
+- for `registry-missing-image`, verify the image build job produced the immutable tag before rerunning deploy;
+- for `registry-transient`, leave the current Compose stack running and rerun the workflow after registry/network recovery;
+- do not manually recreate application services until the required target images are present locally.

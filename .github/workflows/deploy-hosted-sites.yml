@@ -19,6 +19,7 @@ on:
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'
       - 'infra/scripts/deploy-hosted-stack.sh'
+      - 'infra/scripts/registry-retry.sh'
       - 'infra/scripts/verify-orchestrator-worker-recovery.sh'
       - 'infra/scripts/validate-orchestrator-partitions.sh'
       - 'package.json'
