@@ -13,38 +13,38 @@ else
   exit 127
 fi
 
-if rg -n 'process\.env\.REDIS_URL|ORCHESTRATOR_REDIS_URL or REDIS_URL|HOSTED_SESSION_REDIS_URL \?\?' \
+if grep -REn 'process\.env\.REDIS_URL|ORCHESTRATOR_REDIS_URL or REDIS_URL|HOSTED_SESSION_REDIS_URL \?\?' \
   apps/hosted-sites/src apps/hosted-orchestrator/src >/tmp/agentbench-redis-fallbacks.txt; then
   cat /tmp/agentbench-redis-fallbacks.txt >&2
   echo "runtime code must not fall back to shared REDIS_URL" >&2
   exit 1
 fi
 
-if ! rg -q '"hosted-sites:session:"' apps/hosted-sites/src/runtime/session-cache.ts; then
+if ! grep -q '"hosted-sites:session:"' apps/hosted-sites/src/runtime/session-cache.ts; then
   echo "hosted-sites session cache namespace changed or is missing" >&2
   exit 1
 fi
-if ! rg -q 'agentbench:orchestrator:' apps/hosted-orchestrator/src/command-backbone.ts; then
+if ! grep -q 'agentbench:orchestrator:' apps/hosted-orchestrator/src/command-backbone.ts; then
   echo "orchestrator command namespace changed or is missing" >&2
   exit 1
 fi
-if rg -n 'agentbench:orchestrator:' apps/hosted-sites/src >/tmp/agentbench-redis-fallbacks.txt; then
+if grep -RFn 'agentbench:orchestrator:' apps/hosted-sites/src >/tmp/agentbench-redis-fallbacks.txt; then
   cat /tmp/agentbench-redis-fallbacks.txt >&2
   echo "hosted-sites must not issue orchestrator Redis commands" >&2
   exit 1
 fi
-if rg -n 'hosted-sites:session:' apps/hosted-orchestrator/src >/tmp/agentbench-redis-fallbacks.txt; then
+if grep -RFn 'hosted-sites:session:' apps/hosted-orchestrator/src >/tmp/agentbench-redis-fallbacks.txt; then
   cat /tmp/agentbench-redis-fallbacks.txt >&2
   echo "orchestrator must not issue hosted-sites session cache commands" >&2
   exit 1
 fi
 
 local_config="$("${COMPOSE[@]}" -f docker-compose.yml config)"
-if ! grep -q 'HOSTED_SESSION_REDIS_URL: redis://session-redis:6379' <<< "${local_config}"; then
+if ! grep -Eq 'HOSTED_SESSION_REDIS_URL(: |=|=).*redis://session-redis:6379' <<< "${local_config}"; then
   echo "local hosted-sites must use session-redis" >&2
   exit 1
 fi
-if ! grep -q 'ORCHESTRATOR_REDIS_URL: redis://orchestrator-redis:6379' <<< "${local_config}"; then
+if ! grep -Eq 'ORCHESTRATOR_REDIS_URL(: |=|=).*redis://orchestrator-redis:6379' <<< "${local_config}"; then
   echo "local orchestrator must use orchestrator-redis" >&2
   exit 1
 fi
@@ -74,12 +74,13 @@ GATEWAY_IMAGE=nginx:1.27-alpine
 GATEWAY_PLATFORM=linux/amd64
 EOF
 
-server_config="$("${COMPOSE[@]}" --env-file "${server_env}" -f infra/docker/docker-compose.server.yml config)"
-if ! grep -q 'HOSTED_SESSION_REDIS_URL: redis://session-redis:6379' <<< "${server_config}"; then
+server_config="$(env -u HOSTED_SESSION_REDIS_URL -u ORCHESTRATOR_REDIS_URL \
+  "${COMPOSE[@]}" --env-file "${server_env}" -f infra/docker/docker-compose.server.yml config)"
+if ! grep -Eq 'HOSTED_SESSION_REDIS_URL(: |=|=).*redis://session-redis:6379' <<< "${server_config}"; then
   echo "server hosted-sites must use session-redis" >&2
   exit 1
 fi
-if ! grep -q 'ORCHESTRATOR_REDIS_URL: redis://orchestrator-redis:6379' <<< "${server_config}"; then
+if ! grep -Eq 'ORCHESTRATOR_REDIS_URL(: |=|=).*redis://orchestrator-redis:6379' <<< "${server_config}"; then
   echo "server orchestrator must use orchestrator-redis" >&2
   exit 1
 fi
