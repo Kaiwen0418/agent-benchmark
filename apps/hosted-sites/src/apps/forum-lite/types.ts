@@ -18,3 +18,8 @@ export type ModerationAction = {
   action: "lock" | "pin" | "remove_post";
   reason: string;
 };
+
+export type AppSessionState = {
+  threads: ForumThread[];
+  moderationActions: ModerationAction[];
+};

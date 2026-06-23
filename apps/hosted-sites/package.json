@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json",
+    "generate-registry": "node scripts/generate-app-registry.mjs",
+    "check-registry": "node scripts/generate-app-registry.mjs --check",
+    "build": "pnpm run check-registry && tsc -p tsconfig.json",
     "test:questions": "node --import tsx --test tests/unit/evaluation.test.ts tests/unit/templates.test.ts tests/unit/runtime/question-config.test.ts",
-    "test": "node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)",
+    "test": "pnpm run check-registry && node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)",
     "start": "node dist/apps/hosted-sites/src/server.js"
   },
   "dependencies": {

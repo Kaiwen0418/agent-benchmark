@@ -32,9 +32,20 @@ if [[ "${START_LOCAL_SERVICES}" != "true" && "${START_LOCAL_SERVICES}" != "false
 fi
 
 cleanup() {
+  terminate_tree() {
+    local parent="$1"
+    local child
+    while read -r child; do
+      if [[ -n "${child}" ]]; then
+        terminate_tree "${child}"
+      fi
+    done < <(pgrep -P "${parent}" 2>/dev/null || true)
+    kill "${parent}" >/dev/null 2>&1 || true
+  }
+
   for pid in "${ORCHESTRATOR_PID:-}" "${HOSTED_PID:-}"; do
     if [[ -n "${pid}" ]]; then
-      kill "${pid}" >/dev/null 2>&1 || true
+      terminate_tree "${pid}"
       wait "${pid}" 2>/dev/null || true
     fi
   done
@@ -72,13 +83,19 @@ done
 curl -fsS "${HOSTED_BASE_URL}/health" >/dev/null
 curl -fsS "${ORCHESTRATOR_BASE_URL}/health" >/dev/null
 
+set +e
 SMOKE_MODE="${SMOKE_MODE}" \
 GENERATION_SEED="${GENERATION_SEED}" \
+ROOT_DIR="${ROOT_DIR}" \
 HOSTED_BASE_URL="${HOSTED_BASE_URL}" \
 ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL}" \
 node <<'NODE'
+const { existsSync } = await import("node:fs");
+const { pathToFileURL } = await import("node:url");
+
 const smokeMode = process.env.SMOKE_MODE;
 const generationSeed = process.env.GENERATION_SEED || undefined;
+const rootDir = process.env.ROOT_DIR;
 const hostedBaseUrl = process.env.HOSTED_BASE_URL;
 const orchestratorBaseUrl = process.env.ORCHESTRATOR_BASE_URL;
 const runnerSecret = process.env.RUNNER_SHARED_SECRET;
@@ -197,86 +214,35 @@ function generatedConfig(sessionRows, sequenceIndex) {
   return requireObject(generation.taskConfig, `session ${sequenceIndex} taskConfig`);
 }
 
-async function completeShopping(session, config) {
-  const productByCategory = {
-    charger: "prod-charger-30w",
-    cable: "prod-cable-1m",
-    case: "prod-case",
-  };
-  const productId = productByCategory[config.targetCategory];
-  if (!productId) {
-    throw new Error(`Unsupported shopping category: ${config.targetCategory}`);
+const appCompletion = new Map();
+
+async function loadAppDriver(app) {
+  if (appCompletion.has(app)) {
+    return appCompletion.get(app);
   }
-  const quantity = Number(config.quantity);
-  if (!Number.isInteger(quantity) || quantity < 1) {
-    throw new Error(`Invalid shopping quantity: ${config.quantity}`);
+  const driverPath = `${rootDir}/apps/hosted-sites/src/apps/${app}/test-driver.mjs`;
+  if (!existsSync(driverPath)) {
+    throw new Error(`Smoke completion driver is missing for app ${app}: ${driverPath}`);
   }
-
-  await checkedFetch(session.startUrl);
-  for (let count = 0; count < quantity; count += 1) {
-    await postForm("/shopping/cart", session.token, { productId });
+  const driver = await import(pathToFileURL(driverPath).href);
+  if (typeof driver.complete !== "function") {
+    throw new Error(`Smoke completion driver for app ${app} must export complete().`);
   }
-  await postForm("/shopping/checkout", session.token, {
-    shippingMethod: requireString(config.shippingMethod, "shopping shippingMethod"),
-  });
+  appCompletion.set(app, driver.complete);
+  return driver.complete;
 }
-
-async function completeForum(session, config) {
-  const threadId = requireString(config.targetThreadId, "forum targetThreadId");
-  await checkedFetch(`${hostedBaseUrl}/forum/thread/${encodeURIComponent(threadId)}?session=${encodeURIComponent(session.token)}`);
-  await postForm(`/forum/thread/${encodeURIComponent(threadId)}/reply`, session.token, {
-    body: requireString(config.expectedReplyValue, "forum expectedReplyValue"),
-  });
-  await postForm(`/forum/thread/${encodeURIComponent(threadId)}/lock`, session.token, {
-    reason: requireString(config.expectedLockReason, "forum expectedLockReason"),
-  });
-}
-
-async function completeRepo(session, config) {
-  const filePath = requireString(config.filePath, "repo filePath");
-  const expectedText = requireString(config.expectedText, "repo expectedText");
-  const content = [
-    "# Demo Project",
-    "",
-    "## Install",
-    "",
-    `Run \`${expectedText}\` to install dependencies.`,
-    "",
-    "## Usage",
-    "",
-    "Start the dev server with `npm run dev`.",
-    "",
-  ].join("\n");
-  await checkedFetch(`${hostedBaseUrl}/repo/file/${encodeURIComponent(filePath)}/edit?session=${encodeURIComponent(session.token)}`);
-  await postForm(`/repo/file/${encodeURIComponent(filePath)}/edit`, session.token, { content });
-  await postForm("/repo/mr/new", session.token, {
-    title: requireString(config.expectedMrTitle, "repo expectedMrTitle"),
-    targetBranch: requireString(config.expectedTargetBranch, "repo expectedTargetBranch"),
-  });
-}
-
-async function completeWiki(session, config) {
-  const articleSlug = requireString(config.targetArticleSlug, "wiki targetArticleSlug");
-  const answerContract = requireObject(config.answerContract, "wiki answerContract");
-  await checkedFetch(`${hostedBaseUrl}/wiki/article/${encodeURIComponent(articleSlug)}?session=${encodeURIComponent(session.token)}`);
-  await postForm("/wiki/answer", session.token, {
-    answer: requireString(answerContract.canonicalValue, "wiki canonicalValue"),
-  });
-}
-
-const appCompletion = {
-  "shopping-lite": completeShopping,
-  "forum-lite": completeForum,
-  "repo-lite": completeRepo,
-  "wiki-lite": completeWiki,
-};
 
 async function completeAndVerifySession(session, config) {
-  const completeApp = appCompletion[session.app];
-  if (!completeApp) {
-    throw new Error(`Smoke completion is not implemented for app ${session.app}.`);
-  }
-  await completeApp(session, config);
+  const completeApp = await loadAppDriver(session.app);
+  await completeApp({
+    session,
+    config,
+    hostedBaseUrl,
+    checkedFetch,
+    postForm,
+    requireString,
+    requireObject,
+  });
 
   const score = await (
     await checkedFetch(`${hostedBaseUrl}/api/sessions/${encodeURIComponent(session.token)}/score`)
@@ -483,8 +449,15 @@ async function main() {
   );
 }
 
-main().catch((error) => {
+main().then(() => {
+  process.exit(0);
+}).catch((error) => {
   console.error(error);
   process.exit(1);
 });
 NODE
+node_status=$?
+set -e
+cleanup
+trap - EXIT
+exit "${node_status}"

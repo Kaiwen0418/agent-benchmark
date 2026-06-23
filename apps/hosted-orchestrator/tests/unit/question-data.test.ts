@@ -10,7 +10,7 @@ function readHostedSuiteSeed() {
 test("fresh database seed contains generated question pools without fixed session goals", () => {
   const suite = readHostedSuiteSeed();
   assert.ok(Array.isArray(suite.sessions));
-  assert.equal(suite.sessions.length, 4);
+  assert.ok(suite.sessions.length > 0);
 
   for (const value of suite.sessions) {
     assert.ok(value && typeof value === "object" && !Array.isArray(value));

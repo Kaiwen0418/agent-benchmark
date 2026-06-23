@@ -7,13 +7,11 @@ test("hosted catalog is valid and has unique app/task definitions", () => {
   assert.equal(hostedWebSuiteCase.slug, "hosted-web-suite");
   assert.deepEqual(hostedWebSuiteCase.metadata, {});
   const suite = hostedSuiteMetadataSchema.parse(hostedWebSuiteMetadata);
-  assert.equal(suite.sessions.length, 4);
+  assert.ok(suite.sessions.length > 0);
   assert.equal(new Set(suite.sessions.map((session) => session.app)).size, suite.sessions.length);
   assert.equal(new Set(suite.sessions.map((session) => session.taskSlug)).size, suite.sessions.length);
-  assert.equal(
-    suite.sessions.reduce((count, session) => count + session.metadata.questionVariants.length, 0),
-    12,
-  );
+  assert.ok(suite.sessions.every((session, index) => session.sequenceIndex === index));
+  assert.ok(suite.sessions.every((session) => session.metadata.questionVariants.length >= 2));
 });
 
 test("hosted catalog rejects cross-app task config", () => {

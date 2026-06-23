@@ -9,3 +9,8 @@ export type WikiAnswerSubmission = {
   answer: string;
   submittedAt: string;
 };
+
+export type AppSessionState = {
+  wikiArticles: WikiArticle[];
+  wikiAnswerSubmissions: WikiAnswerSubmission[];
+};
