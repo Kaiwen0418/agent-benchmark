@@ -12,7 +12,7 @@ After a session becomes `completed` or `failed`:
 - active forms become read-only result views;
 - score APIs return the persisted hosted result rather than recalculating mutable state;
 - duplicate completion returns the first persisted result;
-- viewer, attempt overview, public result, and database rows report the same terminal score.
+- viewer, run connection payload, public result, and database rows report the same terminal score.
 
 A retryable task requires an explicit draft/finalize protocol and a new task or suite version.
 

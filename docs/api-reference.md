@@ -68,8 +68,7 @@ The connection lasts at most 25 seconds and clients reconnect using `retry: 2000
 | `POST` | `/api/telemetry` | Persist and forward a hosted event |
 | `GET` | `/api/sessions/:token/score` | Evaluate current session state |
 | `POST` | `/api/sessions/:token/complete` | Evaluate and submit session completion |
-| `GET` | `/attempts/:attemptId?session=...` | Render attempt overview |
-| `GET` | `/api/attempts/:attemptId/advance?session=...` | Resolve next task URL |
+| `GET` | `/api/sessions/advance?session=...` | Resolve the next task URL from the opaque session token |
 
 ### Create Session
 

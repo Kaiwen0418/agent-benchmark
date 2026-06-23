@@ -1,7 +1,6 @@
-import type { HostedAttemptReadModel } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import type { IncomingMessage } from "node:http";
-import type { HostedAttemptOverviewSession, HostedSession } from "./types.js";
+import type { HostedSession } from "./types.js";
 import type { PersistedHostedSession } from "./session-store.js";
 
 function resolveHostedUrl(baseUrl: string, path: string) {
@@ -162,12 +161,6 @@ export function createOrchestratorClient(deps: OrchestratorClientDeps) {
     }>(`/api/attempts/${encodeURIComponent(params.attemptId)}/commands/timeout`, params);
   }
 
-  async function getAttemptOverview(attemptId: string) {
-    return getOrchestratorState<HostedAttemptReadModel<HostedAttemptOverviewSession>>(
-      `/api/attempts/${encodeURIComponent(attemptId)}/state`,
-    );
-  }
-
   async function resolveAdvance(params: {
     attemptId: string;
     currentSessionId: string;
@@ -191,7 +184,6 @@ export function createOrchestratorClient(deps: OrchestratorClientDeps) {
     recordSessionAccess,
     recordHostedEvent,
     timeoutAttempt,
-    getAttemptOverview,
     resolveAdvance,
   };
 }

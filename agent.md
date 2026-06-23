@@ -213,9 +213,9 @@ Do not run the mutation steps against production unless the user explicitly requ
 3. Start one run. Record the run ID and attempt ID from the API response or connection payload before navigating away.
 4. Confirm quota decrements exactly once and the connection guide shows four ordered sessions with only session 1 active.
 5. Keep the Web preview open and open the hosted agent URL in a second tab. Do not replace the preview tab when live-view behavior is under test.
-6. Confirm the hosted attempt overview loads through the public HTTPS hostname and contains the expected session order.
+6. Confirm the active hosted session URL loads through the public HTTPS hostname. Browser-facing hosted URLs must use the opaque session token, not an attempt-scoped navigation route.
 7. Complete each hosted task using its generated task text rather than hard-coded fixture assumptions. Verify each evaluator preview or score endpoint returns `score: 1`.
-8. After each completed session, call the attempt advance endpoint and verify:
+8. After each completed session, call the session advance endpoint and verify:
    - `nextSessionId` matches the next ordered session.
    - `nextStartUrl` uses the public HTTPS hosted hostname.
    - `nextStartUrl` never exposes Docker names such as `hosted-sites`, localhost, or private ports.
@@ -239,10 +239,10 @@ Check public service health and lifecycle responses without exposing credentials
 ```bash
 curl -fsS https://hosted-test.project-echo.xyz/health
 curl -fsS 'https://hosted-test.project-echo.xyz/api/sessions/<redacted-token>/score'
-curl -fsS 'https://hosted-test.project-echo.xyz/api/attempts/<attempt-id>/advance?session=<redacted-token>'
+curl -fsS 'https://hosted-test.project-echo.xyz/api/sessions/advance?session=<redacted-token>'
 ```
 
-Verify response URLs are externally reachable. Internal service URLs may be used for server-to-server calls, but must not appear in browser-facing `startUrl`, `nextStartUrl`, viewer URLs, redirects, or connection instructions.
+Verify response URLs are externally reachable. Internal service URLs and attempt-scoped command URLs may be used for server-to-server calls, but must not appear in browser-facing `startUrl`, `nextStartUrl`, viewer URLs, redirects, or connection instructions.
 
 ### Result Reporting
 

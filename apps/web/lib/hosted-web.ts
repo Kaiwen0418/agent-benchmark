@@ -112,8 +112,8 @@ function toAttemptConnection(params: {
     suiteVersion: params.attempt.suiteVersion,
     orchestratorUrl: activeSession?.startUrl ?? null,
     advanceUrl:
-      activeSession && params.attempt.id && activeSession.token
-        ? `${baseUrl}/api/attempts/${encodeURIComponent(params.attempt.id)}/advance?session=${encodeURIComponent(activeSession.token)}`
+      activeSession?.token
+        ? `${baseUrl}/api/sessions/advance?session=${encodeURIComponent(activeSession.token)}`
         : null,
     activeSessionId: activeSession?.sessionId ?? null,
     progress: {

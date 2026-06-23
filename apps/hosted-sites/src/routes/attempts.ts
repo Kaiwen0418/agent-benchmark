@@ -19,15 +19,19 @@ type AttemptsRouteDeps = {
 
 export function createAttemptsRoutes(deps: AttemptsRouteDeps) {
   async function handle(request: IncomingMessage, response: ServerResponse, url: URL) {
-    const advanceMatch = url.pathname.match(/^\/api\/attempts\/([^/]+)\/advance$/);
-    if (request.method === "GET" && advanceMatch) {
+    if (request.method === "GET" && url.pathname === "/api/sessions/advance") {
       const session = await deps.getSession(url, request);
       if (!session) {
         deps.badRequest(response, "Missing or invalid session");
         return true;
       }
 
-      const attemptId = decodeURIComponent(advanceMatch[1]);
+      const attemptId = session.attemptId;
+      if (!attemptId) {
+        deps.badRequest(response, "Session is not attached to an attempt");
+        return true;
+      }
+
       const advance = await deps.resolveAdvance({
         attemptId,
         currentSessionId: session.id,

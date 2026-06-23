@@ -68,14 +68,24 @@ test("attempt overview page is not exposed as a second suite navigation surface"
   });
 });
 
-test("attempt advance API remains available", async () => {
+test("session advance API derives the attempt from the tokenized session", async () => {
   await withAttemptsServer(async (baseUrl, calls) => {
-    const response = await fetch(`${baseUrl}/api/attempts/attempt-1/advance?session=tok_1`);
+    const response = await fetch(`${baseUrl}/api/sessions/advance?session=tok_1`);
     const body = await response.json();
 
     assert.equal(response.status, 200);
     assert.equal(calls.getSession, 1);
     assert.equal(calls.resolveAdvance, 1);
     assert.equal(body.nextSessionId, "session-2");
+  });
+});
+
+test("old attempt-scoped browser advance route is not exposed", async () => {
+  await withAttemptsServer(async (baseUrl, calls) => {
+    const response = await fetch(`${baseUrl}/api/attempts/attempt-1/advance?session=tok_1`);
+
+    assert.equal(response.status, 404);
+    assert.equal(calls.getSession, 0);
+    assert.equal(calls.resolveAdvance, 0);
   });
 });
