@@ -145,12 +145,12 @@ Web completion is not part of the terminal transaction. The database trigger cre
 
 ## 6. Advance Resolution
 
-`GET /api/attempts/:id/advance?session=...` reaches hosted-sites through the default Nginx route. Hosted-sites sends an authenticated `resolve-advance` request to the orchestrator. This read handler verifies the current session against durable attempt state and returns either:
+`GET /api/sessions/advance?session=...` reaches hosted-sites through the default Nginx route. Hosted-sites resolves the opaque session token, derives the durable attempt ID from the recovered session, and sends an authenticated `resolve-advance` request to the orchestrator. This read handler verifies the current session against durable attempt state and returns either:
 
 - `complete: true` with no next URL, or
 - the next session ID and tokenized start URL.
 
-The client does not calculate suite ordering from URLs, Redis state, or its local history.
+The browser-facing URL never needs an attempt ID. The client does not calculate suite ordering from URLs, Redis state, or its local history; retry and current-attempt selection remain orchestrator-owned.
 
 ## 7. Expiry, Cleanup, and Recovery
 
