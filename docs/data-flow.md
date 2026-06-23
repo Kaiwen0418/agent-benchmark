@@ -28,7 +28,7 @@ sequenceDiagram
   W-->>U: connection payload
 ```
 
-Web sends `runId`, `caseId`, and `caseRevisionId`, but never sends the private suite manifest. The worker loads the selected service-role-only revision, validates it, generates a deterministic question snapshot, and binds the attempt to that revision. The first session is `active`; later sessions are `created`.
+Web sends `runId`, `caseId`, and `caseRevisionId`, but never sends the private suite manifest. The worker loads the selected service-role-only revision, validates it, generates a deterministic question snapshot, and binds the attempt to that revision. The attempt stores only revision identity, generation seed, and progress pointers. Each generated session stores its own `metadata.questionGeneration` snapshot. The first session is `active`; later sessions are `created`.
 
 Attempt initialization also uses a short Redis lease to reduce duplicate work. PostgreSQL uniqueness on `(run_id, case_id, provider)` remains the correctness boundary when Redis is unavailable or two requests race. See [Hosted Attempt Consistency](./attempt-consistency.md).
 

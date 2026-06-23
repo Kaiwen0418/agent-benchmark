@@ -10,6 +10,8 @@ This roadmap starts from the architecture that is already running. Completed wor
 - Redis is split into a hosted-session cache endpoint and an orchestrator command-Streams endpoint.
 - Supabase is the durable lifecycle, audit, and scoring store.
 - Hosted-orchestrator is the sole hosted lifecycle database owner; hosted-sites has no database credential and Web uses orchestrator APIs or public read models for hosted data.
+- Complete private suite manifests live only in immutable `benchmark_case_revisions`; public case metadata is display-safe.
+- Hosted attempts store only revision identity, generation seed, active-session pointer, sequence pointer, and completed session ids; generated per-session task config lives on `hosted_web_sessions.metadata`.
 - Attempt initialization is database-first and protected by a unique hosted-attempt constraint plus a short Redis lease.
 - Terminal hosted results and aggregate attempt scores are first-writer-wins database invariants with explicit conflict recovery.
 - Unit tests are separated from production source under workspace `tests/unit`; cross-service smoke scenarios live under root `tests/e2e`, with CI enforcing the layout and explicit discovery.

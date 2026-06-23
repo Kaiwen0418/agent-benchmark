@@ -31,6 +31,9 @@ bash scripts/test-lifecycle-postgres.sh
 echo "== Benchmark case privacy =="
 bash scripts/test-benchmark-case-privacy.sh
 
+echo "== Hosted metadata boundaries =="
+bash scripts/test-hosted-metadata-boundaries.sh
+
 echo "== Benchmark case revisions =="
 bash scripts/test-case-revisions-postgres.sh
 

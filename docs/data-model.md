@@ -50,7 +50,9 @@ One execution of a hosted suite under a run.
 - suite identity: `suite_slug`, `suite_version`
 - immutable definition: `case_revision_id`
 - `aggregate_score` and `scoring_summary`
-- metadata control fields: `activeSessionId`, `activeSequenceIndex`, `completedSessionIds`
+- metadata control fields: `generationSeed`, `caseRevisionId`, `caseRevision`, `caseRevisionContentHash`, `activeSessionId`, `activeSequenceIndex`, `completedSessionIds`
+
+Attempt metadata must not contain `sessions`, `questionVariants`, generated `taskConfig`, canonical answers, evaluator parameters, app state, or raw session tokens. The attempt row binds a run to a suite revision and records suite-level progress; it does not duplicate the generated session manifest.
 
 ### `hosted_web_sessions`
 
@@ -64,6 +66,8 @@ One ordered task in an attempt.
 - authentication: `session_token_hash`; raw token is never persisted
 - recovery metadata: suite fields, title, goal, start path, and app-specific state snapshot
 - access metadata: count, first/last IP, user agent, access time, expiry
+
+Generated session-specific configuration lives here, under `metadata.questionGeneration`, because it is needed only to recover, render, and score that concrete task. This metadata remains service-role/internal data and is not part of public case discovery or Web-facing run summaries.
 
 ### `hosted_web_events`
 
@@ -199,7 +203,7 @@ stateDiagram-v2
 
 - Redis is authoritative for the latest available mutable task state during an active session, but current whole-envelope writes are not concurrency-safe.
 - Supabase is authoritative for durable lifecycle, audit, and scoring records.
-- `benchmark_case_revisions` is authoritative for the suite manifest used by an attempt; its generated question snapshot remains in attempt/session metadata.
+- `benchmark_case_revisions` is authoritative for the suite manifest used by an attempt. Attempts store only the revision/seed/progress binding; generated per-session question snapshots remain on `hosted_web_sessions.metadata`.
 - The orchestrator is the only application writer for attempts, hosted sessions, and hosted results; hosted-sites may read session rows only for cache recovery.
 - The process-local Map is not authoritative and may be lost at any time.
 - `metadata.appState` is a recovery snapshot, not a separately writable domain model.

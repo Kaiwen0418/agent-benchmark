@@ -185,10 +185,8 @@ function normalizedSessions(benchmarkCase) {
   };
 }
 
-function generatedConfig(initialized, sequenceIndex) {
-  const session = initialized.metadata.sessions.find(
-    (candidate) => candidate.sequenceIndex === sequenceIndex,
-  );
+function generatedConfig(sessionRows, sequenceIndex) {
+  const session = sessionRows.find((candidate) => candidate.sequence_index === sequenceIndex);
   const generation = requireObject(
     requireObject(session?.metadata, `session ${sequenceIndex} metadata`).questionGeneration,
     `session ${sequenceIndex} questionGeneration`,
@@ -349,16 +347,32 @@ async function main() {
     throw new Error(`Expected ${suite.sessions.length} initialized sessions, got ${initialized.sessions.length}.`);
   }
   const attempts = await selectRows("benchmark_attempts", {
-    select: "id,case_revision_id",
+    select: "id,case_revision_id,metadata",
     id: `eq.${initialized.attemptId}`,
     limit: "1",
   });
   if (!Array.isArray(attempts) || attempts.length !== 1 || attempts[0].case_revision_id !== caseRevisionId) {
     throw new Error("Initialized attempt did not retain the selected benchmark revision.");
   }
+  const attemptMetadata = requireObject(attempts[0].metadata, "attempt metadata");
+  if ("sessions" in attemptMetadata) {
+    throw new Error("Attempt metadata must not duplicate generated session definitions.");
+  }
+  for (const privateKey of ["questionVariants", "taskConfig", "canonicalValue"]) {
+    if (JSON.stringify(attemptMetadata).includes(privateKey)) {
+      throw new Error(`Attempt metadata leaked private session field: ${privateKey}`);
+    }
+  }
   const sessions = [...initialized.sessions].sort(
     (left, right) => left.sequenceIndex - right.sequenceIndex,
   );
+  const sessionRows = await selectRows("hosted_web_sessions", {
+    select: "id,sequence_index,metadata",
+    attempt_id: `eq.${initialized.attemptId}`,
+  });
+  if (!Array.isArray(sessionRows) || sessionRows.length !== sessions.length) {
+    throw new Error("Hosted session metadata rows were not persisted for every initialized session.");
+  }
   const initialState = await loadAttemptState(initialized.attemptId);
   if (initialState.activeSessionId !== sessions[0].sessionId) {
     throw new Error("The first generated session is not active.");
@@ -381,7 +395,7 @@ async function main() {
   const completedSessions = [];
   const completionCount = smokeMode === "full-pass" ? sessions.length : 1;
   for (const session of sessions.slice(0, completionCount)) {
-    await completeAndVerifySession(session, generatedConfig(initialized, session.sequenceIndex));
+    await completeAndVerifySession(session, generatedConfig(sessionRows, session.sequenceIndex));
     completedSessions.push(session.sessionId);
   }
 
@@ -454,8 +468,15 @@ async function main() {
     throw new Error(`Expected one aggregate attempt score, got ${scoreRows.length}.`);
   }
 
-  const selectedVariants = initialized.metadata.sessions
-    .map((session) => `${session.app}:${session.metadata.questionGeneration.variantId}`)
+  const selectedVariants = sessionRows
+    .sort((left, right) => left.sequence_index - right.sequence_index)
+    .map((session) => {
+      const generation = requireObject(
+        requireObject(session.metadata, `session ${session.sequence_index} metadata`).questionGeneration,
+        `session ${session.sequence_index} questionGeneration`,
+      );
+      return `${sessions.find((candidate) => candidate.sessionId === session.id)?.app ?? "unknown"}:${generation.variantId}`;
+    })
     .join(",");
   console.log(
     `orchestrator smoke (${smokeMode}) passed: run=${run.id} attempt=${initialized.attemptId} sessions=${sessions.length} variants=${selectedVariants}`,

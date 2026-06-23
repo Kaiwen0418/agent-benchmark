@@ -13,7 +13,7 @@ This document defines who may read, mutate, and recover each state family. Owner
 | `benchmark_runs` | Web control plane | Web | Web, public read models | User-facing run lifecycle |
 | `run_events`, `artifacts` | Web control plane | Web internal APIs | Web UI and public read models | Live observability and output artifacts |
 | `benchmark_attempts` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; Web uses orchestrator APIs/public read models | Canonical hosted attempt lifecycle and active-session pointer |
-| `hosted_web_sessions` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; hosted-sites recovery uses an internal API | Durable lifecycle plus latest successful app-state snapshot |
+| `hosted_web_sessions` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; hosted-sites recovery uses an internal API | Durable lifecycle, generated per-session task config, plus latest successful app-state snapshot |
 | `hosted_web_events` | hosted orchestrator | orchestrator workers | orchestrator and result/read-model code | Durable hosted telemetry |
 | `hosted_web_access_logs` | hosted orchestrator | orchestrator workers | maintenance and operations | Retained operational audit, not permanent evidence |
 | `hosted_web_results` | hosted orchestrator | transactional completion RPC | orchestrator and result/read-model code | One terminal result per session |
@@ -44,6 +44,7 @@ Session keys and command keys currently share one Redis instance but are separat
 | --- | --- |
 | Which benchmark definition did this attempt use? | `benchmark_attempts.case_revision_id` -> immutable revision |
 | Which session is active? | Durable attempt/session rows and transactional lifecycle functions |
+| Which question variant did a session receive? | `hosted_web_sessions.metadata.questionGeneration.variantId` |
 | What is the current in-progress app state? | Redis session envelope, subject to current concurrency limitations |
 | What app state can survive Redis loss? | Latest successfully persisted `hosted_web_sessions.metadata.appState` snapshot |
 | Did a session or attempt finish? | PostgreSQL terminal rows and unique constraints |
@@ -56,6 +57,8 @@ Session keys and command keys currently share one Redis instance but are separat
 - Browser clients never receive Supabase service-role or Redis credentials.
 - Web does not submit private suite manifests to orchestrator; it submits a revision ID.
 - Web does not query hosted lifecycle tables directly; attempt state comes from orchestrator APIs and public completed results come from read-model views.
+- Attempts do not own generated session definitions. `benchmark_attempts.metadata` is limited to revision identity, generation seed, active pointer, sequence pointer, and completed session ids.
+- Sessions own generated task configuration for their concrete app/task. `hosted_web_sessions.metadata.questionGeneration.taskConfig` may contain scorer-only values and must remain behind service-role/internal APIs.
 - Hosted-sites owns task actions and evaluation, but not durable attempt progression.
 - Orchestrator workers are the only application writers for hosted lifecycle and scoring tables.
 - Redis cannot override a terminal PostgreSQL transition.
