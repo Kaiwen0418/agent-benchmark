@@ -22,7 +22,7 @@ Current apps:
 - `shopping-lite`: constrained product checkout
 - `forum-lite`: reply to and lock a safety thread
 - `repo-lite`: edit README and create a merge request
-- `wiki-lite`: retrieve and submit an exact date
+- `wiki-lite`: retrieve and submit release-history and policy answers
 
 Each session defines app, task and seed versions, order, weight, required flag, goal, and start path.
 

@@ -41,16 +41,17 @@ flowchart TD
 
 ## Current Hosted Testcases
 
-The production `hosted-web-suite` case runs `hosted-web-suite-v1` version `v2`. All four sessions are required and have weight 1. `shopping-constrained-checkout` is the first session task slug, not the benchmark case slug.
+The production `hosted-web-suite` case runs `hosted-web-suite-v1` version `v3`. All five sessions are required and have weight 1. `shopping-constrained-checkout` is the first session task slug, not the benchmark case slug.
 
-| App | Variants |
-| --- | --- |
-| `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard` |
-| `forum-lite` | `battery-recall`, `wifi-reset`, `screen-advisory` |
-| `repo-lite` | `pnpm-install`, `yarn-install`, `bun-install` |
-| `wiki-lite` | `release-date`, `dispatch-window`, `charger-price` |
+| Task | App | Variants |
+| --- | --- | --- |
+| `shopping-constrained-checkout` | `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard` |
+| `forum-battery-moderation` | `forum-lite` | `battery-recall`, `wifi-reset`, `screen-advisory` |
+| `repo-readme-fix` | `repo-lite` | `pnpm-install`, `yarn-install`, `bun-install` |
+| `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price` |
+| `wiki-policy-answer` | `wiki-lite` | `adapter-restriction`, `standard-dispatch`, `express-cutoff` |
 
-Each app has three semantic variants and ten presentation combinations (`5 layouts x 2 themes`). Presentation must never affect actions or scoring. See [Benchmark Scoring And Testing](./benchmark-testing.md) for required matrix coverage.
+Each task has three semantic variants and ten presentation combinations (`5 layouts x 2 themes`). Presentation must never affect actions or scoring. See [Benchmark Scoring And Testing](./benchmark-testing.md) for required matrix coverage.
 
 ## Core Rules
 

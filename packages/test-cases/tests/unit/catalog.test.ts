@@ -8,7 +8,6 @@ test("hosted catalog is valid and has unique app/task definitions", () => {
   assert.deepEqual(hostedWebSuiteCase.metadata, {});
   const suite = hostedSuiteMetadataSchema.parse(hostedWebSuiteMetadata);
   assert.ok(suite.sessions.length > 0);
-  assert.equal(new Set(suite.sessions.map((session) => session.app)).size, suite.sessions.length);
   assert.equal(new Set(suite.sessions.map((session) => session.taskSlug)).size, suite.sessions.length);
   assert.ok(suite.sessions.every((session, index) => session.sequenceIndex === index));
   assert.ok(suite.sessions.every((session) => session.metadata.questionVariants.length >= 2));
@@ -28,7 +27,7 @@ test("hosted catalog release has a stable revision identity and content hash", (
   const first = createHostedWebCatalogRelease();
   const second = createHostedWebCatalogRelease();
 
-  assert.equal(first.revision, "hosted-web-suite-v2");
+  assert.equal(first.revision, "hosted-web-suite-v3");
   assert.match(first.contentHash, /^[0-9a-f]{64}$/);
   assert.deepEqual(second, first);
 });

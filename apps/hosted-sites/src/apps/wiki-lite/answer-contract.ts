@@ -1,7 +1,7 @@
 import { configString, readQuestionSchemaVersion, readTaskConfig } from "../../runtime/question-config.js";
 import type { WikiArticle } from "./types.js";
 
-export type WikiAnswerKind = "date" | "duration" | "currency";
+export type WikiAnswerKind = "date" | "duration" | "currency" | "text";
 export type WikiAnswerNormalization = "trim" | "trim-casefold" | "trim-casefold-punctuation";
 
 export type WikiAnswerContract = {
@@ -12,7 +12,7 @@ export type WikiAnswerContract = {
   legacy: boolean;
 };
 
-const answerKinds = new Set<WikiAnswerKind>(["date", "duration", "currency"]);
+const answerKinds = new Set<WikiAnswerKind>(["date", "duration", "currency", "text"]);
 const normalizationPolicies = new Set<WikiAnswerNormalization>([
   "trim",
   "trim-casefold",

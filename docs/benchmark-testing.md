@@ -44,7 +44,7 @@ CI should enumerate declared variants directly instead of relying on a few rando
 - Every semantic variant produces the same result across all layouts and light/dark themes.
 - Route tests cover mutation, redirect, terminal rejection, and persisted-score behavior.
 - Orchestrator integration covers failed finalization, duplicate completion, suite aggregation, and callback idempotency.
-- Full lifecycle smoke reports selected variant IDs and verifies four persisted session results plus one aggregate score.
+- Full lifecycle smoke reports selected variant IDs and verifies one persisted session result per suite session plus one aggregate score.
 - A development-only scheduled sweep covers the complete pool without consuming production guest quota.
 
 CI must fail when a declared variant lacks both positive and negative scorer coverage. Development E2E must show that Web, hosted-sites, orchestrator, Redis, and Supabase converge on one terminal score.

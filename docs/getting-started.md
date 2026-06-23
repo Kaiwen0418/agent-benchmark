@@ -97,7 +97,7 @@ The current suite contains:
 - `shopping-lite`: constrained checkout
 - `forum-lite`: reply to and moderate a safety thread
 - `repo-lite`: update installation instructions and create a merge request
-- `wiki-lite`: retrieve and submit a release-history date
+- `wiki-lite`: retrieve and submit release-history and policy answers
 
 Create a standalone local session:
 
