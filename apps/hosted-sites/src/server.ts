@@ -105,7 +105,6 @@ const { recordEvent, forwardRunEvent, telemetryRunEventType } = telemetryRuntime
 const {
   completeSession: completeSessionViaOrchestrator,
   getSessionResult: getSessionResultViaOrchestrator,
-  getAttemptOverview: getAttemptOverviewViaOrchestrator,
   resolveAdvance: resolveAdvanceViaOrchestrator,
 } = orchestratorClient;
 
@@ -137,10 +136,7 @@ function rejectTerminalMutation(session: HostedSession, response: ServerResponse
 }
 
 const attemptsRoutes = createAttemptsRoutes({
-  publicBaseUrl,
-  defaultStartPathForApp,
   getSession,
-  getAttemptOverview: getAttemptOverviewViaOrchestrator,
   resolveAdvance: resolveAdvanceViaOrchestrator,
   badRequest,
 });

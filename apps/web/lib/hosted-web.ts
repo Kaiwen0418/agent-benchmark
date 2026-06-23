@@ -110,10 +110,7 @@ function toAttemptConnection(params: {
     attemptId: params.attempt.id ?? null,
     suiteSlug: params.attempt.suiteSlug,
     suiteVersion: params.attempt.suiteVersion,
-    orchestratorUrl:
-      activeSession && params.attempt.id && activeSession.token
-        ? `${baseUrl}/attempts/${encodeURIComponent(params.attempt.id)}?session=${encodeURIComponent(activeSession.token)}`
-        : activeSession?.startUrl ?? null,
+    orchestratorUrl: activeSession?.startUrl ?? null,
     advanceUrl:
       activeSession && params.attempt.id && activeSession.token
         ? `${baseUrl}/api/attempts/${encodeURIComponent(params.attempt.id)}/advance?session=${encodeURIComponent(activeSession.token)}`
