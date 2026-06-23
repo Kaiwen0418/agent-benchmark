@@ -1,8 +1,5 @@
-import { forumLiteDefinition } from "../apps/forum-lite/definition.js";
-import { repoLiteDefinition } from "../apps/repo-lite/definition.js";
-import { shoppingLiteDefinition } from "../apps/shopping-lite/definition.js";
-import { wikiLiteDefinition } from "../apps/wiki-lite/definition.js";
 import type { HostedAppDefinition, HostedAppRouteDeps } from "./app-definition.js";
+import { hostedAppDefinitions } from "./generated-app-definitions.js";
 import type {
   HostedAppId,
   HostedAppPersistenceState,
@@ -10,15 +7,11 @@ import type {
   HostedSession,
 } from "./types.js";
 
-const appDefinitions = {
-  "shopping-lite": shoppingLiteDefinition,
-  "wiki-lite": wikiLiteDefinition,
-  "forum-lite": forumLiteDefinition,
-  "repo-lite": repoLiteDefinition,
-} satisfies { [TApp in HostedAppId]: HostedAppDefinition<TApp> };
+const appDefinitions = hostedAppDefinitions;
+const fallbackAppId = ("shopping-lite" in appDefinitions ? "shopping-lite" : Object.keys(appDefinitions)[0]) as HostedAppId;
 
 export function resolveHostedAppId(app: string): HostedAppId {
-  return app in appDefinitions ? (app as HostedAppId) : "shopping-lite";
+  return app in appDefinitions ? (app as HostedAppId) : fallbackAppId;
 }
 
 export function getHostedAppDefinition<TApp extends HostedAppId>(
@@ -30,23 +23,10 @@ export function getHostedAppDefinition(app: string): HostedAppDefinition {
 }
 
 export function extractHostedAppState(session: HostedSession): HostedAppPersistenceState {
-  switch (session.app) {
-    case "shopping-lite":
-      return { products: session.state.products, cart: session.state.cart, orders: session.state.orders };
-    case "wiki-lite":
-      return {
-        wikiArticles: session.state.wikiArticles,
-        wikiAnswerSubmissions: session.state.wikiAnswerSubmissions,
-      };
-    case "forum-lite":
-      return { threads: session.state.threads, moderationActions: session.state.moderationActions };
-    case "repo-lite":
-      return {
-        files: session.state.files,
-        issues: session.state.issues,
-        mergeRequests: session.state.mergeRequests,
-      };
-  }
+  const definition = getHostedAppDefinition(session.app);
+  return Object.fromEntries(
+    definition.stateKeys.map((key) => [key, session.state[key as keyof typeof session.state]]),
+  ) as HostedAppPersistenceState;
 }
 
 function mergeHydratedState<TApp extends HostedAppId>(
@@ -69,28 +49,11 @@ export function hydrateHostedAppState<TApp extends HostedAppId>(
 export function hydrateHostedAppState(app: string, value: unknown): HostedAppStateById[HostedAppId];
 export function hydrateHostedAppState(app: string, value: unknown): HostedAppStateById[HostedAppId] {
   const appId = resolveHostedAppId(app);
-  switch (appId) {
-    case "shopping-lite":
-      return mergeHydratedState(
-        shoppingLiteDefinition.buildInitialSessionState(),
-        shoppingLiteDefinition.hydratePersistedState(value),
-      );
-    case "wiki-lite":
-      return mergeHydratedState(
-        wikiLiteDefinition.buildInitialSessionState(),
-        wikiLiteDefinition.hydratePersistedState(value),
-      );
-    case "forum-lite":
-      return mergeHydratedState(
-        forumLiteDefinition.buildInitialSessionState(),
-        forumLiteDefinition.hydratePersistedState(value),
-      );
-    case "repo-lite":
-      return mergeHydratedState(
-        repoLiteDefinition.buildInitialSessionState(),
-        repoLiteDefinition.hydratePersistedState(value),
-      );
-  }
+  const definition = getHostedAppDefinition(appId);
+  return mergeHydratedState(
+    definition.buildInitialSessionState(),
+    definition.hydratePersistedState(value),
+  );
 }
 
 export function listHostedAppDefinitions() {
@@ -112,29 +75,13 @@ export function buildInitialSessionState(app: string): HostedAppStateById[Hosted
 }
 
 export function buildFinalState(session: HostedSession) {
-  switch (session.app) {
-    case "shopping-lite":
-      return shoppingLiteDefinition.buildFinalState(session);
-    case "wiki-lite":
-      return wikiLiteDefinition.buildFinalState(session);
-    case "forum-lite":
-      return forumLiteDefinition.buildFinalState(session);
-    case "repo-lite":
-      return repoLiteDefinition.buildFinalState(session);
-  }
+  return (getHostedAppDefinition(session.app).buildFinalState as (value: HostedSession) => unknown)(session);
 }
 
 export function evaluateSession(session: HostedSession) {
-  switch (session.app) {
-    case "shopping-lite":
-      return shoppingLiteDefinition.evaluate(session);
-    case "wiki-lite":
-      return wikiLiteDefinition.evaluate(session);
-    case "forum-lite":
-      return forumLiteDefinition.evaluate(session);
-    case "repo-lite":
-      return repoLiteDefinition.evaluate(session);
-  }
+  return (getHostedAppDefinition(session.app).evaluate as (value: HostedSession) => ReturnType<HostedAppDefinition["evaluate"]>)(
+    session,
+  );
 }
 
 export function createAppRouteHandlers(deps: HostedAppRouteDeps) {

@@ -9,14 +9,10 @@ import type {
 } from "./types.js";
 
 export type {
-  ForumAppSessionState,
   HostedAppId,
   HostedAppPersistenceState,
   HostedAppSessionState,
   HostedAppStateById,
-  RepoAppSessionState,
-  ShoppingAppSessionState,
-  WikiAppSessionState,
 } from "./types.js";
 
 export function isStateRecord(value: unknown): value is Record<string, unknown> {

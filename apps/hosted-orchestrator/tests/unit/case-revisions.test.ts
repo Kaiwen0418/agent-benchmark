@@ -17,7 +17,7 @@ test("revision loader validates and returns a typed private manifest", async () 
     caseRevisionId: "revision-1",
     loadRevision: async () => row,
   });
-  assert.equal(revision.sessions.length, 4);
+  assert.equal(revision.sessions.length, hostedWebSuiteMetadata.sessions.length);
   assert.equal(revision.contentHash, "a".repeat(64));
 });
 

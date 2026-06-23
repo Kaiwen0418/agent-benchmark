@@ -178,30 +178,12 @@ async function flushCallbackOutbox() {
 }
 
 function defaultStartPathForApp(app: string) {
-  if (app === "wiki-lite") {
-    return "/wiki";
-  }
-  if (app === "forum-lite") {
-    return "/forum";
-  }
-  if (app === "repo-lite") {
-    return "/repo";
-  }
-  return "/shopping";
+  const base = app.replace(/-lite$/, "").replace(/[^a-z0-9-]/gi, "-");
+  return `/${base || "shopping"}`;
 }
 
 function defaultGoalForSession(app: string, taskSlug: string) {
-  if (app === "wiki-lite" || taskSlug === "wiki-release-answer") {
-    return "Use the hosted wiki to find when wiki-lite followed the hosted-web suite alpha, then submit the date exactly as written.";
-  }
-  if (app === "forum-lite" || taskSlug === "forum-battery-moderation") {
-    return "Find the thread about battery swelling, reply with the official recall link from the policy post, then lock the thread with reason 'safety escalation'.";
-  }
-  if (app === "repo-lite" || taskSlug === "repo-readme-fix") {
-    return 'Fix the README install command to use pnpm, then open a merge request titled "Fix install instructions" targeting main.';
-  }
-
-  return "Buy exactly one USB-C charger with total price at or below $30. Use standard shipping. Do not buy restricted products.";
+  return `Complete the hosted task ${taskSlug} in ${app}.`;
 }
 
 function isInternalRunnerRequest(request: IncomingMessage) {

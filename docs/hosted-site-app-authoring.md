@@ -132,6 +132,8 @@ apps/hosted-sites/src/apps/<app-slug>/
   render.ts
   evaluate.ts
   final-state.ts
+  test-support.ts
+  test-driver.mjs
 
 apps/hosted-sites/src/routes/<route-name>.ts
 ```
@@ -142,11 +144,38 @@ apps/hosted-sites/src/routes/<route-name>.ts
 - `render.ts`: HTML for the required task surface.
 - `evaluate.ts`: evaluator-level `HostedWebScoreResult`.
 - `final-state.ts`: compact, redacted result evidence.
+- `test-support.ts`: unit-test helpers that build passing and failing states for declared variants.
+- `test-driver.mjs`: E2E smoke driver that completes one generated session through HTTP routes.
 - `definition.ts`: composes app hooks.
 - `routes`: HTTP parsing, persistence, telemetry, rendering.
-- `runtime/app-registry.ts`: the only top-level app registration point.
+- `runtime/generated-app-*.ts`: generated static imports for app definitions, app state types, and test support.
 
-Do not add app branches to `server.ts` or a central evaluation dispatcher.
+Do not add app branches to `server.ts`, `session-cache.ts`, or a central evaluation dispatcher. Run `pnpm --filter hosted-sites generate-registry` after adding an app directory; `pnpm --filter hosted-sites test` and `build` fail if the generated registry is stale.
+
+## Add Existing Apps To A Suite
+
+If the app already exists under `apps/hosted-sites/src/apps/<app-slug>`, adding it to the default suite should only touch `packages/test-cases`:
+
+1. Add or reuse the app question variants under `packages/test-cases/src/apps/<app-slug>.ts`.
+2. Add the session to `packages/test-cases/src/suites/hosted-web-v2.ts` with `app`, `taskSlug`, `taskVersion`, `seedVersion`, `sequenceIndex`, `weight`, `required`, `startPath`, and `metadata.questionVariants`.
+3. Update the typed catalog schema in `packages/test-cases/src/schemas.ts` only if the app's `taskConfig` shape is new.
+4. Run `pnpm catalog:generate` and `pnpm catalog:check`.
+
+The orchestrator reads the ordered suite manifest. Hosted-sites routes, state hydration, final-state projection, and scoring are resolved through the registered app definition.
+
+## Add A New Hosted App
+
+Adding a new app should be localized to one app directory plus catalog schema/source:
+
+1. Create `apps/hosted-sites/src/apps/<app-slug>/` with the files listed above.
+2. Export `type AppSessionState` from `types.ts`.
+3. Export a `HostedAppDefinition` from `definition.ts`; its `stateKeys` are the authoritative persisted state keys for Redis/session snapshots.
+4. Export a `HostedAppTestSupport` from `test-support.ts`; variant matrix tests use it to build passing and failing states.
+5. Export `complete()` from `test-driver.mjs`; lifecycle smoke dynamically imports it by `session.app`.
+6. Run `pnpm --filter hosted-sites generate-registry`.
+7. Add the app's question variant schema and suite session in `packages/test-cases`, then regenerate the catalog seed.
+
+After this, runtime dispatch, Redis state validation, unit variant matrix coverage, and E2E smoke completion are app-definition driven rather than central switch driven.
 
 ## Scoring
 

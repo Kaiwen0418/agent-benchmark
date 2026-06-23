@@ -12,10 +12,11 @@ import {
   hydrateHostedAppState,
   listHostedAppDefinitions,
 } from "../../src/runtime/app-registry.js";
+import { hostedAppTestSupport } from "../../src/runtime/generated-test-support.js";
 import type { HostedAppRouteDeps } from "../../src/runtime/app-definition.js";
 import type { HostedAppId, HostedSessionFor } from "../../src/runtime/types.js";
 
-const expectedApps = ["shopping-lite", "wiki-lite", "forum-lite", "repo-lite"] as const;
+const expectedApps = listHostedAppDefinitions().map((definition) => definition.id);
 
 function taskConfigForApp(app: HostedAppId) {
   const configs = {
@@ -116,10 +117,13 @@ test("app registry exposes every hosted app definition", () => {
 });
 
 test("app registry builds only the state owned by each app", () => {
-  assert.deepEqual(Object.keys(buildInitialSessionState("shopping-lite")).sort(), ["cart", "orders", "products"]);
-  assert.deepEqual(Object.keys(buildInitialSessionState("wiki-lite")).sort(), ["wikiAnswerSubmissions", "wikiArticles"]);
-  assert.deepEqual(Object.keys(buildInitialSessionState("forum-lite")).sort(), ["moderationActions", "threads"]);
-  assert.deepEqual(Object.keys(buildInitialSessionState("repo-lite")).sort(), ["files", "issues", "mergeRequests"]);
+  for (const definition of listHostedAppDefinitions()) {
+    assert.deepEqual(
+      Object.keys(buildInitialSessionState(definition.id)).sort(),
+      [...definition.stateKeys].sort(),
+      definition.id,
+    );
+  }
 });
 
 test("app registry creates isolated state arrays for each session", () => {
@@ -131,18 +135,12 @@ test("app registry creates isolated state arrays for each session", () => {
 });
 
 test("app registry extracts only state owned by each app", () => {
-  const expectedKeys = {
-    "shopping-lite": ["cart", "orders", "products"],
-    "wiki-lite": ["wikiAnswerSubmissions", "wikiArticles"],
-    "forum-lite": ["moderationActions", "threads"],
-    "repo-lite": ["files", "issues", "mergeRequests"],
-  };
-
   for (const app of expectedApps) {
+    const definition = getHostedAppDefinition(app);
     const state = extractHostedAppState(makeSession(app));
     assert.deepEqual(
       Object.keys(state).sort(),
-      expectedKeys[app as keyof typeof expectedKeys],
+      [...definition.stateKeys].sort(),
     );
   }
 });
@@ -187,6 +185,7 @@ test("app registry composes one route handler per hosted app", () => {
 test("app registry dispatches evaluation and final state through definitions", () => {
   for (const app of expectedApps) {
     const session = makeSession(app);
+    hostedAppTestSupport[app].applyPassingState(session, taskConfigForApp(app).questionGeneration.taskConfig);
     const result = evaluateSession(session);
     const finalState = buildFinalState(session);
 

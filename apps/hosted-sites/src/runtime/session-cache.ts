@@ -1,6 +1,6 @@
 import { createClient } from "redis";
 import type { RedisHostedSessionEnvelopeV2 } from "@agentbench/shared";
-import { resolveHostedAppId } from "./app-registry.js";
+import { getHostedAppDefinition, listHostedAppDefinitions, resolveHostedAppId } from "./app-registry.js";
 import type { HostedAppId, HostedAppPersistenceState, HostedSession } from "./types.js";
 
 export type SessionCache = {
@@ -38,15 +38,9 @@ function isNullableString(value: unknown) {
   return value === null || typeof value === "string";
 }
 
-const stateKeysByApp = {
-  "shopping-lite": ["products", "cart", "orders"],
-  "wiki-lite": ["wikiArticles", "wikiAnswerSubmissions"],
-  "forum-lite": ["threads", "moderationActions"],
-  "repo-lite": ["files", "issues", "mergeRequests"],
-} as const satisfies { [TApp in HostedAppId]: readonly (keyof HostedAppPersistenceState)[] };
-
 function isHostedAppSessionState(app: HostedAppId, value: unknown) {
-  return isRecord(value) && stateKeysByApp[app].every((key) => Array.isArray(value[key]));
+  const stateKeys = getHostedAppDefinition(app).stateKeys as readonly (keyof HostedAppPersistenceState)[];
+  return isRecord(value) && stateKeys.every((key) => Array.isArray(value[key]));
 }
 
 function hasHostedSessionFields(value: Record<string, unknown>) {
@@ -94,7 +88,7 @@ function normalizeHostedSession(value: unknown): HostedSession | null {
   }
 
   const app = resolveHostedAppId(value.app as string);
-  const stateKeys = stateKeysByApp[app];
+  const stateKeys = getHostedAppDefinition(app).stateKeys as readonly (keyof HostedAppPersistenceState)[];
 
   if (isHostedAppSessionState(app, value.state)) {
     return { ...value, app } as HostedSession;
@@ -106,7 +100,7 @@ function normalizeHostedSession(value: unknown): HostedSession | null {
 
   const state = Object.fromEntries(stateKeys.map((key) => [key, value[key]]));
   const migrated: Record<string, unknown> = { ...value, app, state };
-  for (const key of Object.values(stateKeysByApp).flat()) {
+  for (const key of listHostedAppDefinitions().flatMap((definition) => definition.stateKeys)) {
     delete migrated[key];
   }
   return migrated as HostedSession;
