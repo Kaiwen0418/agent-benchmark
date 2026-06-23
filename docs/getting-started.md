@@ -98,6 +98,7 @@ The current suite contains:
 - `forum-lite`: reply to and moderate a safety thread
 - `repo-lite`: update installation instructions and create a merge request
 - `wiki-lite`: retrieve and submit release-history and policy answers
+- `notes-lite`: create a generated follow-up note
 
 Create a standalone local session:
 

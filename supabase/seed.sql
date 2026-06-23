@@ -4,7 +4,7 @@ values (
   '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
   'hosted-web-suite',
   'Hosted Web Suite',
-  'Run a five-step hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite.',
+  'Run a six-step hosted suite across shopping-lite, forum-lite, repo-lite, wiki-lite, and notes-lite.',
   'browser',
   'easy',
   'hosted-web',
@@ -22,10 +22,10 @@ set
 
 select public.publish_benchmark_case_revision(
   '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
-  'hosted-web-suite-v3',
+  'hosted-web-suite-v3.0.1',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3",
+  "suiteVersion": "v3.0.1",
   "sessions": [
     {
       "app": "shopping-lite",
@@ -271,10 +271,52 @@ select public.publish_benchmark_case_revision(
           }
         ]
       }
+    },
+    {
+      "app": "notes-lite",
+      "taskSlug": "notes-followup-create",
+      "title": "Notes Follow-up",
+      "startPath": "/notes",
+      "taskVersion": "v1",
+      "seedVersion": "notes-lite-v1",
+      "sequenceIndex": 5,
+      "weight": 1,
+      "required": true,
+      "metadata": {
+        "questionVariants": [
+          {
+            "id": "support-followup",
+            "goal": "Create a follow-up note titled 'Support follow-up' with body 'Email Mira after the replacement adapter ships.' and tag 'support'.",
+            "taskConfig": {
+              "expectedTitle": "Support follow-up",
+              "expectedBody": "Email Mira after the replacement adapter ships.",
+              "expectedTag": "support"
+            }
+          },
+          {
+            "id": "release-note",
+            "goal": "Create a follow-up note titled 'Release reminder' with body 'Confirm the hosted-web v3.0.1 smoke run before publishing notes.' and tag 'release'.",
+            "taskConfig": {
+              "expectedTitle": "Release reminder",
+              "expectedBody": "Confirm the hosted-web v3.0.1 smoke run before publishing notes.",
+              "expectedTag": "release"
+            }
+          },
+          {
+            "id": "ops-check",
+            "goal": "Create a follow-up note titled 'Ops check' with body 'Review Redis health metrics after the next hosted suite run.' and tag 'ops'.",
+            "taskConfig": {
+              "expectedTitle": "Ops check",
+              "expectedBody": "Review Redis health metrics after the next hosted suite run.",
+              "expectedTag": "ops"
+            }
+          }
+        ]
+      }
     }
   ]
 }$catalog$::jsonb,
-  '1800ad49697562245e84fda67dc306f0790c86bc892284a7a9bb7f928bcf7be3'
+  '2f445d65e94040275e7f4cf763a765abed2dc5b88eabca75935db816cf003a25'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

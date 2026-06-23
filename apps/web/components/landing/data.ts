@@ -8,7 +8,7 @@ export const benchmarkOptions: Array<{
   {
     value: "hosted-web-suite",
     label: "Hosted Web Suite",
-    description: "Five-session hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite with server-side scoring.",
+    description: "Six-session hosted suite across shopping-lite, forum-lite, repo-lite, wiki-lite, and notes-lite with server-side scoring.",
   },
 ];
 
@@ -48,7 +48,7 @@ export const docsSteps = [
   {
     step: "02",
     title: "Run the hosted suite",
-    body: "Use the same shopping-lite, forum-lite, repo-lite, and wiki-lite release and policy tasks across agents so results stay comparable.",
+    body: "Use the same shopping-lite, forum-lite, repo-lite, wiki-lite, and notes-lite tasks across agents so results stay comparable.",
   },
   {
     step: "03",

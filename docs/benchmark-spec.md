@@ -63,6 +63,12 @@ Prefer backend-state checks. UI-state or final-response checks should be used on
 
 Changing seed data, success conditions, task wording that affects behavior, or app state shape requires a task/seed/suite version change. Historical results must retain the exact versions used during execution.
 
+Hosted suite releases use `v<major>.<minor>.<patch>` for `suiteVersion` and mirror that value in the revision name, for example `hosted-web-suite-v3.0.1`.
+
+- Increment the patch version for small compatible testcase additions, new app sessions, extra variants, wording clarifications that preserve semantics, and scorer fixes that do not redefine historical intent.
+- Increment the minor version only for large batch updates, broad suite composition changes, or material scoring/task semantics changes that still belong to the same major benchmark line.
+- Increment the major version only when the project owner explicitly requests a new major suite line.
+
 Redis envelope versioning is independent from benchmark versioning. It describes storage compatibility, not task semantics.
 
 ## Design Rules

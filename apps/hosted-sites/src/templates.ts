@@ -36,13 +36,15 @@ export function layout(params: {
   const isTerminal = params.session.status === "completed" || params.session.status === "failed" || params.session.status === "expired";
   const appNav =
     params.session.app === "wiki-lite"
-      ? `<a href="/wiki?session=${encodeURIComponent(params.session.token)}">Knowledge base</a>`
-      : params.session.app === "forum-lite"
-        ? `<a href="/forum?session=${encodeURIComponent(params.session.token)}">All threads</a>`
-        : params.session.app === "repo-lite"
-          ? `<a href="/repo?session=${encodeURIComponent(params.session.token)}">Repository</a>`
-          : `<a href="/shopping?session=${encodeURIComponent(params.session.token)}">Catalog</a>
-             <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>`;
+        ? `<a href="/wiki?session=${encodeURIComponent(params.session.token)}">Knowledge base</a>`
+        : params.session.app === "forum-lite"
+          ? `<a href="/forum?session=${encodeURIComponent(params.session.token)}">All threads</a>`
+          : params.session.app === "repo-lite"
+            ? `<a href="/repo?session=${encodeURIComponent(params.session.token)}">Repository</a>`
+            : params.session.app === "notes-lite"
+              ? `<a href="/notes?session=${encodeURIComponent(params.session.token)}">Notes</a>`
+              : `<a href="/shopping?session=${encodeURIComponent(params.session.token)}">Catalog</a>
+                 <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>`;
   const telemetry = isViewer || isTerminal ? "" : `
     <script>
       window.AgentBenchHostedSession = ${JSON.stringify({
