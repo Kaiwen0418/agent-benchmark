@@ -7,8 +7,14 @@ cd "${ROOT_DIR}"
 echo "== Deployment classifier =="
 bash scripts/test-deploy-classifier.sh
 
+echo "== Registry retry helper =="
+bash scripts/test-registry-retry.sh
+
 echo "== Orchestrator topology =="
 bash scripts/test-orchestrator-topology.sh
+
+echo "== Redis topology =="
+bash scripts/test-redis-topology.sh
 
 echo "== Web secret boundary =="
 bash scripts/check-web-secret-boundary.sh

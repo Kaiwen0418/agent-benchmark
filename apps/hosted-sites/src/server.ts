@@ -34,7 +34,7 @@ const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:300
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
 const instanceId = process.env.HOSTED_SITES_INSTANCE_ID ?? `${hostname()}:${process.pid}`;
-const redisUrl = process.env.HOSTED_SESSION_REDIS_URL ?? process.env.REDIS_URL;
+const redisUrl = process.env.HOSTED_SESSION_REDIS_URL;
 const sessionRedisTtlMs = Number(process.env.HOSTED_SESSION_REDIS_TTL_MS ?? 1000 * 60 * 60 * 6);
 
 const sessions = new Map<string, HostedSession>();

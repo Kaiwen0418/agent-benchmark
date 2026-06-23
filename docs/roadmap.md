@@ -7,7 +7,7 @@ This roadmap starts from the architecture that is already running. Completed wor
 - External agents own their browser; AgentBench does not run arbitrary agent code.
 - `apps/web` runs on Vercel and owns run creation, quota, live observability, replay, and artifacts.
 - The hosted stack runs behind Nginx and Cloudflare Tunnel on a private Linux host.
-- Redis provides the shared hosted-session cache and 16 partitioned orchestrator command Streams.
+- Redis is split into a hosted-session cache endpoint and an orchestrator command-Streams endpoint.
 - Supabase is the durable lifecycle, audit, and scoring store.
 - Hosted-orchestrator is the sole hosted lifecycle database owner; hosted-sites has no database credential and Web uses orchestrator APIs or public read models for hosted data.
 - Attempt initialization is database-first and protected by a unique hosted-attempt constraint plus a short Redis lease.
@@ -80,6 +80,7 @@ P0 completion criterion: after any single-process failure or command retry, the 
 - Separate liveness from readiness; readiness should cover Redis, partition ownership, and required Supabase access.
 - Define alert thresholds and an operator runbook for queue backlog, callback failure, migration failure, disk pressure, and Redis recovery.
 - Test backup/restore and disaster recovery for Supabase records and Redis-backed active sessions.
+- Deployment retries transient registry/network failures before replacing containers, and Redis session/command workloads are independently addressed for capacity and failure analysis.
 
 Completion criteria: an operator can identify a stuck attempt and its last durable command without reading unstructured container logs.
 

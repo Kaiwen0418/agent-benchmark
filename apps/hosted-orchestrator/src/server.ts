@@ -37,7 +37,7 @@ const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const orchestratorRedisUrl = process.env.ORCHESTRATOR_REDIS_URL ?? process.env.REDIS_URL;
+const orchestratorRedisUrl = process.env.ORCHESTRATOR_REDIS_URL;
 const orchestratorMode = (process.env.ORCHESTRATOR_MODE ?? "all") as CommandBackboneRole;
 const orchestratorPartitionCount = Math.trunc(envNumber("ORCHESTRATOR_PARTITION_COUNT", 16));
 
@@ -1198,7 +1198,7 @@ async function persistCommandDeadLetter(deadLetter: CommandDeadLetter) {
 }
 
 if (!orchestratorRedisUrl) {
-  throw new Error("ORCHESTRATOR_REDIS_URL or REDIS_URL is required for the orchestrator command backbone.");
+  throw new Error("ORCHESTRATOR_REDIS_URL is required for the orchestrator command backbone.");
 }
 
 const commandBackbone = createCommandBackbone({

@@ -126,7 +126,7 @@ queue_recovery_command() {
   local partition="$1"
   local command_id="$2"
   local partition_key="$3"
-  compose exec -T redis redis-cli --raw XADD \
+  compose exec -T orchestrator-redis redis-cli --raw XADD \
     "agentbench:orchestrator:commands:p${partition}" '*' \
     commandId "${command_id}" \
     type maintenance.cleanup \
@@ -139,7 +139,7 @@ wait_for_command_result() {
   local result=""
   local attempt
   for attempt in $(seq 1 30); do
-    result="$(compose exec -T redis redis-cli --raw GET "agentbench:orchestrator:result:${command_id}" | tr -d '\r')"
+    result="$(compose exec -T orchestrator-redis redis-cli --raw GET "agentbench:orchestrator:result:${command_id}" | tr -d '\r')"
     if [[ -n "${result}" ]] && node -e '
       const result = JSON.parse(process.argv[1]);
       process.exit(result.commandId === process.argv[2] && result.statusCode === 200 ? 0 : 1);
