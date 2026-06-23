@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { addReplyToThread, lockThread } from "../../src/apps/forum-lite/actions.js";
+import { createNote } from "../../src/apps/notes-lite/actions.js";
 import { createMergeRequest, updateFileContent } from "../../src/apps/repo-lite/actions.js";
 import { addProductToCart, getCartTotal, submitCheckoutOrder } from "../../src/apps/shopping-lite/actions.js";
 import { markArticleViewed, submitWikiAnswer } from "../../src/apps/wiki-lite/actions.js";
@@ -123,4 +124,33 @@ test("repo actions update README and create merge request snapshots", () => {
   assert.equal(session.state.mergeRequests.length, 1);
   assert.equal(session.state.mergeRequests[0].title, "Fix install instructions");
   assert.equal(session.state.mergeRequests[0].changedFiles[0].content.includes("pnpm install"), true);
+});
+
+test("notes actions create trimmed notes and reject missing fields", () => {
+  const session = makeSession("notes-lite");
+  const created = createNote(session, {
+    title: "  Support follow-up  ",
+    body: "  Email Mira after the replacement adapter ships.  ",
+    tag: " support ",
+    now: () => "2026-06-01T00:00:00.000Z",
+    makeId: (prefix) => `${prefix}_1`,
+  });
+
+  assert.equal(created.success, true);
+  assert.deepEqual(session.state.notes[0], {
+    id: "note_1",
+    title: "Support follow-up",
+    body: "Email Mira after the replacement adapter ships.",
+    tag: "support",
+    createdAt: "2026-06-01T00:00:00.000Z",
+  });
+
+  const rejected = createNote(session, {
+    title: "",
+    body: "Body",
+    tag: "support",
+    now: () => "2026-06-01T00:00:00.000Z",
+    makeId: (prefix) => `${prefix}_2`,
+  });
+  assert.deepEqual(rejected, { success: false, error: "Title is required" });
 });

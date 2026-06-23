@@ -35,7 +35,7 @@ flowchart LR
 
 ### `apps/hosted-sites`
 
-- serves `shopping-lite`, `forum-lite`, `repo-lite`, and `wiki-lite`
+- serves `shopping-lite`, `forum-lite`, `repo-lite`, `wiki-lite`, and `notes-lite`
 - validates session tokens and app ownership
 - mutates session-scoped task state
 - emits telemetry and task signals

@@ -29,12 +29,13 @@ The homepage is now centered on one primary path:
 - run status starts at `waiting_for_agent`
 - the UI allocates a hosted attempt with one or more ordered hosted sessions
 - the connect page and JSON config expose an attempt-level hosted suite URL plus per-session details
-- the default benchmark case is a five-session hosted suite:
+- the default benchmark case is a six-session hosted suite:
   - `shopping-lite`
   - `forum-lite`
   - `repo-lite`
   - `wiki-lite` release lookup
   - `wiki-lite` policy lookup
+  - `notes-lite`
 - for hosted-web runs, the agent uses the hosted suite URL as the main task surface
 - hosted-sites writes per-session results and the aggregated attempt score
 

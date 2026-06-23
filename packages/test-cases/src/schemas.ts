@@ -48,6 +48,12 @@ export const wikiTaskConfigSchema = z.object({
   }
 });
 
+export const notesTaskConfigSchema = z.object({
+  expectedTitle: z.string().min(1),
+  expectedBody: z.string().min(1),
+  expectedTag: z.string().min(1),
+});
+
 export const shoppingQuestionVariantSchema = questionVariantBaseSchema.extend({
   taskConfig: shoppingTaskConfigSchema,
 });
@@ -59,6 +65,9 @@ export const repoQuestionVariantSchema = questionVariantBaseSchema.extend({
 });
 export const wikiQuestionVariantSchema = questionVariantBaseSchema.extend({
   taskConfig: wikiTaskConfigSchema,
+});
+export const notesQuestionVariantSchema = questionVariantBaseSchema.extend({
+  taskConfig: notesTaskConfigSchema,
 });
 
 function sessionSchema<TApp extends string, TConfig extends z.ZodTypeAny>(app: TApp, variant: TConfig) {
@@ -82,12 +91,14 @@ export const shoppingSessionSchema = sessionSchema("shopping-lite", shoppingQues
 export const forumSessionSchema = sessionSchema("forum-lite", forumQuestionVariantSchema);
 export const repoSessionSchema = sessionSchema("repo-lite", repoQuestionVariantSchema);
 export const wikiSessionSchema = sessionSchema("wiki-lite", wikiQuestionVariantSchema);
+export const notesSessionSchema = sessionSchema("notes-lite", notesQuestionVariantSchema);
 
 export const hostedSessionDefinitionSchema = z.discriminatedUnion("app", [
   shoppingSessionSchema,
   forumSessionSchema,
   repoSessionSchema,
   wikiSessionSchema,
+  notesSessionSchema,
 ]);
 
 export const hostedSuiteMetadataSchema = z.object({
@@ -131,6 +142,7 @@ export function parseQuestionVariants(app: string, value: unknown): HostedQuesti
     "forum-lite": forumQuestionVariantSchema,
     "repo-lite": repoQuestionVariantSchema,
     "wiki-lite": wikiQuestionVariantSchema,
+    "notes-lite": notesQuestionVariantSchema,
   }[app];
   if (!schema) {
     throw new Error(`Unsupported hosted app ${app}.`);

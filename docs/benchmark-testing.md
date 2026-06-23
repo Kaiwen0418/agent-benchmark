@@ -38,6 +38,7 @@ CI should enumerate declared variants directly instead of relying on a few rando
 | `forum-lite` | Every thread/value/reason tuple; wrong thread, missing reply, wrong reason, lock-before-reply, and writes after lock. |
 | `repo-lite` | Every package-manager/title/branch tuple; forbidden text retained, wrong file/title/branch, and duplicate MR. |
 | `wiki-lite` | Every article/answer-kind tuple; canonical answer, declared normalization, near miss, wrong article, empty answer, and duplicate submission. |
+| `notes-lite` | Every generated note tuple; exact title/body/tag match, wrong tag, missing body, and terminal mutation rejection. |
 
 ## Cross-Cutting Coverage
 
@@ -63,10 +64,10 @@ Publishing converts the validated catalog into an immutable `benchmark_case_revi
 
 ## Commands And Scheduled Coverage
 
-- `pnpm --filter hosted-sites test` imports the canonical catalog, executes positive and negative scoring for all 12 current variants, and repeats each passing state across all five layouts and both themes.
+- `pnpm --filter hosted-sites test` imports the canonical catalog, executes positive and negative scoring for all 15 current variants, and repeats each passing state across all five layouts and both themes.
 - `pnpm catalog:publish` validates and publishes the current catalog release with service-role credentials.
 - `pnpm verify:ci` runs the complete repository gate, including Redis command tests, PostgreSQL lifecycle races, local hosted smoke, and production builds.
 - `Hosted Variant Sweep` runs four deterministic full-pass attempts against the development environment every Monday and on demand. Seeds `full-pool-0`, `full-pool-1`, `full-pool-2`, and `full-pool-4` cover every current variant without using Web guest quota.
-- Each lifecycle smoke logs selected variant IDs and requires four unique `hosted_web_results` rows plus one `benchmark_attempt_scores` row.
+- Each lifecycle smoke logs selected variant IDs and requires one unique `hosted_web_results` row per suite session plus one `benchmark_attempt_scores` row.
 
 The seed list is versioned with the suite. Recompute it whenever variant IDs, session order, app slug, or task slug changes; CI remains the immediate guard against an uncovered variant.

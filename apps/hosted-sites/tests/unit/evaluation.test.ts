@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateForum, type ForumEvaluationSession } from "../../src/apps/forum-lite/evaluate.js";
+import { evaluateNotes, type NotesEvaluationSession } from "../../src/apps/notes-lite/evaluate.js";
 import { evaluateRepo, type RepoEvaluationSession } from "../../src/apps/repo-lite/evaluate.js";
 import { evaluateShopping, type ShoppingEvaluationSession } from "../../src/apps/shopping-lite/evaluate.js";
 import { evaluateWiki, type WikiEvaluationSession } from "../../src/apps/wiki-lite/evaluate.js";
@@ -53,6 +54,11 @@ const defaultTaskConfigs = {
     forbiddenText: "npm install",
     expectedMrTitle: "Fix install instructions",
     expectedTargetBranch: "main",
+  }),
+  notes: generatedTaskConfig({
+    expectedTitle: "Support follow-up",
+    expectedBody: "Email Mira after the replacement adapter ships.",
+    expectedTag: "support",
   }),
 };
 
@@ -362,6 +368,50 @@ test("evaluateRepo fails when MR title does not match", () => {
     }),
   );
 
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+function makeNotesSession(
+  overrides?: Partial<NotesEvaluationSession["state"]>,
+): NotesEvaluationSession {
+  return {
+    app: "notes-lite",
+    taskSlug: "notes-followup-create",
+    metadata: defaultTaskConfigs.notes,
+    state: {
+      notes: [
+        {
+          id: "note_1",
+          title: "Support follow-up",
+          body: "Email Mira after the replacement adapter ships.",
+          tag: "support",
+          createdAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+      ...overrides,
+    },
+  };
+}
+
+test("evaluateNotes passes when exact generated note exists", () => {
+  const result = evaluateNotes(makeNotesSession());
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateNotes fails when the generated note tag is wrong", () => {
+  const result = evaluateNotes(makeNotesSession({
+    notes: [
+      {
+        id: "note_1",
+        title: "Support follow-up",
+        body: "Email Mira after the replacement adapter ships.",
+        tag: "ops",
+        createdAt: "2026-06-01T00:00:00.000Z",
+      },
+    ],
+  }));
   assert.equal(result.status, "failed");
   assert.equal(result.score, 0);
 });

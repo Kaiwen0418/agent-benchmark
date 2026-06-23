@@ -32,6 +32,7 @@ function taskConfigForApp(app: HostedAppId) {
     },
     "forum-lite": { targetThreadId: "thr-battery", expectedReplyValue: "https://support.example.com/recall/battery-2026", expectedLockReason: "safety escalation" },
     "repo-lite": { filePath: "README.md", expectedText: "pnpm install", forbiddenText: "npm install", expectedMrTitle: "Fix install instructions", expectedTargetBranch: "main" },
+    "notes-lite": { expectedTitle: "Support follow-up", expectedBody: "Email Mira after the replacement adapter ships.", expectedTag: "support" },
   } satisfies Record<HostedAppId, Record<string, unknown>>;
   return {
     questionGeneration: {

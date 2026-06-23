@@ -170,6 +170,7 @@ App-specific state is a discriminated union:
 | `wiki-lite` | `wikiArticles`, `wikiAnswerSubmissions` |
 | `forum-lite` | `threads`, `moderationActions` |
 | `repo-lite` | `files`, `issues`, `mergeRequests` |
+| `notes-lite` | `notes` |
 
 A session never carries another app's state fields. Redis validation rejects mismatched app/state payloads.
 
