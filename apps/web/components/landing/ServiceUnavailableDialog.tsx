@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+
 type ServiceUnavailableDialogProps = {
   message: string;
   onClose: () => void;
@@ -11,9 +14,19 @@ export function ServiceUnavailableDialog({
   onClose,
   onRetry,
 }: ServiceUnavailableDialogProps) {
-  return (
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-[#111111]/45 px-5 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] grid place-items-center bg-[#111111]/45 px-5 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="service-unavailable-title"
@@ -41,6 +54,7 @@ export function ServiceUnavailableDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

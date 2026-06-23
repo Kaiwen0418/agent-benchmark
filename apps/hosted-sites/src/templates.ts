@@ -1,7 +1,5 @@
 import type { ServerResponse } from "node:http";
-import type { HostedAttemptReadModel } from "@agentbench/shared";
-import type { HostedSession, HostedAttemptOverviewSession } from "./runtime/types.js";
-import { sendJson } from "./runtime/http.js";
+import type { HostedSession } from "./runtime/types.js";
 import { readUiTheme, readUiVariant } from "./runtime/question-config.js";
 
 export function escapeHtml(value: string) {
@@ -355,41 +353,4 @@ export function layout(params: {
     </div>
   </body>
 </html>`;
-}
-
-export function renderAttemptOverview(
-  readModel: HostedAttemptReadModel<HostedAttemptOverviewSession>,
-  currentSession: HostedSession,
-  response: ServerResponse,
-  publicBaseUrl: string,
-  defaultStartPathForApp: (app: string) => string,
-) {
-  const cards = readModel.sessions
-    .map((session, index) => {
-      const state = session.id === readModel.activeSessionId ? "active" : session.status;
-      return `<article class="card">
-        <div class="muted">Session ${index + 1}</div>
-        <h2>${escapeHtml(session.title ?? session.taskSlug)}</h2>
-        <p>${escapeHtml(session.goal)}</p>
-        <p class="muted">App: ${escapeHtml(session.app)} · State: ${escapeHtml(state)}</p>
-        <a href="${escapeHtml(`${publicBaseUrl}${session.startPath ?? defaultStartPathForApp(session.app)}?session=${encodeURIComponent(session.token)}`)}">Open session</a>
-      </article>`;
-    })
-    .join("");
-
-  sendHtml(
-    response,
-    200,
-    layout({
-      title: "Hosted Suite Overview",
-      session: currentSession,
-      body: `<section class="panel">
-        <h2>Attempt ${escapeHtml(readModel.attemptId)}</h2>
-        <p>${readModel.progress.completed} of ${readModel.progress.total} sessions have submitted results.</p>
-      </section>
-      <section class="grid" style="margin-top:16px;">${cards}</section>`,
-      publicBaseUrl,
-      defaultStartPathForApp,
-    }),
-  );
 }
