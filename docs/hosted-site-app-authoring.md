@@ -159,7 +159,7 @@ Do not add app branches to `server.ts`, `session-cache.ts`, or a central evaluat
 If the app already exists under `apps/hosted-sites/src/apps/<app-slug>`, adding it to the default suite should only touch `packages/test-cases`:
 
 1. Add or reuse the app question variants under `packages/test-cases/src/apps/<app-slug>.ts`.
-2. Add the session to `packages/test-cases/src/suites/hosted-web-v2.ts` with `app`, `taskSlug`, `taskVersion`, `seedVersion`, `sequenceIndex`, `weight`, `required`, `startPath`, and `metadata.questionVariants`.
+2. Add the session to `packages/test-cases/src/suites/hosted-web.ts` with `app`, `taskSlug`, `taskVersion`, `seedVersion`, `sequenceIndex`, `weight`, `required`, `startPath`, and `metadata.questionVariants`.
 3. Update the typed catalog schema in `packages/test-cases/src/schemas.ts` only if the app's `taskConfig` shape is new.
 4. Run `pnpm catalog:generate` and `pnpm catalog:check`.
 
