@@ -25,6 +25,9 @@ bash scripts/check-database-ownership.sh
 echo "== Test layout =="
 bash scripts/check-test-layout.sh
 
+echo "== Hosted app consistency =="
+pnpm hosted-app:check
+
 echo "== Lifecycle Postgres integration =="
 bash scripts/test-lifecycle-postgres.sh
 

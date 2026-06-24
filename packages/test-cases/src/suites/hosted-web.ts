@@ -1,9 +1,12 @@
-import { forumQuestionVariants } from "../apps/forum-lite.js";
-import { notesQuestionVariants } from "../apps/notes-lite.js";
-import { repoQuestionVariants } from "../apps/repo-lite.js";
-import { shoppingQuestionVariants } from "../apps/shopping-lite.js";
-import { wikiPolicyQuestionVariants, wikiQuestionVariants } from "../apps/wiki-lite.js";
+import { hostedTestcaseApps } from "../generated-app-registry.js";
 import { hostedSuiteMetadataSchema } from "../schemas.js";
+
+const shoppingQuestionVariants = hostedTestcaseApps["shopping-lite"].variantPools.default;
+const forumQuestionVariants = hostedTestcaseApps["forum-lite"].variantPools.default;
+const repoQuestionVariants = hostedTestcaseApps["repo-lite"].variantPools.default;
+const wikiQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.release;
+const wikiPolicyQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.policy;
+const notesQuestionVariants = hostedTestcaseApps["notes-lite"].variantPools.default;
 
 export const hostedWebSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-suite-v1",
@@ -24,7 +27,7 @@ export const hostedWebSuiteCase = {
   id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
   slug: "hosted-web-suite",
   title: "Hosted Web Suite",
-  description: "Run a six-step hosted suite across shopping-lite, forum-lite, repo-lite, wiki-lite, and notes-lite.",
+  description: "Run the published deterministic hosted-web benchmark suite.",
   category: "browser",
   difficulty: "easy",
   provider: "hosted-web" as const,
