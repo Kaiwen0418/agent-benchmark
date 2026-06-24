@@ -162,17 +162,7 @@ type HostedSessionBase = {
 };
 ```
 
-App-specific state is a discriminated union:
-
-| App | State fields |
-| --- | --- |
-| `shopping-lite` | `products`, `cart`, `orders` |
-| `wiki-lite` | `wikiArticles`, `wikiAnswerSubmissions` |
-| `forum-lite` | `threads`, `moderationActions` |
-| `repo-lite` | `files`, `issues`, `mergeRequests` |
-| `notes-lite` | `notes` |
-
-A session never carries another app's state fields. Redis validation rejects mismatched app/state payloads.
+App-specific state is a generated discriminated union. Each app owns its state in `apps/hosted-sites/src/apps/<app-slug>/types.ts`, and `runtime/generated-app-types.ts` is the generated cross-app map. A session never carries another app's state fields; Redis validation rejects mismatched app/state payloads.
 
 The Redis envelope currently contains the raw write token, generated private task configuration inside `metadata`, and may contain a callback secret. Redis must therefore remain private. Token hashing, credential minimization, and ACL separation are tracked in [Issue #62](https://github.com/Kaiwen0418/agent-benchmark/issues/62).
 

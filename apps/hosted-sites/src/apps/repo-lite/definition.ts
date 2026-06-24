@@ -1,7 +1,7 @@
-import { createRepoRoutes } from "../../routes/repo.js";
 import { isStateRecord, readStateArray, type HostedAppDefinition } from "../../runtime/app-definition.js";
 import { evaluateRepo } from "./evaluate.js";
 import { buildRepoFinalState } from "./final-state.js";
+import { createRepoRoutes } from "./routes.js";
 import { getRepoDefaultGoal, getRepoStartPath, repoSeedFiles, repoSeedIssues, repoSeedMergeRequests } from "./seed.js";
 import type { RepoFile, RepoIssue, RepoMergeRequest } from "./types.js";
 

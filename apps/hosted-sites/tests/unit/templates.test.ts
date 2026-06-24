@@ -40,7 +40,8 @@ for (const uiVariant of ["workspace", "sidebar", "compact", "dashboard", "editor
       assert.match(html, new RegExp(`data-ui-variant="${uiVariant}"`));
       assert.match(html, new RegExp(`data-ui-theme="${uiTheme}"`));
       assert.match(html, new RegExp(`${uiVariant} · ${uiTheme}`));
-      assert.match(html, /Knowledge base/);
+      assert.match(html, /Task home/);
+      assert.match(html, /href="\/wiki\?session=tok_layout"/);
       assert.doesNotMatch(html, /Release History|Battery Thread|Edit README/);
     });
   }

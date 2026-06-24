@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 import { createApiRoutes } from "../../../src/routes/api.js";
-import { createShoppingRoutes } from "../../../src/routes/shopping.js";
+import { createShoppingRoutes } from "../../../src/apps/shopping-lite/routes.js";
 import { buildInitialSessionState, defaultGoalForSession, defaultStartPathForApp, evaluateSession } from "../../../src/runtime/app-registry.js";
 import { badRequest, notFound, readForm, readJson, sendJson } from "../../../src/runtime/http.js";
 import type { HostedSession } from "../../../src/runtime/types.js";

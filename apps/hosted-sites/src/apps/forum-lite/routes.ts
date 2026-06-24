@@ -1,28 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { HostedWebScoreResult } from "@agentbench/scoring";
-import { addReplyToThread, lockThread } from "../apps/forum-lite/actions.js";
-import { renderForumIndex, renderThread } from "../apps/forum-lite/render.js";
-import { redirect, sendJson } from "../runtime/http.js";
-import { isHostedSessionForApp, type HostedSession } from "../runtime/types.js";
+import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
+import { redirect, sendJson } from "../../runtime/http.js";
+import { isHostedSessionForApp } from "../../runtime/types.js";
+import { addReplyToThread, lockThread } from "./actions.js";
+import { renderForumIndex, renderThread } from "./render.js";
 
-type ForumRoutesDeps = {
-  publicBaseUrl: string;
-  defaultStartPathForApp: (app: string) => string;
-  makeId: (prefix: string) => string;
-  getSession: (url: URL, request: IncomingMessage) => Promise<HostedSession | null>;
-  persistSessionSnapshot: (session: HostedSession) => Promise<void>;
-  recordEvent: (session: HostedSession, payload: Record<string, unknown>) => Promise<void>;
-  forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
-  completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
-  evaluateSession: (session: HostedSession) => HostedWebScoreResult;
-  resolveSessionResult: (session: HostedSession) => Promise<HostedWebScoreResult>;
-  rejectTerminalMutation: (session: HostedSession, response: ServerResponse) => boolean;
-  readForm: (request: IncomingMessage) => Promise<URLSearchParams>;
-  badRequest: (response: ServerResponse, message: string) => void;
-  notFound: (response: ServerResponse) => void;
-};
-
-export function createForumRoutes(deps: ForumRoutesDeps) {
+export function createForumRoutes(deps: HostedAppRouteDeps) {
   async function getForumSession(url: URL, request: IncomingMessage) {
     const session = await deps.getSession(url, request);
     return session && isHostedSessionForApp(session, "forum-lite") ? session : null;

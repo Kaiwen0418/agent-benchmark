@@ -35,7 +35,7 @@ flowchart LR
 
 ### `apps/hosted-sites`
 
-- serves `shopping-lite`, `forum-lite`, `repo-lite`, `wiki-lite`, and `notes-lite`
+- serves dynamically discovered hosted app definitions
 - validates session tokens and app ownership
 - mutates session-scoped task state
 - emits telemetry and task signals

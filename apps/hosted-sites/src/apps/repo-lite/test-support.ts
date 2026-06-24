@@ -1,6 +1,13 @@
 import { configString, type HostedAppTestSupport } from "../../runtime/test-support.js";
 
 export const repoLiteTestSupport: HostedAppTestSupport<"repo-lite"> = {
+  exampleTaskConfig: {
+    filePath: "README.md",
+    expectedText: "pnpm install",
+    forbiddenText: "npm install",
+    expectedMrTitle: "Fix install instructions",
+    expectedTargetBranch: "main",
+  },
   applyPassingState(session, config) {
     const filePath = configString(config, "filePath");
     const file = session.state.files.find((candidate) => candidate.path === filePath);

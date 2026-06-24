@@ -18,29 +18,14 @@ import type { HostedAppId, HostedSessionFor } from "../../src/runtime/types.js";
 
 const expectedApps = listHostedAppDefinitions().map((definition) => definition.id);
 
-function taskConfigForApp(app: HostedAppId) {
-  const configs = {
-    "shopping-lite": { targetCategory: "charger", quantity: 1, maxTotal: 30, shippingMethod: "standard", avoidRestricted: true },
-    "wiki-lite": {
-      targetArticleSlug: "agentbench-release-history",
-      answerContract: {
-        kind: "date",
-        canonicalValue: "June 1, 2026",
-        normalization: "trim-casefold-punctuation",
-        sourceArticleSlug: "agentbench-release-history",
-      },
-    },
-    "forum-lite": { targetThreadId: "thr-battery", expectedReplyValue: "https://support.example.com/recall/battery-2026", expectedLockReason: "safety escalation" },
-    "repo-lite": { filePath: "README.md", expectedText: "pnpm install", forbiddenText: "npm install", expectedMrTitle: "Fix install instructions", expectedTargetBranch: "main" },
-    "notes-lite": { expectedTitle: "Support follow-up", expectedBody: "Email Mira after the replacement adapter ships.", expectedTag: "support" },
-  } satisfies Record<HostedAppId, Record<string, unknown>>;
+function taskMetadataForApp(app: HostedAppId) {
   return {
     questionGeneration: {
       schemaVersion: 3,
       generationSeed: "registry-test",
       variantId: `${app}-test`,
       uiVariant: "workspace",
-      taskConfig: configs[app],
+      taskConfig: hostedAppTestSupport[app].exampleTaskConfig,
     },
   };
 }
@@ -66,7 +51,7 @@ function makeSession<TApp extends HostedAppId>(app: TApp): HostedSessionFor<TApp
     goal: defaultGoalForSession(app, `${app}-task`),
     startPath: defaultStartPathForApp(app),
     seedVersion: `${app}-v1`,
-    metadata: taskConfigForApp(app),
+    metadata: taskMetadataForApp(app),
     status: "active",
     expiresAt: null,
     accessCount: 0,
@@ -186,7 +171,7 @@ test("app registry composes one route handler per hosted app", () => {
 test("app registry dispatches evaluation and final state through definitions", () => {
   for (const app of expectedApps) {
     const session = makeSession(app);
-    hostedAppTestSupport[app].applyPassingState(session, taskConfigForApp(app).questionGeneration.taskConfig);
+    hostedAppTestSupport[app].applyPassingState(session, hostedAppTestSupport[app].exampleTaskConfig);
     const result = evaluateSession(session);
     const finalState = buildFinalState(session);
 

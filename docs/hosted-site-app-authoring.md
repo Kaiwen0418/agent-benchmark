@@ -41,7 +41,7 @@ flowchart TD
 
 ## Current Hosted Testcases
 
-The production `hosted-web-suite` case runs `hosted-web-suite-v1` version `v3.0.1`. All six sessions are required and have weight 1. `shopping-constrained-checkout` is the first session task slug, not the benchmark case slug.
+This is the only documentation table that enumerates the changing suite contents. The catalog source remains authoritative; update this summary when publishing a revision instead of copying the list into other documents.
 
 | Task | App | Variants |
 | --- | --- | --- |
@@ -131,28 +131,27 @@ apps/hosted-sites/src/apps/<app-slug>/
   types.ts
   seed.ts
   actions.ts
+  routes.ts
   render.ts
   evaluate.ts
   final-state.ts
   test-support.ts
   test-driver.mjs
-
-apps/hosted-sites/src/routes/<route-name>.ts
 ```
 
 - `types.ts`: compact app domain types.
 - `seed.ts`: deterministic fixtures and defaults.
 - `actions.ts`: pure business mutations with explicit inputs.
+- `routes.ts`: app-local HTTP parsing, persistence, telemetry, rendering, and redirects.
 - `render.ts`: HTML for the required task surface.
 - `evaluate.ts`: evaluator-level `HostedWebScoreResult`.
 - `final-state.ts`: compact, redacted result evidence.
-- `test-support.ts`: unit-test helpers that build passing and failing states for declared variants.
+- `test-support.ts`: representative task config plus unit-test helpers that build passing and failing states for declared variants.
 - `test-driver.mjs`: E2E smoke driver that completes one generated session through HTTP routes.
 - `definition.ts`: composes app hooks.
-- `routes`: HTTP parsing, persistence, telemetry, rendering.
 - `runtime/generated-app-*.ts`: generated static imports for app definitions, app state types, and test support.
 
-Do not add app branches to `server.ts`, `session-cache.ts`, or a central evaluation dispatcher. Run `pnpm --filter hosted-sites generate-registry` after adding an app directory; `pnpm --filter hosted-sites test` and `build` fail if the generated registry is stale.
+Do not add app branches to `server.ts`, `templates.ts`, `session-cache.ts`, or a central evaluation dispatcher. Run `pnpm --filter hosted-sites generate-registry` after adding an app directory; `pnpm --filter hosted-sites test` and `build` fail if the generated registry is stale.
 
 ## Add Existing Apps To A Suite
 
@@ -178,6 +177,8 @@ Adding a new app should be localized to one app directory plus catalog schema/so
 7. Add the app's question variant schema and suite session in `packages/test-cases`, then regenerate the catalog seed.
 
 After this, runtime dispatch, Redis state validation, unit variant matrix coverage, and E2E smoke completion are app-definition driven rather than central switch driven.
+
+See [Hosted App Extensibility](./hosted-app-extensibility.md) for the remaining automation boundary and recommended scaffold/catalog-registry work.
 
 ## Scoring
 

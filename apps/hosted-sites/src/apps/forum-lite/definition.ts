@@ -1,7 +1,7 @@
-import { createForumRoutes } from "../../routes/forum.js";
 import { isStateRecord, readStateArray, type HostedAppDefinition } from "../../runtime/app-definition.js";
 import { evaluateForum } from "./evaluate.js";
 import { buildForumFinalState } from "./final-state.js";
+import { createForumRoutes } from "./routes.js";
 import { forumSeedModerations, forumSeedThreads, getForumDefaultGoal, getForumStartPath } from "./seed.js";
 import type { ForumPost, ForumThread, ModerationAction } from "./types.js";
 

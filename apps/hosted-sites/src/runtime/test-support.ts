@@ -1,6 +1,7 @@
 import type { HostedAppId, HostedSessionFor } from "./types.js";
 
 export type HostedAppTestSupport<TApp extends HostedAppId = HostedAppId> = {
+  exampleTaskConfig: Record<string, unknown>;
   applyPassingState: (session: HostedSessionFor<TApp>, config: Record<string, unknown>) => void;
   breakPassingState: (session: HostedSessionFor<TApp>) => void;
 };
