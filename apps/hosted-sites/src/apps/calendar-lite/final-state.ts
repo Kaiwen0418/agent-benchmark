@@ -1,0 +1,16 @@
+import type { HostedSessionFor } from "../../runtime/types.js";
+
+export function buildCalendarLiteFinalState(session: HostedSessionFor<"calendar-lite">) {
+  return {
+    app: "calendar-lite",
+    taskSlug: session.taskSlug,
+    calendarEvents: session.state.calendarEvents.map((calendarEvent) => ({
+      id: calendarEvent.id,
+      title: calendarEvent.title,
+      date: calendarEvent.date,
+      startTime: calendarEvent.startTime,
+      durationMinutes: calendarEvent.durationMinutes,
+      attendeeEmail: calendarEvent.attendeeEmail,
+    })),
+  };
+}
