@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { wikiQuestionVariants } from "@agentbench/test-cases";
+import { hostedTestcaseApps } from "@agentbench/test-cases";
 import { generateAttemptQuestions } from "../../src/question-generation.js";
+
+const wikiQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.release;
 
 const session = {
   app: "wiki-lite",

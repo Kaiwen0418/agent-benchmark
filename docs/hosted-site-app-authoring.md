@@ -43,6 +43,7 @@ flowchart TD
 
 This is the only documentation table that enumerates the changing suite contents. The catalog source remains authoritative; update this summary when publishing a revision instead of copying the list into other documents.
 
+<!-- generated:hosted-testcases:start -->
 | Task | App | Variants |
 | --- | --- | --- |
 | `shopping-constrained-checkout` | `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard` |
@@ -51,8 +52,9 @@ This is the only documentation table that enumerates the changing suite contents
 | `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price` |
 | `wiki-policy-answer` | `wiki-lite` | `adapter-restriction`, `standard-dispatch`, `express-cutoff` |
 | `notes-followup-create` | `notes-lite` | `support-followup`, `release-note`, `ops-check` |
+<!-- generated:hosted-testcases:end -->
 
-Each task has three semantic variants and ten presentation combinations (`5 layouts x 2 themes`). Presentation must never affect actions or scoring. See [Benchmark Scoring And Testing](./benchmark-testing.md) for required matrix coverage.
+Each task declares at least two semantic variants. The generic matrix combines every declared variant with all supported layouts and themes; presentation must never affect actions or scoring. See [Benchmark Scoring And Testing](./benchmark-testing.md) for required matrix coverage.
 
 ## Core Rules
 
@@ -157,24 +159,27 @@ Do not add app branches to `server.ts`, `templates.ts`, `session-cache.ts`, or a
 
 If the app already exists under `apps/hosted-sites/src/apps/<app-slug>`, adding it to the default suite should only touch `packages/test-cases`:
 
-1. Add or reuse the app question variants under `packages/test-cases/src/apps/<app-slug>.ts`.
-2. Add the session to `packages/test-cases/src/suites/hosted-web.ts` with `app`, `taskSlug`, `taskVersion`, `seedVersion`, `sequenceIndex`, `weight`, `required`, `startPath`, and `metadata.questionVariants`.
-3. Update the typed catalog schema in `packages/test-cases/src/schemas.ts` only if the app's `taskConfig` shape is new.
-4. Run `pnpm catalog:generate` and `pnpm catalog:check`.
+1. Add or reuse a named variant pool in `packages/test-cases/src/apps/<app-slug>/definition.ts`.
+2. Add the session to `packages/test-cases/src/suites/hosted-web.ts` with `app`, `taskSlug`, `taskVersion`, `seedVersion`, `sequenceIndex`, `weight`, `required`, `startPath`, and the selected variant pool.
+3. Run `pnpm catalog:generate` and `pnpm catalog:check`.
 
 The orchestrator reads the ordered suite manifest. Hosted-sites routes, state hydration, final-state projection, and scoring are resolved through the registered app definition.
 
 ## Add A New Hosted App
 
-Adding a new app should be localized to one app directory plus catalog schema/source:
+Start with:
 
-1. Create `apps/hosted-sites/src/apps/<app-slug>/` with the files listed above.
-2. Export `type AppSessionState` from `types.ts`.
-3. Export a `HostedAppDefinition` from `definition.ts`; its `stateKeys` are the authoritative persisted state keys for Redis/session snapshots.
-4. Export a `HostedAppTestSupport` from `test-support.ts`; variant matrix tests use it to build passing and failing states.
-5. Export `complete()` from `test-driver.mjs`; lifecycle smoke dynamically imports it by `session.app`.
-6. Run `pnpm --filter hosted-sites generate-registry`.
-7. Add the app's question variant schema and suite session in `packages/test-cases`, then regenerate the catalog seed.
+```bash
+pnpm create-hosted-app <app-slug>-lite
+```
+
+The scaffold creates the hosted implementation and testcase definition directories, then regenerates both app registries. Replace the generated single-submit example with reviewed business behavior:
+
+1. Define domain state, seed data, actions, routes, renderer, evaluator, and final evidence under `apps/hosted-sites/src/apps/<app-slug>/`.
+2. Define the private task-config Zod schema and at least one named variant pool under `packages/test-cases/src/apps/<app-slug>/definition.ts`.
+3. Keep `HostedAppDefinition.stateKeys`, persisted-state validation, test support, and the smoke driver aligned with the implemented state and routes.
+4. Add the app session explicitly to `packages/test-cases/src/suites/hosted-web.ts`. Suite order, weights, required flags, and versions are benchmark policy and are never inferred.
+5. Run `pnpm catalog:generate`, `pnpm hosted-app:check`, and the full test suite.
 
 After this, runtime dispatch, Redis state validation, unit variant matrix coverage, and E2E smoke completion are app-definition driven rather than central switch driven.
 
