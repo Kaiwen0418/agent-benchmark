@@ -92,13 +92,7 @@ The default direct-process ports are:
 
 ## Hosted Web Suite
 
-The current suite contains:
-
-- `shopping-lite`: constrained checkout
-- `forum-lite`: reply to and moderate a safety thread
-- `repo-lite`: update installation instructions and create a merge request
-- `wiki-lite`: retrieve and submit release-history and policy answers
-- `notes-lite`: create a generated follow-up note
+The current ordered suite is defined by the published testcase catalog. See the single authoritative [current testcase table](./hosted-site-app-authoring.md#current-hosted-testcases) instead of duplicating the changing app list here.
 
 Create a standalone local session:
 

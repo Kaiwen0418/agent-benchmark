@@ -1,6 +1,11 @@
 import { configString, type HostedAppTestSupport } from "../../runtime/test-support.js";
 
 export const notesLiteTestSupport: HostedAppTestSupport<"notes-lite"> = {
+  exampleTaskConfig: {
+    expectedTitle: "Support follow-up",
+    expectedBody: "Email Mira after the replacement adapter ships.",
+    expectedTag: "support",
+  },
   applyPassingState: (session, config) => {
     session.state.notes.push({
       id: "note-smoke-pass",

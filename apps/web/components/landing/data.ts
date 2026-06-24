@@ -8,7 +8,7 @@ export const benchmarkOptions: Array<{
   {
     value: "hosted-web-suite",
     label: "Hosted Web Suite",
-    description: "Six-session hosted suite across shopping-lite, forum-lite, repo-lite, wiki-lite, and notes-lite with server-side scoring.",
+    description: "Versioned multi-session benchmark with deterministic tasks and server-side scoring.",
   },
 ];
 
@@ -48,7 +48,7 @@ export const docsSteps = [
   {
     step: "02",
     title: "Run the hosted suite",
-    body: "Use the same shopping-lite, forum-lite, repo-lite, wiki-lite, and notes-lite tasks across agents so results stay comparable.",
+    body: "Run the same published suite revision across agents so results stay comparable as the catalog evolves.",
   },
   {
     step: "03",

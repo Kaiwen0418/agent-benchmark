@@ -1,28 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { HostedWebScoreResult } from "@agentbench/scoring";
-import { markArticleViewed, submitWikiAnswer } from "../apps/wiki-lite/actions.js";
-import { renderWikiArticle, renderWikiIndex } from "../apps/wiki-lite/render.js";
-import { redirect, sendJson } from "../runtime/http.js";
-import { isHostedSessionForApp, type HostedSession } from "../runtime/types.js";
+import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
+import { redirect, sendJson } from "../../runtime/http.js";
+import { isHostedSessionForApp } from "../../runtime/types.js";
+import { markArticleViewed, submitWikiAnswer } from "./actions.js";
+import { renderWikiArticle, renderWikiIndex } from "./render.js";
 
-type WikiRoutesDeps = {
-  publicBaseUrl: string;
-  defaultStartPathForApp: (app: string) => string;
-  now: () => string;
-  getSession: (url: URL, request: IncomingMessage) => Promise<HostedSession | null>;
-  persistSessionSnapshot: (session: HostedSession) => Promise<void>;
-  recordEvent: (session: HostedSession, payload: Record<string, unknown>) => Promise<void>;
-  forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
-  completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
-  evaluateSession: (session: HostedSession) => HostedWebScoreResult;
-  resolveSessionResult: (session: HostedSession) => Promise<HostedWebScoreResult>;
-  rejectTerminalMutation: (session: HostedSession, response: ServerResponse) => boolean;
-  readForm: (request: IncomingMessage) => Promise<URLSearchParams>;
-  badRequest: (response: ServerResponse, message: string) => void;
-  notFound: (response: ServerResponse) => void;
-};
-
-export function createWikiRoutes(deps: WikiRoutesDeps) {
+export function createWikiRoutes(deps: HostedAppRouteDeps) {
   async function getWikiSession(url: URL, request: IncomingMessage) {
     const session = await deps.getSession(url, request);
     return session && isHostedSessionForApp(session, "wiki-lite") ? session : null;

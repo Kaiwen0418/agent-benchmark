@@ -17,15 +17,7 @@ benchmark run
     aggregate attempt score
 ```
 
-Current apps:
-
-- `shopping-lite`: constrained product checkout
-- `forum-lite`: reply to and lock a safety thread
-- `repo-lite`: edit README and create a merge request
-- `wiki-lite`: retrieve and submit release-history and policy answers
-- `notes-lite`: create a generated follow-up note
-
-Each session defines app, task and seed versions, order, weight, required flag, goal, and start path.
+The published testcase catalog defines the current app list and ordered sessions. See the single authoritative [current testcase table](./hosted-site-app-authoring.md#current-hosted-testcases). Each session defines app, task and seed versions, order, weight, required flag, goal, and start path.
 
 ## Session Isolation
 

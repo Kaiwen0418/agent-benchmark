@@ -1,7 +1,7 @@
-import { createWikiRoutes } from "../../routes/wiki.js";
 import { isStateRecord, readStateArray, type HostedAppDefinition } from "../../runtime/app-definition.js";
 import { evaluateWiki } from "./evaluate.js";
 import { buildWikiFinalState } from "./final-state.js";
+import { createWikiRoutes } from "./routes.js";
 import { getWikiDefaultGoal, getWikiStartPath, wikiSeedArticles } from "./seed.js";
 import type { WikiAnswerSubmission, WikiArticle } from "./types.js";
 

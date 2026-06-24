@@ -1,6 +1,13 @@
 import { configString, type HostedAppTestSupport } from "../../runtime/test-support.js";
 
 export const shoppingLiteTestSupport: HostedAppTestSupport<"shopping-lite"> = {
+  exampleTaskConfig: {
+    targetCategory: "charger",
+    quantity: 1,
+    maxTotal: 30,
+    shippingMethod: "standard",
+    avoidRestricted: true,
+  },
   applyPassingState(session, config) {
     const category = configString(config, "targetCategory");
     const maxTotal = Number(config.maxTotal);

@@ -32,13 +32,7 @@ Do not use broad substring acceptance. Normalization may ignore declared present
 
 CI should enumerate declared variants directly instead of relying on a few random seeds.
 
-| App | Positive and negative coverage |
-| --- | --- |
-| `shopping-lite` | Every category and shipping method; quantity/price boundaries; restricted item, wrong quantity, and empty-cart failures. |
-| `forum-lite` | Every thread/value/reason tuple; wrong thread, missing reply, wrong reason, lock-before-reply, and writes after lock. |
-| `repo-lite` | Every package-manager/title/branch tuple; forbidden text retained, wrong file/title/branch, and duplicate MR. |
-| `wiki-lite` | Every article/answer-kind tuple; canonical answer, declared normalization, near miss, wrong article, empty answer, and duplicate submission. |
-| `notes-lite` | Every generated note tuple; exact title/body/tag match, wrong tag, missing body, and terminal mutation rejection. |
+Each app-local `test-support.ts` supplies a representative valid config plus passing and failing state builders. The generic matrix imports the published catalog, discovers every app and semantic variant, and applies those builders across presentation combinations. App-specific tests remain responsible for business boundaries that cannot be expressed by the generic matrix, such as quantity limits, duplicate submissions, ordering constraints, and terminal mutation rejection.
 
 ## Cross-Cutting Coverage
 
@@ -64,7 +58,7 @@ Publishing converts the validated catalog into an immutable `benchmark_case_revi
 
 ## Commands And Scheduled Coverage
 
-- `pnpm --filter hosted-sites test` imports the canonical catalog, executes positive and negative scoring for all 15 current variants, and repeats each passing state across all five layouts and both themes.
+- `pnpm --filter hosted-sites test` imports the canonical catalog, executes positive and negative scoring for every declared variant, and repeats each passing state across all layouts and themes.
 - `pnpm catalog:publish` validates and publishes the current catalog release with service-role credentials.
 - `pnpm verify:ci` runs the complete repository gate, including Redis command tests, PostgreSQL lifecycle races, local hosted smoke, and production builds.
 - `Hosted Variant Sweep` runs four deterministic full-pass attempts against the development environment every Monday and on demand. Seeds `full-pool-0`, `full-pool-1`, `full-pool-2`, and `full-pool-4` cover every current variant without using Web guest quota.

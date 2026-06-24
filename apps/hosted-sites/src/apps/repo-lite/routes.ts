@@ -1,28 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { HostedWebScoreResult } from "@agentbench/scoring";
-import { createMergeRequest, updateFileContent } from "../apps/repo-lite/actions.js";
-import { renderFileEdit, renderMRDetail, renderNewMR, renderRepoIndex } from "../apps/repo-lite/render.js";
-import { redirect, sendJson } from "../runtime/http.js";
-import { isHostedSessionForApp, type HostedSession } from "../runtime/types.js";
+import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
+import { redirect, sendJson } from "../../runtime/http.js";
+import { isHostedSessionForApp } from "../../runtime/types.js";
+import { createMergeRequest, updateFileContent } from "./actions.js";
+import { renderFileEdit, renderMRDetail, renderNewMR, renderRepoIndex } from "./render.js";
 
-type RepoRoutesDeps = {
-  publicBaseUrl: string;
-  defaultStartPathForApp: (app: string) => string;
-  makeId: (prefix: string) => string;
-  getSession: (url: URL, request: IncomingMessage) => Promise<HostedSession | null>;
-  persistSessionSnapshot: (session: HostedSession) => Promise<void>;
-  recordEvent: (session: HostedSession, payload: Record<string, unknown>) => Promise<void>;
-  forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
-  completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
-  evaluateSession: (session: HostedSession) => HostedWebScoreResult;
-  resolveSessionResult: (session: HostedSession) => Promise<HostedWebScoreResult>;
-  rejectTerminalMutation: (session: HostedSession, response: ServerResponse) => boolean;
-  readForm: (request: IncomingMessage) => Promise<URLSearchParams>;
-  badRequest: (response: ServerResponse, message: string) => void;
-  notFound: (response: ServerResponse) => void;
-};
-
-export function createRepoRoutes(deps: RepoRoutesDeps) {
+export function createRepoRoutes(deps: HostedAppRouteDeps) {
   async function getRepoSession(url: URL, request: IncomingMessage) {
     const session = await deps.getSession(url, request);
     return session && isHostedSessionForApp(session, "repo-lite") ? session : null;

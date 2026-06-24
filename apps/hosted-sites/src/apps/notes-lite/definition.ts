@@ -1,7 +1,7 @@
-import { createNotesRoutes } from "../../routes/notes.js";
 import { isStateRecord, readStateArray, type HostedAppDefinition } from "../../runtime/app-definition.js";
 import { evaluateNotes } from "./evaluate.js";
 import { buildNotesFinalState } from "./final-state.js";
+import { createNotesRoutes } from "./routes.js";
 import { getNotesDefaultGoal, getNotesStartPath } from "./seed.js";
 import type { Note } from "./types.js";
 

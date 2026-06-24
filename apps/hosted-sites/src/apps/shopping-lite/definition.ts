@@ -1,7 +1,7 @@
-import { createShoppingRoutes } from "../../routes/shopping.js";
 import { isStateRecord, readStateArray, type HostedAppDefinition } from "../../runtime/app-definition.js";
 import { evaluateShopping } from "./evaluate.js";
 import { buildShoppingFinalState } from "./final-state.js";
+import { createShoppingRoutes } from "./routes.js";
 import { getShoppingDefaultGoal, getShoppingStartPath, shoppingSeedProducts } from "./seed.js";
 import type { CartItem, Order, Product } from "./types.js";
 
