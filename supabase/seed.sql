@@ -22,10 +22,10 @@ set
 
 select public.publish_benchmark_case_revision(
   '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
-  'hosted-web-suite-v3.0.1',
+  'hosted-web-suite-v3.0.2',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3.0.1",
+  "suiteVersion": "v3.0.2",
   "sessions": [
     {
       "app": "shopping-lite",
@@ -313,10 +313,58 @@ select public.publish_benchmark_case_revision(
           }
         ]
       }
+    },
+    {
+      "app": "calendar-lite",
+      "taskSlug": "calendar-event-create",
+      "title": "Calendar Event",
+      "startPath": "/calendar",
+      "taskVersion": "v1",
+      "seedVersion": "calendar-lite-v1",
+      "sequenceIndex": 6,
+      "weight": 1,
+      "required": true,
+      "metadata": {
+        "questionVariants": [
+          {
+            "id": "architecture-review",
+            "goal": "Create an event titled 'Architecture review' on July 8, 2026 at 14:30 for 45 minutes with attendee mira@example.com.",
+            "taskConfig": {
+              "expectedTitle": "Architecture review",
+              "expectedDate": "2026-07-08",
+              "expectedStartTime": "14:30",
+              "expectedDurationMinutes": 45,
+              "expectedAttendeeEmail": "mira@example.com"
+            }
+          },
+          {
+            "id": "release-readiness",
+            "goal": "Create an event titled 'Release readiness' on July 10, 2026 at 09:00 for 30 minutes with attendee ops@example.com.",
+            "taskConfig": {
+              "expectedTitle": "Release readiness",
+              "expectedDate": "2026-07-10",
+              "expectedStartTime": "09:00",
+              "expectedDurationMinutes": 30,
+              "expectedAttendeeEmail": "ops@example.com"
+            }
+          },
+          {
+            "id": "scoring-retro",
+            "goal": "Create an event titled 'Scoring retrospective' on July 14, 2026 at 16:00 for 60 minutes with attendee evals@example.com.",
+            "taskConfig": {
+              "expectedTitle": "Scoring retrospective",
+              "expectedDate": "2026-07-14",
+              "expectedStartTime": "16:00",
+              "expectedDurationMinutes": 60,
+              "expectedAttendeeEmail": "evals@example.com"
+            }
+          }
+        ]
+      }
     }
   ]
 }$catalog$::jsonb,
-  '2f445d65e94040275e7f4cf763a765abed2dc5b88eabca75935db816cf003a25'
+  'e155bbcba0aa40f1a8bfdd63cbb979638758bc36858a828c6bc729d4c0d98913'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

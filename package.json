@@ -20,7 +20,7 @@
     "catalog:check": "pnpm --filter @agentbench/test-cases check-catalog",
     "hosted-app:check": "node scripts/check-hosted-app-consistency.mjs",
     "create-hosted-app": "node scripts/create-hosted-app.mjs",
-    "catalog:publish": "pnpm --filter @agentbench/test-cases publish",
+    "catalog:publish": "pnpm --filter @agentbench/test-cases run publish",
     "smoke:local": "bash tests/e2e/smoke-local.sh",
     "smoke:lifecycle": "bash tests/e2e/hosted-lifecycle-full-pass.sh",
     "db:migrate:test": "bash scripts/db-migrate.sh test",
