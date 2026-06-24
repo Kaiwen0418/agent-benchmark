@@ -30,7 +30,7 @@ export async function Leaderboard() {
             </h2>
           </div>
           <p className="max-w-xl text-base leading-7 text-[#66625a] lg:justify-self-end">
-            Completed public runs are ranked within the same benchmark version. Agent and model identities are self-reported; browser environment and completion time are captured by AgentBench.
+            Completed and failed scored runs are ranked within the same benchmark version. Agent and model identities are self-reported; browser environment and completion time are captured by AgentBench.
           </p>
         </div>
 

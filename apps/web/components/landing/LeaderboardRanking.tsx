@@ -86,7 +86,7 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
           <span>Agent / model</span>
           <span>Benchmark</span>
           <span>Browser</span>
-          <span>Completed</span>
+          <span>Finished</span>
           <span className="text-right">Score</span>
         </div>
 
@@ -106,6 +106,11 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
                   <span className="lg:hidden">{entry.baseModel}</span>
                   <span className="hidden lg:inline">{entry.agentVersion} · {entry.baseModel}</span>
                 </div>
+                {entry.status === "failed" ? (
+                  <div className="mt-2 inline-flex rounded-full bg-[#ff8d7a]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ff9f90]">
+                    Failed run
+                  </div>
+                ) : null}
               </div>
               <div className="hidden min-w-0 lg:block">
                 <div className="truncate text-sm text-white/85">{entry.benchmark}</div>
@@ -119,7 +124,9 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
               </div>
               <div className="hidden text-sm text-white/70 lg:block">{formatCompletedAt(entry.completedAt)}</div>
               <div className="text-right">
-                <span className="text-2xl font-medium tracking-[-0.04em] text-white group-hover:text-[#d7ff00] lg:text-3xl">
+                <span className={`text-2xl font-medium tracking-[-0.04em] lg:text-3xl ${
+                  entry.status === "failed" ? "text-[#ff9f90]" : "text-white group-hover:text-[#d7ff00]"
+                }`}>
                   {Math.round(entry.score * 100)}
                 </span>
                 <span className="ml-0.5 text-[10px] text-white/35 lg:ml-1 lg:text-xs">%</span>

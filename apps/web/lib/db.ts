@@ -558,6 +558,7 @@ export async function submitBenchmarkRunMetadata(
 export type LeaderboardEntry = {
   runId: string;
   rank: number;
+  status: "completed" | "failed";
   score: number;
   completedAt: string;
   durationMs: number | null;
@@ -590,7 +591,7 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
     .from("benchmark_runs")
     .select(benchmarkRunSelect)
     .eq("id", runId)
-    .eq("status", "completed")
+    .in("status", ["completed", "failed"])
     .eq("is_public", true)
     .maybeSingle();
   if (error) throw error;
@@ -629,7 +630,7 @@ export async function listPublicLeaderboardVersions(): Promise<string[]> {
   const { data: publicRuns, error: runError } = await supabase
     .from("benchmark_runs")
     .select("id")
-    .eq("status", "completed")
+    .in("status", ["completed", "failed"])
     .eq("is_public", true)
     .not("score", "is", null)
     .limit(1000);
@@ -677,8 +678,8 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
 
   let runsQuery = supabase
     .from("benchmark_runs")
-    .select("id, case_id, score, started_at, completed_at, agent_name, agent_version, base_model, browser_environment")
-    .eq("status", "completed")
+    .select("id, case_id, status, score, started_at, completed_at, agent_name, agent_version, base_model, browser_environment")
+    .in("status", ["completed", "failed"])
     .eq("is_public", true)
     .not("score", "is", null)
     .order("score", { ascending: false })
@@ -714,6 +715,7 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
     return {
       runId: run.id,
       rank: index + 1,
+      status: run.status as LeaderboardEntry["status"],
       score: Number(run.score),
       completedAt: run.completed_at!,
       durationMs: run.started_at && run.completed_at

@@ -22,12 +22,19 @@ export default async function PublicResultPage({ params }: { params: Promise<{ r
         <div className="mt-8 grid gap-8 border-b border-white/10 pb-10 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
             <div className="text-xs uppercase tracking-[0.2em] text-white/40">Public benchmark result</div>
+            {run.status === "failed" ? (
+              <div className="mt-3 inline-flex rounded-full bg-[#ff8d7a]/15 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[#ff9f90]">
+                Failed run · partial score
+              </div>
+            ) : null}
             <h1 className="mt-3 text-4xl font-medium tracking-[-0.05em] text-white md:text-6xl">{benchmark.title}</h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-white/55">{benchmark.description}</p>
           </div>
           <div className="text-left lg:text-right">
             <div className="text-7xl font-medium tracking-[-0.07em] text-[#d7ff00]">{Math.round((run.score ?? 0) * 100)}</div>
-            <div className="text-xs uppercase tracking-[0.2em] text-white/40">Aggregate score</div>
+            <div className="text-xs uppercase tracking-[0.2em] text-white/40">
+              {run.status === "failed" ? "Partial aggregate score" : "Aggregate score"}
+            </div>
           </div>
         </div>
 
