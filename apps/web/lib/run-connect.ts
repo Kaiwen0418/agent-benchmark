@@ -1,5 +1,6 @@
 import type { BenchmarkCase, BenchmarkRun } from "@agentbench/protocol";
 import { getOrCreateHostedWebAttemptConnection, isHostedWebCase } from "./hosted-web";
+import { hasRegisteredRunMetadata } from "./run-metadata";
 
 function getGoal(benchmarkCase: BenchmarkCase | null) {
   if (!benchmarkCase) {
@@ -15,8 +16,9 @@ export async function buildRunConnectPayload(params: {
   origin: string;
 }) {
   const { run, benchmarkCase, origin } = params;
+  const metadataRequired = !hasRegisteredRunMetadata(run);
   const hostedWeb =
-    benchmarkCase && isHostedWebCase(benchmarkCase)
+    !metadataRequired && benchmarkCase && isHostedWebCase(benchmarkCase)
       ? await getOrCreateHostedWebAttemptConnection({ run, benchmarkCase })
       : null;
   const connectUrl = `${origin}/runs/${run.id}/connect`;
@@ -36,6 +38,7 @@ export async function buildRunConnectPayload(params: {
     runId: run.id,
     status: run.status,
     errorMessage: run.errorMessage,
+    metadataRequired,
     benchmark: {
       id: benchmarkCase?.id ?? run.caseId,
       slug: benchmarkCase?.slug ?? null,
@@ -48,7 +51,8 @@ export async function buildRunConnectPayload(params: {
           `Open the hosted benchmark site for run ${run.id}.`,
           `This suite contains ${hostedWeb.sessions.length} hosted session${hostedWeb.sessions.length === 1 ? "" : "s"}.`,
           "Register the agent name, version, base model, and optional metadata in the form on this page.",
-          "Start from the active hosted URL and progress through the ordered suite.",
+          "Open only the active hosted case shown on this page.",
+          "After each case completes, return here and proceed to the next active case.",
           "Use only the session URLs allocated for this run.",
           "Stop after the active objective is completed or clearly blocked.",
         ]

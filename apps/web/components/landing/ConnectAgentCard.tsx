@@ -5,15 +5,26 @@ import { benchmarkOptions } from "./data";
 import { RunConnectionCard } from "./RunConnectionCard";
 import { RunDetailTabs } from "./RunDetailTabs";
 import { usePlaygroundStore } from "@/lib/playground-store";
+import { AgentIdentityFields } from "@/components/run/AgentIdentityFields";
 
 export function ConnectAgentCard() {
   const benchmark = usePlaygroundStore((state) => state.benchmark);
+  const agentSelection = usePlaygroundStore((state) => state.agentSelection);
+  const customAgent = usePlaygroundStore((state) => state.customAgent);
+  const agentVersion = usePlaygroundStore((state) => state.agentVersion);
+  const modelSelection = usePlaygroundStore((state) => state.modelSelection);
+  const customModel = usePlaygroundStore((state) => state.customModel);
   const phase = usePlaygroundStore((state) => state.phase);
   const quota = usePlaygroundStore((state) => state.quota);
   const quotaLoading = usePlaygroundStore((state) => state.quotaLoading);
   const runError = usePlaygroundStore((state) => state.runError);
   const score = usePlaygroundStore((state) => state.score);
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
+  const setAgentSelection = usePlaygroundStore((state) => state.setAgentSelection);
+  const setCustomAgent = usePlaygroundStore((state) => state.setCustomAgent);
+  const setAgentVersion = usePlaygroundStore((state) => state.setAgentVersion);
+  const setModelSelection = usePlaygroundStore((state) => state.setModelSelection);
+  const setCustomModel = usePlaygroundStore((state) => state.setCustomModel);
   const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
   const startRun = usePlaygroundStore((state) => state.startRun);
   const stopRun = usePlaygroundStore((state) => state.stopRun);
@@ -155,6 +166,17 @@ export function ConnectAgentCard() {
         <div className="rounded-[1.15rem] bg-[#efede6] p-3.5 text-[13px] leading-6 text-[#5c574d]">
           {benchmarkOptions.find((item) => item.value === benchmark)?.description}
         </div>
+
+        <AgentIdentityFields
+          value={{ agentSelection, customAgent, agentVersion, modelSelection, customModel }}
+          onChange={(value) => {
+            setAgentSelection(value.agentSelection);
+            setCustomAgent(value.customAgent);
+            setAgentVersion(value.agentVersion);
+            setModelSelection(value.modelSelection);
+            setCustomModel(value.customModel);
+          }}
+        />
 
         {runError ? (
           <div className="rounded-[1rem] border border-[#ead2ca] bg-[#fff0eb] p-3 text-[13px] leading-6 text-[#8a4334]">

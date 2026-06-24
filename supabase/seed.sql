@@ -1,27 +1,16 @@
 -- Generated from packages/test-cases. Run `pnpm catalog:generate`; do not edit by hand.
-insert into public.benchmark_cases (id, slug, title, description, category, difficulty, provider, is_public)
-values (
-  '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
-  'hosted-web-suite',
-  'Hosted Web Suite',
-  'Run the published deterministic hosted-web benchmark suite.',
-  'browser',
-  'easy',
-  'hosted-web',
-  true
-)
-on conflict (id) do update
-set
-  slug = excluded.slug,
-  title = excluded.title,
-  description = excluded.description,
-  category = excluded.category,
-  difficulty = excluded.difficulty,
-  provider = excluded.provider,
-  is_public = excluded.is_public;
-
-select public.publish_benchmark_case_revision(
-  '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005',
+select public.publish_benchmark_case_catalog(
+  $case${
+  "id": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
+  "slug": "hosted-web-suite",
+  "title": "Hosted Web Suite",
+  "description": "Run the published deterministic hosted-web benchmark suite.",
+  "category": "browser",
+  "difficulty": "easy",
+  "provider": "hosted-web",
+  "metadata": {},
+  "isPublic": true
+}$case$::jsonb,
   'hosted-web-suite-v3.0.2',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",

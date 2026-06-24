@@ -68,6 +68,7 @@ test("viewer layout disables navigation and mutations while retaining the read-o
 test("terminal layout disables forms and does not emit telemetry", () => {
   const session = makeSession("workspace", "light");
   session.status = "failed";
+  session.runId = "run-1";
   const html = layout({
     title: "Terminal task",
     session,
@@ -77,6 +78,7 @@ test("terminal layout disables forms and does not emit telemetry", () => {
   });
 
   assert.match(html, /terminal-readonly/);
-  assert.match(html, /persisted result is read-only/);
+  assert.match(html, /return to the AgentBench Connection Page to continue/);
+  assert.match(html, /href="http:\/\/localhost:3000\/runs\/run-1\/connect"/);
   assert.doesNotMatch(html, /abTelemetry/);
 });

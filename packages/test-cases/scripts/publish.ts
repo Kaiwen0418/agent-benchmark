@@ -11,7 +11,7 @@ if (!supabaseUrl || !serviceRoleKey) {
 const release = createHostedWebCatalogRelease();
 hostedSuiteMetadataSchema.parse(release.manifest);
 
-const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/publish_benchmark_case_revision`, {
+const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/publish_benchmark_case_catalog`, {
   method: "POST",
   headers: {
     apikey: serviceRoleKey,
@@ -19,7 +19,7 @@ const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/rpc/publ
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    target_case_id: release.caseId,
+    target_case: release.benchmarkCase,
     target_revision: release.revision,
     target_manifest: release.manifest,
     target_content_hash: release.contentHash,

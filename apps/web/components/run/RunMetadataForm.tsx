@@ -2,28 +2,25 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-type AgentIdentity = {
-  name: string;
-  version: string;
-  baseModel: string;
-};
+import type { AgentIdentity } from "@agentbench/protocol";
+import { resolveAgentIdentity } from "@/lib/agent-catalog";
+import { AgentIdentityFields, identityDraftFromAgent } from "./AgentIdentityFields";
 
 export function RunMetadataForm({
   runId,
   initialAgent,
   initialMetadata,
   locked,
+  onSaved,
 }: {
   runId: string;
   initialAgent: AgentIdentity | null;
   initialMetadata: Record<string, unknown>;
   locked: boolean;
+  onSaved?: (agent: AgentIdentity, metadata: Record<string, unknown>) => void;
 }) {
   const router = useRouter();
-  const [name, setName] = useState(initialAgent?.name ?? "");
-  const [version, setVersion] = useState(initialAgent?.version ?? "");
-  const [baseModel, setBaseModel] = useState(initialAgent?.baseModel ?? "");
+  const [identity, setIdentity] = useState(() => identityDraftFromAgent(initialAgent));
   const [metadata, setMetadata] = useState(() => JSON.stringify(initialMetadata, null, 2));
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -45,12 +42,18 @@ export function RunMetadataForm({
       return;
     }
 
+    const resolvedIdentity = resolveAgentIdentity(identity);
+    if (!resolvedIdentity) {
+      setMessage({ tone: "error", text: "Agent, version, and base model are required." });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const response = await fetch(`/api/runs/${runId}/metadata`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, version, baseModel, metadata: parsedMetadata }),
+        body: JSON.stringify({ ...resolvedIdentity, metadata: parsedMetadata }),
       });
       const result = await response.json().catch(() => null);
 
@@ -59,6 +62,7 @@ export function RunMetadataForm({
       }
 
       setMessage({ tone: "success", text: "Agent metadata saved. You can start the benchmark." });
+      onSaved?.(resolvedIdentity, parsedMetadata as Record<string, unknown>);
       router.refresh();
     } catch (error) {
       setMessage({ tone: "error", text: error instanceof Error ? error.message : "Unable to save agent metadata." });
@@ -77,20 +81,7 @@ export function RunMetadataForm({
         Register the agent identity before opening the active benchmark.
       </p>
       <form onSubmit={submit} className="mt-5">
-        <div className="grid gap-4 md:grid-cols-3">
-          <label className="text-xs font-medium text-[#4f4a43]">
-            Agent name
-            <input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} disabled={locked} className={inputClass} />
-          </label>
-          <label className="text-xs font-medium text-[#4f4a43]">
-            Agent version
-            <input required maxLength={120} value={version} onChange={(event) => setVersion(event.target.value)} disabled={locked} className={inputClass} />
-          </label>
-          <label className="text-xs font-medium text-[#4f4a43]">
-            Base model
-            <input required maxLength={160} value={baseModel} onChange={(event) => setBaseModel(event.target.value)} disabled={locked} className={inputClass} />
-          </label>
-        </div>
+        <AgentIdentityFields value={identity} onChange={setIdentity} disabled={locked} />
         <label className="mt-4 block text-xs font-medium text-[#4f4a43]">
           Additional metadata (JSON)
           <textarea

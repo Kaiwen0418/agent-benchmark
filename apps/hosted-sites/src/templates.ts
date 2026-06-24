@@ -34,6 +34,9 @@ export function layout(params: {
   const uiTheme = readUiTheme(params.session.metadata);
   const isViewer = params.session.accessMode === "viewer";
   const isTerminal = params.session.status === "completed" || params.session.status === "failed" || params.session.status === "expired";
+  const connectionUrl = params.session.runId
+    ? `${(process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000").replace(/\/$/, "")}/runs/${encodeURIComponent(params.session.runId)}/connect`
+    : null;
   const taskHomePath = params.session.startPath ?? params.defaultStartPathForApp(params.session.app);
   const taskHomeSeparator = taskHomePath.includes("?") ? "&" : "?";
   const appNav = `<a href="${escapeHtml(taskHomePath)}${taskHomeSeparator}session=${encodeURIComponent(params.session.token)}">Task home</a>`;
@@ -331,7 +334,7 @@ export function layout(params: {
   <body class="ui-${uiVariant} theme-${uiTheme}${isViewer ? " viewer-readonly" : ""}${isTerminal ? " terminal-readonly" : ""}" data-ui-variant="${uiVariant}" data-ui-theme="${uiTheme}">
     <div class="shell">
     ${isViewer ? '<div class="viewer-banner">Live read-only session view</div>' : ""}
-    ${isTerminal ? `<div class="viewer-banner">Session ${escapeHtml(params.session.status)} · persisted result is read-only</div>` : ""}
+    ${isTerminal ? `<div class="viewer-banner">Case ${escapeHtml(params.session.status)} · return to the AgentBench Connection Page to continue${connectionUrl ? ` · <a href="${escapeHtml(connectionUrl)}">Return to Connection Page</a>` : ""}</div>` : ""}
     <header>
       <div class="heading">
         <span class="layout-badge">${escapeHtml(params.session.app)} · ${uiVariant} · ${uiTheme}</span>

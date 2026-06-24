@@ -20,6 +20,7 @@ Hosted task requests use an opaque session token in `?session=<token>` or in the
 | `GET` | `/api/runs/:runId/stream` | SSE snapshots, heartbeat, terminal event | run visibility rules |
 | `GET` | `/api/runs/:runId/artifacts` | List artifacts | run visibility rules |
 | `GET` | `/api/runs/:runId/artifacts/file?path=...` | Read local artifact file | run visibility rules |
+| `GET` | `/api/agent-options` | List curated agent and model options | public |
 
 ### Create Run
 
@@ -29,11 +30,16 @@ Content-Type: application/json
 
 {
   "caseId": "uuid",
-  "executionMode": "external-agent"
+  "executionMode": "external-agent",
+  "agent": {
+    "name": "Codex",
+    "version": "latest",
+    "baseModel": "GPT-5"
+  }
 }
 ```
 
-Response: `201 { run, quota }`. Quota exhaustion returns `403` with `trial_limit_reached` or `daily_limit_reached`.
+Response: `201 { run, quota }`. The service persists the self-reported identity and captures the request browser environment. `GET /api/agent-options` provides curated choices, but clients may submit other non-empty values. Quota exhaustion returns `403` with `trial_limit_reached` or `daily_limit_reached`.
 
 ### Connect Run
 
