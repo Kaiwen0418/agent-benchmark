@@ -10,6 +10,7 @@ type RunConnectPayload = {
   runId: string;
   status: string;
   errorMessage: string | null;
+  metadataRequired: boolean;
   prompt: string;
   connectUrl: string;
   configUrl: string;
@@ -335,6 +336,10 @@ export function RunConnectionCard() {
             ))}
           </div>
           <RunDetailTabs />
+        </div>
+      ) : payload.metadataRequired ? (
+        <div className="mt-4 rounded-[1.2rem] border border-[#dfd8cb] bg-[#fbf8f3] p-4 text-sm leading-7 text-[#3f3b34]">
+          Submit agent metadata on the connection page before the hosted suite is allocated.
         </div>
       ) : null}
     </div>

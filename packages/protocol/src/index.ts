@@ -183,6 +183,7 @@ export const createRunInputSchema = z.object({
   caseId: z.string().uuid(),
   executionMode: runExecutionModeSchema.default("external-agent"),
   isPublic: z.boolean().default(true),
+  agent: agentIdentitySchema.optional(),
 });
 
 export type CreateRunInput = z.infer<typeof createRunInputSchema>;

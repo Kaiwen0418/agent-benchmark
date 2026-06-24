@@ -11,7 +11,7 @@ import type { Database } from "@agentbench/shared";
 import path from "node:path";
 import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
-import { buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
+import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
@@ -245,6 +245,8 @@ export async function createBenchmarkRun(params: {
   guestId: string | null;
   executionMode: BenchmarkRun["executionMode"];
   isPublic: boolean;
+  agent?: BenchmarkRun["agent"];
+  browserEnvironment: NonNullable<BenchmarkRun["browserEnvironment"]>;
 }): Promise<BenchmarkRun> {
   const supabase = getSupabase();
   const benchmarkCase = await getBenchmarkCase(params.caseId);
@@ -252,6 +254,11 @@ export async function createBenchmarkRun(params: {
     throw new BenchmarkCaseUnavailableError();
   }
   const initialStatus = params.executionMode === "external-agent" ? "waiting_for_agent" : "queued";
+  const initialMetadata = buildInitialRunMetadata({
+    agent: params.agent ?? undefined,
+    browserEnvironment: params.browserEnvironment,
+    now: new Date().toISOString(),
+  });
 
   const { data, error } = await supabase
     .from("benchmark_runs")
@@ -262,6 +269,7 @@ export async function createBenchmarkRun(params: {
       execution_mode: params.executionMode,
       status: initialStatus,
       is_public: params.isPublic,
+      ...initialMetadata,
     })
     .select(benchmarkRunSelect)
     .single();
@@ -273,7 +281,11 @@ export async function createBenchmarkRun(params: {
   await supabase.from("run_events").insert({
     run_id: data.id,
     type: "run.created",
-    payload: { status: initialStatus, executionMode: params.executionMode },
+    payload: {
+      status: initialStatus,
+      executionMode: params.executionMode,
+      agent: params.agent ?? null,
+    },
   });
 
   return mapRunRow(data);

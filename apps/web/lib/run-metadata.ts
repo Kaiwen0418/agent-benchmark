@@ -1,4 +1,4 @@
-import type { BrowserEnvironment, SubmitRunMetadataInput } from "@agentbench/protocol";
+import type { AgentIdentity, BrowserEnvironment, SubmitRunMetadataInput } from "@agentbench/protocol";
 import type { Database } from "@agentbench/shared";
 
 function browserFromUserAgent(userAgent: string) {
@@ -67,8 +67,44 @@ export function buildRunMetadataUpdate(params: {
     agent_version: params.input.version,
     base_model: params.input.baseModel,
     browser_environment: params.browserEnvironment,
-    metadata: { ...params.currentMetadata, ...params.input.metadata, identityReportedAt: params.now },
+    metadata: {
+      ...params.currentMetadata,
+      ...params.input.metadata,
+      identityReportedAt: params.now,
+      identitySource: "connection-page",
+    },
     started_at: params.startedAt ?? params.now,
     status: params.currentStatus === "waiting_for_agent" ? "agent_connected" : params.currentStatus,
+  };
+}
+
+export function hasRegisteredRunMetadata(run: {
+  agent: AgentIdentity | null;
+  status: string;
+  metadata: Record<string, unknown>;
+}) {
+  return Boolean(
+    run.agent &&
+    (run.metadata.identitySource === "connection-page" || run.status !== "waiting_for_agent"),
+  );
+}
+
+export function buildInitialRunMetadata(params: {
+  agent: AgentIdentity | undefined;
+  browserEnvironment: BrowserEnvironment;
+  now: string;
+}): Database["public"]["Tables"]["benchmark_runs"]["Update"] {
+  if (!params.agent) {
+    return {
+      browser_environment: params.browserEnvironment,
+    };
+  }
+
+  return {
+    agent_name: params.agent.name,
+    agent_version: params.agent.version,
+    base_model: params.agent.baseModel,
+    browser_environment: params.browserEnvironment,
+    metadata: { identityReportedAt: params.now, identitySource: "run-creation" },
   };
 }

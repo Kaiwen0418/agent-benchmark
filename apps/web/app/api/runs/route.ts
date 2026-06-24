@@ -7,6 +7,7 @@ import {
   isDevQuotaBypassed,
 } from "@/lib/auth";
 import { BenchmarkCaseUnavailableError, createBenchmarkRun, getQuotaStatus } from "@/lib/db";
+import { captureBrowserEnvironment } from "@/lib/run-metadata";
 
 export async function POST(request: Request) {
   const json = await request.json();
@@ -74,6 +75,8 @@ export async function POST(request: Request) {
       guestId: guest?.guestId ?? null,
       executionMode: input.executionMode,
       isPublic: input.isPublic,
+      agent: input.agent,
+      browserEnvironment: captureBrowserEnvironment(request.headers),
     });
   } catch (error) {
     if (error instanceof BenchmarkCaseUnavailableError) {

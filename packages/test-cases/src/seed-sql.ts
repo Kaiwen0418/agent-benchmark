@@ -1,38 +1,13 @@
 import { hostedWebSuiteCase } from "./index.js";
 import { createHostedWebCatalogRelease } from "./release.js";
 
-function sqlString(value: string) {
-  return `'${value.replaceAll("'", "''")}'`;
-}
-
 export function generateSupabaseSeedSql() {
   const release = createHostedWebCatalogRelease();
   const manifest = JSON.stringify(release.manifest, null, 2);
 
   return `-- Generated from packages/test-cases. Run \`pnpm catalog:generate\`; do not edit by hand.
-insert into public.benchmark_cases (id, slug, title, description, category, difficulty, provider, is_public)
-values (
-  '${hostedWebSuiteCase.id}',
-  ${sqlString(hostedWebSuiteCase.slug)},
-  ${sqlString(hostedWebSuiteCase.title)},
-  ${sqlString(hostedWebSuiteCase.description)},
-  ${sqlString(hostedWebSuiteCase.category)},
-  ${sqlString(hostedWebSuiteCase.difficulty)},
-  '${hostedWebSuiteCase.provider}',
-  true
-)
-on conflict (id) do update
-set
-  slug = excluded.slug,
-  title = excluded.title,
-  description = excluded.description,
-  category = excluded.category,
-  difficulty = excluded.difficulty,
-  provider = excluded.provider,
-  is_public = excluded.is_public;
-
-select public.publish_benchmark_case_revision(
-  '${hostedWebSuiteCase.id}',
+select public.publish_benchmark_case_catalog(
+  $case$${JSON.stringify(hostedWebSuiteCase, null, 2)}$case$::jsonb,
   '${release.revision}',
   $catalog$${manifest}$catalog$::jsonb,
   '${release.contentHash}'

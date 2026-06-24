@@ -144,6 +144,8 @@ fi
 
 "${PSQL[@]}" -v ON_ERROR_STOP=1 \
   < "${ROOT_DIR}/supabase/migrations/20260622000021_unify_benchmark_case_model.sql" >/dev/null
+"${PSQL[@]}" -v ON_ERROR_STOP=1 \
+  < "${ROOT_DIR}/supabase/migrations/20260624000024_publish_benchmark_case_catalog.sql" >/dev/null
 
 [[ "$(${PSQL[@]} -Atqc "select slug from public.benchmark_cases where id = '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005'")" == "hosted-web-suite" ]]
 [[ "$(${PSQL[@]} -Atqc "select metadata from public.benchmark_cases where id = '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005'")" == "{}" ]]
@@ -162,5 +164,27 @@ post_migration_revision="$(${PSQL[@]} -Atqc "
 ")"
 [[ "${post_migration_revision}" == "${published_revision}" ]]
 [[ "$(${PSQL[@]} -Atqc "select metadata from public.benchmark_cases where id = '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005'")" == "{}" ]]
+
+"${PSQL[@]}" -v ON_ERROR_STOP=1 -c "
+  update public.benchmark_cases
+  set description = 'Run a four-step hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite.'
+  where id = '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005';
+" >/dev/null
+"${PSQL[@]}" -v ON_ERROR_STOP=1 \
+  < "${ROOT_DIR}/supabase/migrations/20260624000024_publish_benchmark_case_catalog.sql" >/dev/null
+[[ "$(${PSQL[@]} -Atqc "select description from public.benchmark_cases where id = '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005'")" == "Run the published deterministic hosted-web benchmark suite." ]]
+
+catalog_revision="$(${PSQL[@]} -Atqc "
+  set role service_role;
+  select public.publish_benchmark_case_catalog(
+    '{\"id\":\"7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005\",\"slug\":\"hosted-web-suite\",\"title\":\"Hosted Web Suite\",\"description\":\"Current dynamic suite\",\"category\":\"browser\",\"difficulty\":\"easy\",\"provider\":\"hosted-web\",\"isPublic\":true}'::jsonb,
+    'v3',
+    '{\"suiteSlug\":\"hosted-suite\",\"suiteVersion\":\"v3\",\"sessions\":[]}'::jsonb,
+    repeat('d', 64)
+  );
+")"
+[[ -n "${catalog_revision}" ]]
+[[ "$(${PSQL[@]} -Atqc "select description from public.benchmark_cases where id = '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005'")" == "Current dynamic suite" ]]
+[[ "$(${PSQL[@]} -Atqc "select current_revision_id from public.benchmark_cases where id = '7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005'")" == "${catalog_revision}" ]]
 
 echo "benchmark case revision Postgres tests passed"

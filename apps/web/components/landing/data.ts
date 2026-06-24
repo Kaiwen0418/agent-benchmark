@@ -19,7 +19,12 @@ export const docsBlocks = {
   -d '{
     "caseId": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
     "executionMode": "external-agent",
-    "isPublic": true
+    "isPublic": true,
+    "agent": {
+      "name": "Codex",
+      "version": "latest",
+      "baseModel": "GPT-5"
+    }
   }'`,
   response: `{
   "runId": "run_9f3kx8",

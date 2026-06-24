@@ -13,6 +13,7 @@ import {
   deriveHostedScoring,
   type HostedSessionBreakdown,
 } from "./hosted-scoring";
+import { resolveAgentIdentity } from "./agent-catalog";
 
 export type PlaygroundBenchmark = "hosted-web-suite";
 
@@ -39,6 +40,11 @@ type PlaygroundStore = {
   endpoint: string;
   apiKey: string;
   benchmark: PlaygroundBenchmark;
+  agentSelection: string;
+  customAgent: string;
+  agentVersion: string;
+  modelSelection: string;
+  customModel: string;
   currentRunId: string | null;
   currentExecutionMode: RunExecutionMode | null;
   liveViewUrl: string | null;
@@ -60,6 +66,11 @@ type PlaygroundStore = {
   setEndpoint: (value: string) => void;
   setApiKey: (value: string) => void;
   setBenchmark: (value: PlaygroundBenchmark) => void;
+  setAgentSelection: (value: string) => void;
+  setCustomAgent: (value: string) => void;
+  setAgentVersion: (value: string) => void;
+  setModelSelection: (value: string) => void;
+  setCustomModel: (value: string) => void;
   setActiveTab: (value: PanelTab) => void;
   setLiveSlide: (index: number) => void;
   fetchQuota: () => Promise<void>;
@@ -82,6 +93,11 @@ const initialState = {
   endpoint: "",
   apiKey: "",
   benchmark: "hosted-web-suite" as PlaygroundBenchmark,
+  agentSelection: "",
+  customAgent: "",
+  agentVersion: "latest",
+  modelSelection: "",
+  customModel: "",
   currentRunId: null,
   currentExecutionMode: null,
   liveViewUrl: null,
@@ -531,6 +547,11 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   setEndpoint: (value) => set({ endpoint: value }),
   setApiKey: (value) => set({ apiKey: value }),
   setBenchmark: (value) => set({ benchmark: value }),
+  setAgentSelection: (value) => set({ agentSelection: value }),
+  setCustomAgent: (value) => set({ customAgent: value }),
+  setAgentVersion: (value) => set({ agentVersion: value }),
+  setModelSelection: (value) => set({ modelSelection: value }),
+  setCustomModel: (value) => set({ customModel: value }),
   setActiveTab: (value) => set({ activeTab: value }),
   setLiveSlide: (index) => set({ liveSlide: index }),
   fetchQuota: async () => {
@@ -566,7 +587,16 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
     });
 
     try {
-      const benchmark = get().benchmark;
+      const state = get();
+      const benchmark = state.benchmark;
+      const agent = resolveAgentIdentity(state);
+      if (!agent) {
+        set({
+          quotaLoading: false,
+          runError: "Select an agent and base model, and provide an agent version.",
+        });
+        return;
+      }
       const response = await fetch("/api/runs", {
         method: "POST",
         headers: {
@@ -577,6 +607,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
           caseId: BENCHMARK_CASE_IDS[benchmark],
           executionMode: mode,
           isPublic: true,
+          agent,
         }),
       });
 

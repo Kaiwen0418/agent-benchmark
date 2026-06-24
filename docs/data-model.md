@@ -34,7 +34,7 @@ erDiagram
 
 ### `benchmark_case_revisions`
 
-An immutable, service-role-only release record containing `revision`, SHA-256 `content_hash`, and the complete validated private `manifest`. Publication is atomic and idempotent through `publish_benchmark_case_revision`; normal updates and deletes are rejected. Historical attempts keep their revision foreign key when the case's current revision changes.
+An immutable, service-role-only release record containing `revision`, SHA-256 `content_hash`, and the complete validated private `manifest`. Catalog publication is atomic and idempotent through `publish_benchmark_case_catalog`, which synchronizes the public case identity before selecting the immutable revision. Normal revision updates and deletes are rejected. Historical attempts keep their revision foreign key when the case's current revision changes.
 
 ### `benchmark_runs`
 
