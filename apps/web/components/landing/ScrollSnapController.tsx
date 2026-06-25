@@ -119,7 +119,9 @@ export function ScrollSnapController() {
       if (!anchor) return;
       const hash = anchor.getAttribute("href");
       if (!hash || hash === "#") return;
-      const target = document.querySelector<HTMLElement>(hash);
+      const target = Array.from(document.querySelectorAll<HTMLElement>(hash)).find(
+        (element) => element.offsetParent !== null,
+      );
       if (!target) return;
       e.preventDefault();
       clearSnapTimeout();
