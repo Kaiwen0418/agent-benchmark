@@ -20,12 +20,14 @@ function generatedTaskConfig(taskConfig: Record<string, unknown>, schemaVersion 
 
 function wikiTaskConfig(params: {
   targetArticleSlug: string;
-  kind: "date" | "duration" | "currency";
+  kind: "date" | "duration" | "currency" | "text";
   canonicalValue: string;
   normalization: "trim" | "trim-casefold" | "trim-casefold-punctuation";
+  secondaryArticleSlug?: string;
 }) {
   return generatedTaskConfig({
     targetArticleSlug: params.targetArticleSlug,
+    secondaryArticleSlug: params.secondaryArticleSlug,
     answerContract: {
       kind: params.kind,
       canonicalValue: params.canonicalValue,
@@ -349,6 +351,47 @@ test("evaluateWiki fails when article was not viewed even if answer matches", ()
 
   assert.equal(result.status, "failed");
   assert.match(result.summary, /requires opening the generated target article/i);
+});
+
+test("evaluateWiki passes when both target and secondary articles are viewed for multi-hop variant", () => {
+  const result = evaluateWiki(
+    makeWikiSession({
+      metadata: wikiTaskConfig({
+        targetArticleSlug: "usb-c-charger-faq",
+        kind: "currency",
+        canonicalValue: "$24.99",
+        normalization: "trim",
+        secondaryArticleSlug: "agentbench-release-history",
+      }),
+      events: [
+        { type: "page.load", url: "/wiki/article/agentbench-release-history?session=tok" },
+        { type: "page.load", url: "/wiki/article/usb-c-charger-faq?session=tok" },
+      ],
+      wikiAnswerSubmissions: [{ answer: "$24.99", submittedAt: "2026-06-01T00:00:00.000Z" }],
+    }),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateWiki fails when secondary article is required but not viewed", () => {
+  const result = evaluateWiki(
+    makeWikiSession({
+      metadata: wikiTaskConfig({
+        targetArticleSlug: "usb-c-charger-faq",
+        kind: "currency",
+        canonicalValue: "$24.99",
+        normalization: "trim",
+        secondaryArticleSlug: "agentbench-release-history",
+      }),
+      events: [{ type: "page.load", url: "/wiki/article/usb-c-charger-faq?session=tok" }],
+      wikiAnswerSubmissions: [{ answer: "$24.99", submittedAt: "2026-06-01T00:00:00.000Z" }],
+    }),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.match(result.summary, /secondary article/i);
 });
 
 function makeForumSession(

@@ -27,7 +27,7 @@ test("hosted catalog release has a stable revision identity and content hash", (
   const first = createHostedWebCatalogRelease();
   const second = createHostedWebCatalogRelease();
 
-  assert.equal(first.revision, "hosted-web-suite-v3.0.5");
+  assert.equal(first.revision, "hosted-web-suite-v3.0.6");
   assert.match(first.contentHash, /^[0-9a-f]{64}$/);
   assert.deepEqual(second, first);
 });

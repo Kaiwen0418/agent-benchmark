@@ -49,8 +49,8 @@ This is the only documentation table that enumerates the changing suite contents
 | `shopping-constrained-checkout` | `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard`, `combo-charger-cable`, `travel-kit-free-shipping`, `cable-budget-shipping` |
 | `forum-battery-moderation` | `forum-lite` | `battery-recall`, `wifi-reset`, `screen-advisory`, `battery-recall-pin`, `wifi-reset-report`, `screen-advisory-both` |
 | `repo-readme-fix` | `repo-lite` | `pnpm-install`, `yarn-install`, `bun-install`, `pnpm-install-and-version`, `yarn-install-and-rename`, `bun-install-and-script` |
-| `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price` |
-| `wiki-policy-answer` | `wiki-lite` | `adapter-restriction`, `standard-dispatch`, `express-cutoff` |
+| `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price`, `release-to-charger-price`, `dispatch-with-adapters` |
+| `wiki-policy-answer` | `wiki-lite` | `adapter-restriction`, `standard-dispatch`, `express-cutoff`, `adapter-to-shipping`, `express-to-history` |
 | `notes-followup-create` | `notes-lite` | `support-followup`, `release-note`, `ops-check` |
 | `calendar-event-create` | `calendar-lite` | `architecture-review`, `release-readiness`, `scoring-retro` |
 <!-- generated:hosted-testcases:end -->

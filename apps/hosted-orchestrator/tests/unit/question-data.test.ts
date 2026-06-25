@@ -32,15 +32,15 @@ test("fresh database seed contains generated question pools without fixed sessio
 
 test("wiki question variants declare typed answer contracts", () => {
   const suite = readHostedSuiteSeed();
-  assert.equal(suite.suiteVersion, "v3.0.5");
+  assert.equal(suite.suiteVersion, "v3.0.6");
   const sessions = suite.sessions as Array<Record<string, unknown>>;
   const wiki = sessions.find((session) => session.app === "wiki-lite");
   assert.ok(wiki);
-  assert.equal(wiki.taskVersion, "v2");
-  assert.equal(wiki.seedVersion, "wiki-lite-v2");
+  assert.equal(wiki.taskVersion, "v3");
+  assert.equal(wiki.seedVersion, "wiki-lite-v4");
   const metadata = wiki.metadata as Record<string, unknown>;
   const variants = metadata.questionVariants as Array<Record<string, unknown>>;
-  assert.equal(variants.length, 3);
+  assert.equal(variants.length, 5);
   for (const variant of variants) {
     const config = variant.taskConfig as Record<string, unknown>;
     assert.equal("expectedAnswer" in config, false);
@@ -56,7 +56,7 @@ test("scheduled development seeds cover every declared variant", () => {
   const suite = readHostedSuiteSeed();
   const sessions = suite.sessions as Array<Record<string, unknown>>;
   const selectedBySession = new Map<string, Set<string>>();
-  for (const seed of ["full-pool-0", "full-pool-1", "full-pool-9", "full-pool-16", "full-pool-34", "full-pool-91"]) {
+  for (const seed of ["full-pool-0", "full-pool-1", "full-pool-4", "full-pool-6", "full-pool-9", "full-pool-43", "full-pool-153"]) {
     const generated = generateAttemptQuestions(
       sessions as Parameters<typeof generateAttemptQuestions>[0],
       seed,

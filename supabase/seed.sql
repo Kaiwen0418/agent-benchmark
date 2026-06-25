@@ -11,10 +11,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-suite-v3.0.5',
+  'hosted-web-suite-v3.0.6',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3.0.5",
+  "suiteVersion": "v3.0.6",
   "sessions": [
     {
       "app": "shopping-lite",
@@ -275,8 +275,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "wiki-release-answer",
       "title": "Wiki Release Lookup",
       "startPath": "/wiki",
-      "taskVersion": "v2",
-      "seedVersion": "wiki-lite-v2",
+      "taskVersion": "v3",
+      "seedVersion": "wiki-lite-v4",
       "sequenceIndex": 3,
       "weight": 1,
       "required": true,
@@ -320,6 +320,34 @@ select public.publish_benchmark_case_catalog(
                 "sourceArticleSlug": "usb-c-charger-faq"
               }
             }
+          },
+          {
+            "id": "release-to-charger-price",
+            "goal": "The release history article references the USB-C Charger FAQ for recommended accessories. Open both articles and submit the exact price of the recommended budget charger.",
+            "taskConfig": {
+              "targetArticleSlug": "usb-c-charger-faq",
+              "secondaryArticleSlug": "agentbench-release-history",
+              "answerContract": {
+                "kind": "currency",
+                "canonicalValue": "$24.99",
+                "normalization": "trim",
+                "sourceArticleSlug": "usb-c-charger-faq"
+              }
+            }
+          },
+          {
+            "id": "dispatch-with-adapters",
+            "goal": "The power adapter safety article references the shipping policy for dispatch timing. Open both articles and submit the standard shipping dispatch window.",
+            "taskConfig": {
+              "targetArticleSlug": "shipping-policy",
+              "secondaryArticleSlug": "power-adapters",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "two business days",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "shipping-policy"
+              }
+            }
           }
         ]
       }
@@ -329,8 +357,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "wiki-policy-answer",
       "title": "Wiki Policy Lookup",
       "startPath": "/wiki",
-      "taskVersion": "v1",
-      "seedVersion": "wiki-lite-v3",
+      "taskVersion": "v2",
+      "seedVersion": "wiki-lite-v4",
       "sequenceIndex": 4,
       "weight": 1,
       "required": true,
@@ -367,6 +395,34 @@ select public.publish_benchmark_case_catalog(
             "goal": "Use the hosted wiki to find the express order same-day shipping cutoff time, then submit only the time.",
             "taskConfig": {
               "targetArticleSlug": "shipping-policy",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "3pm",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "shipping-policy"
+              }
+            }
+          },
+          {
+            "id": "adapter-to-shipping",
+            "goal": "The shipping policy references the power adapter safety article for restricted equipment rules. Open both articles and submit who restricted lab power adapters are reserved for.",
+            "taskConfig": {
+              "targetArticleSlug": "power-adapters",
+              "secondaryArticleSlug": "shipping-policy",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "internal certification teams",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "power-adapters"
+              }
+            }
+          },
+          {
+            "id": "express-to-history",
+            "goal": "The release history article references the shipping policy for delivery details. Open both articles and submit the express order same-day shipping cutoff time.",
+            "taskConfig": {
+              "targetArticleSlug": "shipping-policy",
+              "secondaryArticleSlug": "agentbench-release-history",
               "answerContract": {
                 "kind": "text",
                 "canonicalValue": "3pm",
@@ -470,7 +526,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '817c7fd62a2161cd9bfd3205965bf22d7e5445cbeca89074daf203881fd3ec59'
+  'e6e705b644b3a6fd1c4533dd32512fd6c61d410c575e47da04f26b0702454d21'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)
