@@ -8,6 +8,7 @@ import {
   OTHER_OPTION_VALUE,
   type AgentCatalog,
 } from "@/lib/agent-catalog";
+import { SiteSelect } from "@/components/ui/SiteSelect";
 
 export type AgentIdentityDraft = {
   agentSelection: string;
@@ -69,24 +70,25 @@ export function AgentIdentityFields({
 
   const inputClass =
     "mt-2 w-full rounded-[0.9rem] border border-[#d8d1c4] bg-white px-3.5 py-3 text-sm text-[#111111] outline-none transition focus:border-[#111111] disabled:cursor-not-allowed disabled:bg-[#eeeae2] disabled:text-[#777168]";
+  const selectClass = "mt-2";
 
   return (
     <div className={`grid gap-4 md:grid-cols-3 ${className}`}>
       <label className="text-xs font-medium text-[#4f4a43]">
         Agent
-        <select
+        <SiteSelect
           required
           value={value.agentSelection}
           onChange={(event) => onChange({ ...value, agentSelection: event.target.value })}
           disabled={disabled}
-          className={inputClass}
+          className={selectClass}
         >
           <option value="" disabled>Select an agent</option>
           {catalog.agents.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
           <option value={OTHER_OPTION_VALUE}>Other</option>
-        </select>
+        </SiteSelect>
         {value.agentSelection === OTHER_OPTION_VALUE ? (
           <input
             required
@@ -113,12 +115,12 @@ export function AgentIdentityFields({
       </label>
       <label className="text-xs font-medium text-[#4f4a43]">
         Base model
-        <select
+        <SiteSelect
           required
           value={value.modelSelection}
           onChange={(event) => onChange({ ...value, modelSelection: event.target.value })}
           disabled={disabled}
-          className={inputClass}
+          className={selectClass}
         >
           <option value="" disabled>Select a model</option>
           {catalog.models.map((option) => (
@@ -127,7 +129,7 @@ export function AgentIdentityFields({
             </option>
           ))}
           <option value={OTHER_OPTION_VALUE}>Other</option>
-        </select>
+        </SiteSelect>
         {value.modelSelection === OTHER_OPTION_VALUE ? (
           <input
             required

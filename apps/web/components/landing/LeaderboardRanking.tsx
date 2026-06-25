@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { LeaderboardEntry } from "@/lib/db";
 import { LEADERBOARD_MAX_ENTRIES, LEADERBOARD_PAGE_SIZE, paginateLeaderboard } from "@/lib/leaderboard-pagination";
+import { SiteSelect } from "@/components/ui/SiteSelect";
 
 export type LeaderboardBoard = {
   version: string;
@@ -44,6 +45,8 @@ function PlaceholderRow({ position }: { position: number }) {
 export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
   const [activeVersion, setActiveVersion] = useState(boards[0]?.version ?? "all");
   const [page, setPage] = useState(1);
+  const latestBoard = boards[0];
+  const otherBoards = boards.slice(1);
   const activeBoard = boards.find((board) => board.version === activeVersion) ?? boards[0];
   const pagination = paginateLeaderboard(activeBoard?.entries ?? [], page);
   const { entries, page: currentPage, pageCount, pageEntries, placeholderPositions } = pagination;
@@ -56,24 +59,35 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
   return (
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Benchmark version">
-          {boards.map((board) => {
-            const active = board.version === activeVersion;
-            return (
-              <button
-                key={board.version}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => selectVersion(board.version)}
-                className={active
-                  ? "rounded-full bg-[#111111] px-4 py-2 text-xs font-medium text-white"
-                  : "rounded-full border border-[#d8d0c2] bg-white/55 px-4 py-2 text-xs text-[#625c52] transition-colors hover:border-[#111111] hover:text-[#111111]"}
-              >
-                {board.version === "all" ? "All versions" : `Suite ${board.version}`}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2" aria-label="Benchmark version">
+          {latestBoard ? (
+            <button
+              type="button"
+              aria-pressed={latestBoard.version === activeVersion}
+              onClick={() => selectVersion(latestBoard.version)}
+              className={latestBoard.version === activeVersion
+                ? "rounded-[0.6rem] bg-[#111111] px-4 py-2.5 text-xs font-medium text-white"
+                : "rounded-[0.6rem] border border-[#d8d0c2] bg-white/55 px-4 py-2.5 text-xs text-[#625c52] transition-colors hover:border-[#111111] hover:text-[#111111]"}
+            >
+              {latestBoard.version === "all" ? "All versions" : `Suite ${latestBoard.version}`}
+            </button>
+          ) : null}
+          {otherBoards.length > 0 ? (
+            <SiteSelect
+              compact
+              aria-label="Other benchmark suites"
+              value={otherBoards.some((board) => board.version === activeVersion) ? activeVersion : ""}
+              onChange={(event) => selectVersion(event.target.value)}
+              className="min-w-[10rem] bg-white/55 py-2.5 text-xs text-[#625c52]"
+            >
+              <option value="" disabled>Other suites</option>
+              {otherBoards.map((board) => (
+                <option key={board.version} value={board.version}>
+                  Suite {board.version}
+                </option>
+              ))}
+            </SiteSelect>
+          ) : null}
         </div>
         <div className="text-xs uppercase tracking-[0.16em] text-[#8a8378]">
           Top {Math.min(entries.length, LEADERBOARD_MAX_ENTRIES)} · {LEADERBOARD_PAGE_SIZE} per page
