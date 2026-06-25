@@ -61,7 +61,7 @@ Publishing converts the validated catalog into an immutable `benchmark_case_revi
 - `pnpm --filter hosted-sites test` imports the canonical catalog, executes positive and negative scoring for every declared variant, and repeats each passing state across all layouts and themes.
 - `pnpm catalog:publish` validates and publishes the current catalog release with service-role credentials.
 - `pnpm verify:ci` runs the complete repository gate, including Redis command tests, PostgreSQL lifecycle races, local hosted smoke, and production builds.
-- `Hosted Variant Sweep` runs seven deterministic full-pass attempts against the development environment every Monday and on demand. Seeds `full-pool-0`, `full-pool-1`, `full-pool-3`, `full-pool-23`, `full-pool-34`, `full-pool-107`, and `full-pool-188` cover every current variant without using Web guest quota.
+- `Hosted Variant Sweep` runs seven deterministic full-pass attempts against the development environment every Monday and on demand. Seeds `full-pool-0`, `full-pool-1`, `full-pool-2`, `full-pool-18`, `full-pool-59`, `full-pool-152`, and `full-pool-197` cover every current variant without using Web guest quota.
 - Each lifecycle smoke logs selected variant IDs and requires one unique `hosted_web_results` row per suite session plus one `benchmark_attempt_scores` row.
 
 The seed list is versioned with the suite. Recompute it whenever variant IDs, session order, app slug, or task slug changes; CI remains the immediate guard against an uncovered variant.

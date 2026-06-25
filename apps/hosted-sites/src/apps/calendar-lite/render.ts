@@ -13,7 +13,7 @@ export function renderCalendarLite(
       <article class="card">
         <h2>${escapeHtml(calendarEvent.title)}</h2>
         <p>${escapeHtml(calendarEvent.date)} at ${escapeHtml(calendarEvent.startTime)} for ${calendarEvent.durationMinutes} minutes</p>
-        <p class="muted">${escapeHtml(calendarEvent.attendeeEmail)}</p>
+        <p class="muted">${escapeHtml(calendarEvent.attendeeEmail)}${calendarEvent.secondaryAttendeeEmail ? `, ${escapeHtml(calendarEvent.secondaryAttendeeEmail)}` : ""}</p>
       </article>`).join("")
     : '<article class="card"><p class="muted">No events scheduled.</p></article>';
 
@@ -38,6 +38,7 @@ export function renderCalendarLite(
           </label>
         </div>
         <label style="display:block;margin-top:12px;">Attendee email <input type="email" name="attendeeEmail" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+        <label style="display:block;margin-top:12px;">Secondary attendee email <input type="email" name="secondaryAttendeeEmail" placeholder="Optional" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
         <button type="submit" style="margin-top:12px;">Create event</button>
       </form>
     </section>

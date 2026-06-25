@@ -11,10 +11,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-suite-v3.0.7',
+  'hosted-web-suite-v3.0.8',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3.0.7",
+  "suiteVersion": "v3.0.8",
   "sessions": [
     {
       "app": "shopping-lite",
@@ -511,8 +511,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "calendar-event-create",
       "title": "Calendar Event",
       "startPath": "/calendar",
-      "taskVersion": "v1",
-      "seedVersion": "calendar-lite-v1",
+      "taskVersion": "v2",
+      "seedVersion": "calendar-lite-v2",
       "sequenceIndex": 6,
       "weight": 1,
       "required": true,
@@ -550,13 +550,49 @@ select public.publish_benchmark_case_catalog(
               "expectedDurationMinutes": 60,
               "expectedAttendeeEmail": "evals@example.com"
             }
+          },
+          {
+            "id": "architecture-review-plus-lead",
+            "goal": "Create an event titled 'Architecture review' on July 8, 2026 at 14:30 for 45 minutes with attendees mira@example.com and lead@example.com.",
+            "taskConfig": {
+              "expectedTitle": "Architecture review",
+              "expectedDate": "2026-07-08",
+              "expectedStartTime": "14:30",
+              "expectedDurationMinutes": 45,
+              "expectedAttendeeEmail": "mira@example.com",
+              "expectedSecondaryAttendeeEmail": "lead@example.com"
+            }
+          },
+          {
+            "id": "release-readiness-plus-pm",
+            "goal": "Create an event titled 'Release readiness' on July 10, 2026 at 09:00 for 30 minutes with attendees ops@example.com and pm@example.com.",
+            "taskConfig": {
+              "expectedTitle": "Release readiness",
+              "expectedDate": "2026-07-10",
+              "expectedStartTime": "09:00",
+              "expectedDurationMinutes": 30,
+              "expectedAttendeeEmail": "ops@example.com",
+              "expectedSecondaryAttendeeEmail": "pm@example.com"
+            }
+          },
+          {
+            "id": "scoring-retro-plus-analyst",
+            "goal": "Create an event titled 'Scoring retrospective' on July 14, 2026 at 16:00 for 60 minutes with attendees evals@example.com and analyst@example.com.",
+            "taskConfig": {
+              "expectedTitle": "Scoring retrospective",
+              "expectedDate": "2026-07-14",
+              "expectedStartTime": "16:00",
+              "expectedDurationMinutes": 60,
+              "expectedAttendeeEmail": "evals@example.com",
+              "expectedSecondaryAttendeeEmail": "analyst@example.com"
+            }
           }
         ]
       }
     }
   ]
 }$catalog$::jsonb,
-  '0f5006278d204b0fc6521dcd2423c73074b3cf1347c79cea39db9482a5a69de8'
+  '7e4bc4d598f3240e29487673714fccee5eac5d8e97572806c3910cdd1852bf5f'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

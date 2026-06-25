@@ -26,11 +26,11 @@ jobs:
         generation_seed:
           - full-pool-0
           - full-pool-1
-          - full-pool-3
-          - full-pool-23
-          - full-pool-34
-          - full-pool-107
-          - full-pool-188
+          - full-pool-2
+          - full-pool-18
+          - full-pool-59
+          - full-pool-152
+          - full-pool-197
     steps:
       - name: Checkout develop
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5

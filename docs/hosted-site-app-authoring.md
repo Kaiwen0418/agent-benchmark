@@ -52,7 +52,7 @@ This is the only documentation table that enumerates the changing suite contents
 | `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price`, `release-to-charger-price`, `dispatch-with-adapters` |
 | `wiki-policy-answer` | `wiki-lite` | `adapter-restriction`, `standard-dispatch`, `express-cutoff`, `adapter-to-shipping`, `express-to-history` |
 | `notes-followup-create` | `notes-lite` | `support-followup`, `release-note`, `ops-check`, `update-support-followup`, `update-release-note`, `update-ops-check` |
-| `calendar-event-create` | `calendar-lite` | `architecture-review`, `release-readiness`, `scoring-retro` |
+| `calendar-event-create` | `calendar-lite` | `architecture-review`, `release-readiness`, `scoring-retro`, `architecture-review-plus-lead`, `release-readiness-plus-pm`, `scoring-retro-plus-analyst` |
 <!-- generated:hosted-testcases:end -->
 
 Each task declares at least two semantic variants. The generic matrix combines every declared variant with all supported layouts and themes; presentation must never affect actions or scoring. See [Benchmark Scoring And Testing](./benchmark-testing.md) for required matrix coverage.

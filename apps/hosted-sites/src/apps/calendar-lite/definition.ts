@@ -14,6 +14,7 @@ function isCalendarEvent(value: unknown): value is CalendarEvent {
     typeof value.startTime === "string" &&
     typeof value.durationMinutes === "number" &&
     typeof value.attendeeEmail === "string" &&
+    (value.secondaryAttendeeEmail === undefined || typeof value.secondaryAttendeeEmail === "string") &&
     typeof value.createdAt === "string"
   );
 }

@@ -1,4 +1,4 @@
-import { configString, type HostedAppTestSupport } from "../../runtime/test-support.js";
+import { configString, configStringOrNull, type HostedAppTestSupport } from "../../runtime/test-support.js";
 
 export const calendarLiteTestSupport: HostedAppTestSupport<"calendar-lite"> = {
   exampleTaskConfig: {
@@ -16,10 +16,14 @@ export const calendarLiteTestSupport: HostedAppTestSupport<"calendar-lite"> = {
       startTime: configString(config, "expectedStartTime"),
       durationMinutes: Number(config.expectedDurationMinutes),
       attendeeEmail: configString(config, "expectedAttendeeEmail"),
+      secondaryAttendeeEmail: configStringOrNull(config, "expectedSecondaryAttendeeEmail") ?? undefined,
       createdAt: "2026-06-24T00:00:00.000Z",
     });
   },
   breakPassingState(session) {
-    session.state.calendarEvents[0]!.title = "Wrong event title";
+    const event = session.state.calendarEvents.at(-1);
+    if (event) {
+      event.title = "Wrong event title";
+    }
   },
 };
