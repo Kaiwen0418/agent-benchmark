@@ -35,6 +35,27 @@ export function addProductToCart(session: ShoppingSession, productId: string) {
   session.state.cart.push({ productId, quantity: 1 });
 }
 
+export function removeProductFromCart(session: ShoppingSession, productId: string) {
+  session.state.cart = session.state.cart.filter((item) => item.productId !== productId);
+}
+
+export function setCartItemQuantity(session: ShoppingSession, productId: string, quantity: number) {
+  if (!Number.isInteger(quantity)) {
+    throw new Error("Quantity must be an integer.");
+  }
+  if (quantity <= 0) {
+    removeProductFromCart(session, productId);
+    return;
+  }
+
+  const existing = session.state.cart.find((item) => item.productId === productId);
+  if (existing) {
+    existing.quantity = quantity;
+  } else {
+    session.state.cart.push({ productId, quantity });
+  }
+}
+
 export function submitCheckoutOrder(
   session: ShoppingSession,
   params: {

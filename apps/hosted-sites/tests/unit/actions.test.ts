@@ -3,7 +3,7 @@ import test from "node:test";
 import { addReplyToThread, lockThread } from "../../src/apps/forum-lite/actions.js";
 import { createNote } from "../../src/apps/notes-lite/actions.js";
 import { createMergeRequest, updateFileContent } from "../../src/apps/repo-lite/actions.js";
-import { addProductToCart, getCartTotal, submitCheckoutOrder } from "../../src/apps/shopping-lite/actions.js";
+import { addProductToCart, getCartTotal, removeProductFromCart, setCartItemQuantity, submitCheckoutOrder } from "../../src/apps/shopping-lite/actions.js";
 import { markArticleViewed, submitWikiAnswer } from "../../src/apps/wiki-lite/actions.js";
 import { buildInitialSessionState, defaultGoalForSession, defaultStartPathForApp } from "../../src/runtime/app-registry.js";
 import type { HostedAppId, HostedSessionFor } from "../../src/runtime/types.js";
@@ -62,6 +62,32 @@ test("shopping actions add products, submit order, and clear cart", () => {
   assert.equal(order.items.length, 1);
   assert.equal(session.state.orders.length, 1);
   assert.deepEqual(session.state.cart, []);
+});
+
+test("shopping actions remove cart items and adjust quantities", () => {
+  const session = makeSession("shopping-lite");
+  addProductToCart(session, "prod-charger-30w");
+  addProductToCart(session, "prod-charger-30w");
+  addProductToCart(session, "prod-cable-1m");
+
+  assert.deepEqual(session.state.cart, [
+    { productId: "prod-charger-30w", quantity: 2 },
+    { productId: "prod-cable-1m", quantity: 1 },
+  ]);
+
+  setCartItemQuantity(session, "prod-charger-30w", 1);
+  assert.deepEqual(session.state.cart, [
+    { productId: "prod-charger-30w", quantity: 1 },
+    { productId: "prod-cable-1m", quantity: 1 },
+  ]);
+
+  removeProductFromCart(session, "prod-cable-1m");
+  assert.deepEqual(session.state.cart, [{ productId: "prod-charger-30w", quantity: 1 }]);
+
+  setCartItemQuantity(session, "prod-charger-30w", 0);
+  assert.deepEqual(session.state.cart, []);
+
+  assert.throws(() => setCartItemQuantity(session, "prod-charger-30w", 1.5), /integer/);
 });
 
 test("wiki actions dedupe viewed articles and trim submitted answers", () => {
