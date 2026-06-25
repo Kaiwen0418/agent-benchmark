@@ -52,3 +52,56 @@ export function lockThread(
   session.state.moderationActions.push(action);
   return { success: true, action } as const;
 }
+
+export function pinThread(
+  session: ForumSession,
+  params: {
+    threadId: string;
+    reason: string;
+    makeId: (prefix: string) => string;
+  },
+) {
+  const thread = session.state.threads.find((candidate) => candidate.id === params.threadId);
+  if (!thread) {
+    return { success: false, error: "Thread not found" } as const;
+  }
+  if (!thread.locked) {
+    return { success: false, error: "Thread must be locked before pinning" } as const;
+  }
+
+  thread.pinned = true;
+  const action: ModerationAction = {
+    id: params.makeId("mod"),
+    threadId: params.threadId,
+    action: "pin",
+    reason: params.reason,
+  };
+  session.state.moderationActions.push(action);
+  return { success: true, action } as const;
+}
+
+export function reportThread(
+  session: ForumSession,
+  params: {
+    threadId: string;
+    reason: string;
+    makeId: (prefix: string) => string;
+  },
+) {
+  const thread = session.state.threads.find((candidate) => candidate.id === params.threadId);
+  if (!thread) {
+    return { success: false, error: "Thread not found" } as const;
+  }
+  if (thread.locked) {
+    return { success: false, error: "Cannot report a locked thread" } as const;
+  }
+
+  const action: ModerationAction = {
+    id: params.makeId("mod"),
+    threadId: params.threadId,
+    action: "report",
+    reason: params.reason,
+  };
+  session.state.moderationActions.push(action);
+  return { success: true, action } as const;
+}

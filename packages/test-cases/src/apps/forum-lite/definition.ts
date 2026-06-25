@@ -7,12 +7,18 @@ export const forumLiteTestcaseDefinition = defineHostedTestcaseApp({
     targetThreadId: z.string().min(1),
     expectedReplyValue: z.string().url(),
     expectedLockReason: z.string().min(1),
+    requiresPin: z.boolean().optional(),
+    requiresReport: z.boolean().optional(),
+    expectedReportReason: z.string().min(1).optional(),
   }),
   variantPools: {
     default: [
       { id: "battery-recall", goal: "Find the battery swelling thread, reply with the official recall link from the support post, then lock it with reason 'safety escalation'.", taskConfig: { targetThreadId: "thr-battery", expectedReplyValue: "https://support.example.com/recall/battery-2026", expectedLockReason: "safety escalation" } },
       { id: "wifi-reset", goal: "Find the 5GHz connectivity thread, reply with the official reset-guide link from support, then lock it with reason 'resolved with guide'.", taskConfig: { targetThreadId: "thr-wifi", expectedReplyValue: "https://support.example.com/network/5ghz-reset", expectedLockReason: "resolved with guide" } },
       { id: "screen-advisory", goal: "Find the low-brightness flickering thread, reply with the display calibration advisory link, then lock it with reason 'known display issue'.", taskConfig: { targetThreadId: "thr-screen", expectedReplyValue: "https://support.example.com/display/flicker-calibration", expectedLockReason: "known display issue" } },
+      { id: "battery-recall-pin", goal: "Find the battery swelling thread, reply with the official recall link from the support post, lock it with reason 'safety escalation', then pin it.", taskConfig: { targetThreadId: "thr-battery", expectedReplyValue: "https://support.example.com/recall/battery-2026", expectedLockReason: "safety escalation", requiresPin: true } },
+      { id: "wifi-reset-report", goal: "Find the 5GHz connectivity thread, submit a moderation report with reason 'needs escalation', then reply with the reset-guide link and lock it with reason 'resolved with guide'.", taskConfig: { targetThreadId: "thr-wifi", expectedReplyValue: "https://support.example.com/network/5ghz-reset", expectedLockReason: "resolved with guide", requiresReport: true, expectedReportReason: "needs escalation" } },
+      { id: "screen-advisory-both", goal: "Find the low-brightness flickering thread, submit a report with reason 'duplicate issue', reply with the display calibration advisory link, lock it with reason 'known display issue', then pin it.", taskConfig: { targetThreadId: "thr-screen", expectedReplyValue: "https://support.example.com/display/flicker-calibration", expectedLockReason: "known display issue", requiresReport: true, expectedReportReason: "duplicate issue", requiresPin: true } },
     ],
   },
 });

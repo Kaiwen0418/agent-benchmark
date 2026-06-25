@@ -91,3 +91,11 @@ export function configNumberOrNull(config: Record<string, unknown>, key: string)
   }
   return value;
 }
+
+export function configBooleanOrFalse(config: Record<string, unknown>, key: string): boolean {
+  const value = config[key];
+  if (typeof value !== "boolean") {
+    return false;
+  }
+  return value;
+}

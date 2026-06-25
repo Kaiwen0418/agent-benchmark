@@ -11,10 +11,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-suite-v3.0.3',
+  'hosted-web-suite-v3.0.4',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3.0.3",
+  "suiteVersion": "v3.0.4",
   "sessions": [
     {
       "app": "shopping-lite",
@@ -111,8 +111,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "forum-battery-moderation",
       "title": "Forum Moderation",
       "startPath": "/forum",
-      "taskVersion": "v1",
-      "seedVersion": "forum-lite-v1",
+      "taskVersion": "v2",
+      "seedVersion": "forum-lite-v2",
       "sequenceIndex": 1,
       "weight": 1,
       "required": true,
@@ -143,6 +143,39 @@ select public.publish_benchmark_case_catalog(
               "targetThreadId": "thr-screen",
               "expectedReplyValue": "https://support.example.com/display/flicker-calibration",
               "expectedLockReason": "known display issue"
+            }
+          },
+          {
+            "id": "battery-recall-pin",
+            "goal": "Find the battery swelling thread, reply with the official recall link from the support post, lock it with reason 'safety escalation', then pin it.",
+            "taskConfig": {
+              "targetThreadId": "thr-battery",
+              "expectedReplyValue": "https://support.example.com/recall/battery-2026",
+              "expectedLockReason": "safety escalation",
+              "requiresPin": true
+            }
+          },
+          {
+            "id": "wifi-reset-report",
+            "goal": "Find the 5GHz connectivity thread, submit a moderation report with reason 'needs escalation', then reply with the reset-guide link and lock it with reason 'resolved with guide'.",
+            "taskConfig": {
+              "targetThreadId": "thr-wifi",
+              "expectedReplyValue": "https://support.example.com/network/5ghz-reset",
+              "expectedLockReason": "resolved with guide",
+              "requiresReport": true,
+              "expectedReportReason": "needs escalation"
+            }
+          },
+          {
+            "id": "screen-advisory-both",
+            "goal": "Find the low-brightness flickering thread, submit a report with reason 'duplicate issue', reply with the display calibration advisory link, lock it with reason 'known display issue', then pin it.",
+            "taskConfig": {
+              "targetThreadId": "thr-screen",
+              "expectedReplyValue": "https://support.example.com/display/flicker-calibration",
+              "expectedLockReason": "known display issue",
+              "requiresPin": true,
+              "requiresReport": true,
+              "expectedReportReason": "duplicate issue"
             }
           }
         ]
@@ -396,7 +429,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '9a41d12fb2f6a9792163439f5e9dcb42852f12df1383cebbd56d33a690c8bda1'
+  'bc6833abed1623fb9b148dc48df735d5381654b8a4d89b3a1f215109cd2875d0'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

@@ -353,11 +353,12 @@ test("evaluateWiki fails when article was not viewed even if answer matches", ()
 
 function makeForumSession(
   overrides?: Partial<ForumEvaluationSession["state"]>,
+  metadata?: Record<string, unknown>,
 ): ForumEvaluationSession {
   return {
     app: "forum-lite",
     taskSlug: "forum-battery-moderation",
-    metadata: defaultTaskConfigs.forum,
+    metadata: metadata ?? defaultTaskConfigs.forum,
     state: {
       threads: [
         {
@@ -460,6 +461,182 @@ test("evaluateForum fails when agent reply is missing recall link", () => {
 
   assert.equal(result.status, "failed");
   assert.equal(result.score, 0);
+});
+
+test("evaluateForum passes when agent replies, locks, and pins the thread", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-battery",
+            title: "Battery swelling issue after firmware update",
+            category: "safety",
+            locked: true,
+            pinned: true,
+            posts: [
+              { id: "p-battery-1", author: "user123", body: "My device started swelling." },
+              { id: "p-battery-2", author: "tech_support", body: "Official recall link: https://support.example.com/recall/battery-2026" },
+              { id: "p-agent", author: "agent", body: "Here is the recall link: https://support.example.com/recall/battery-2026" },
+            ],
+          },
+        ],
+        moderationActions: [
+          { id: "mod_1", threadId: "thr-battery", action: "lock", reason: "safety escalation" },
+          { id: "mod_2", threadId: "thr-battery", action: "pin", reason: "safety escalation" },
+        ],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-battery",
+        expectedReplyValue: "https://support.example.com/recall/battery-2026",
+        expectedLockReason: "safety escalation",
+        requiresPin: true,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateForum fails when pin is required but missing", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-battery",
+            title: "Battery swelling issue after firmware update",
+            category: "safety",
+            locked: true,
+            posts: [
+              { id: "p-battery-1", author: "user123", body: "My device started swelling." },
+              { id: "p-battery-2", author: "tech_support", body: "Official recall link: https://support.example.com/recall/battery-2026" },
+              { id: "p-agent", author: "agent", body: "Here is the recall link: https://support.example.com/recall/battery-2026" },
+            ],
+          },
+        ],
+        moderationActions: [{ id: "mod_1", threadId: "thr-battery", action: "lock", reason: "safety escalation" }],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-battery",
+        expectedReplyValue: "https://support.example.com/recall/battery-2026",
+        expectedLockReason: "safety escalation",
+        requiresPin: true,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateForum passes when agent reports, replies, and locks the thread", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-wifi",
+            title: "WiFi connectivity drops on 5GHz",
+            category: "networking",
+            locked: true,
+            posts: [
+              { id: "p-wifi-1", author: "user123", body: "My 5GHz keeps dropping." },
+              { id: "p-wifi-2", author: "tech_support", body: "Reset guide: https://support.example.com/network/5ghz-reset" },
+              { id: "p-agent", author: "agent", body: "Use https://support.example.com/network/5ghz-reset" },
+            ],
+          },
+        ],
+        moderationActions: [
+          { id: "mod_1", threadId: "thr-wifi", action: "report", reason: "needs escalation" },
+          { id: "mod_2", threadId: "thr-wifi", action: "lock", reason: "resolved with guide" },
+        ],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-wifi",
+        expectedReplyValue: "https://support.example.com/network/5ghz-reset",
+        expectedLockReason: "resolved with guide",
+        requiresReport: true,
+        expectedReportReason: "needs escalation",
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateForum fails when report is required but missing", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-wifi",
+            title: "WiFi connectivity drops on 5GHz",
+            category: "networking",
+            locked: true,
+            posts: [
+              { id: "p-wifi-1", author: "user123", body: "My 5GHz keeps dropping." },
+              { id: "p-wifi-2", author: "tech_support", body: "Reset guide: https://support.example.com/network/5ghz-reset" },
+              { id: "p-agent", author: "agent", body: "Use https://support.example.com/network/5ghz-reset" },
+            ],
+          },
+        ],
+        moderationActions: [{ id: "mod_1", threadId: "thr-wifi", action: "lock", reason: "resolved with guide" }],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-wifi",
+        expectedReplyValue: "https://support.example.com/network/5ghz-reset",
+        expectedLockReason: "resolved with guide",
+        requiresReport: true,
+        expectedReportReason: "needs escalation",
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateForum passes when agent reports, replies, locks, and pins the thread", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-screen",
+            title: "Screen flickering in low brightness",
+            category: "display",
+            locked: true,
+            pinned: true,
+            posts: [
+              { id: "p-screen-1", author: "user123", body: "Screen flickers at low brightness." },
+              { id: "p-screen-2", author: "tech_support", body: "Calibration advisory: https://support.example.com/display/flicker-calibration" },
+              { id: "p-agent", author: "agent", body: "See https://support.example.com/display/flicker-calibration" },
+            ],
+          },
+        ],
+        moderationActions: [
+          { id: "mod_1", threadId: "thr-screen", action: "report", reason: "duplicate issue" },
+          { id: "mod_2", threadId: "thr-screen", action: "lock", reason: "known display issue" },
+          { id: "mod_3", threadId: "thr-screen", action: "pin", reason: "known display issue" },
+        ],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-screen",
+        expectedReplyValue: "https://support.example.com/display/flicker-calibration",
+        expectedLockReason: "known display issue",
+        requiresReport: true,
+        expectedReportReason: "duplicate issue",
+        requiresPin: true,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
 });
 
 function makeRepoSession(

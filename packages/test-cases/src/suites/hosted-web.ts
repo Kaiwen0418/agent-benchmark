@@ -11,10 +11,10 @@ const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPool
 
 export const hostedWebSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-suite-v1",
-  suiteVersion: "v3.0.3",
+  suiteVersion: "v3.0.4",
   sessions: [
     { app: "shopping-lite", taskSlug: "shopping-constrained-checkout", title: "Shopping Checkout", taskVersion: "v2", seedVersion: "shopping-lite-v2", sequenceIndex: 0, weight: 1, required: true, metadata: { questionVariants: shoppingQuestionVariants } },
-    { app: "forum-lite", taskSlug: "forum-battery-moderation", title: "Forum Moderation", startPath: "/forum", taskVersion: "v1", seedVersion: "forum-lite-v1", sequenceIndex: 1, weight: 1, required: true, metadata: { questionVariants: forumQuestionVariants } },
+    { app: "forum-lite", taskSlug: "forum-battery-moderation", title: "Forum Moderation", startPath: "/forum", taskVersion: "v2", seedVersion: "forum-lite-v2", sequenceIndex: 1, weight: 1, required: true, metadata: { questionVariants: forumQuestionVariants } },
     { app: "repo-lite", taskSlug: "repo-readme-fix", title: "Repository README Fix", startPath: "/repo", taskVersion: "v1", seedVersion: "repo-lite-v1", sequenceIndex: 2, weight: 1, required: true, metadata: { questionVariants: repoQuestionVariants } },
     { app: "wiki-lite", taskSlug: "wiki-release-answer", title: "Wiki Release Lookup", startPath: "/wiki", taskVersion: "v2", seedVersion: "wiki-lite-v2", sequenceIndex: 3, weight: 1, required: true, metadata: { questionVariants: wikiQuestionVariants } },
     { app: "wiki-lite", taskSlug: "wiki-policy-answer", title: "Wiki Policy Lookup", startPath: "/wiki", taskVersion: "v1", seedVersion: "wiki-lite-v3", sequenceIndex: 4, weight: 1, required: true, metadata: { questionVariants: wikiPolicyQuestionVariants } },
@@ -23,7 +23,7 @@ export const hostedWebSuiteMetadata = hostedSuiteMetadataSchema.parse({
   ],
 });
 
-export const hostedWebSuiteRevision = "hosted-web-suite-v3.0.3";
+export const hostedWebSuiteRevision = "hosted-web-suite-v3.0.4";
 
 export const hostedWebSuiteCase = {
   id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",

@@ -17,7 +17,8 @@ function isForumThread(value: unknown): value is ForumThread {
     typeof value.category === "string" &&
     Array.isArray(value.posts) &&
     value.posts.every(isForumPost) &&
-    (value.locked === undefined || typeof value.locked === "boolean")
+    (value.locked === undefined || typeof value.locked === "boolean") &&
+    (value.pinned === undefined || typeof value.pinned === "boolean")
   );
 }
 
@@ -26,7 +27,7 @@ function isModerationAction(value: unknown): value is ModerationAction {
     isStateRecord(value) &&
     typeof value.id === "string" &&
     typeof value.threadId === "string" &&
-    (value.action === "lock" || value.action === "pin" || value.action === "remove_post") &&
+    (value.action === "lock" || value.action === "pin" || value.action === "remove_post" || value.action === "report") &&
     typeof value.reason === "string"
   );
 }

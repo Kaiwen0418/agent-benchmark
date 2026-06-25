@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addReplyToThread, lockThread } from "../../src/apps/forum-lite/actions.js";
+import { addReplyToThread, lockThread, pinThread, reportThread } from "../../src/apps/forum-lite/actions.js";
 import { createNote } from "../../src/apps/notes-lite/actions.js";
 import { createMergeRequest, updateFileContent } from "../../src/apps/repo-lite/actions.js";
 import { addProductToCart, getCartTotal, submitCheckoutOrder } from "../../src/apps/shopping-lite/actions.js";
@@ -144,6 +144,45 @@ test("forum actions reject locked threads and persist moderation actions", () =>
     makeId: (prefix) => `${prefix}_2`,
   });
   assert.deepEqual(rejected, { success: false, error: "Thread is locked" });
+});
+
+test("forum pin action requires thread to be locked first", () => {
+  const session = makeSession("forum-lite");
+
+  const pinBeforeLock = pinThread(session, {
+    threadId: "thr-battery",
+    reason: "important",
+    makeId: (prefix) => `${prefix}_1`,
+  });
+  assert.equal(pinBeforeLock.success, false);
+
+  lockThread(session, { threadId: "thr-battery", reason: "safety escalation", makeId: (prefix) => `${prefix}_2` });
+  const pinAfterLock = pinThread(session, {
+    threadId: "thr-battery",
+    reason: "important",
+    makeId: (prefix) => `${prefix}_3`,
+  });
+  assert.equal(pinAfterLock.success, true);
+  assert.equal(session.state.threads.find((thread) => thread.id === "thr-battery")?.pinned, true);
+});
+
+test("forum report action rejects locked threads", () => {
+  const session = makeSession("forum-lite");
+
+  const report = reportThread(session, {
+    threadId: "thr-battery",
+    reason: "needs escalation",
+    makeId: (prefix) => `${prefix}_1`,
+  });
+  assert.equal(report.success, true);
+
+  lockThread(session, { threadId: "thr-battery", reason: "safety escalation", makeId: (prefix) => `${prefix}_2` });
+  const reportAfterLock = reportThread(session, {
+    threadId: "thr-battery",
+    reason: "late report",
+    makeId: (prefix) => `${prefix}_3`,
+  });
+  assert.equal(reportAfterLock.success, false);
 });
 
 test("repo actions update README and create merge request snapshots", () => {

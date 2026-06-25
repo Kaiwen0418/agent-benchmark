@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
 import { redirect, sendJson } from "../../runtime/http.js";
 import { isHostedSessionForApp } from "../../runtime/types.js";
-import { addReplyToThread, lockThread } from "./actions.js";
+import { addReplyToThread, lockThread, pinThread, reportThread } from "./actions.js";
 import { renderForumIndex, renderThread } from "./render.js";
 
 export function createForumRoutes(deps: HostedAppRouteDeps) {
@@ -138,6 +138,92 @@ export function createForumRoutes(deps: HostedAppRouteDeps) {
         sendJson(response, 502, { error: "Hosted orchestrator unavailable" });
         return true;
       }
+
+      redirect(response, `/forum/thread/${encodeURIComponent(threadId)}?session=${encodeURIComponent(session.token)}`);
+      return true;
+    }
+
+    const pinMatch = url.pathname.match(/^\/forum\/thread\/([^/]+)\/pin$/);
+    if (request.method === "POST" && pinMatch) {
+      const session = await getForumSession(url, request);
+      if (!session) {
+        deps.badRequest(response, "Missing or invalid session");
+        return true;
+      }
+      if (deps.rejectTerminalMutation(session, response)) return true;
+
+      const threadId = decodeURIComponent(pinMatch[1]);
+      const form = await deps.readForm(request);
+      const reason = form.get("reason");
+      if (typeof reason !== "string" || reason.trim().length === 0) {
+        deps.badRequest(response, "Pin reason is required");
+        return true;
+      }
+
+      const result = pinThread(session, {
+        threadId,
+        reason: reason.trim(),
+        makeId: deps.makeId,
+      });
+
+      if (!result.success) {
+        deps.badRequest(response, result.error);
+        return true;
+      }
+
+      await deps.persistSessionSnapshot(session);
+      await deps.recordEvent(session, { type: "task.signal", name: "forum.thread_pinned", threadId, actionId: result.action.id });
+      await deps.forwardRunEvent(session, "hosted.task_signal", {
+        source: "hosted-sites",
+        sessionId: session.id,
+        taskSlug: session.taskSlug,
+        name: "forum.thread_pinned",
+        threadId,
+        actionId: result.action.id,
+      });
+
+      redirect(response, `/forum/thread/${encodeURIComponent(threadId)}?session=${encodeURIComponent(session.token)}`);
+      return true;
+    }
+
+    const reportMatch = url.pathname.match(/^\/forum\/thread\/([^/]+)\/report$/);
+    if (request.method === "POST" && reportMatch) {
+      const session = await getForumSession(url, request);
+      if (!session) {
+        deps.badRequest(response, "Missing or invalid session");
+        return true;
+      }
+      if (deps.rejectTerminalMutation(session, response)) return true;
+
+      const threadId = decodeURIComponent(reportMatch[1]);
+      const form = await deps.readForm(request);
+      const reason = form.get("reason");
+      if (typeof reason !== "string" || reason.trim().length === 0) {
+        deps.badRequest(response, "Report reason is required");
+        return true;
+      }
+
+      const result = reportThread(session, {
+        threadId,
+        reason: reason.trim(),
+        makeId: deps.makeId,
+      });
+
+      if (!result.success) {
+        deps.badRequest(response, result.error);
+        return true;
+      }
+
+      await deps.persistSessionSnapshot(session);
+      await deps.recordEvent(session, { type: "task.signal", name: "forum.thread_reported", threadId, actionId: result.action.id });
+      await deps.forwardRunEvent(session, "hosted.task_signal", {
+        source: "hosted-sites",
+        sessionId: session.id,
+        taskSlug: session.taskSlug,
+        name: "forum.thread_reported",
+        threadId,
+        actionId: result.action.id,
+      });
 
       redirect(response, `/forum/thread/${encodeURIComponent(threadId)}?session=${encodeURIComponent(session.token)}`);
       return true;
