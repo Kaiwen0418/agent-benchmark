@@ -15,7 +15,9 @@ export type Order = {
   id: string;
   items: CartItem[];
   total: number;
+  subtotal?: number;
   shippingMethod: "standard" | "express";
+  shippingCost?: number;
   submittedAt: string;
 };
 

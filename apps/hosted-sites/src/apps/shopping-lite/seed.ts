@@ -2,6 +2,12 @@ import type { Product } from "./types.js";
 
 export const shoppingSeedProducts: Product[] = [
   {
+    id: "prod-charger-20w",
+    name: "VoltEdge 20W USB-C Charger",
+    category: "charger",
+    price: 18.99,
+  },
+  {
     id: "prod-charger-30w",
     name: "VoltEdge 30W USB-C Charger",
     category: "charger",
@@ -18,6 +24,12 @@ export const shoppingSeedProducts: Product[] = [
     name: "Braided USB-C Cable 1m",
     category: "cable",
     price: 9.99,
+  },
+  {
+    id: "prod-cable-2m",
+    name: "Braided USB-C Cable 2m",
+    category: "cable",
+    price: 14.99,
   },
   {
     id: "prod-adapter-lab",

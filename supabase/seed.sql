@@ -11,17 +11,17 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-suite-v3.0.2',
+  'hosted-web-suite-v3.0.3',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3.0.2",
+  "suiteVersion": "v3.0.3",
   "sessions": [
     {
       "app": "shopping-lite",
       "taskSlug": "shopping-constrained-checkout",
       "title": "Shopping Checkout",
-      "taskVersion": "v1",
-      "seedVersion": "shopping-lite-v1",
+      "taskVersion": "v2",
+      "seedVersion": "shopping-lite-v2",
       "sequenceIndex": 0,
       "weight": 1,
       "required": true,
@@ -58,6 +58,49 @@ select public.publish_benchmark_case_catalog(
               "maxTotal": 15,
               "shippingMethod": "standard",
               "avoidRestricted": true
+            }
+          },
+          {
+            "id": "combo-charger-cable",
+            "goal": "Buy one charger and one USB-C cable with a total price at or below $35, use standard shipping, and avoid restricted products.",
+            "taskConfig": {
+              "targetCategory": "charger",
+              "quantity": 1,
+              "maxTotal": 35,
+              "shippingMethod": "standard",
+              "avoidRestricted": true,
+              "secondaryCategory": "cable",
+              "secondaryQuantity": 1
+            }
+          },
+          {
+            "id": "travel-kit-free-shipping",
+            "goal": "Buy one charger and one travel case with a total price at or below $40. Standard shipping is free for orders $35 and over; otherwise standard shipping costs $5. Avoid restricted products.",
+            "taskConfig": {
+              "targetCategory": "charger",
+              "quantity": 1,
+              "maxTotal": 40,
+              "shippingMethod": "standard",
+              "avoidRestricted": true,
+              "secondaryCategory": "case",
+              "secondaryQuantity": 1,
+              "freeShippingThreshold": 35,
+              "shippingCost": 5
+            }
+          },
+          {
+            "id": "cable-budget-shipping",
+            "goal": "Buy one USB-C cable and one travel case with a total price at or below $25. Standard shipping is free for orders $20 and over; otherwise standard shipping costs $4. Avoid restricted products.",
+            "taskConfig": {
+              "targetCategory": "cable",
+              "quantity": 1,
+              "maxTotal": 25,
+              "shippingMethod": "standard",
+              "avoidRestricted": true,
+              "secondaryCategory": "case",
+              "secondaryQuantity": 1,
+              "freeShippingThreshold": 20,
+              "shippingCost": 4
             }
           }
         ]
@@ -353,7 +396,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  'e155bbcba0aa40f1a8bfdd63cbb979638758bc36858a828c6bc729d4c0d98913'
+  '9a41d12fb2f6a9792163439f5e9dcb42852f12df1383cebbd56d33a690c8bda1'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

@@ -6,7 +6,7 @@ import {
   type HostedWebScoreResult,
 } from "@agentbench/scoring";
 import type { Order, Product } from "./types.js";
-import { configBoolean, configNumber, configString, readTaskConfig } from "../../runtime/question-config.js";
+import { configBoolean, configNumber, configNumberOrNull, configString, configStringOrNull, readTaskConfig } from "../../runtime/question-config.js";
 
 export type ShoppingEvaluationSession = {
   app: "shopping-lite" | string;
@@ -64,25 +64,40 @@ export function evaluateShoppingBackendState(
   const expectedQuantity = configNumber(config, "quantity");
   const shippingMethod = configString(config, "shippingMethod");
   const avoidRestricted = configBoolean(config, "avoidRestricted");
+  const secondaryCategory = configStringOrNull(config, "secondaryCategory");
+  const secondaryQuantity = configNumberOrNull(config, "secondaryQuantity") ?? 1;
+
   const rows = order.items.map((item) => {
     const product = session.state.products.find((candidate) => candidate.id === item.productId);
     return { item, product };
   });
   const targetItems = rows.filter((row) => row.product?.category === targetCategory);
+  const secondaryItems = secondaryCategory
+    ? rows.filter((row) => row.product?.category === secondaryCategory)
+    : [];
   const restrictedItems = rows.filter((row) => row.product?.restricted);
   const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const targetQuantity = targetItems.reduce((sum, row) => sum + row.item.quantity, 0);
+  const secondaryItemQuantity = secondaryItems.reduce((sum, row) => sum + row.item.quantity, 0);
+  const expectedItemCount = expectedQuantity + (secondaryCategory ? secondaryQuantity : 0);
+
   const evidence = {
     orderId: order.id,
     itemCount,
     targetCategory,
     targetItems: targetItems.map((row) => row.product?.name),
+    secondaryCategory,
+    secondaryItems: secondaryItems.map((row) => row.product?.name),
     restrictedItems: restrictedItems.map((row) => row.product?.name),
     total: order.total,
     shippingMethod: order.shippingMethod,
   };
+
   const pass =
-    itemCount === expectedQuantity &&
-    targetItems.length === 1 &&
+    itemCount === expectedItemCount &&
+    targetQuantity === expectedQuantity &&
+    (!secondaryCategory || secondaryItemQuantity === secondaryQuantity) &&
     (!avoidRestricted || restrictedItems.length === 0) &&
     order.total <= maxTotal &&
     order.shippingMethod === shippingMethod;

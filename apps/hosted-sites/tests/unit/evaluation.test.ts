@@ -64,15 +64,21 @@ const defaultTaskConfigs = {
 
 function makeShoppingSession(
   overrides?: Partial<ShoppingEvaluationSession["state"]>,
+  metadata?: Record<string, unknown>,
 ): ShoppingEvaluationSession {
   return {
     app: "shopping-lite",
     taskSlug: "shopping-constrained-checkout",
-    metadata: defaultTaskConfigs.shopping,
+    metadata: metadata ?? defaultTaskConfigs.shopping,
     state: {
       products: [
+        { id: "prod-charger-20w", name: "VoltEdge 20W USB-C Charger", category: "charger", price: 18.99 },
         { id: "prod-charger-30w", name: "VoltEdge 30W USB-C Charger", category: "charger", price: 24.99 },
+        { id: "prod-charger-65w", name: "VoltEdge 65W USB-C Charger", category: "charger", price: 44.99 },
+        { id: "prod-cable-1m", name: "Braided USB-C Cable 1m", category: "cable", price: 9.99 },
+        { id: "prod-cable-2m", name: "Braided USB-C Cable 2m", category: "cable", price: 14.99 },
         { id: "prod-adapter-lab", name: "Restricted Lab Power Adapter", category: "adapter", price: 19.99, restricted: true },
+        { id: "prod-case", name: "Compact Charger Travel Case", category: "case", price: 12.5 },
       ],
       orders: [
         {
@@ -139,6 +145,182 @@ test("evaluateShopping fails when restricted item is included", () => {
 
   assert.equal(result.status, "failed");
   assert.match(result.summary, /does not satisfy/i);
+});
+
+test("evaluateShopping passes for multi-item cart with secondary category", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_combo",
+            items: [
+              { productId: "prod-charger-20w", quantity: 1 },
+              { productId: "prod-cable-1m", quantity: 1 },
+            ],
+            subtotal: 28.98,
+            total: 28.98,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 35,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "cable",
+        secondaryQuantity: 1,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateShopping fails when secondary category is missing", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_single",
+            items: [{ productId: "prod-charger-20w", quantity: 1 }],
+            total: 18.99,
+            shippingMethod: "standard",
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 35,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "cable",
+        secondaryQuantity: 1,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateShopping passes with shipping threshold and free shipping", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_shipping",
+            items: [
+              { productId: "prod-charger-30w", quantity: 1 },
+              { productId: "prod-case", quantity: 1 },
+            ],
+            subtotal: 37.49,
+            total: 37.49,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 40,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "case",
+        secondaryQuantity: 1,
+        freeShippingThreshold: 35,
+        shippingCost: 5,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateShopping passes with shipping threshold and paid shipping", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_shipping",
+            items: [
+              { productId: "prod-charger-20w", quantity: 1 },
+              { productId: "prod-case", quantity: 1 },
+            ],
+            subtotal: 31.49,
+            total: 36.49,
+            shippingMethod: "standard",
+            shippingCost: 5,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 40,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "case",
+        secondaryQuantity: 1,
+        freeShippingThreshold: 35,
+        shippingCost: 5,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateShopping fails when paid shipping pushes total over budget", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_shipping",
+            items: [
+              { productId: "prod-charger-20w", quantity: 1 },
+              { productId: "prod-case", quantity: 1 },
+            ],
+            subtotal: 31.49,
+            total: 36.49,
+            shippingMethod: "standard",
+            shippingCost: 5,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 35,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "case",
+        secondaryQuantity: 1,
+        freeShippingThreshold: 35,
+        shippingCost: 5,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
 });
 
 test("evaluateWiki passes when article was viewed and exact answer submitted", () => {

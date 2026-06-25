@@ -9,7 +9,9 @@ export function buildShoppingFinalState(session: HostedSessionFor<"shopping-lite
       ? {
           id: order.id,
           total: order.total,
+          subtotal: order.subtotal ?? order.total,
           shippingMethod: order.shippingMethod,
+          shippingCost: order.shippingCost ?? 0,
           submittedAt: order.submittedAt,
           items: order.items.map((item) => {
             const product = session.state.products.find((candidate) => candidate.id === item.productId);

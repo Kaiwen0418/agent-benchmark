@@ -60,8 +60,45 @@ test("shopping actions add products, submit order, and clear cart", () => {
 
   assert.equal(order.id, "ord_1");
   assert.equal(order.items.length, 1);
+  assert.equal(order.total, 49.98);
+  assert.equal(order.subtotal, 49.98);
+  assert.equal(order.shippingCost, 0);
   assert.equal(session.state.orders.length, 1);
   assert.deepEqual(session.state.cart, []);
+});
+
+test("submitCheckoutOrder includes shipping cost when threshold is not met", () => {
+  const session = makeSession("shopping-lite");
+  addProductToCart(session, "prod-charger-20w");
+  addProductToCart(session, "prod-case");
+
+  const order = submitCheckoutOrder(session, {
+    makeId: (prefix) => `${prefix}_1`,
+    now: () => "2026-06-01T00:00:00.000Z",
+    shippingMethod: "standard",
+    shippingCost: 5,
+  });
+
+  assert.equal(order.subtotal, 31.49);
+  assert.equal(order.shippingCost, 5);
+  assert.equal(order.total, 36.49);
+});
+
+test("submitCheckoutOrder includes zero shipping cost when threshold is met", () => {
+  const session = makeSession("shopping-lite");
+  addProductToCart(session, "prod-charger-30w");
+  addProductToCart(session, "prod-case");
+
+  const order = submitCheckoutOrder(session, {
+    makeId: (prefix) => `${prefix}_1`,
+    now: () => "2026-06-01T00:00:00.000Z",
+    shippingMethod: "standard",
+    shippingCost: 0,
+  });
+
+  assert.equal(order.subtotal, 37.49);
+  assert.equal(order.shippingCost, 0);
+  assert.equal(order.total, 37.49);
 });
 
 test("wiki actions dedupe viewed articles and trim submitted answers", () => {

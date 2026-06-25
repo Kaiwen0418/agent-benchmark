@@ -46,7 +46,7 @@ This is the only documentation table that enumerates the changing suite contents
 <!-- generated:hosted-testcases:start -->
 | Task | App | Variants |
 | --- | --- | --- |
-| `shopping-constrained-checkout` | `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard` |
+| `shopping-constrained-checkout` | `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard`, `combo-charger-cable`, `travel-kit-free-shipping`, `cable-budget-shipping` |
 | `forum-battery-moderation` | `forum-lite` | `battery-recall`, `wifi-reset`, `screen-advisory` |
 | `repo-readme-fix` | `repo-lite` | `pnpm-install`, `yarn-install`, `bun-install` |
 | `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price` |

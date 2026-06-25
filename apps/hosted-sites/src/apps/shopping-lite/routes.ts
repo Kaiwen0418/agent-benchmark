@@ -2,7 +2,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
 import { redirect, sendJson } from "../../runtime/http.js";
 import { isHostedSessionForApp } from "../../runtime/types.js";
-import { addProductToCart, submitCheckoutOrder } from "./actions.js";
+import { addProductToCart, getShippingCost, submitCheckoutOrder } from "./actions.js";
+import { readTaskConfig } from "../../runtime/question-config.js";
 import { renderCart, renderOrder, renderProducts } from "./render.js";
 
 export function createShoppingRoutes(deps: HostedAppRouteDeps) {
@@ -77,10 +78,13 @@ export function createShoppingRoutes(deps: HostedAppRouteDeps) {
 
       const form = await deps.readForm(request);
       const shippingMethod = form.get("shippingMethod") === "express" ? "express" : "standard";
+      const taskConfig = readTaskConfig(session.metadata);
+      const shippingCost = getShippingCost(session, shippingMethod, taskConfig);
       const order = submitCheckoutOrder(session, {
         makeId: deps.makeId,
         now: deps.now,
         shippingMethod,
+        shippingCost,
       });
       await deps.persistSessionSnapshot(session);
       await deps.recordEvent(session, { type: "task.signal", name: "order.submitted", orderId: order.id });

@@ -32,7 +32,7 @@ test("fresh database seed contains generated question pools without fixed sessio
 
 test("wiki question variants declare typed answer contracts", () => {
   const suite = readHostedSuiteSeed();
-  assert.equal(suite.suiteVersion, "v3.0.2");
+  assert.equal(suite.suiteVersion, "v3.0.3");
   const sessions = suite.sessions as Array<Record<string, unknown>>;
   const wiki = sessions.find((session) => session.app === "wiki-lite");
   assert.ok(wiki);
@@ -56,7 +56,7 @@ test("scheduled development seeds cover every declared variant", () => {
   const suite = readHostedSuiteSeed();
   const sessions = suite.sessions as Array<Record<string, unknown>>;
   const selectedBySession = new Map<string, Set<string>>();
-  for (const seed of ["full-pool-0", "full-pool-1", "full-pool-2", "full-pool-4"]) {
+  for (const seed of ["full-pool-0", "full-pool-1", "full-pool-2", "full-pool-4", "full-pool-5", "full-pool-9"]) {
     const generated = generateAttemptQuestions(
       sessions as Parameters<typeof generateAttemptQuestions>[0],
       seed,
