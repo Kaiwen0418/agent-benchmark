@@ -77,18 +77,17 @@ export function AgentIdentityFields({
       <label className="text-xs font-medium text-[#4f4a43]">
         Agent
         <SiteSelect
-          required
           value={value.agentSelection}
-          onChange={(event) => onChange({ ...value, agentSelection: event.target.value })}
+          onValueChange={(agentSelection) => onChange({ ...value, agentSelection })}
+          ariaLabel="Agent"
+          options={[
+            { value: "", label: "Select an agent", disabled: true },
+            ...catalog.agents.map((option) => ({ value: option.value, label: option.label })),
+            { value: OTHER_OPTION_VALUE, label: "Other" },
+          ]}
           disabled={disabled}
           className={selectClass}
-        >
-          <option value="" disabled>Select an agent</option>
-          {catalog.agents.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-          <option value={OTHER_OPTION_VALUE}>Other</option>
-        </SiteSelect>
+        />
         {value.agentSelection === OTHER_OPTION_VALUE ? (
           <input
             required
@@ -116,20 +115,20 @@ export function AgentIdentityFields({
       <label className="text-xs font-medium text-[#4f4a43]">
         Base model
         <SiteSelect
-          required
           value={value.modelSelection}
-          onChange={(event) => onChange({ ...value, modelSelection: event.target.value })}
+          onValueChange={(modelSelection) => onChange({ ...value, modelSelection })}
+          ariaLabel="Base model"
+          options={[
+            { value: "", label: "Select a model", disabled: true },
+            ...catalog.models.map((option) => ({
+              value: option.value,
+              label: `${option.label} · ${option.provider}`,
+            })),
+            { value: OTHER_OPTION_VALUE, label: "Other" },
+          ]}
           disabled={disabled}
           className={selectClass}
-        >
-          <option value="" disabled>Select a model</option>
-          {catalog.models.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label} · {option.provider}
-            </option>
-          ))}
-          <option value={OTHER_OPTION_VALUE}>Other</option>
-        </SiteSelect>
+        />
         {value.modelSelection === OTHER_OPTION_VALUE ? (
           <input
             required
