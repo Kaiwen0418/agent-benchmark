@@ -199,7 +199,9 @@ test("repo actions update README and create merge request snapshots", () => {
   assert.equal(mr.success, true);
   assert.equal(session.state.mergeRequests.length, 1);
   assert.equal(session.state.mergeRequests[0].title, "Fix install instructions");
-  assert.equal(session.state.mergeRequests[0].changedFiles[0].content.includes("pnpm install"), true);
+  assert.equal(session.state.mergeRequests[0].changedFiles.length, session.state.files.length);
+  const readmeInMr = session.state.mergeRequests[0].changedFiles.find((file) => file.path === "README.md");
+  assert.equal(readmeInMr?.content.includes("pnpm install"), true);
 });
 
 test("notes actions create trimmed notes and reject missing fields", () => {

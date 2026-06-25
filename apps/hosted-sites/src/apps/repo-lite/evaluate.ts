@@ -6,7 +6,7 @@ import {
   type HostedWebScoreResult,
 } from "@agentbench/scoring";
 import type { RepoFile, RepoMergeRequest } from "./types.js";
-import { configString, readTaskConfig } from "../../runtime/question-config.js";
+import { configString, configStringOrNull, readTaskConfig } from "../../runtime/question-config.js";
 
 function containsStandaloneText(content: string, value: string) {
   const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -57,9 +57,25 @@ function evaluateRepoBackendState(
   const forbiddenText = configString(config, "forbiddenText");
   const expectedMrTitle = configString(config, "expectedMrTitle");
   const expectedTargetBranch = configString(config, "expectedTargetBranch");
+  const secondaryFilePath = configStringOrNull(config, "secondaryFilePath");
+  const secondaryExpectedText = configStringOrNull(config, "secondaryExpectedText");
+  const secondaryForbiddenText = configStringOrNull(config, "secondaryForbiddenText");
+
   const file = session.state.files.find((candidate) => candidate.path === filePath);
   const fileHasExpectedText = file ? file.content.includes(expectedText) : false;
   const fileHasForbiddenText = file ? containsStandaloneText(file.content, forbiddenText) : true;
+
+  const secondaryFile = secondaryFilePath
+    ? session.state.files.find((candidate) => candidate.path === secondaryFilePath)
+    : undefined;
+  const secondaryHasExpectedText =
+    secondaryFilePath == null || secondaryExpectedText == null
+      ? true
+      : secondaryFile != null && secondaryFile.content.includes(secondaryExpectedText);
+  const secondaryHasForbiddenText =
+    secondaryFilePath == null || secondaryForbiddenText == null
+      ? false
+      : secondaryFile != null && containsStandaloneText(secondaryFile.content, secondaryForbiddenText);
 
   if (!mr) {
     return failedEvaluator({
@@ -70,6 +86,9 @@ function evaluateRepoBackendState(
         filePath,
         fileHasExpectedText,
         fileHasForbiddenText,
+        secondaryFilePath,
+        secondaryHasExpectedText,
+        secondaryHasForbiddenText,
         mrTitle: null,
         targetBranch: null,
       },
@@ -78,7 +97,13 @@ function evaluateRepoBackendState(
 
   const titleMatches = mr.title.trim() === expectedMrTitle;
   const targetBranchMatches = mr.targetBranch.trim().toLowerCase() === expectedTargetBranch.toLowerCase();
-  const pass = titleMatches && targetBranchMatches && fileHasExpectedText && !fileHasForbiddenText;
+  const pass =
+    titleMatches &&
+    targetBranchMatches &&
+    fileHasExpectedText &&
+    !fileHasForbiddenText &&
+    secondaryHasExpectedText &&
+    !secondaryHasForbiddenText;
 
   const evidence = {
     mrTitle: mr.title,
@@ -88,6 +113,9 @@ function evaluateRepoBackendState(
     filePath,
     fileHasExpectedText,
     fileHasForbiddenText,
+    secondaryFilePath,
+    secondaryHasExpectedText,
+    secondaryHasForbiddenText,
   };
 
   return pass
@@ -100,7 +128,7 @@ function evaluateRepoBackendState(
         type: "backend_state",
         name: "correct merge request created",
         errorMessage:
-          "The edited file and merge request do not satisfy the generated task configuration.",
+          "The edited file(s) and merge request do not satisfy the generated task configuration.",
         evidence,
       });
 }

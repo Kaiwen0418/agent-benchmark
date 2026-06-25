@@ -641,16 +641,21 @@ test("evaluateForum passes when agent reports, replies, locks, and pins the thre
 
 function makeRepoSession(
   overrides?: Partial<RepoEvaluationSession["state"]>,
+  metadata?: Record<string, unknown>,
 ): RepoEvaluationSession {
   return {
     app: "repo-lite",
     taskSlug: "repo-readme-fix",
-    metadata: defaultTaskConfigs.repo,
+    metadata: metadata ?? defaultTaskConfigs.repo,
     state: {
       files: [
         {
           path: "README.md",
           content: "# Demo Project\n\nRun `npm install` to install dependencies.\n",
+        },
+        {
+          path: "package.json",
+          content: '{\n  "name": "demo-project",\n  "version": "1.0.0"\n}\n',
         },
       ],
       mergeRequests: [],
@@ -725,6 +730,86 @@ test("evaluateRepo fails when MR title does not match", () => {
         },
       ],
     }),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateRepo passes when README and package.json are edited correctly", () => {
+  const result = evaluateRepo(
+    makeRepoSession(
+      {
+        files: [
+          {
+            path: "README.md",
+            content: "# Demo Project\n\nRun `pnpm install` to install dependencies.\n",
+          },
+          {
+            path: "package.json",
+            content: '{\n  "name": "demo-project",\n  "version": "1.0.1"\n}\n',
+          },
+        ],
+        mergeRequests: [
+          {
+            id: "mr_1",
+            title: "Fix install and bump version",
+            changedFiles: [],
+            targetBranch: "main",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        filePath: "README.md",
+        expectedText: "pnpm install",
+        forbiddenText: "npm install",
+        expectedMrTitle: "Fix install and bump version",
+        expectedTargetBranch: "main",
+        secondaryFilePath: "package.json",
+        secondaryExpectedText: "1.0.1",
+        secondaryForbiddenText: "1.0.0",
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateRepo fails when secondary file edit is missing", () => {
+  const result = evaluateRepo(
+    makeRepoSession(
+      {
+        files: [
+          {
+            path: "README.md",
+            content: "# Demo Project\n\nRun `pnpm install` to install dependencies.\n",
+          },
+          {
+            path: "package.json",
+            content: '{\n  "name": "demo-project",\n  "version": "1.0.0"\n}\n',
+          },
+        ],
+        mergeRequests: [
+          {
+            id: "mr_1",
+            title: "Fix install and bump version",
+            changedFiles: [],
+            targetBranch: "main",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        filePath: "README.md",
+        expectedText: "pnpm install",
+        forbiddenText: "npm install",
+        expectedMrTitle: "Fix install and bump version",
+        expectedTargetBranch: "main",
+        secondaryFilePath: "package.json",
+        secondaryExpectedText: "1.0.1",
+        secondaryForbiddenText: "1.0.0",
+      }),
+    ),
   );
 
   assert.equal(result.status, "failed");

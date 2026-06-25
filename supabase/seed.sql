@@ -11,10 +11,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-suite-v3.0.4',
+  'hosted-web-suite-v3.0.5',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3.0.4",
+  "suiteVersion": "v3.0.5",
   "sessions": [
     {
       "app": "shopping-lite",
@@ -186,8 +186,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "repo-readme-fix",
       "title": "Repository README Fix",
       "startPath": "/repo",
-      "taskVersion": "v1",
-      "seedVersion": "repo-lite-v1",
+      "taskVersion": "v2",
+      "seedVersion": "repo-lite-v2",
       "sequenceIndex": 2,
       "weight": 1,
       "required": true,
@@ -224,6 +224,47 @@ select public.publish_benchmark_case_catalog(
               "forbiddenText": "npm install",
               "expectedMrTitle": "Add Bun setup",
               "expectedTargetBranch": "develop"
+            }
+          },
+          {
+            "id": "pnpm-install-and-version",
+            "goal": "Replace the README install command with `pnpm install`, bump `package.json` version from `1.0.0` to `1.0.1`, then open a merge request titled `Fix install and bump version` targeting `main`.",
+            "taskConfig": {
+              "filePath": "README.md",
+              "expectedText": "pnpm install",
+              "forbiddenText": "npm install",
+              "expectedMrTitle": "Fix install and bump version",
+              "expectedTargetBranch": "main",
+              "secondaryFilePath": "package.json",
+              "secondaryExpectedText": "1.0.1",
+              "secondaryForbiddenText": "1.0.0"
+            }
+          },
+          {
+            "id": "yarn-install-and-rename",
+            "goal": "Replace the README install command with `yarn install`, rename the project in `package.json` from `demo-project` to `demo-yarn-project`, then open a merge request titled `Update README and rename project` targeting `main`.",
+            "taskConfig": {
+              "filePath": "README.md",
+              "expectedText": "yarn install",
+              "forbiddenText": "npm install",
+              "expectedMrTitle": "Update README and rename project",
+              "expectedTargetBranch": "main",
+              "secondaryFilePath": "package.json",
+              "secondaryExpectedText": "demo-yarn-project",
+              "secondaryForbiddenText": "demo-project"
+            }
+          },
+          {
+            "id": "bun-install-and-script",
+            "goal": "Replace the README install command with `bun install`, add a `test` script to `package.json`, then open a merge request titled `Add Bun and test script` targeting `develop`.",
+            "taskConfig": {
+              "filePath": "README.md",
+              "expectedText": "bun install",
+              "forbiddenText": "npm install",
+              "expectedMrTitle": "Add Bun and test script",
+              "expectedTargetBranch": "develop",
+              "secondaryFilePath": "package.json",
+              "secondaryExpectedText": "test"
             }
           }
         ]
@@ -429,7 +470,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  'bc6833abed1623fb9b148dc48df735d5381654b8a4d89b3a1f215109cd2875d0'
+  '817c7fd62a2161cd9bfd3205965bf22d7e5445cbeca89074daf203881fd3ec59'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

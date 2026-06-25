@@ -111,7 +111,7 @@ export function renderNewMR(
       session,
       body: `<section class="panel">
         <h2>New Merge Request</h2>
-        <p class="muted">Proposed change to README.md</p>
+        <p class="muted">Proposed changes</p>
         ${diffPreview}
         <form method="post" action="/repo/mr/new?session=${encodeURIComponent(session.token)}" style="margin-top:16px;">
           <label>
