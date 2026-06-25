@@ -1,7 +1,7 @@
-import type { HostedAttemptReadModel } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import type { IncomingMessage } from "node:http";
-import type { HostedAttemptOverviewSession, HostedSession } from "./types.js";
+import type { HostedSession } from "./types.js";
+import type { PersistedHostedSession } from "./session-store.js";
 
 function resolveHostedUrl(baseUrl: string, path: string) {
   return new URL(path, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).toString();
@@ -76,6 +76,19 @@ export function createOrchestratorClient(deps: OrchestratorClientDeps) {
     );
   }
 
+  async function getSessionResult(session: HostedSession) {
+    if (!session.persisted) {
+      return null;
+    }
+    return getOrchestratorState<HostedWebScoreResult>(
+      `/api/sessions/${encodeURIComponent(session.id)}/result`,
+    );
+  }
+
+  async function recoverSession(params: { token?: string; sessionId?: string }) {
+    return postOrchestratorCommand<PersistedHostedSession>("/api/sessions/recover", params);
+  }
+
   async function persistSessionSnapshot(session: HostedSession, metadata: Record<string, unknown>) {
     if (!session.persisted) {
       return null;
@@ -148,12 +161,6 @@ export function createOrchestratorClient(deps: OrchestratorClientDeps) {
     }>(`/api/attempts/${encodeURIComponent(params.attemptId)}/commands/timeout`, params);
   }
 
-  async function getAttemptOverview(attemptId: string) {
-    return getOrchestratorState<HostedAttemptReadModel<HostedAttemptOverviewSession>>(
-      `/api/attempts/${encodeURIComponent(attemptId)}/state`,
-    );
-  }
-
   async function resolveAdvance(params: {
     attemptId: string;
     currentSessionId: string;
@@ -171,11 +178,12 @@ export function createOrchestratorClient(deps: OrchestratorClientDeps) {
 
   return {
     completeSession,
+    getSessionResult,
+    recoverSession,
     persistSessionSnapshot,
     recordSessionAccess,
     recordHostedEvent,
     timeoutAttempt,
-    getAttemptOverview,
     resolveAdvance,
   };
 }

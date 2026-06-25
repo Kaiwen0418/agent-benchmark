@@ -16,3 +16,9 @@ export type RepoMergeRequest = {
   changedFiles: Array<{ path: string; content: string }>;
   targetBranch: string;
 };
+
+export type AppSessionState = {
+  files: RepoFile[];
+  issues: RepoIssue[];
+  mergeRequests: RepoMergeRequest[];
+};

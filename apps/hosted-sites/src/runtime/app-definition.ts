@@ -9,14 +9,10 @@ import type {
 } from "./types.js";
 
 export type {
-  ForumAppSessionState,
   HostedAppId,
   HostedAppPersistenceState,
   HostedAppSessionState,
   HostedAppStateById,
-  RepoAppSessionState,
-  ShoppingAppSessionState,
-  WikiAppSessionState,
 } from "./types.js";
 
 export function isStateRecord(value: unknown): value is Record<string, unknown> {
@@ -45,6 +41,8 @@ export type HostedAppRouteDeps = {
   forwardRunEvent: (session: HostedSession, type: string, payload: Record<string, unknown>) => Promise<void>;
   completeSession: (session: HostedSession, result: HostedWebScoreResult) => Promise<HostedWebScoreResult | null>;
   evaluateSession: (session: HostedSession) => HostedWebScoreResult;
+  resolveSessionResult: (session: HostedSession) => Promise<HostedWebScoreResult>;
+  rejectTerminalMutation: (session: HostedSession, response: ServerResponse) => boolean;
   readForm: (request: IncomingMessage) => Promise<URLSearchParams>;
   badRequest: (response: ServerResponse, message: string) => void;
   notFound: (response: ServerResponse) => void;

@@ -1,47 +1,16 @@
 import type { HostedAttemptSessionStatus } from "@agentbench/shared";
-import type { CartItem, Order, Product } from "../apps/shopping-lite/types.js";
-import type { ForumThread, ModerationAction } from "../apps/forum-lite/types.js";
-import type { RepoFile, RepoIssue, RepoMergeRequest } from "../apps/repo-lite/types.js";
-import type { WikiAnswerSubmission, WikiArticle } from "../apps/wiki-lite/types.js";
+import type { HostedAppId, HostedAppStateById } from "./generated-app-types.js";
+
+export type { HostedAppId, HostedAppStateById } from "./generated-app-types.js";
 
 export type HostedSessionStatus = HostedAttemptSessionStatus;
 
-export type HostedAppId = "shopping-lite" | "wiki-lite" | "forum-lite" | "repo-lite";
-
-export type ShoppingAppSessionState = {
-  products: Product[];
-  cart: CartItem[];
-  orders: Order[];
-};
-
-export type WikiAppSessionState = {
-  wikiArticles: WikiArticle[];
-  wikiAnswerSubmissions: WikiAnswerSubmission[];
-};
-
-export type ForumAppSessionState = {
-  threads: ForumThread[];
-  moderationActions: ModerationAction[];
-};
-
-export type RepoAppSessionState = {
-  files: RepoFile[];
-  issues: RepoIssue[];
-  mergeRequests: RepoMergeRequest[];
-};
-
-export type HostedAppStateById = {
-  "shopping-lite": ShoppingAppSessionState;
-  "wiki-lite": WikiAppSessionState;
-  "forum-lite": ForumAppSessionState;
-  "repo-lite": RepoAppSessionState;
-};
+export function isTerminalHostedSessionStatus(status: HostedSessionStatus) {
+  return status === "completed" || status === "failed" || status === "expired";
+}
 
 export type HostedAppSessionState = HostedAppStateById[HostedAppId];
-export type HostedAppPersistenceState = Partial<ShoppingAppSessionState> &
-  Partial<WikiAppSessionState> &
-  Partial<ForumAppSessionState> &
-  Partial<RepoAppSessionState>;
+export type HostedAppPersistenceState = Partial<HostedAppSessionState>;
 
 type HostedSessionBase = {
   id: string;

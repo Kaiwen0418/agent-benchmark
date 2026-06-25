@@ -1,38 +1,31 @@
 import type { IncomingMessage } from "node:http";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { verifyHostedViewerToken, type Database, type HostedWebSessionMetadata } from "@agentbench/shared";
+import { verifyHostedViewerToken, type HostedWebSessionMetadata } from "@agentbench/shared";
 import type { SessionCache } from "./session-cache.js";
 import type { HostedAppPersistenceState, HostedAppSessionState, HostedSession } from "./types.js";
 
 type PersistedSessionMetadata = HostedWebSessionMetadata<HostedAppPersistenceState>;
-type PersistedSessionRow = Pick<
-  Database["public"]["Tables"]["hosted_web_sessions"]["Row"],
-  | "id"
-  | "run_id"
-  | "case_id"
-  | "attempt_id"
-  | "app"
-  | "task_slug"
-  | "task_version"
-  | "sequence_index"
-  | "weight"
-  | "required"
-  | "seed_version"
-  | "status"
-  | "metadata"
-  | "created_at"
-  | "expires_at"
-  | "access_count"
-  | "last_accessed_at"
-  | "first_seen_ip"
-  | "last_seen_ip"
-  | "first_seen_user_agent"
-  | "last_seen_user_agent"
-> & {
+export type PersistedHostedSession = {
+  id: string;
+  run_id: string | null;
+  case_id: string | null;
+  attempt_id: string | null;
+  app: string;
+  task_slug: string;
+  task_version: string;
+  sequence_index: number;
+  weight: number;
+  required: boolean;
+  seed_version: string | null;
+  status: string;
   metadata: PersistedSessionMetadata | null;
-};
-type RawPersistedSessionRow = Omit<PersistedSessionRow, "metadata"> & {
-  metadata: Database["public"]["Tables"]["hosted_web_sessions"]["Row"]["metadata"];
+  created_at: string;
+  expires_at: string | null;
+  access_count: number | null;
+  last_accessed_at: string | null;
+  first_seen_ip: string | null;
+  last_seen_ip: string | null;
+  first_seen_user_agent: string | null;
+  last_seen_user_agent: string | null;
 };
 
 type SessionStoreDeps = {
@@ -41,9 +34,8 @@ type SessionStoreDeps = {
   publicBaseUrl: string;
   now: () => string;
   makeId: (prefix: string) => string;
-  hashToken: (token: string) => string;
   viewerTokenSecret?: string;
-  getSupabaseAdmin: () => SupabaseClient<Database> | null | undefined;
+  recoverSession: (params: { token?: string; sessionId?: string }) => Promise<PersistedHostedSession | null>;
   persistSessionSnapshotDurably?: (
     session: HostedSession,
     metadata: Record<string, unknown>,
@@ -115,7 +107,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
 
   function hydrateSessionFromMetadata(params: {
     token: string;
-    row: PersistedSessionRow;
+    row: PersistedHostedSession;
     accessMode?: "write" | "viewer";
   }) {
     const metadata =
@@ -174,16 +166,6 @@ export function createSessionStore(deps: SessionStoreDeps) {
     } as HostedSession;
   }
 
-  function asPersistedSessionRow(row: RawPersistedSessionRow): PersistedSessionRow {
-    return {
-      ...row,
-      metadata:
-        row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-          ? (row.metadata as PersistedSessionMetadata)
-          : null,
-    };
-  }
-
   async function persistSessionSnapshot(session: HostedSession) {
     if (session.accessMode === "viewer") {
       return;
@@ -196,6 +178,11 @@ export function createSessionStore(deps: SessionStoreDeps) {
     }
 
     await deps.persistSessionSnapshotDurably?.(session, buildSessionMetadata(session));
+  }
+
+  async function markSessionTerminal(session: HostedSession, result: { status: string }) {
+    session.status = result.status === "passed" ? "completed" : "failed";
+    await cacheSession(session);
   }
 
   async function markSessionExpired(session: HostedSession, request: IncomingMessage) {
@@ -252,31 +239,21 @@ export function createSessionStore(deps: SessionStoreDeps) {
       return session;
     }
 
-    const supabase = deps.getSupabaseAdmin();
-    if (!supabase) {
-      return session;
-    }
-
-    const { data, error } = await supabase
-      .from("hosted_web_sessions")
-      .select("status, expires_at")
-      .eq("id", session.id)
-      .maybeSingle();
-
-    if (error || !data) {
+    const recovered = await deps.recoverSession({ token: session.token });
+    if (!recovered) {
       return session;
     }
 
     if (
-      data.status === "created" ||
-      data.status === "active" ||
-      data.status === "completed" ||
-      data.status === "failed" ||
-      data.status === "expired"
+      recovered.status === "created" ||
+      recovered.status === "active" ||
+      recovered.status === "completed" ||
+      recovered.status === "failed" ||
+      recovered.status === "expired"
     ) {
-      session.status = data.status;
+      session.status = recovered.status;
     }
-    session.expiresAt = data.expires_at ?? session.expiresAt;
+    session.expiresAt = recovered.expires_at ?? session.expiresAt;
     return session;
   }
 
@@ -354,24 +331,14 @@ export function createSessionStore(deps: SessionStoreDeps) {
 
     const viewerClaims = verifyHostedViewerToken(token, deps.viewerTokenSecret);
     if (viewerClaims) {
-      const supabase = deps.getSupabaseAdmin();
-      if (!supabase) {
-        return null;
-      }
-
-      const { data, error } = await supabase
-        .from("hosted_web_sessions")
-        .select("id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, created_at, expires_at, access_count, last_accessed_at, first_seen_ip, last_seen_ip, first_seen_user_agent, last_seen_user_agent")
-        .eq("id", viewerClaims.sessionId)
-        .maybeSingle();
-
-      if (error || !data) {
+      const recovered = await deps.recoverSession({ sessionId: viewerClaims.sessionId });
+      if (!recovered) {
         return null;
       }
 
       const viewerSession = hydrateSessionFromMetadata({
         token,
-        row: asPersistedSessionRow(data),
+        row: recovered,
         accessMode: "viewer",
       });
       return isExpired(viewerSession) || viewerSession.status === "expired" ? null : viewerSession;
@@ -405,22 +372,12 @@ export function createSessionStore(deps: SessionStoreDeps) {
       return existing;
     }
 
-    const supabase = deps.getSupabaseAdmin();
-    if (!supabase) {
+    const recovered = await deps.recoverSession({ token });
+    if (!recovered) {
       return null;
     }
 
-    const { data, error } = await supabase
-      .from("hosted_web_sessions")
-      .select("id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, created_at, expires_at, access_count, last_accessed_at, first_seen_ip, last_seen_ip, first_seen_user_agent, last_seen_user_agent")
-      .eq("session_token_hash", deps.hashToken(token))
-      .maybeSingle();
-
-    if (error || !data) {
-      return null;
-    }
-
-    const hydrated = hydrateSessionFromMetadata({ token, row: asPersistedSessionRow(data) });
+    const hydrated = hydrateSessionFromMetadata({ token, row: recovered });
     if (isExpired(hydrated) || hydrated.status === "expired") {
       await markSessionExpired(hydrated, request);
       return null;
@@ -441,5 +398,6 @@ export function createSessionStore(deps: SessionStoreDeps) {
     getSession,
     getSessionByToken,
     persistSessionSnapshot,
+    markSessionTerminal,
   };
 }

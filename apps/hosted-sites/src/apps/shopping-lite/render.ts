@@ -93,9 +93,8 @@ export function renderOrder(
   response: ServerResponse,
   publicBaseUrl: string,
   defaultStartPathForApp: (app: string) => string,
-  evaluateSession: (session: ShoppingSession) => { status: string; score: number; summary: string },
+  score: { status: string; score: number; summary: string },
 ) {
-  const score = evaluateSession(session);
   sendHtml(
     response,
     200,

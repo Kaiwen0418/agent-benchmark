@@ -48,6 +48,7 @@ export const benchmarkCaseSchema = z.object({
   category: z.string(),
   difficulty: z.string(),
   provider: z.enum(["native", "hosted-web", "webarena"]).default("native"),
+  currentRevisionId: z.string().uuid().nullable().default(null),
   metadata: z.record(z.any()).default({}),
   isPublic: z.boolean(),
   createdAt: z.string(),
@@ -182,6 +183,7 @@ export const createRunInputSchema = z.object({
   caseId: z.string().uuid(),
   executionMode: runExecutionModeSchema.default("external-agent"),
   isPublic: z.boolean().default(true),
+  agent: agentIdentitySchema.optional(),
 });
 
 export type CreateRunInput = z.infer<typeof createRunInputSchema>;

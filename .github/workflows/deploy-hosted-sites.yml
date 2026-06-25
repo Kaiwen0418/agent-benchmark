@@ -19,6 +19,7 @@ on:
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'
       - 'infra/scripts/deploy-hosted-stack.sh'
+      - 'infra/scripts/registry-retry.sh'
       - 'infra/scripts/verify-orchestrator-worker-recovery.sh'
       - 'infra/scripts/validate-orchestrator-partitions.sh'
       - 'package.json'
@@ -341,7 +342,7 @@ jobs:
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
           HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
           HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8081' }}
         run: bash infra/scripts/deploy-hosted-stack.sh
@@ -372,10 +373,10 @@ jobs:
           HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
           HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
           AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
-        run: bash apps/hosted-sites/scripts/orchestrator-smoke-full-pass.sh
+        run: bash tests/e2e/hosted-lifecycle-full-pass.sh
 
   deploy-production:
     if: |
@@ -418,7 +419,7 @@ jobs:
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
           HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
           HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8080' }}
         run: bash infra/scripts/deploy-hosted-stack.sh

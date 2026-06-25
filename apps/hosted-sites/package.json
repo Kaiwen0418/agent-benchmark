@@ -5,15 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json",
-    "test:questions": "node --import tsx --test src/evaluation.test.ts src/templates.test.ts src/runtime/question-config.test.ts",
-    "test": "node --import tsx --test src/*.test.ts src/**/*.test.ts",
+    "generate-registry": "node scripts/generate-app-registry.mjs",
+    "check-registry": "node scripts/generate-app-registry.mjs --check",
+    "build": "pnpm run check-registry && tsc -p tsconfig.json",
+    "test:questions": "node --import tsx --test tests/unit/evaluation.test.ts tests/unit/templates.test.ts tests/unit/runtime/question-config.test.ts",
+    "test": "pnpm run check-registry && node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)",
     "start": "node dist/apps/hosted-sites/src/server.js"
   },
   "dependencies": {
     "@agentbench/scoring": "workspace:*",
     "@agentbench/shared": "workspace:*",
-    "@supabase/supabase-js": "^2.108.2",
+    "@agentbench/test-cases": "workspace:*",
     "redis": "^6.0.0"
   },
   "devDependencies": {

@@ -27,6 +27,7 @@ for _ in $(seq 1 30); do
 done
 
 pnpm --filter @agentbench/scoring build
+pnpm --filter @agentbench/test-cases build
 
 (
   cd apps/hosted-orchestrator
@@ -35,7 +36,7 @@ pnpm --filter @agentbench/scoring build
     --test-coverage-lines=65 \
     --test-coverage-branches=75 \
     --test-coverage-functions=70 \
-    src/*.test.ts src/**/*.test.ts
+    $(find tests/unit -type f -name '*.test.ts' | sort)
 )
 
 (
@@ -45,15 +46,15 @@ pnpm --filter @agentbench/scoring build
     --test-coverage-lines=70 \
     --test-coverage-branches=80 \
     --test-coverage-functions=70 \
-    src/*.test.ts src/**/*.test.ts
+    $(find tests/unit -type f -name '*.test.ts' | sort)
 )
 
 (
   cd packages/scoring
-  node --test \
+  node --import tsx --test \
     --experimental-test-coverage \
     --test-coverage-lines=75 \
     --test-coverage-branches=90 \
     --test-coverage-functions=80 \
-    dist/*.test.js
+    tests/unit/*.test.ts
 )

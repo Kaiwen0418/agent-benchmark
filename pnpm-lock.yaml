@@ -20,6 +20,9 @@ importers:
       '@agentbench/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@agentbench/test-cases':
+        specifier: workspace:*
+        version: link:../../packages/test-cases
       '@supabase/supabase-js':
         specifier: ^2.108.2
         version: 2.108.2
@@ -45,9 +48,9 @@ importers:
       '@agentbench/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@supabase/supabase-js':
-        specifier: ^2.108.2
-        version: 2.108.2
+      '@agentbench/test-cases':
+        specifier: workspace:*
+        version: link:../../packages/test-cases
       redis:
         specifier: ^6.0.0
         version: 6.0.0
@@ -70,6 +73,9 @@ importers:
       '@agentbench/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@agentbench/test-cases':
+        specifier: workspace:*
+        version: link:../../packages/test-cases
       '@supabase/ssr':
         specifier: ^0.5.2
         version: 0.5.2(@supabase/supabase-js@2.108.2)
@@ -144,11 +150,30 @@ importers:
       '@types/node':
         specifier: ^22.19.21
         version: 22.19.21
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
 
   packages/shared: {}
+
+  packages/test-cases:
+    dependencies:
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.21
+        version: 22.19.21
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
 
 packages:
 

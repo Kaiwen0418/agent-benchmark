@@ -7,6 +7,7 @@ export type Database = {
         Row: {
           category: string;
           created_at: string;
+          current_revision_id: string | null;
           description: string;
           difficulty: string;
           id: string;
@@ -19,6 +20,7 @@ export type Database = {
         Insert: {
           category: string;
           created_at?: string;
+          current_revision_id?: string | null;
           description: string;
           difficulty: string;
           id?: string;
@@ -31,6 +33,7 @@ export type Database = {
         Update: {
           category?: string;
           created_at?: string;
+          current_revision_id?: string | null;
           description?: string;
           difficulty?: string;
           id?: string;
@@ -40,6 +43,26 @@ export type Database = {
           slug?: string;
           title?: string;
         };
+        Relationships: [];
+      };
+      benchmark_case_revisions: {
+        Row: {
+          case_id: string;
+          content_hash: string;
+          created_at: string;
+          id: string;
+          manifest: Json;
+          revision: string;
+        };
+        Insert: {
+          case_id: string;
+          content_hash: string;
+          created_at?: string;
+          id?: string;
+          manifest: Json;
+          revision: string;
+        };
+        Update: never;
         Relationships: [];
       };
       benchmark_attempt_scores: {
@@ -78,6 +101,7 @@ export type Database = {
       benchmark_attempts: {
         Row: {
           aggregate_score: number | null;
+          case_revision_id: string | null;
           case_id: string;
           completed_at: string | null;
           created_at: string;
@@ -93,6 +117,7 @@ export type Database = {
         };
         Insert: {
           aggregate_score?: number | null;
+          case_revision_id?: string | null;
           case_id: string;
           completed_at?: string | null;
           created_at?: string;
@@ -108,6 +133,7 @@ export type Database = {
         };
         Update: {
           aggregate_score?: number | null;
+          case_revision_id?: string | null;
           case_id?: string;
           completed_at?: string | null;
           created_at?: string;
@@ -649,7 +675,45 @@ export type Database = {
         Relationships: [];
       };
     };
-    Views: Record<string, never>;
+    Views: {
+      public_benchmark_cases: {
+        Row: {
+          category: string | null;
+          created_at: string | null;
+          description: string | null;
+          difficulty: string | null;
+          id: string | null;
+          metadata: Json | null;
+          provider: "native" | "hosted-web" | "webarena" | null;
+          slug: string | null;
+          title: string | null;
+        };
+        Relationships: [];
+      };
+      public_hosted_run_summaries: {
+        Row: {
+          benchmark_title: string | null;
+          case_id: string | null;
+          observed_user_agent: string | null;
+          run_id: string | null;
+          suite_slug: string | null;
+          suite_version: string | null;
+        };
+        Relationships: [];
+      };
+      public_hosted_run_tasks: {
+        Row: {
+          app: string | null;
+          created_at: string | null;
+          run_id: string | null;
+          score: number | null;
+          status: "passed" | "failed" | "error" | null;
+          summary: string | null;
+          task_slug: string | null;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
       complete_hosted_attempt_session: {
         Args: {

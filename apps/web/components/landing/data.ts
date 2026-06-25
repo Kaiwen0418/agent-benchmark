@@ -6,9 +6,9 @@ export const benchmarkOptions: Array<{
   description: string;
 }> = [
   {
-    value: "shopping-constrained-checkout",
+    value: "hosted-web-suite",
     label: "Hosted Web Suite",
-    description: "Four-step hosted suite across shopping-lite, forum-lite, repo-lite, and wiki-lite with server-side scoring.",
+    description: "Versioned multi-session benchmark with deterministic tasks and server-side scoring.",
   },
 ];
 
@@ -19,7 +19,12 @@ export const docsBlocks = {
   -d '{
     "caseId": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
     "executionMode": "external-agent",
-    "isPublic": true
+    "isPublic": true,
+    "agent": {
+      "name": "Codex",
+      "version": "latest",
+      "baseModel": "GPT-5"
+    }
   }'`,
   response: `{
   "runId": "run_9f3kx8",
@@ -31,7 +36,7 @@ export const docsBlocks = {
 {
   "event": "run.completed",
   "runId": "run_9f3kx8",
-  "benchmark": "shopping-constrained-checkout",
+  "benchmark": "hosted-web-suite",
   "score": 1,
   "safetyPass": true,
   "durationMs": 74200,
@@ -48,7 +53,7 @@ export const docsSteps = [
   {
     step: "02",
     title: "Run the hosted suite",
-    body: "Use the same shopping-lite, forum-lite, repo-lite, and wiki-lite tasks across agents so results stay comparable.",
+    body: "Run the same published suite revision across agents so results stay comparable as the catalog evolves.",
   },
   {
     step: "03",

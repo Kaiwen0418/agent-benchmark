@@ -1,7 +1,5 @@
 # Web Playground
 
-> [中文](./README.zh-CN.md) | English
-
 This app is now oriented around a single-page interactive AI playground.
 
 ## Product Shape
@@ -31,11 +29,7 @@ The homepage is now centered on one primary path:
 - run status starts at `waiting_for_agent`
 - the UI allocates a hosted attempt with one or more ordered hosted sessions
 - the connect page and JSON config expose an attempt-level hosted suite URL plus per-session details
-- the default benchmark case is a four-step hosted suite:
-  - `shopping-lite`
-  - `forum-lite`
-  - `repo-lite`
-  - `wiki-lite`
+- the default benchmark case resolves its ordered sessions from the published catalog revision
 - for hosted-web runs, the agent uses the hosted suite URL as the main task surface
 - hosted-sites writes per-session results and the aggregated attempt score
 
@@ -54,8 +48,4 @@ Default startup uses Docker runtime for backend services:
 
 For normal `Start Agent Session` testing, `web + hosted-sites + hosted-orchestrator` is the default path.
 
-## Next Recommended Steps
-
-1. Replace the lightweight attempt overview with a server-owned orchestrator state machine.
-2. Persist richer session progress so `advance` no longer depends on in-memory state.
-3. Tighten per-run auth and isolation before public rollout.
+The Web control plane always requires Supabase server credentials. It has no process-local database or run fallback. Missing credentials and unavailable database requests return `503 service_unavailable`; attempt connection failures are shown as a retryable modal in the playground.

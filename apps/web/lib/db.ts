@@ -11,14 +11,13 @@ import type { Database } from "@agentbench/shared";
 import path from "node:path";
 import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
-import { mockStore } from "./mock-store";
-import { buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
+import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
 const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
-const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, metadata, is_public, created_at";
+const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, current_revision_id, metadata, is_public, created_at";
 const benchmarkRunSelect = "id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at, metadata, agent_name, agent_version, base_model, browser_environment, is_public";
 
 function getSupabase() {
@@ -36,18 +35,22 @@ function getGuestRunLimit() {
     : PRODUCTION_GUEST_RUN_LIMIT;
 }
 
-export function isMockMode() {
-  return !getSupabase();
+export class BenchmarkCaseUnavailableError extends Error {
+  code = "benchmark_case_unavailable" as const;
+
+  constructor() {
+    super("Benchmark case is not available for hosted execution.");
+    this.name = "BenchmarkCaseUnavailableError";
+  }
 }
 
-function shouldUseLocalExternalAgentStore(params: {
-  executionMode?: BenchmarkRun["executionMode"];
-  benchmarkCase?: BenchmarkCase | null;
-}) {
-  return (
-    process.env.NODE_ENV !== "production" &&
-    params.executionMode === "external-agent" &&
-    params.benchmarkCase?.provider !== "hosted-web"
+export function isRunnableBenchmarkCase(
+  benchmarkCase: BenchmarkCase | null,
+): benchmarkCase is BenchmarkCase & { currentRevisionId: string } {
+  return Boolean(
+    benchmarkCase?.isPublic &&
+    benchmarkCase.provider === "hosted-web" &&
+    benchmarkCase.currentRevisionId,
   );
 }
 
@@ -99,9 +102,6 @@ export function resolveLocalArtifactFile(runId: string, storagePath: string) {
 
 export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.listCases();
-  }
 
   const { data, error } = await supabase
     .from("benchmark_cases")
@@ -120,6 +120,7 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
     category: item.category,
     difficulty: item.difficulty,
     provider: item.provider ?? "native",
+    currentRevisionId: item.current_revision_id,
     metadata: item.metadata ?? {},
     isPublic: item.is_public,
     createdAt: item.created_at,
@@ -128,15 +129,16 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
 
 export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.getCase(caseId);
-  }
 
   const byId = await supabase
     .from("benchmark_cases")
     .select(benchmarkCaseSelect)
     .eq("id", caseId)
     .maybeSingle();
+
+  if (byId.error) {
+    throw byId.error;
+  }
 
   if (byId.data) {
     return {
@@ -147,6 +149,7 @@ export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | 
       category: byId.data.category,
       difficulty: byId.data.difficulty,
       provider: byId.data.provider ?? "native",
+      currentRevisionId: byId.data.current_revision_id,
       metadata: byId.data.metadata ?? {},
       isPublic: byId.data.is_public,
       createdAt: byId.data.created_at,
@@ -158,6 +161,10 @@ export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | 
     .select(benchmarkCaseSelect)
     .eq("slug", caseId)
     .maybeSingle();
+
+  if (bySlug.error) {
+    throw bySlug.error;
+  }
 
   if (!bySlug.data) {
     return null;
@@ -171,6 +178,7 @@ export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | 
     category: bySlug.data.category,
     difficulty: bySlug.data.difficulty,
     provider: bySlug.data.provider ?? "native",
+    currentRevisionId: bySlug.data.current_revision_id,
     metadata: bySlug.data.metadata ?? {},
     isPublic: bySlug.data.is_public,
     createdAt: bySlug.data.created_at,
@@ -237,28 +245,31 @@ export async function createBenchmarkRun(params: {
   guestId: string | null;
   executionMode: BenchmarkRun["executionMode"];
   isPublic: boolean;
+  agent?: BenchmarkRun["agent"];
+  browserEnvironment: NonNullable<BenchmarkRun["browserEnvironment"]>;
 }): Promise<BenchmarkRun> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.createRun(params.caseId, params.userId, params.guestId, params.executionMode);
-  }
-
   const benchmarkCase = await getBenchmarkCase(params.caseId);
-  if (shouldUseLocalExternalAgentStore({ executionMode: params.executionMode, benchmarkCase })) {
-    return mockStore.createRun(params.caseId, params.userId, params.guestId, params.executionMode);
+  if (!isRunnableBenchmarkCase(benchmarkCase)) {
+    throw new BenchmarkCaseUnavailableError();
   }
-
   const initialStatus = params.executionMode === "external-agent" ? "waiting_for_agent" : "queued";
+  const initialMetadata = buildInitialRunMetadata({
+    agent: params.agent ?? undefined,
+    browserEnvironment: params.browserEnvironment,
+    now: new Date().toISOString(),
+  });
 
   const { data, error } = await supabase
     .from("benchmark_runs")
     .insert({
-      case_id: params.caseId,
+      case_id: benchmarkCase.id,
       user_id: params.userId,
       guest_id: params.guestId,
       execution_mode: params.executionMode,
       status: initialStatus,
       is_public: params.isPublic,
+      ...initialMetadata,
     })
     .select(benchmarkRunSelect)
     .single();
@@ -270,7 +281,11 @@ export async function createBenchmarkRun(params: {
   await supabase.from("run_events").insert({
     run_id: data.id,
     type: "run.created",
-    payload: { status: initialStatus, executionMode: params.executionMode },
+    payload: {
+      status: initialStatus,
+      executionMode: params.executionMode,
+      agent: params.agent ?? null,
+    },
   });
 
   return mapRunRow(data);
@@ -278,9 +293,6 @@ export async function createBenchmarkRun(params: {
 
 export async function listBenchmarkRuns(): Promise<BenchmarkRun[]> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return mockStore.listRuns();
-  }
 
   const { data, error } = await supabase
     .from("benchmark_runs")
@@ -295,15 +307,7 @@ export async function listBenchmarkRuns(): Promise<BenchmarkRun[]> {
 }
 
 export async function getBenchmarkRun(runId: string): Promise<BenchmarkRun | null> {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    return localRun;
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return null;
-  }
 
   const { data, error } = await supabase
     .from("benchmark_runs")
@@ -319,15 +323,7 @@ export async function getBenchmarkRun(runId: string): Promise<BenchmarkRun | nul
 }
 
 export async function listRunEvents(runId: string) {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    return mockStore.listEvents(runId);
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return [];
-  }
 
   const { data, error } = await supabase
     .from("run_events")
@@ -349,18 +345,7 @@ export async function listRunEvents(runId: string) {
 }
 
 export async function listArtifacts(runId: string): Promise<Artifact[]> {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    return mockStore.listArtifacts(runId).map((artifact) => ({
-      ...artifact,
-      url: toLocalArtifactUrl(runId, artifact.storagePath, artifact.url),
-    }));
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return [];
-  }
 
   const { data, error } = await supabase
     .from("artifacts")
@@ -383,33 +368,7 @@ export async function listArtifacts(runId: string): Promise<Artifact[]> {
 }
 
 export async function appendRunEvent(runId: string, input: AppendRunEventInput) {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    const updatedRun =
-      input.type === "agent.connected"
-        ? mockStore.setRunStatus(runId, "agent_connected")
-        : input.type === "run.running"
-          ? (() => {
-              const run = mockStore.setRunStatus(runId, "running");
-              if (run && typeof input.payload.liveViewUrl === "string") {
-                mockStore.setRunLiveViewUrl(runId, input.payload.liveViewUrl);
-              }
-              return run;
-            })()
-          : input.type === "run.completed"
-            ? mockStore.setRunStatus(runId, "completed")
-            : input.type === "run.failed"
-              ? mockStore.setRunStatus(runId, "failed")
-              : null;
-
-    const event = mockStore.appendEvent(runId, input.type, input.payload);
-    return { event, run: updatedRun };
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return { event: mockStore.appendEvent(runId, input.type, input.payload), run: null };
-  }
 
   const { data: eventRow, error: eventError } = await supabase
     .from("run_events")
@@ -476,32 +435,7 @@ export async function appendRunEvent(runId: string, input: AppendRunEventInput) 
 }
 
 export async function completeBenchmarkRun(runId: string, input: CompleteRunInput) {
-  const localRun = mockStore.getRun(runId);
-  if (localRun) {
-    if (terminalRunStatuses.has(localRun.status)) {
-      return localRun;
-    }
-    localRun.status = input.status;
-    localRun.score = input.score ?? null;
-    localRun.errorMessage = input.errorMessage ?? null;
-    localRun.completedAt = new Date().toISOString();
-
-    input.artifacts.forEach((artifact) => {
-      mockStore.createArtifact(runId, artifact);
-    });
-
-    mockStore.appendEvent(runId, input.status === "completed" ? "run.completed" : "run.failed", {
-      score: input.score ?? null,
-      errorMessage: input.errorMessage ?? null,
-    });
-
-    return localRun;
-  }
-
   const supabase = getSupabase();
-  if (!supabase) {
-    return null;
-  }
 
   const { data: existingRun, error: existingRunError } = await supabase
     .from("benchmark_runs")
@@ -577,9 +511,6 @@ export async function submitBenchmarkRunMetadata(
   browserEnvironment: Record<string, unknown>,
 ) {
   const supabase = getSupabase();
-  if (!supabase) {
-    return null;
-  }
 
   const existing = await supabase.from("benchmark_runs").select("metadata, status, started_at").eq("id", runId).maybeSingle();
   if (existing.error) {
@@ -627,6 +558,7 @@ export async function submitBenchmarkRunMetadata(
 export type LeaderboardEntry = {
   runId: string;
   rank: number;
+  status: "completed" | "failed";
   score: number;
   completedAt: string;
   durationMs: number | null;
@@ -654,55 +586,51 @@ export type PublicBenchmarkResult = {
 
 export async function getPublicBenchmarkResult(runId: string): Promise<PublicBenchmarkResult | null> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return null;
-  }
 
   const { data: row, error } = await supabase
     .from("benchmark_runs")
     .select(benchmarkRunSelect)
     .eq("id", runId)
-    .eq("status", "completed")
+    .in("status", ["completed", "failed"])
     .eq("is_public", true)
     .maybeSingle();
   if (error) throw error;
   if (!row) return null;
 
   const run = mapRunRow(row);
-  const [{ data: benchmark, error: benchmarkError }, { data: attempt, error: attemptError }, { data: results, error: resultsError }] = await Promise.all([
+  const [{ data: benchmark, error: benchmarkError }, { data: summary, error: summaryError }, { data: results, error: resultsError }] = await Promise.all([
     supabase.from("benchmark_cases").select("title, description").eq("id", run.caseId).maybeSingle(),
-    supabase.from("benchmark_attempts").select("suite_slug, suite_version").eq("run_id", runId).eq("status", "completed").maybeSingle(),
-    supabase.from("hosted_web_results").select("app, task_slug, status, score, summary, created_at").eq("run_id", runId).order("created_at", { ascending: true }),
+    supabase.from("public_hosted_run_summaries").select("suite_slug, suite_version").eq("run_id", runId).maybeSingle(),
+    supabase.from("public_hosted_run_tasks").select("app, task_slug, status, score, summary, created_at").eq("run_id", runId).order("created_at", { ascending: true }),
   ]);
-  if (benchmarkError || attemptError || resultsError) {
-    throw benchmarkError ?? attemptError ?? resultsError;
+  if (benchmarkError || summaryError || resultsError) {
+    throw benchmarkError ?? summaryError ?? resultsError;
   }
   if (!benchmark) return null;
 
   return {
     run,
     benchmark,
-    suite: attempt ? { slug: attempt.suite_slug, version: attempt.suite_version } : null,
+    suite: summary && summary.suite_slug && summary.suite_version
+      ? { slug: summary.suite_slug, version: summary.suite_version }
+      : null,
     tasks: (results ?? []).map((result) => ({
       app: result.app ?? "hosted-app",
       taskSlug: result.task_slug ?? "hosted-task",
-      status: result.status,
-      score: result.score,
-      summary: result.summary,
+      status: result.status!,
+      score: result.score!,
+      summary: result.summary!,
     })),
   };
 }
 
 export async function listPublicLeaderboardVersions(): Promise<string[]> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return [];
-  }
 
   const { data: publicRuns, error: runError } = await supabase
     .from("benchmark_runs")
     .select("id")
-    .eq("status", "completed")
+    .in("status", ["completed", "failed"])
     .eq("is_public", true)
     .not("score", "is", null)
     .limit(1000);
@@ -715,9 +643,8 @@ export async function listPublicLeaderboardVersions(): Promise<string[]> {
   }
 
   const { data: attempts, error: attemptError } = await supabase
-    .from("benchmark_attempts")
+    .from("public_hosted_run_summaries")
     .select("suite_version")
-    .eq("status", "completed")
     .in("run_id", publicRuns.map((run) => run.id))
     .order("suite_version", { ascending: false });
 
@@ -725,29 +652,25 @@ export async function listPublicLeaderboardVersions(): Promise<string[]> {
     throw attemptError ?? new Error("Failed to load leaderboard versions");
   }
 
-  return [...new Set(attempts.map((attempt) => attempt.suite_version))]
+  return [...new Set(attempts.map((attempt) => attempt.suite_version).filter((version): version is string => Boolean(version)))]
     .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }));
 }
 
 export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): Promise<LeaderboardEntry[]> {
   const supabase = getSupabase();
-  if (!supabase) {
-    return [];
-  }
 
   let versionRunIds: string[] | null = null;
   if (suiteVersion) {
     const { data: versionAttempts, error: versionError } = await supabase
-      .from("benchmark_attempts")
+      .from("public_hosted_run_summaries")
       .select("run_id")
-      .eq("status", "completed")
       .eq("suite_version", suiteVersion)
       .limit(1000);
 
     if (versionError || !versionAttempts) {
       throw versionError ?? new Error("Failed to load leaderboard version");
     }
-    versionRunIds = [...new Set(versionAttempts.map((attempt) => attempt.run_id))];
+    versionRunIds = [...new Set(versionAttempts.map((attempt) => attempt.run_id).filter((id): id is string => Boolean(id)))];
     if (versionRunIds.length === 0) {
       return [];
     }
@@ -755,8 +678,8 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
 
   let runsQuery = supabase
     .from("benchmark_runs")
-    .select("id, case_id, score, started_at, completed_at, agent_name, agent_version, base_model, browser_environment")
-    .eq("status", "completed")
+    .select("id, case_id, status, score, started_at, completed_at, agent_name, agent_version, base_model, browser_environment")
+    .in("status", ["completed", "failed"])
     .eq("is_public", true)
     .not("score", "is", null)
     .order("score", { ascending: false })
@@ -772,45 +695,34 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
     throw error ?? new Error("Failed to load leaderboard");
   }
 
-  const caseIds = [...new Set(runs.map((run) => run.case_id))];
-  const [{ data: cases, error: caseError }, { data: attempts, error: attemptError }, { data: sessions, error: sessionError }] = await Promise.all([
-    caseIds.length > 0
-      ? supabase.from("benchmark_cases").select("id, title").in("id", caseIds)
-      : Promise.resolve({ data: [], error: null }),
-    runs.length > 0
-      ? supabase.from("benchmark_attempts").select("run_id, suite_version").in("run_id", runs.map((run) => run.id))
-      : Promise.resolve({ data: [], error: null }),
-    runs.length > 0
-      ? supabase.from("hosted_web_sessions").select("run_id, first_seen_user_agent, sequence_index").in("run_id", runs.map((run) => run.id)).order("sequence_index", { ascending: true })
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-  if (caseError || attemptError || sessionError) {
-    throw caseError ?? attemptError ?? sessionError;
+  const { data: summaries, error: summaryError } = runs.length > 0
+    ? await supabase
+      .from("public_hosted_run_summaries")
+      .select("run_id, benchmark_title, suite_version, observed_user_agent")
+      .in("run_id", runs.map((run) => run.id))
+    : { data: [], error: null };
+  if (summaryError) {
+    throw summaryError;
   }
 
-  const caseTitles = new Map((cases ?? []).map((item) => [item.id, item.title]));
-  const suiteVersions = new Map((attempts ?? []).map((item) => [item.run_id, item.suite_version]));
-  const sessionBrowsers = new Map<string, ReturnType<typeof parseBrowserEnvironment>>();
-  for (const session of sessions ?? []) {
-    if (!sessionBrowsers.has(session.run_id) && session.first_seen_user_agent) {
-      sessionBrowsers.set(session.run_id, parseBrowserEnvironment(session.first_seen_user_agent));
-    }
-  }
+  const summaryByRun = new Map((summaries ?? []).map((item) => [item.run_id, item]));
   return runs.map((run, index) => {
     const browser = run.browser_environment && typeof run.browser_environment === "object" && !Array.isArray(run.browser_environment)
       ? run.browser_environment as Record<string, unknown>
       : {};
-    const observedBrowser = sessionBrowsers.get(run.id);
+    const summary = summaryByRun.get(run.id);
+    const observedBrowser = parseBrowserEnvironment(summary?.observed_user_agent ?? null);
     return {
       runId: run.id,
       rank: index + 1,
+      status: run.status as LeaderboardEntry["status"],
       score: Number(run.score),
       completedAt: run.completed_at!,
       durationMs: run.started_at && run.completed_at
         ? Math.max(0, new Date(run.completed_at).getTime() - new Date(run.started_at).getTime())
         : null,
-      benchmark: caseTitles.get(run.case_id) ?? "Hosted benchmark",
-      suiteVersion: suiteVersions.get(run.id) ?? null,
+      benchmark: summary?.benchmark_title ?? "Hosted benchmark",
+      suiteVersion: summary?.suite_version ?? null,
       agentName: run.agent_name ?? "Unreported agent",
       agentVersion: run.agent_version ?? "unknown",
       baseModel: run.base_model ?? "Unreported model",
@@ -829,10 +741,7 @@ export async function getQuotaStatus(params: {
     let limit = DEFAULT_USER_DAILY_RUN_LIMIT;
     let used = 0;
 
-    if (!supabase) {
-      used = mockStore.countRunsForUserSince(params.userId, startOfUtcDay());
-    } else {
-      const [profileResult, countResult] = await Promise.all([
+    const [profileResult, countResult] = await Promise.all([
         supabase
           .from("profiles")
           .select("daily_run_limit")
@@ -843,18 +752,17 @@ export async function getQuotaStatus(params: {
           .select("*", { count: "exact", head: true })
           .eq("user_id", params.userId)
           .gte("created_at", startOfUtcDay()),
-      ]);
+    ]);
 
-      if (profileResult.data?.daily_run_limit) {
-        limit = profileResult.data.daily_run_limit;
-      }
-
-      if (countResult.error) {
-        throw countResult.error;
-      }
-
-      used = countResult.count ?? 0;
+    if (profileResult.data?.daily_run_limit) {
+      limit = profileResult.data.daily_run_limit;
     }
+
+    if (countResult.error) {
+      throw countResult.error;
+    }
+
+    used = countResult.count ?? 0;
 
     return {
       mode: "user",
@@ -868,16 +776,17 @@ export async function getQuotaStatus(params: {
 
   const guestId = params.guestId;
   const limit = getGuestRunLimit();
-  const used = guestId
-    ? getSupabase()
-      ? (
-          await getSupabase()!
-            .from("benchmark_runs")
-            .select("*", { count: "exact", head: true })
-            .eq("guest_id", guestId)
-        ).count ?? 0
-      : mockStore.countRunsForGuest(guestId)
-    : 0;
+  let used = 0;
+  if (guestId) {
+    const countResult = await getSupabase()
+      .from("benchmark_runs")
+      .select("*", { count: "exact", head: true })
+      .eq("guest_id", guestId);
+    if (countResult.error) {
+      throw countResult.error;
+    }
+    used = countResult.count ?? 0;
+  }
 
   return {
     mode: "guest",

@@ -1,7 +1,5 @@
 # Roadmap
 
-> [中文](./roadmap.zh-CN.md) | English
-
 This roadmap starts from the architecture that is already running. Completed work is documented in [Architecture](./architecture.md) and is not repeated as TODO items here.
 
 ## Current Baseline
@@ -9,10 +7,14 @@ This roadmap starts from the architecture that is already running. Completed wor
 - External agents own their browser; AgentBench does not run arbitrary agent code.
 - `apps/web` runs on Vercel and owns run creation, quota, live observability, replay, and artifacts.
 - The hosted stack runs behind Nginx and Cloudflare Tunnel on a private Linux host.
-- Redis provides the shared hosted-session cache and 16 partitioned orchestrator command Streams.
+- Redis is split into a hosted-session cache endpoint and an orchestrator command-Streams endpoint.
 - Supabase is the durable lifecycle, audit, and scoring store.
+- Hosted-orchestrator is the sole hosted lifecycle database owner; hosted-sites has no database credential and Web uses orchestrator APIs or public read models for hosted data.
+- Complete private suite manifests live only in immutable `benchmark_case_revisions`; public case metadata is display-safe.
+- Hosted attempts store only revision identity, generation seed, active-session pointer, sequence pointer, and completed session ids; generated per-session task config lives on `hosted_web_sessions.metadata`.
 - Attempt initialization is database-first and protected by a unique hosted-attempt constraint plus a short Redis lease.
 - Terminal hosted results and aggregate attempt scores are first-writer-wins database invariants with explicit conflict recovery.
+- Unit tests are separated from production source under workspace `tests/unit`; cross-service smoke scenarios live under root `tests/e2e`, with CI enforcing the layout and explicit discovery.
 - `develop` deploys to development; `main` deploys to production through separate GitHub Environments, runners, database URLs, image channels, ports, and Compose projects.
 
 ## P0 Release Gate
@@ -26,6 +28,7 @@ P0 is now organized as ordered, independently verifiable milestones. A milestone
 | P0.3 Atomic lifecycle transitions | Complete | Timeout, terminal completion, and active promotion share an attempt row lock and pass real-Postgres timeout-versus-completion and duplicate-completion race tests. |
 | P0.4 Durable callback recovery | Complete | Web completion callbacks use a transactional outbox, eight-attempt bounded retry, stale-claim recovery, periodic reconciliation, and an idempotent Web receiver. |
 | P0.5 Poison-command containment | Complete | Commands retry at most three times, persist diagnostic dead letters before acknowledgement, and support authenticated inspection and replay with a new command ID. |
+| P0.6 Evaluator confidentiality | Complete | Public case discovery exposes only display-safe metadata while suite manifests, generated variant pools, canonical answers, and evaluator parameters remain service-role-only. |
 
 ### P0.2 Implementation Scope
 
@@ -64,6 +67,14 @@ P0 completion criterion: after any single-process failure or command retry, the 
 - Internal authenticated APIs list dead letters and replay a selected record with a new command ID, avoiding the original result cache.
 - CI covers retry limits, DLQ persistence failure recovery, diagnostic schema, and database storage.
 
+### P0.6 Implementation Scope
+
+- Anonymous and authenticated database clients read benchmark cases through an explicit public projection rather than the base table.
+- The public projection exposes suite identity and display-safe session summaries, but never variant pools, generated task configuration, canonical answers, or evaluator parameters.
+- Server-side control-plane and hosted services retain private manifest access through service-role credentials.
+- Real-Postgres CI verifies both denied base-table access and sanitized public projection output.
+- Completion evidence: `develop@4d941b1` passed [Hosted deployment run 27939566570](https://github.com/Kaiwen0418/agent-benchmark/actions/runs/27939566570), including the development migration, deployment, and four-app lifecycle smoke.
+
 ## P1: Observability and Operations
 
 - Emit structured logs with request ID, command ID, run ID, attempt ID, session ID, partition, and deployment environment.
@@ -71,6 +82,7 @@ P0 completion criterion: after any single-process failure or command retry, the 
 - Separate liveness from readiness; readiness should cover Redis, partition ownership, and required Supabase access.
 - Define alert thresholds and an operator runbook for queue backlog, callback failure, migration failure, disk pressure, and Redis recovery.
 - Test backup/restore and disaster recovery for Supabase records and Redis-backed active sessions.
+- Deployment retries transient registry/network failures before replacing containers, and Redis session/command workloads are independently addressed for capacity and failure analysis.
 
 Completion criteria: an operator can identify a stuck attempt and its last durable command without reading unstructured container logs.
 
@@ -83,6 +95,24 @@ Completion criteria: an operator can identify a stuck attempt and its last durab
 - Remove duplicated app-specific defaults from the orchestrator; hosted app definitions and benchmark case metadata should own task semantics.
 
 Completion criteria: transport changes do not require lifecycle changes, and incompatible command payloads fail validation before entering Redis Streams.
+
+## P1: Benchmark Quality
+
+Detailed scoring and coverage rules are defined in [Benchmark Scoring And Testing](./benchmark-testing.md). Roadmap status remains here.
+
+| Milestone | Status | Exit criteria |
+| --- | --- | --- |
+| BQ.1 Scorer and task contract | Complete | Every information-retrieval variant has an unambiguous canonical answer, declared normalization, valid source evidence, and positive/negative tests. |
+| BQ.2 Terminal score consistency | Complete | Terminal sessions reject mutation and every API, UI projection, and database row returns the first persisted result. |
+| BQ.3 Testcase expansion | Complete | CI enumerates every app variant across positive/negative paths and development E2E proves one consistent aggregate. |
+| BQ.4 Typed testcase catalog | Complete | Hosted task definitions and suite composition have one discriminated, validated TypeScript source used by tests, local data, and publishing. |
+| BQ.5 Immutable benchmark releases | Complete | Every attempt references an immutable case revision, and changing the current release cannot alter historical interpretation. |
+
+Complete BQ.1 and BQ.2 before expanding the hosted app catalog so new applications do not inherit ambiguous or mutable terminal scoring.
+
+BQ.1-BQ.3 completion evidence: `develop@3ca9329` passed [Hosted deployment run 27937799988](https://github.com/Kaiwen0418/agent-benchmark/actions/runs/27937799988), including generated variant checks, first-result terminal consistency, one result per session, one aggregate score, and the four-app lifecycle smoke.
+
+BQ.4 completion evidence: `develop@8e24b02` passed [Hosted deployment run 27941406084](https://github.com/Kaiwen0418/agent-benchmark/actions/runs/27941406084), including catalog validation, generated-seed drift checks, both hosted image builds, development deployment, and the four-app lifecycle smoke.
 
 ## P2: Benchmark and Product Depth
 

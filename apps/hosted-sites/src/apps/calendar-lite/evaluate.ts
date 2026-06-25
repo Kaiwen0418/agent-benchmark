@@ -1,0 +1,34 @@
+import { aggregateStrictScore, failedEvaluator, passedEvaluator, type HostedWebScoreResult } from "@agentbench/scoring";
+import { configString, readTaskConfig } from "../../runtime/question-config.js";
+import type { HostedSessionFor } from "../../runtime/types.js";
+
+export function evaluateCalendarLite(session: HostedSessionFor<"calendar-lite">): HostedWebScoreResult {
+  const config = readTaskConfig(session.metadata);
+  const expectedTitle = configString(config, "expectedTitle");
+  const expectedDate = configString(config, "expectedDate");
+  const expectedStartTime = configString(config, "expectedStartTime");
+  const expectedDurationMinutes = Number(config.expectedDurationMinutes);
+  const expectedAttendeeEmail = configString(config, "expectedAttendeeEmail").toLowerCase();
+  const match = session.state.calendarEvents.find(
+    (calendarEvent) =>
+      calendarEvent.title === expectedTitle &&
+      calendarEvent.date === expectedDate &&
+      calendarEvent.startTime === expectedStartTime &&
+      calendarEvent.durationMinutes === expectedDurationMinutes &&
+      calendarEvent.attendeeEmail === expectedAttendeeEmail,
+  );
+  return aggregateStrictScore({
+    evaluators: [
+      match
+        ? passedEvaluator({ type: "backend_state", name: "requested calendar event exists", evidence: { eventId: match.id } })
+        : failedEvaluator({
+            type: "backend_state",
+            name: "requested calendar event exists",
+            errorMessage: "No calendar event matches the requested title, schedule, duration, and attendee.",
+            evidence: { eventCount: session.state.calendarEvents.length },
+          }),
+    ],
+    passSummary: "The requested calendar event was created.",
+    failSummary: "The requested calendar event was not found.",
+  });
+}

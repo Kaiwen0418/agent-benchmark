@@ -13,7 +13,7 @@ required_variables=(
   HOSTED_SITES_PUBLIC_URL
   IMAGE_CHANNEL
   IMAGE_TAG
-  NEXT_PUBLIC_SUPABASE_URL
+  SUPABASE_URL
   RUNNER_SHARED_SECRET
   SUPABASE_SERVICE_ROLE_KEY
 )
@@ -81,6 +81,8 @@ fi
 
 ENV_FILE="${RUNNER_TEMP:-/tmp}/agentbench-${DEPLOYMENT_ENVIRONMENT}.env.server"
 COMPOSE_FILE="infra/docker/docker-compose.server.yml"
+# shellcheck source=registry-retry.sh
+source "infra/scripts/registry-retry.sh"
 cat > "${ENV_FILE}" <<EOF
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
 HOSTED_SITES_IMAGE=${HOSTED_IMAGE}
@@ -92,15 +94,16 @@ RUNNER_SHARED_SECRET=${RUNNER_SHARED_SECRET}
 HOSTED_SITES_PUBLIC_URL=${HOSTED_SITES_PUBLIC_URL}
 HOSTED_ORCHESTRATOR_URL=http://hosted-orchestrator:3004
 HOSTED_ORCHESTRATOR_PUBLIC_URL=${HOSTED_ORCHESTRATOR_PUBLIC_URL}
-NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+SUPABASE_URL=${SUPABASE_URL}
 SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-HOSTED_SESSION_REDIS_URL=redis://redis:6379
-ORCHESTRATOR_REDIS_URL=redis://redis:6379
+HOSTED_SESSION_REDIS_URL=redis://session-redis:6379
+ORCHESTRATOR_REDIS_URL=redis://orchestrator-redis:6379
 ORCHESTRATOR_PARTITION_COUNT=${ORCHESTRATOR_PARTITION_COUNT}
 ORCHESTRATOR_WORKER_0_PARTITIONS=${ORCHESTRATOR_WORKER_0_PARTITIONS}
 ORCHESTRATOR_WORKER_1_PARTITIONS=${ORCHESTRATOR_WORKER_1_PARTITIONS}
 HOSTED_SESSION_REDIS_TTL_MS=21600000
-REDIS_IMAGE=redis:7-alpine
+HOSTED_SESSION_REDIS_IMAGE=redis:7-alpine
+ORCHESTRATOR_REDIS_IMAGE=redis:7-alpine
 GATEWAY_HTTP_PORT=${GATEWAY_HTTP_PORT}
 GATEWAY_IMAGE=${GATEWAY_IMAGE}
 GATEWAY_PLATFORM=${GATEWAY_PLATFORM}
@@ -131,7 +134,7 @@ compose config > "${RUNNER_TEMP:-/tmp}/agentbench-${DEPLOYMENT_ENVIRONMENT}-comp
 
 dump_deploy_logs() {
   echo "---- deployment ----"
-  echo "environment=${DEPLOYMENT_ENVIRONMENT} project=${COMPOSE_PROJECT_NAME} channel=${IMAGE_CHANNEL} port=${GATEWAY_HTTP_PORT}"
+  echo "environment=${DEPLOYMENT_ENVIRONMENT} project=${COMPOSE_PROJECT_NAME} channel=${IMAGE_CHANNEL} port=${GATEWAY_HTTP_PORT} failure_stage=${failure_stage:-unknown}"
   echo "---- host architecture ----"
   uname -a || true
   echo "gateway image=${GATEWAY_IMAGE} platform=${GATEWAY_PLATFORM}"
@@ -146,15 +149,17 @@ dump_deploy_logs() {
   (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null || true) | grep -E ":${GATEWAY_HTTP_PORT}\\b" || true
   echo "---- compose logs ----"
   compose logs --tail=160 gateway hosted-sites hosted-orchestrator \
-    hosted-orchestrator-worker-0 hosted-orchestrator-worker-1 redis || true
+    hosted-orchestrator-worker-0 hosted-orchestrator-worker-1 session-redis orchestrator-redis || true
 }
 
 deploy_status=0
+failure_stage=preflight
 trap 'deploy_status=$?; if [[ "${deploy_status}" -ne 0 ]]; then dump_deploy_logs; fi; rm -f "${ENV_FILE}"' EXIT
 
 PREVIOUS_ORCHESTRATOR_IMAGE="$(service_image_evidence hosted-orchestrator)"
 
-printf '%s' "${GHCR_PAT}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+failure_stage=registry
+registry_retry_command "ghcr-login" bash -c 'printf "%s" "${GHCR_PAT}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin'
 HOSTED_REPLICAS="$(compose ps -q hosted-sites 2>/dev/null | wc -l | tr -d ' ')"
 HOSTED_REPLICAS="${HOSTED_REPLICAS:-1}"
 [[ "${HOSTED_REPLICAS}" -gt 0 ]] || HOSTED_REPLICAS=1
@@ -163,26 +168,72 @@ echo "Deploying ${DEPLOYMENT_ENVIRONMENT}: project=${COMPOSE_PROJECT_NAME}, chan
 echo "Targets: hosted-sites=${HOSTED_SITES_CHANGED}, orchestrator=${ORCHESTRATOR_CHANGED}, nginx=${INFRA_CHANGED}, topology=${TOPOLOGY_CHANGED}"
 echo "Image tags: hosted-sites=${HOSTED_SITES_IMAGE_TAG}, orchestrator=${HOSTED_ORCHESTRATOR_IMAGE_TAG}"
 
+declare -a pull_services=()
+gateway_pull_required=false
+
+append_pull_service() {
+  local service="$1"
+  local existing
+  for existing in "${pull_services[@]}"; do
+    if [[ "${existing}" == "${service}" ]]; then
+      return
+    fi
+  done
+  pull_services+=("${service}")
+}
+
 if [[ "${HOSTED_SITES_CHANGED}" == "true" ]]; then
-  compose pull hosted-sites
+  append_pull_service hosted-sites
+fi
+
+if [[ "${ORCHESTRATOR_CHANGED}" == "true" ]]; then
+  append_pull_service hosted-orchestrator
+  append_pull_service hosted-orchestrator-worker-0
+  append_pull_service hosted-orchestrator-worker-1
+fi
+
+if [[ "${INFRA_CHANGED}" == "true" ]]; then
+  append_pull_service session-redis
+  append_pull_service orchestrator-redis
+  gateway_pull_required=true
+fi
+
+if [[ "${TOPOLOGY_CHANGED}" == "true" ]]; then
+  append_pull_service session-redis
+  append_pull_service orchestrator-redis
+  append_pull_service hosted-sites
+  append_pull_service hosted-orchestrator
+  append_pull_service hosted-orchestrator-worker-0
+  append_pull_service hosted-orchestrator-worker-1
+  gateway_pull_required=true
+fi
+
+if [[ "${#pull_services[@]}" -gt 0 ]]; then
+  registry_retry_command "compose-pull" compose pull "${pull_services[@]}"
+fi
+
+if [[ "${gateway_pull_required}" == "true" ]]; then
+  registry_retry_command "gateway-pull" docker pull --platform "${GATEWAY_PLATFORM}" "${GATEWAY_IMAGE}"
+  docker run --rm --platform "${GATEWAY_PLATFORM}" --entrypoint nginx "${GATEWAY_IMAGE}" -v
+fi
+
+failure_stage=compose
+if [[ "${HOSTED_SITES_CHANGED}" == "true" ]]; then
   compose up -d --remove-orphans --no-deps --scale "hosted-sites=${HOSTED_REPLICAS}" hosted-sites
 fi
 
 if [[ "${ORCHESTRATOR_CHANGED}" == "true" ]]; then
-  compose pull hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
   compose up -d --remove-orphans --no-deps \
     hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
 fi
 
 if [[ "${INFRA_CHANGED}" == "true" ]]; then
-  docker pull --platform "${GATEWAY_PLATFORM}" "${GATEWAY_IMAGE}"
-  docker run --rm --platform "${GATEWAY_PLATFORM}" --entrypoint nginx "${GATEWAY_IMAGE}" -v
-  compose up -d --remove-orphans redis
+  compose up -d --remove-orphans session-redis orchestrator-redis
   compose up -d --remove-orphans --force-recreate --no-deps gateway
 fi
 
 if [[ "${TOPOLOGY_CHANGED}" == "true" ]]; then
-  compose up -d --remove-orphans redis
+  compose up -d --remove-orphans session-redis orchestrator-redis
   compose up -d --remove-orphans --no-deps --scale "hosted-sites=${HOSTED_REPLICAS}" hosted-sites
   compose up -d --remove-orphans --no-deps \
     hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1
@@ -191,6 +242,7 @@ fi
 
 compose ps
 
+failure_stage=smoke
 gateway_running() {
   local gateway_id
   gateway_id="$(compose ps -q gateway 2>/dev/null)"
@@ -224,6 +276,7 @@ if [[ "${smoke_ready}" != "true" ]]; then
 fi
 
 if [[ "${VERIFY_ORCHESTRATOR_WORKER_RECOVERY}" == "true" ]]; then
+  failure_stage=worker-recovery
   WORKER_RECOVERY_ENV_FILE="${ENV_FILE}" \
   WORKER_RECOVERY_COMPOSE_FILE="${COMPOSE_FILE}" \
   PREVIOUS_ORCHESTRATOR_IMAGE="${PREVIOUS_ORCHESTRATOR_IMAGE}" \
@@ -232,3 +285,5 @@ if [[ "${VERIFY_ORCHESTRATOR_WORKER_RECOVERY}" == "true" ]]; then
   ORCHESTRATOR_WORKER_1_PARTITIONS="${ORCHESTRATOR_WORKER_1_PARTITIONS}" \
     bash infra/scripts/verify-orchestrator-worker-recovery.sh
 fi
+
+failure_stage=complete

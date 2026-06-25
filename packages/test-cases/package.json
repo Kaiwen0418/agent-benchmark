@@ -1,0 +1,35 @@
+{
+  "name": "@agentbench/test-cases",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "generate-registry": "node scripts/generate-app-registry.mjs",
+    "check-registry": "node scripts/generate-app-registry.mjs --check",
+    "build": "pnpm run check-registry && tsc -p tsconfig.json",
+    "test": "pnpm run build && node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)",
+    "generate-seed": "tsx scripts/generate-seed.ts",
+    "check-seed": "tsx scripts/generate-seed.ts --check",
+    "generate-docs": "tsx scripts/generate-docs.ts",
+    "check-docs": "tsx scripts/generate-docs.ts --check",
+    "generate-catalog": "pnpm run generate-registry && pnpm run generate-seed && pnpm run generate-docs",
+    "check-catalog": "pnpm run check-registry && pnpm run check-seed && pnpm run check-docs",
+    "publish": "tsx scripts/publish.ts"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.21",
+    "tsx": "^4.22.4",
+    "typescript": "^5.7.3"
+  }
+}

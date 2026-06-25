@@ -1,7 +1,5 @@
 # Hosted Web Benchmarks
 
-> [中文](./hosted-web-benchmark.zh-CN.md) | English
-
 ## Execution Model
 
 AgentBench hosts deterministic benchmark websites. The evaluated agent opens an opaque session URL using its own browser and interacts with normal HTML forms and links. AgentBench does not launch or control the agent's browser.
@@ -19,14 +17,7 @@ benchmark run
     aggregate attempt score
 ```
 
-Current apps:
-
-- `shopping-lite`: constrained product checkout
-- `forum-lite`: reply to and lock a safety thread
-- `repo-lite`: edit README and create a merge request
-- `wiki-lite`: retrieve and submit an exact date
-
-Each session defines app, task and seed versions, order, weight, required flag, goal, and start path.
+The published testcase catalog defines the current app list and ordered sessions. See the single authoritative [current testcase table](./hosted-site-app-authoring.md#current-hosted-testcases). Each session defines app, task and seed versions, order, weight, required flag, goal, and start path.
 
 ## Session Isolation
 
@@ -63,7 +54,7 @@ Telemetry is not the primary success source. Evaluators should prefer server-sid
 
 An app must define its own typed state, seed data, validators, actions, rendering, routes, final-state projection, and evaluators. It must also register through the app registry and include tests for state isolation, hydration, actions, and scoring.
 
-See [Hosted Site App Authoring](./hosted-site-app-authoring.zh-CN.md) for implementation guidance.
+See [Hosted Site App Authoring](./hosted-site-app-authoring.md) for implementation guidance.
 
 ## Non-Goals
 

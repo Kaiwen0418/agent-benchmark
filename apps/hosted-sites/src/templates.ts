@@ -1,7 +1,5 @@
 import type { ServerResponse } from "node:http";
-import type { HostedAttemptReadModel } from "@agentbench/shared";
-import type { HostedSession, HostedAttemptOverviewSession } from "./runtime/types.js";
-import { sendJson } from "./runtime/http.js";
+import type { HostedSession } from "./runtime/types.js";
 import { readUiTheme, readUiVariant } from "./runtime/question-config.js";
 
 export function escapeHtml(value: string) {
@@ -35,16 +33,14 @@ export function layout(params: {
   const uiVariant = readUiVariant(params.session.metadata);
   const uiTheme = readUiTheme(params.session.metadata);
   const isViewer = params.session.accessMode === "viewer";
-  const appNav =
-    params.session.app === "wiki-lite"
-      ? `<a href="/wiki?session=${encodeURIComponent(params.session.token)}">Knowledge base</a>`
-      : params.session.app === "forum-lite"
-        ? `<a href="/forum?session=${encodeURIComponent(params.session.token)}">All threads</a>`
-        : params.session.app === "repo-lite"
-          ? `<a href="/repo?session=${encodeURIComponent(params.session.token)}">Repository</a>`
-          : `<a href="/shopping?session=${encodeURIComponent(params.session.token)}">Catalog</a>
-             <a href="/shopping/cart?session=${encodeURIComponent(params.session.token)}">Cart</a>`;
-  const telemetry = isViewer ? "" : `
+  const isTerminal = params.session.status === "completed" || params.session.status === "failed" || params.session.status === "expired";
+  const connectionUrl = params.session.runId
+    ? `${(process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000").replace(/\/$/, "")}/runs/${encodeURIComponent(params.session.runId)}/connect`
+    : null;
+  const taskHomePath = params.session.startPath ?? params.defaultStartPathForApp(params.session.app);
+  const taskHomeSeparator = taskHomePath.includes("?") ? "&" : "?";
+  const appNav = `<a href="${escapeHtml(taskHomePath)}${taskHomeSeparator}session=${encodeURIComponent(params.session.token)}">Task home</a>`;
+  const telemetry = isViewer || isTerminal ? "" : `
     <script>
       window.AgentBenchHostedSession = ${JSON.stringify({
         token: params.session.token,
@@ -174,6 +170,8 @@ export function layout(params: {
       .layout-badge { display: inline-block; margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
       .viewer-banner { margin: 0 24px; padding: 10px 14px; border: 1px solid var(--line); background: var(--accent-soft); color: var(--ink); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
       .viewer-readonly form, .viewer-readonly a { pointer-events: none; }
+      .terminal-readonly form { pointer-events: none; opacity: .58; }
+      .terminal-readonly button, .terminal-readonly input, .terminal-readonly textarea, .terminal-readonly select { cursor: not-allowed; }
       .viewer-readonly form { opacity: .58; }
       .viewer-readonly button, .viewer-readonly input, .viewer-readonly textarea, .viewer-readonly select { cursor: not-allowed; }
       .viewer-readonly a { cursor: default; }
@@ -333,9 +331,10 @@ export function layout(params: {
     </style>
     ${telemetry}
   </head>
-  <body class="ui-${uiVariant} theme-${uiTheme}${isViewer ? " viewer-readonly" : ""}" data-ui-variant="${uiVariant}" data-ui-theme="${uiTheme}">
+  <body class="ui-${uiVariant} theme-${uiTheme}${isViewer ? " viewer-readonly" : ""}${isTerminal ? " terminal-readonly" : ""}" data-ui-variant="${uiVariant}" data-ui-theme="${uiTheme}">
     <div class="shell">
     ${isViewer ? '<div class="viewer-banner">Live read-only session view</div>' : ""}
+    ${isTerminal ? `<div class="viewer-banner">Case ${escapeHtml(params.session.status)} · return to the AgentBench Connection Page to continue${connectionUrl ? ` · <a href="${escapeHtml(connectionUrl)}">Return to Connection Page</a>` : ""}</div>` : ""}
     <header>
       <div class="heading">
         <span class="layout-badge">${escapeHtml(params.session.app)} · ${uiVariant} · ${uiTheme}</span>
@@ -351,41 +350,4 @@ export function layout(params: {
     </div>
   </body>
 </html>`;
-}
-
-export function renderAttemptOverview(
-  readModel: HostedAttemptReadModel<HostedAttemptOverviewSession>,
-  currentSession: HostedSession,
-  response: ServerResponse,
-  publicBaseUrl: string,
-  defaultStartPathForApp: (app: string) => string,
-) {
-  const cards = readModel.sessions
-    .map((session, index) => {
-      const state = session.id === readModel.activeSessionId ? "active" : session.status;
-      return `<article class="card">
-        <div class="muted">Session ${index + 1}</div>
-        <h2>${escapeHtml(session.title ?? session.taskSlug)}</h2>
-        <p>${escapeHtml(session.goal)}</p>
-        <p class="muted">App: ${escapeHtml(session.app)} · State: ${escapeHtml(state)}</p>
-        <a href="${escapeHtml(`${publicBaseUrl}${session.startPath ?? defaultStartPathForApp(session.app)}?session=${encodeURIComponent(session.token)}`)}">Open session</a>
-      </article>`;
-    })
-    .join("");
-
-  sendHtml(
-    response,
-    200,
-    layout({
-      title: "Hosted Suite Overview",
-      session: currentSession,
-      body: `<section class="panel">
-        <h2>Attempt ${escapeHtml(readModel.attemptId)}</h2>
-        <p>${readModel.progress.completed} of ${readModel.progress.total} sessions have submitted results.</p>
-      </section>
-      <section class="grid" style="margin-top:16px;">${cards}</section>`,
-      publicBaseUrl,
-      defaultStartPathForApp,
-    }),
-  );
 }

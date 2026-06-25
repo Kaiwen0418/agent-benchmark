@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "test:questions": "node --import tsx --test src/question-*.test.ts",
-    "test": "node --import tsx --test src/*.test.ts src/**/*.test.ts",
+    "test:questions": "node --import tsx --test tests/unit/question-*.test.ts",
+    "test": "node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)",
     "start": "node dist/apps/hosted-orchestrator/src/server.js"
   },
   "dependencies": {
     "@agentbench/scoring": "workspace:*",
     "@agentbench/shared": "workspace:*",
+    "@agentbench/test-cases": "workspace:*",
     "@supabase/supabase-js": "^2.108.2",
     "redis": "^6.0.0"
   },

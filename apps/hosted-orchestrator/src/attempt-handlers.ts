@@ -12,26 +12,14 @@ type AttemptHandlersDeps<TReadModel extends HostedAttemptReadModel> = {
   initializeAttempt: (params: {
     runId: string | null;
     caseId: string | null;
+    caseRevisionId: string | null;
     callbackSecret: string | null;
-    suiteSlug: string;
-    suiteVersion: string;
-    sessions: Array<{
-      app: string;
-      taskSlug: string;
-      taskVersion: string;
-      sequenceIndex: number;
-      weight: number;
-      required: boolean;
-      title: string | null;
-      goal: string | null;
-      startPath: string | null;
-      seedVersion: string | null;
-      metadata: Record<string, unknown>;
-    }>;
+    generationSeed?: string;
   }) => Promise<{
     attemptId: string;
     suiteSlug: string;
     suiteVersion: string;
+    generationSeed?: string;
     metadata: Record<string, unknown>;
     sessions: Array<{
       sessionId: string;
@@ -147,22 +135,9 @@ export function createAttemptHandlers<TReadModel extends HostedAttemptReadModel>
   async function handleInitializeAttempt(params: {
     runId: string | null;
     caseId: string | null;
+    caseRevisionId: string | null;
     callbackSecret: string | null;
-    suiteSlug: string;
-    suiteVersion: string;
-    sessions: Array<{
-      app: string;
-      taskSlug: string;
-      taskVersion: string;
-      sequenceIndex: number;
-      weight: number;
-      required: boolean;
-      title: string | null;
-      goal: string | null;
-      startPath: string | null;
-      seedVersion: string | null;
-      metadata: Record<string, unknown>;
-    }>;
+    generationSeed?: string;
   }): Promise<InitializeAttemptHandlerResponse> {
     return {
       statusCode: 201,
@@ -175,15 +150,17 @@ export function createAttemptHandlers<TReadModel extends HostedAttemptReadModel>
     result: HostedWebScoreResult;
   }): Promise<CompleteSessionHandlerResponse> {
     const completion = await deps.completeSessionCommand(params.session, params.result);
-    await deps.forwardRunEvent(params.session, "hosted.score", {
-      ...completion.result,
-      attemptId: params.session.attemptId,
-      sessionId: params.session.id,
-      app: params.session.app,
-      taskSlug: params.session.taskSlug,
-      sequenceIndex: params.session.sequenceIndex,
-      weight: params.session.weight,
-    });
+    if (!completion.duplicate) {
+      await deps.forwardRunEvent(params.session, "hosted.score", {
+        ...completion.result,
+        attemptId: params.session.attemptId,
+        sessionId: params.session.id,
+        app: params.session.app,
+        taskSlug: params.session.taskSlug,
+        sequenceIndex: params.session.sequenceIndex,
+        weight: params.session.weight,
+      });
+    }
     if (completion.attemptResult.complete && completion.attemptResult.aggregate) {
       await deps.forwardCompletion(params.session, completion.attemptResult.aggregate);
     }

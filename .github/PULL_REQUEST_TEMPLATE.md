@@ -1,3 +1,5 @@
+<!-- PR title: <type>(<scope>): <imperative summary>. Do not add [codex]. -->
+
 ## Summary
 
 <!-- Explain the problem and the approach. -->
@@ -24,6 +26,7 @@ Describe any unchecked item, deployment ordering, and rollback plan:
 ## Contributor Checks
 
 - [ ] This pull request targets `develop`, unless it is an approved release or hotfix
+- [ ] The title, branch, and commits follow `docs/work-item-naming.md`
 - [ ] No credentials, session tokens, production data, or private user data are included
 - [ ] Substantial AI-generated code is disclosed below, or none was used
 

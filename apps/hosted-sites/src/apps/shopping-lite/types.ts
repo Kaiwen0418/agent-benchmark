@@ -18,3 +18,9 @@ export type Order = {
   shippingMethod: "standard" | "express";
   submittedAt: string;
 };
+
+export type AppSessionState = {
+  products: Product[];
+  cart: CartItem[];
+  orders: Order[];
+};

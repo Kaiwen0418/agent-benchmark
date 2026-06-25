@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { LeaderboardEntry } from "@/lib/db";
 import { LEADERBOARD_MAX_ENTRIES, LEADERBOARD_PAGE_SIZE, paginateLeaderboard } from "@/lib/leaderboard-pagination";
+import { SiteSelect } from "@/components/ui/SiteSelect";
 
 export type LeaderboardBoard = {
   version: string;
@@ -44,6 +45,8 @@ function PlaceholderRow({ position }: { position: number }) {
 export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
   const [activeVersion, setActiveVersion] = useState(boards[0]?.version ?? "all");
   const [page, setPage] = useState(1);
+  const latestBoard = boards[0];
+  const otherBoards = boards.slice(1);
   const activeBoard = boards.find((board) => board.version === activeVersion) ?? boards[0];
   const pagination = paginateLeaderboard(activeBoard?.entries ?? [], page);
   const { entries, page: currentPage, pageCount, pageEntries, placeholderPositions } = pagination;
@@ -56,24 +59,33 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
   return (
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Benchmark version">
-          {boards.map((board) => {
-            const active = board.version === activeVersion;
-            return (
-              <button
-                key={board.version}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => selectVersion(board.version)}
-                className={active
-                  ? "rounded-full bg-[#111111] px-4 py-2 text-xs font-medium text-white"
-                  : "rounded-full border border-[#d8d0c2] bg-white/55 px-4 py-2 text-xs text-[#625c52] transition-colors hover:border-[#111111] hover:text-[#111111]"}
-              >
-                {board.version === "all" ? "All versions" : `Suite ${board.version}`}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2" aria-label="Benchmark version">
+          {latestBoard ? (
+            <button
+              type="button"
+              aria-pressed={latestBoard.version === activeVersion}
+              onClick={() => selectVersion(latestBoard.version)}
+              className={latestBoard.version === activeVersion
+                ? "rounded-[0.6rem] bg-[#111111] px-4 py-2.5 text-xs font-medium text-white"
+                : "rounded-[0.6rem] border border-[#d8d0c2] bg-white/55 px-4 py-2.5 text-xs text-[#625c52] transition-colors hover:border-[#111111] hover:text-[#111111]"}
+            >
+              {latestBoard.version === "all" ? "All versions" : `Suite ${latestBoard.version}`}
+            </button>
+          ) : null}
+          {otherBoards.length > 0 ? (
+            <SiteSelect
+              compact
+              ariaLabel="Other benchmark suites"
+              value={otherBoards.some((board) => board.version === activeVersion) ? activeVersion : ""}
+              onValueChange={selectVersion}
+              options={[
+                { value: "", label: "Other suites", disabled: true },
+                ...otherBoards.map((board) => ({ value: board.version, label: `Suite ${board.version}` })),
+              ]}
+              className="min-w-[10rem]"
+              triggerClassName="bg-white/55 py-2.5 text-xs text-[#625c52]"
+            />
+          ) : null}
         </div>
         <div className="text-xs uppercase tracking-[0.16em] text-[#8a8378]">
           Top {Math.min(entries.length, LEADERBOARD_MAX_ENTRIES)} · {LEADERBOARD_PAGE_SIZE} per page
@@ -86,7 +98,7 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
           <span>Agent / model</span>
           <span>Benchmark</span>
           <span>Browser</span>
-          <span>Completed</span>
+          <span>Finished</span>
           <span className="text-right">Score</span>
         </div>
 
@@ -106,6 +118,11 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
                   <span className="lg:hidden">{entry.baseModel}</span>
                   <span className="hidden lg:inline">{entry.agentVersion} · {entry.baseModel}</span>
                 </div>
+                {entry.status === "failed" ? (
+                  <div className="mt-2 inline-flex rounded-full bg-[#ff8d7a]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ff9f90]">
+                    Failed run
+                  </div>
+                ) : null}
               </div>
               <div className="hidden min-w-0 lg:block">
                 <div className="truncate text-sm text-white/85">{entry.benchmark}</div>
@@ -119,7 +136,9 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
               </div>
               <div className="hidden text-sm text-white/70 lg:block">{formatCompletedAt(entry.completedAt)}</div>
               <div className="text-right">
-                <span className="text-2xl font-medium tracking-[-0.04em] text-white group-hover:text-[#d7ff00] lg:text-3xl">
+                <span className={`text-2xl font-medium tracking-[-0.04em] lg:text-3xl ${
+                  entry.status === "failed" ? "text-[#ff9f90]" : "text-white group-hover:text-[#d7ff00]"
+                }`}>
                   {Math.round(entry.score * 100)}
                 </span>
                 <span className="ml-0.5 text-[10px] text-white/35 lg:ml-1 lg:text-xs">%</span>

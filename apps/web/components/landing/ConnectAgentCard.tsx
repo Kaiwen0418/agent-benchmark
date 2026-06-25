@@ -5,6 +5,7 @@ import { benchmarkOptions } from "./data";
 import { RunConnectionCard } from "./RunConnectionCard";
 import { RunDetailTabs } from "./RunDetailTabs";
 import { usePlaygroundStore } from "@/lib/playground-store";
+import { SiteSelect } from "@/components/ui/SiteSelect";
 
 export function ConnectAgentCard() {
   const benchmark = usePlaygroundStore((state) => state.benchmark);
@@ -139,22 +140,22 @@ export function ConnectAgentCard() {
       <div className="space-y-4">
         <label className="block">
           <span className="mb-2 block text-[13px] text-[#5d574d]">Benchmark</span>
-          <select
+          <SiteSelect
             value={benchmark}
-            onChange={(event) => setBenchmark(event.target.value as typeof benchmark)}
-            className="w-full rounded-[1rem] border border-[#d8d1c4] bg-white px-4 py-2.5 text-sm text-[#111111] outline-none transition focus:border-[#111111]"
-          >
-            {benchmarkOptions.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => setBenchmark(value as typeof benchmark)}
+            ariaLabel="Benchmark"
+            options={benchmarkOptions.map((item) => ({ value: item.value, label: item.label }))}
+            compact
+          />
         </label>
 
         <div className="rounded-[1.15rem] bg-[#efede6] p-3.5 text-[13px] leading-6 text-[#5c574d]">
           {benchmarkOptions.find((item) => item.value === benchmark)?.description}
         </div>
+
+        <p className="text-[12px] leading-5 text-[#777064]">
+          Agent identity, model, and optional metadata are registered on the connection page after the run is created.
+        </p>
 
         {runError ? (
           <div className="rounded-[1rem] border border-[#ead2ca] bg-[#fff0eb] p-3 text-[13px] leading-6 text-[#8a4334]">

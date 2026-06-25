@@ -1,7 +1,5 @@
 # API Reference
 
-> [中文](./api-reference.zh-CN.md) | English
-
 ## Authentication
 
 Public web reads use the current Supabase user or an HTTP-only guest cookie. Service-to-service writes require `x-runner-secret: <RUNNER_SHARED_SECRET>`. The header and environment variable retain a legacy name; they now authenticate hosted services, not a runner component.
@@ -22,6 +20,7 @@ Hosted task requests use an opaque session token in `?session=<token>` or in the
 | `GET` | `/api/runs/:runId/stream` | SSE snapshots, heartbeat, terminal event | run visibility rules |
 | `GET` | `/api/runs/:runId/artifacts` | List artifacts | run visibility rules |
 | `GET` | `/api/runs/:runId/artifacts/file?path=...` | Read local artifact file | run visibility rules |
+| `GET` | `/api/agent-options` | List curated agent and model options | public |
 
 ### Create Run
 
@@ -31,11 +30,16 @@ Content-Type: application/json
 
 {
   "caseId": "uuid",
-  "executionMode": "external-agent"
+  "executionMode": "external-agent",
+  "agent": {
+    "name": "Codex",
+    "version": "latest",
+    "baseModel": "GPT-5"
+  }
 }
 ```
 
-Response: `201 { run, quota }`. Quota exhaustion returns `403` with `trial_limit_reached` or `daily_limit_reached`.
+Response: `201 { run, quota }`. The service persists the self-reported identity and captures the request browser environment. `GET /api/agent-options` provides curated choices, but clients may submit other non-empty values. Quota exhaustion returns `403` with `trial_limit_reached` or `daily_limit_reached`.
 
 ### Connect Run
 
@@ -70,8 +74,7 @@ The connection lasts at most 25 seconds and clients reconnect using `retry: 2000
 | `POST` | `/api/telemetry` | Persist and forward a hosted event |
 | `GET` | `/api/sessions/:token/score` | Evaluate current session state |
 | `POST` | `/api/sessions/:token/complete` | Evaluate and submit session completion |
-| `GET` | `/attempts/:attemptId?session=...` | Render attempt overview |
-| `GET` | `/api/attempts/:attemptId/advance?session=...` | Resolve next task URL |
+| `GET` | `/api/sessions/advance?session=...` | Resolve the next task URL from the opaque session token |
 
 ### Create Session
 
@@ -138,20 +141,13 @@ Write endpoints append a command to Redis Streams and wait for the worker result
 {
   "runId": "uuid",
   "caseId": "uuid",
+  "caseRevisionId": "uuid",
   "callbackSecret": "optional",
-  "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v1",
-  "sessions": [
-    {
-      "app": "shopping-lite",
-      "taskSlug": "shopping-constrained-checkout",
-      "sequenceIndex": 0,
-      "weight": 1,
-      "required": true
-    }
-  ]
+  "generationSeed": "optional deterministic seed"
 }
 ```
+
+The orchestrator loads the service-role-only manifest identified by `caseRevisionId`, verifies that it belongs to `caseId`, validates the typed suite schema, and rejects missing or invalid revisions before creating sessions. Clients cannot supply or override suite sessions.
 
 ### Complete Session Command
 

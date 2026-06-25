@@ -9,9 +9,11 @@ COPY apps/hosted-orchestrator ./apps/hosted-orchestrator
 COPY apps/hosted-sites ./apps/hosted-sites
 COPY packages/scoring ./packages/scoring
 COPY packages/shared ./packages/shared
+COPY packages/test-cases ./packages/test-cases
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @agentbench/scoring build
+RUN pnpm --filter @agentbench/test-cases build
 RUN pnpm --filter hosted-orchestrator build
 
 FROM node:22-alpine AS runtime
@@ -24,8 +26,10 @@ COPY scripts ./scripts
 COPY apps/hosted-orchestrator ./apps/hosted-orchestrator
 COPY packages/scoring ./packages/scoring
 COPY packages/shared ./packages/shared
+COPY packages/test-cases ./packages/test-cases
 COPY --from=build /app/apps/hosted-orchestrator/dist ./apps/hosted-orchestrator/dist
 COPY --from=build /app/packages/scoring/dist ./packages/scoring/dist
+COPY --from=build /app/packages/test-cases/dist ./packages/test-cases/dist
 
 RUN pnpm install --prod --frozen-lockfile
 

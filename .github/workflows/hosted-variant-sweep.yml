@@ -1,0 +1,49 @@
+name: Hosted Variant Sweep
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-variant-sweep-development
+  cancel-in-progress: false
+
+jobs:
+  sweep-development:
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-dev
+    environment: development
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        generation_seed:
+          - full-pool-0
+          - full-pool-1
+          - full-pool-2
+          - full-pool-4
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: develop
+          persist-credentials: false
+
+      - name: Run deterministic full-pool lifecycle smoke
+        env:
+          START_LOCAL_SERVICES: "false"
+          SMOKE_MODE: full-pass
+          GENERATION_SEED: ${{ matrix.generation_seed }}
+          HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
+          HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
+          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
+        run: bash tests/e2e/hosted-lifecycle-smoke.sh

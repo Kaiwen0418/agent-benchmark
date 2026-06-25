@@ -1,7 +1,5 @@
 # Getting Started
 
-> [中文](./getting-started.zh-CN.md) | English
-
 ## Prerequisites
 
 - Node.js and pnpm
@@ -17,12 +15,14 @@ cp apps/web/.env.example apps/web/.env.local
 
 Configure these values in `apps/web/.env.local`:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
+
+Supabase variables are server-only. Browser components use same-origin `/api/*` routes and must not initialize a Supabase client.
 
 Copy the database target example and configure the root `.env.local`:
 
@@ -92,12 +92,7 @@ The default direct-process ports are:
 
 ## Hosted Web Suite
 
-The current suite contains:
-
-- `shopping-lite`: constrained checkout
-- `forum-lite`: reply to and moderate a safety thread
-- `repo-lite`: update installation instructions and create a merge request
-- `wiki-lite`: retrieve and submit a release-history date
+The current ordered suite is defined by the published testcase catalog. See the single authoritative [current testcase table](./hosted-site-app-authoring.md#current-hosted-testcases) instead of duplicating the changing app list here.
 
 Create a standalone local session:
 

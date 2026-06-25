@@ -27,6 +27,7 @@ import { generateAttemptQuestions } from "./question-generation.js";
 import { createIdempotentInitializer } from "./idempotent-initializer.js";
 import { createSingleFlight } from "./single-flight.js";
 import { createCallbackOutboxProcessor } from "./callback-outbox.js";
+import { resolveBenchmarkCaseRevision } from "./case-revisions.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -34,9 +35,9 @@ const { publicBaseUrl: hostedSitesPublicBaseUrl } = resolveHostedSitesUrls(proce
 const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000";
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
-const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const orchestratorRedisUrl = process.env.ORCHESTRATOR_REDIS_URL ?? process.env.REDIS_URL;
+const orchestratorRedisUrl = process.env.ORCHESTRATOR_REDIS_URL;
 const orchestratorMode = (process.env.ORCHESTRATOR_MODE ?? "all") as CommandBackboneRole;
 const orchestratorPartitionCount = Math.trunc(envNumber("ORCHESTRATOR_PARTITION_COUNT", 16));
 
@@ -74,6 +75,12 @@ type PersistedSessionRow = Pick<
   | "start_url"
   | "expires_at"
   | "created_at"
+  | "access_count"
+  | "last_accessed_at"
+  | "first_seen_ip"
+  | "last_seen_ip"
+  | "first_seen_user_agent"
+  | "last_seen_user_agent"
 > & {
   metadata: HostedWebSessionMetadata | null;
 };
@@ -171,30 +178,12 @@ async function flushCallbackOutbox() {
 }
 
 function defaultStartPathForApp(app: string) {
-  if (app === "wiki-lite") {
-    return "/wiki";
-  }
-  if (app === "forum-lite") {
-    return "/forum";
-  }
-  if (app === "repo-lite") {
-    return "/repo";
-  }
-  return "/shopping";
+  const base = app.replace(/-lite$/, "").replace(/[^a-z0-9-]/gi, "-");
+  return `/${base || "shopping"}`;
 }
 
 function defaultGoalForSession(app: string, taskSlug: string) {
-  if (app === "wiki-lite" || taskSlug === "wiki-release-answer") {
-    return "Use the hosted wiki to find when wiki-lite followed the hosted-web suite alpha, then submit the date exactly as written.";
-  }
-  if (app === "forum-lite" || taskSlug === "forum-battery-moderation") {
-    return "Find the thread about battery swelling, reply with the official recall link from the policy post, then lock the thread with reason 'safety escalation'.";
-  }
-  if (app === "repo-lite" || taskSlug === "repo-readme-fix") {
-    return 'Fix the README install command to use pnpm, then open a merge request titled "Fix install instructions" targeting main.';
-  }
-
-  return "Buy exactly one USB-C charger with total price at or below $30. Use standard shipping. Do not buy restricted products.";
+  return `Complete the hosted task ${taskSlug} in ${app}.`;
 }
 
 function isInternalRunnerRequest(request: IncomingMessage) {
@@ -395,8 +384,6 @@ async function loadLatestSessionResult(sessionId: string) {
     .from("hosted_web_results")
     .select("status, score, summary, evaluators")
     .eq("session_id", sessionId)
-    .order("created_at", { ascending: false })
-    .limit(1)
     .maybeSingle();
 
   if (!data) {
@@ -565,7 +552,7 @@ async function findExistingInitializedAttempt(
   }
   const { data, error } = await supabase
     .from("benchmark_attempts")
-    .select("id")
+    .select("id, case_revision_id")
     .eq("run_id", params.runId)
     .eq("case_id", params.caseId)
     .eq("provider", "hosted-web")
@@ -576,10 +563,14 @@ async function findExistingInitializedAttempt(
     throw error;
   }
   if (data) {
+    if (data.case_revision_id !== params.caseRevisionId) {
+      throw new Error("Existing hosted attempt is bound to a different benchmark revision.");
+    }
+    const revision = await loadBenchmarkCaseRevision(params.caseId, params.caseRevisionId);
     return recoverInitializedAttempt({
       runId: params.runId,
       caseId: params.caseId,
-      expectedSessionCount: params.sessions.length,
+      expectedSessionCount: revision.sessions.length,
     });
   }
   return null;
@@ -609,49 +600,50 @@ async function acquireInitializationLease(key: string) {
   };
 }
 
-async function initializeAttempt(params: {
+type InitializeAttemptParams = {
   runId: string | null;
   caseId: string | null;
+  caseRevisionId: string | null;
   callbackSecret: string | null;
-  suiteSlug: string;
-  suiteVersion: string;
-  sessions: Array<{
-    app: string;
-    taskSlug: string;
-    taskVersion: string;
-    sequenceIndex: number;
-    weight: number;
-    required: boolean;
-    title: string | null;
-    goal: string | null;
-    startPath: string | null;
-    seedVersion: string | null;
-    metadata: Record<string, unknown>;
-  }>;
-}) {
+  generationSeed?: string;
+};
+
+async function loadBenchmarkCaseRevision(caseId: string, caseRevisionId: string | null) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error("Hosted attempt initialization requires a database connection.");
+  }
+  return resolveBenchmarkCaseRevision({
+    caseId,
+    caseRevisionId,
+    loadRevision: async (revisionId) => {
+      const { data, error } = await supabase
+        .from("benchmark_case_revisions")
+        .select("id, case_id, revision, content_hash, manifest")
+        .eq("id", revisionId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+async function initializeAttempt(params: InitializeAttemptParams) {
   const supabase = getSupabaseAdmin();
   if (!supabase || !params.runId || !params.caseId) {
     throw new Error("Hosted attempt initialization requires database-backed run and case ids.");
   }
   const runId = params.runId;
   const caseId = params.caseId;
-  const generated = generateAttemptQuestions(params.sessions);
+  const revision = await loadBenchmarkCaseRevision(caseId, params.caseRevisionId);
+  const generated = generateAttemptQuestions(revision.sessions, params.generationSeed);
   const generatedSessions = generated.sessions;
 
   const metadata = {
     generationSeed: generated.generationSeed,
-    sessions: generatedSessions.map((session) => ({
-      app: session.app,
-      taskSlug: session.taskSlug,
-      taskVersion: session.taskVersion,
-      sequenceIndex: session.sequenceIndex,
-      weight: session.weight,
-      required: session.required,
-      title: session.title,
-      goal: session.goal,
-      seedVersion: session.seedVersion,
-      metadata: session.metadata,
-    })),
+    caseRevisionId: revision.id,
+    caseRevision: revision.revision,
+    caseRevisionContentHash: revision.contentHash,
     activeSessionId: null,
     activeSequenceIndex: 0,
     completedSessionIds: [],
@@ -662,9 +654,10 @@ async function initializeAttempt(params: {
     .insert({
       run_id: runId,
       case_id: caseId,
+      case_revision_id: revision.id,
       provider: "hosted-web",
-      suite_slug: params.suiteSlug,
-      suite_version: params.suiteVersion,
+      suite_slug: revision.suiteSlug,
+      suite_version: revision.suiteVersion,
       status: "running",
       metadata,
       started_at: now(),
@@ -693,8 +686,11 @@ async function initializeAttempt(params: {
     const sessionMetadata = {
       ...session.metadata,
       schemaVersion: 1,
-      suiteSlug: params.suiteSlug,
-      suiteVersion: params.suiteVersion,
+      suiteSlug: revision.suiteSlug,
+      suiteVersion: revision.suiteVersion,
+      caseRevisionId: revision.id,
+      caseRevision: revision.revision,
+      caseRevisionContentHash: revision.contentHash,
       title: session.title,
       goal: session.goal,
       startPath,
@@ -786,7 +782,7 @@ async function initializeAttempt(params: {
           attemptId: attemptRow.id,
           app: session.app,
           taskSlug: session.taskSlug,
-          suiteSlug: params.suiteSlug,
+          suiteSlug: revision.suiteSlug,
           sequenceIndex: session.sequenceIndex,
           weight: session.weight,
           status: session.status === "scoring" ? "active" : session.status,
@@ -827,7 +823,7 @@ async function loadSessionByToken(token: string) {
   const { data, error } = await supabase
     .from("hosted_web_sessions")
     .select(
-      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at",
+      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at, access_count, last_accessed_at, first_seen_ip, last_seen_ip, first_seen_user_agent, last_seen_user_agent",
     )
     .eq("session_token_hash", hashToken(token))
     .maybeSingle();
@@ -837,6 +833,31 @@ async function loadSessionByToken(token: string) {
   }
 
   return data as PersistedSessionRow;
+}
+
+async function recoverHostedSession(params: { token?: string; sessionId?: string }) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return null;
+  }
+
+  let query = supabase
+    .from("hosted_web_sessions")
+    .select(
+      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at, access_count, last_accessed_at, first_seen_ip, last_seen_ip, first_seen_user_agent, last_seen_user_agent",
+    );
+  if (params.token) {
+    query = query.eq("session_token_hash", hashToken(params.token));
+  } else if (params.sessionId) {
+    query = query.eq("id", params.sessionId);
+  } else {
+    return null;
+  }
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return data;
 }
 
 async function persistHostedSessionSnapshot(token: string, metadata: Record<string, unknown>) {
@@ -849,6 +870,7 @@ async function persistHostedSessionSnapshot(token: string, metadata: Record<stri
     .from("hosted_web_sessions")
     .update({ metadata })
     .eq("session_token_hash", hashToken(token))
+    .eq("status", "active")
     .select("id")
     .maybeSingle();
 
@@ -921,7 +943,7 @@ async function persistHostedEvent(token: string, payload: Record<string, unknown
   }
 
   const session = await loadSessionByToken(token);
-  if (!session || !session.run_id) {
+  if (!session || !session.run_id || session.status !== "active") {
     return false;
   }
 
@@ -974,16 +996,16 @@ const attemptLifecycle = createAttemptLifecycle({
 });
 
 const initializeAttemptIdempotently = createIdempotentInitializer({
-  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
+  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}:${params.caseRevisionId}`,
   findExisting: findExistingInitializedAttempt,
-  waitForExisting: (params) => {
+  waitForExisting: async (params) => {
     if (!params.runId || !params.caseId) {
       throw new Error("Hosted attempt recovery requires run and case ids.");
     }
     return recoverInitializedAttempt({
       runId: params.runId,
       caseId: params.caseId,
-      expectedSessionCount: params.sessions.length,
+      expectedSessionCount: (await loadBenchmarkCaseRevision(params.caseId, params.caseRevisionId)).sessions.length,
     });
   },
   acquireLock: acquireInitializationLease,
@@ -991,7 +1013,7 @@ const initializeAttemptIdempotently = createIdempotentInitializer({
 });
 
 const initializeAttemptSingleFlight = createSingleFlight({
-  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}`,
+  key: (params: Parameters<typeof initializeAttempt>[0]) => `${params.runId}:${params.caseId}:${params.caseRevisionId}`,
   run: initializeAttemptIdempotently,
 });
 
@@ -1146,7 +1168,7 @@ async function persistCommandDeadLetter(deadLetter: CommandDeadLetter) {
 }
 
 if (!orchestratorRedisUrl) {
-  throw new Error("ORCHESTRATOR_REDIS_URL or REDIS_URL is required for the orchestrator command backbone.");
+  throw new Error("ORCHESTRATOR_REDIS_URL is required for the orchestrator command backbone.");
 }
 
 const commandBackbone = createCommandBackbone({
@@ -1357,34 +1379,36 @@ const server = createServer(async (request, response) => {
       const initialized = await commandBackbone.execute("attempt.init", {
         runId: typeof input.runId === "string" ? input.runId : null,
         caseId: typeof input.caseId === "string" ? input.caseId : null,
+        caseRevisionId: typeof input.caseRevisionId === "string" ? input.caseRevisionId : null,
         callbackSecret: typeof input.callbackSecret === "string" ? input.callbackSecret : null,
-        suiteSlug: typeof input.suiteSlug === "string" ? input.suiteSlug : "hosted-web-suite",
-        suiteVersion: typeof input.suiteVersion === "string" ? input.suiteVersion : "v1",
-        sessions: Array.isArray(input.sessions)
-          ? input.sessions
-              .filter((session): session is Record<string, unknown> => Boolean(session && typeof session === "object"))
-              .map((session, index) => ({
-                app: typeof session.app === "string" ? session.app : "shopping-lite",
-                taskSlug: typeof session.taskSlug === "string" ? session.taskSlug : `hosted-task-${index + 1}`,
-                taskVersion: typeof session.taskVersion === "string" ? session.taskVersion : "v1",
-                sequenceIndex:
-                  typeof session.sequenceIndex === "number" && Number.isFinite(session.sequenceIndex)
-                    ? session.sequenceIndex
-                    : index,
-                weight: typeof session.weight === "number" ? session.weight : 1,
-                required: typeof session.required === "boolean" ? session.required : true,
-                title: typeof session.title === "string" ? session.title : null,
-                goal: typeof session.goal === "string" ? session.goal : null,
-                startPath: typeof session.startPath === "string" ? session.startPath : null,
-                seedVersion: typeof session.seedVersion === "string" ? session.seedVersion : null,
-                metadata:
-                  session.metadata && typeof session.metadata === "object" && !Array.isArray(session.metadata)
-                    ? (session.metadata as Record<string, unknown>)
-                    : {},
-              }))
-          : [],
+        generationSeed: typeof input.generationSeed === "string" ? input.generationSeed : undefined,
       }, typeof input.runId === "string" ? input.runId : typeof input.caseId === "string" ? input.caseId : "attempt.init", commandIdFromRequest(request));
       sendJson(response, initialized.statusCode, initialized.body);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/sessions/recover") {
+      const input = await readJson(request);
+      const recovered = await recoverHostedSession({
+        token: typeof input.token === "string" ? input.token : undefined,
+        sessionId: typeof input.sessionId === "string" ? input.sessionId : undefined,
+      });
+      if (!recovered) {
+        sendJson(response, 404, { error: "session_not_found" });
+        return;
+      }
+      sendJson(response, 200, recovered);
+      return;
+    }
+
+    const sessionResultMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/result$/);
+    if (request.method === "GET" && sessionResultMatch) {
+      const result = await loadLatestSessionResult(decodeURIComponent(sessionResultMatch[1]));
+      if (!result) {
+        sendJson(response, 404, { error: "Session result not found" });
+        return;
+      }
+      sendJson(response, 200, result);
       return;
     }
 

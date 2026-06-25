@@ -6,26 +6,40 @@ import {
   GUEST_COOKIE_NAME,
   isDevQuotaBypassed,
 } from "@/lib/auth";
-import { createBenchmarkRun, getQuotaStatus } from "@/lib/db";
+import { BenchmarkCaseUnavailableError, createBenchmarkRun, getQuotaStatus } from "@/lib/db";
+import { captureBrowserEnvironment } from "@/lib/run-metadata";
 
 export async function POST(request: Request) {
   const json = await request.json();
   const input = createRunInputSchema.parse(json);
   const user = await getCurrentUser();
   const guest = user ? null : await getOrCreateGuestId();
-  const quota = isDevQuotaBypassed(request)
-    ? {
-        mode: user ? "user" : "guest",
-        isAuthenticated: Boolean(user),
-        used: 0,
-        limit: 999,
-        remaining: 999,
-        resetAt: null,
-      }
-    : await getQuotaStatus({
-        userId: user?.id ?? null,
-        guestId: guest?.guestId ?? null,
-      });
+  let quota;
+  try {
+    quota = isDevQuotaBypassed(request)
+      ? {
+          mode: user ? "user" : "guest",
+          isAuthenticated: Boolean(user),
+          used: 0,
+          limit: 999,
+          remaining: 999,
+          resetAt: null,
+        }
+      : await getQuotaStatus({
+          userId: user?.id ?? null,
+          guestId: guest?.guestId ?? null,
+        });
+  } catch (error) {
+    console.error("[web] benchmark database unavailable during quota check", error);
+    return NextResponse.json(
+      {
+        error: "service_unavailable",
+        message: "The benchmark service is temporarily unavailable. Please try again shortly.",
+        retryable: true,
+      },
+      { status: 503 },
+    );
+  }
 
   if (quota.remaining <= 0) {
     const response = NextResponse.json(
@@ -53,13 +67,34 @@ export async function POST(request: Request) {
     return response;
   }
 
-  const run = await createBenchmarkRun({
-    caseId: input.caseId,
-    userId: user?.id ?? null,
-    guestId: guest?.guestId ?? null,
-    executionMode: input.executionMode,
-    isPublic: input.isPublic,
-  });
+  let run;
+  try {
+    run = await createBenchmarkRun({
+      caseId: input.caseId,
+      userId: user?.id ?? null,
+      guestId: guest?.guestId ?? null,
+      executionMode: input.executionMode,
+      isPublic: input.isPublic,
+      agent: input.agent,
+      browserEnvironment: captureBrowserEnvironment(request.headers),
+    });
+  } catch (error) {
+    if (error instanceof BenchmarkCaseUnavailableError) {
+      return NextResponse.json(
+        { error: error.code, message: error.message },
+        { status: 404 },
+      );
+    }
+    console.error("[web] benchmark database unavailable during run creation", error);
+    return NextResponse.json(
+      {
+        error: "service_unavailable",
+        message: "The benchmark service is temporarily unavailable. Please try again shortly.",
+        retryable: true,
+      },
+      { status: 503 },
+    );
+  }
   const nextQuota = {
     ...quota,
     used: quota.used + 1,

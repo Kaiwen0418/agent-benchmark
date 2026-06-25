@@ -1,9 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import { hostname } from "node:os";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@agentbench/shared";
-import type { HostedAttemptOverviewSession, HostedSession } from "./runtime/types.js";
+import {
+  isTerminalHostedSessionStatus,
+  type HostedAttemptOverviewSession,
+  type HostedSession,
+} from "./runtime/types.js";
 import { redirect, readForm, readJson, sendJson, notFound, badRequest } from "./runtime/http.js";
 import { createAttemptsRoutes } from "./routes/attempts.js";
 import { createApiRoutes } from "./routes/api.js";
@@ -31,14 +33,11 @@ const orchestratorBaseUrl = process.env.HOSTED_ORCHESTRATOR_URL ?? "http://local
 const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000";
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const instanceId = process.env.HOSTED_SITES_INSTANCE_ID ?? `${hostname()}:${process.pid}`;
-const redisUrl = process.env.HOSTED_SESSION_REDIS_URL ?? process.env.REDIS_URL;
+const redisUrl = process.env.HOSTED_SESSION_REDIS_URL;
 const sessionRedisTtlMs = Number(process.env.HOSTED_SESSION_REDIS_TTL_MS ?? 1000 * 60 * 60 * 6);
 
 const sessions = new Map<string, HostedSession>();
-let supabaseAdmin: SupabaseClient<Database> | null | undefined;
 const sessionCache = redisUrl
   ? createRedisSessionCache({
       url: redisUrl,
@@ -52,28 +51,6 @@ function now() {
 
 function makeId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-}
-
-function getSupabaseAdmin() {
-  if (supabaseAdmin !== undefined) {
-    return supabaseAdmin;
-  }
-
-  supabaseAdmin =
-    supabaseUrl && supabaseServiceRoleKey
-      ? createClient(supabaseUrl, supabaseServiceRoleKey, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        })
-      : null;
-
-  return supabaseAdmin;
-}
-
-function hashToken(token: string) {
-  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 function clientIp(request: IncomingMessage) {
@@ -101,9 +78,8 @@ const sessionStore = createSessionStore({
   publicBaseUrl,
   now,
   makeId,
-  hashToken,
   viewerTokenSecret,
-  getSupabaseAdmin,
+  recoverSession: orchestratorClient.recoverSession,
   persistSessionSnapshotDurably: orchestratorClient.persistSessionSnapshot,
   persistSessionAccess: orchestratorClient.recordSessionAccess,
   defaultStartPathForApp,
@@ -117,7 +93,7 @@ const sessionStore = createSessionStore({
   onSessionExpired: orchestratorClient.timeoutAttempt,
 });
 
-const { createHostedSession, getSession, getSessionByToken, persistSessionSnapshot } = sessionStore;
+const { createHostedSession, getSession, getSessionByToken, persistSessionSnapshot, markSessionTerminal } = sessionStore;
 const telemetryRuntime = createTelemetryRuntime({
   now,
   agentbenchWebUrl,
@@ -128,15 +104,39 @@ const telemetryRuntime = createTelemetryRuntime({
 const { recordEvent, forwardRunEvent, telemetryRunEventType } = telemetryRuntime;
 const {
   completeSession: completeSessionViaOrchestrator,
-  getAttemptOverview: getAttemptOverviewViaOrchestrator,
+  getSessionResult: getSessionResultViaOrchestrator,
   resolveAdvance: resolveAdvanceViaOrchestrator,
 } = orchestratorClient;
 
+async function completeSession(session: HostedSession, result: ReturnType<typeof evaluateSession>) {
+  const persistedResult = await completeSessionViaOrchestrator(session, result);
+  if (persistedResult) {
+    await markSessionTerminal(session, persistedResult);
+  }
+  return persistedResult;
+}
+
+async function resolveSessionResult(session: HostedSession) {
+  if (isTerminalHostedSessionStatus(session.status)) {
+    const persistedResult = await getSessionResultViaOrchestrator(session);
+    if (persistedResult) {
+      return persistedResult;
+    }
+    throw new Error("Persisted terminal session result is unavailable.");
+  }
+  return evaluateSession(session);
+}
+
+function rejectTerminalMutation(session: HostedSession, response: ServerResponse) {
+  if (!isTerminalHostedSessionStatus(session.status)) {
+    return false;
+  }
+  sendJson(response, 409, { error: "session_terminal", status: session.status });
+  return true;
+}
+
 const attemptsRoutes = createAttemptsRoutes({
-  publicBaseUrl,
-  defaultStartPathForApp,
   getSession,
-  getAttemptOverview: getAttemptOverviewViaOrchestrator,
   resolveAdvance: resolveAdvanceViaOrchestrator,
   badRequest,
 });
@@ -150,7 +150,9 @@ const apiRoutes = createApiRoutes({
   forwardRunEvent,
   telemetryRunEventType,
   evaluateSession,
-  completeSession: completeSessionViaOrchestrator,
+  completeSession,
+  resolveSessionResult,
+  rejectTerminalMutation,
   readJson,
   badRequest,
   notFound,
@@ -165,8 +167,10 @@ const appRouteHandlers = createAppRouteHandlers({
   persistSessionSnapshot,
   recordEvent,
   forwardRunEvent,
-  completeSession: completeSessionViaOrchestrator,
+  completeSession,
   evaluateSession,
+  resolveSessionResult,
+  rejectTerminalMutation,
   readForm,
   badRequest,
   notFound,

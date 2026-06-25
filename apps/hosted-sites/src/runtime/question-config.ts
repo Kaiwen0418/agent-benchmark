@@ -1,4 +1,4 @@
-export function readTaskConfig(metadata: Record<string, unknown> | null | undefined) {
+export function readQuestionGeneration(metadata: Record<string, unknown> | null | undefined) {
   if (!metadata) {
     throw new Error("Hosted session is missing generated question metadata.");
   }
@@ -6,6 +6,20 @@ export function readTaskConfig(metadata: Record<string, unknown> | null | undefi
   if (!generation || typeof generation !== "object" || Array.isArray(generation)) {
     throw new Error("Hosted session is missing questionGeneration metadata.");
   }
+  return generation as Record<string, unknown>;
+}
+
+export function readQuestionSchemaVersion(metadata: Record<string, unknown> | null | undefined) {
+  const generation = readQuestionGeneration(metadata);
+  const value = generation.schemaVersion;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new Error("Hosted session questionGeneration.schemaVersion must be a positive integer.");
+  }
+  return value;
+}
+
+export function readTaskConfig(metadata: Record<string, unknown> | null | undefined) {
+  const generation = readQuestionGeneration(metadata);
   const taskConfig = (generation as Record<string, unknown>).taskConfig;
   if (!taskConfig || typeof taskConfig !== "object" || Array.isArray(taskConfig)) {
     throw new Error("Hosted session is missing a generated taskConfig.");
