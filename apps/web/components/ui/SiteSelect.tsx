@@ -7,14 +7,16 @@ type SiteSelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
   compact?: boolean;
 };
 
-export function SiteSelect({ className, compact = false, children, ...props }: SiteSelectProps) {
+export function SiteSelect({ className, compact = false, children, style, ...props }: SiteSelectProps) {
   return (
     <span className="relative block">
       <select
         {...props}
+        style={{ colorScheme: "light", ...style }}
         className={cn(
           "w-full appearance-none rounded-[0.6rem] border border-[#d8d1c4] bg-white pr-10 text-sm text-[#111111] outline-none transition",
           "focus:border-[#111111] disabled:cursor-not-allowed disabled:bg-[#eeeae2] disabled:text-[#777168]",
+          "[&>option]:bg-white [&>option]:text-[#111111]",
           compact ? "px-3.5 py-2.5" : "px-3.5 py-3",
           className,
         )}
