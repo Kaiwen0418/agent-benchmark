@@ -903,6 +903,58 @@ test("evaluateNotes fails when the generated note tag is wrong", () => {
   assert.equal(result.score, 0);
 });
 
+test("evaluateNotes passes when targeted seeded note is updated", () => {
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note-seed-support",
+            title: "Support follow-up",
+            body: "Email Mira after the replacement adapter ships.",
+            tag: "support",
+            createdAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        expectedTitle: "Support follow-up",
+        expectedBody: "Email Mira after the replacement adapter ships.",
+        expectedTag: "support",
+        targetNoteId: "note-seed-support",
+      }),
+    ),
+  );
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateNotes fails when targeted seeded note is not updated", () => {
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note-seed-support",
+            title: "Old support follow-up",
+            body: "Follow up with Mira about the replacement adapter.",
+            tag: "support",
+            createdAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        expectedTitle: "Support follow-up",
+        expectedBody: "Email Mira after the replacement adapter ships.",
+        expectedTag: "support",
+        targetNoteId: "note-seed-support",
+      }),
+    ),
+  );
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
 test("generated shopping config changes the accepted category and shipping method", () => {
   const session = makeShoppingSession({
     products: [{ id: "prod-cable", name: "USB-C Cable", category: "cable", price: 9.99 }],

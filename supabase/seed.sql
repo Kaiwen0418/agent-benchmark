@@ -11,10 +11,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-suite-v3.0.6',
+  'hosted-web-suite-v3.0.7',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3.0.6",
+  "suiteVersion": "v3.0.7",
   "sessions": [
     {
       "app": "shopping-lite",
@@ -439,8 +439,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "notes-followup-create",
       "title": "Notes Follow-up",
       "startPath": "/notes",
-      "taskVersion": "v1",
-      "seedVersion": "notes-lite-v1",
+      "taskVersion": "v2",
+      "seedVersion": "notes-lite-v2",
       "sequenceIndex": 5,
       "weight": 1,
       "required": true,
@@ -471,6 +471,36 @@ select public.publish_benchmark_case_catalog(
               "expectedTitle": "Ops check",
               "expectedBody": "Review Redis health metrics after the next hosted suite run.",
               "expectedTag": "ops"
+            }
+          },
+          {
+            "id": "update-support-followup",
+            "goal": "Update the seeded note titled 'Old support follow-up' to title 'Support follow-up', body 'Email Mira after the replacement adapter ships.', and tag 'support'.",
+            "taskConfig": {
+              "expectedTitle": "Support follow-up",
+              "expectedBody": "Email Mira after the replacement adapter ships.",
+              "expectedTag": "support",
+              "targetNoteId": "note-seed-support"
+            }
+          },
+          {
+            "id": "update-release-note",
+            "goal": "Update the seeded note titled 'Old release reminder' to title 'Release reminder', body 'Confirm the hosted-web v3.0.1 smoke run before publishing notes.', and tag 'release'.",
+            "taskConfig": {
+              "expectedTitle": "Release reminder",
+              "expectedBody": "Confirm the hosted-web v3.0.1 smoke run before publishing notes.",
+              "expectedTag": "release",
+              "targetNoteId": "note-seed-release"
+            }
+          },
+          {
+            "id": "update-ops-check",
+            "goal": "Update the seeded note titled 'Old ops check' to title 'Ops check', body 'Review Redis health metrics after the next hosted suite run.', and tag 'ops'.",
+            "taskConfig": {
+              "expectedTitle": "Ops check",
+              "expectedBody": "Review Redis health metrics after the next hosted suite run.",
+              "expectedTag": "ops",
+              "targetNoteId": "note-seed-ops"
             }
           }
         ]
@@ -526,7 +556,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  'e6e705b644b3a6fd1c4533dd32512fd6c61d410c575e47da04f26b0702454d21'
+  '0f5006278d204b0fc6521dcd2423c73074b3cf1347c79cea39db9482a5a69de8'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

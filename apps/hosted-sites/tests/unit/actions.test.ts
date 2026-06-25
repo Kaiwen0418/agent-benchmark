@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { addReplyToThread, lockThread, pinThread, reportThread } from "../../src/apps/forum-lite/actions.js";
-import { createNote } from "../../src/apps/notes-lite/actions.js";
+import { createNote, updateNote } from "../../src/apps/notes-lite/actions.js";
 import { createMergeRequest, updateFileContent } from "../../src/apps/repo-lite/actions.js";
 import { addProductToCart, getCartTotal, submitCheckoutOrder } from "../../src/apps/shopping-lite/actions.js";
 import { markArticleViewed, submitWikiAnswer } from "../../src/apps/wiki-lite/actions.js";
@@ -215,7 +215,7 @@ test("notes actions create trimmed notes and reject missing fields", () => {
   });
 
   assert.equal(created.success, true);
-  assert.deepEqual(session.state.notes[0], {
+  assert.deepEqual(session.state.notes.at(-1), {
     id: "note_1",
     title: "Support follow-up",
     body: "Email Mira after the replacement adapter ships.",
@@ -231,4 +231,51 @@ test("notes actions create trimmed notes and reject missing fields", () => {
     makeId: (prefix) => `${prefix}_2`,
   });
   assert.deepEqual(rejected, { success: false, error: "Title is required" });
+});
+
+test("notes update action updates an existing note and validates fields", () => {
+  const session = makeSession("notes-lite");
+  const created = createNote(session, {
+    title: "Original title",
+    body: "Original body.",
+    tag: "original",
+    now: () => "2026-06-01T00:00:00.000Z",
+    makeId: (prefix) => `${prefix}_1`,
+  });
+  assert.equal(created.success, true);
+  const createdId = created.note!.id;
+
+  const updated = updateNote(session, {
+    noteId: createdId,
+    title: "Updated title",
+    body: "Updated body.",
+    tag: "updated",
+  });
+  assert.equal(updated.success, true);
+  assert.deepEqual(
+    session.state.notes.find((note) => note.id === createdId),
+    {
+      id: createdId,
+      title: "Updated title",
+      body: "Updated body.",
+      tag: "updated",
+      createdAt: "2026-06-01T00:00:00.000Z",
+    },
+  );
+
+  const missing = updateNote(session, {
+    noteId: createdId,
+    title: "",
+    body: "Body",
+    tag: "tag",
+  });
+  assert.deepEqual(missing, { success: false, error: "Title is required" });
+
+  const notFound = updateNote(session, {
+    noteId: "note-missing",
+    title: "Title",
+    body: "Body",
+    tag: "tag",
+  });
+  assert.deepEqual(notFound, { success: false, error: "Note not found" });
 });
