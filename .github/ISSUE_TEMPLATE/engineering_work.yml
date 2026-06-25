@@ -1,0 +1,36 @@
+name: Engineering work
+description: Propose architecture, operations, security, performance, or maintenance work
+title: "type(area): "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Use the title format defined in docs/work-item-naming.md. Report
+        vulnerabilities through SECURITY.md instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the current limitation, risk, or maintenance cost.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the intended boundary, behavior, and alternatives.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable conditions that define completion.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Operational impact
+      description: Note schema, API, deployment, security, compatibility, and rollback implications.

@@ -12,22 +12,25 @@ Thank you for contributing. Maintainers review all external changes before they 
 ## Development Workflow
 
 1. Fork the repository and create a short-lived branch from the latest `develop`.
-2. Use `feature/<description>`, `fix/<description>`, or `chore/<description>`. Include an issue ID when one exists.
+2. Name the branch `<owner>/<issue>-<type>-<short-slug>`, such as `codex/94-ops-container-healthchecks`.
 3. Install dependencies with `pnpm install --frozen-lockfile`.
 4. Keep the change focused and add tests for changed behavior.
 5. Run `pnpm verify:ci` before opening the pull request.
 6. Open the pull request against `develop`. Only release and emergency hotfix pull requests target `main`.
 
-Use Conventional Commit subjects such as `feat(hosted-sites): add moderation task variants`.
+Use Conventional Commit subjects such as `feat(hosted-sites): add moderation task variants`. Pull request titles use the same format and must not include an author or automation prefix such as `[codex]`.
+
+See [Work Item Naming](./docs/work-item-naming.md) for issue, branch, commit, pull request, and legacy-name rules.
 
 ## Pull Request Requirements
 
 - Explain the problem, approach, and user-visible behavior.
-- Link related issues.
+- Link the primary issue with `Closes #<number>`, or explain why no issue exists.
 - Include tests and screenshots or recordings for UI changes.
 - Describe database, deployment, configuration, or compatibility impact.
 - Keep generated files and unrelated formatting changes out of the pull request.
 - Disclose substantial AI-generated code. Contributors remain responsible for correctness, security, licensing, and tests.
+- Prefer squash merge for normal pull requests into `develop`.
 
 Maintainers may request that a large pull request be split before review.
 
