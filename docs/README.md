@@ -21,6 +21,7 @@
 
 ## Development
 
+- [Work Item Naming](./work-item-naming.md)
 - [Hosted Site App Authoring](./hosted-site-app-authoring.md)
 - [Hosted App Extensibility](./hosted-app-extensibility.md)
 - [Deployment and Scaling](./deployment.md)

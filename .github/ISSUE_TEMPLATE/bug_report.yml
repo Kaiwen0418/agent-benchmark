@@ -1,6 +1,6 @@
 name: Bug report
 description: Report a reproducible defect
-title: "[Bug]: "
+title: "fix(area): "
 labels:
   - bug
 body:

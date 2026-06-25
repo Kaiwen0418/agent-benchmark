@@ -52,3 +52,30 @@ pnpm verify:ci
 3. Put cross-service scenarios in root `tests/e2e`.
 4. Update the workspace `test` script or CI runner when a new test category is introduced; test discovery must never depend on implicit defaults.
 5. Keep production `tsconfig` inputs focused on production code. Tests execute through `tsx` and import production modules explicitly.
+
+## Preview Lifecycle Verification
+
+Run this verification after changes to hosted lifecycle, telemetry, live
+viewing, quota, deployment configuration, or cross-service URLs. Use the test
+environment unless production verification is explicitly requested.
+
+1. Open the preview Web application and confirm quota loading and suite startup
+   complete without console errors.
+2. Start a run and record the run and attempt IDs without exposing complete
+   tokens.
+3. Complete every generated hosted task in suite order and verify its evaluator
+   result.
+4. After each task, verify advancement returns the next ordered session and a
+   public HTTPS hosted URL.
+5. After the final task, verify advancement reports completion with no next
+   session or URL.
+6. Keep Web and hosted task tabs open together when testing live view. Confirm
+   page changes, task signals, overlays, and SSE updates continue after
+   reconnect.
+7. Confirm viewer URLs are read-only and do not expose write tokens, Docker
+   names, localhost, private ports, or internal command URLs.
+8. Report startup, initialization, scores, advancement, viewer behavior,
+   reconnect behavior, and console or network errors separately.
+
+Treat any private or internal URL returned to a browser as a blocking issue.
+Successful scoring alone does not verify live-view behavior.

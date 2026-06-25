@@ -1,6 +1,6 @@
 name: Feature request
 description: Propose a focused enhancement
-title: "[Feature]: "
+title: "feat(area): "
 labels:
   - enhancement
 body:
