@@ -131,6 +131,14 @@ Not a traditional admin dashboard.
 
 For visual replay, hosted-sites can emit DOM/task telemetry, but real screenshots or videos must be uploaded by the user's agent/browser runtime. A hosted site cannot reliably capture the agent's browser pixels because of browser security boundaries.
 
+Before committing or opening a pull request with user-visible frontend changes:
+
+1. Run the affected page in an actual browser; tests and production builds alone are insufficient.
+2. Visually inspect every changed interactive state, including open menus, dialogs, loading/empty states, and selected/disabled states.
+3. Check the relevant desktop layout and at least one narrow/mobile viewport when the component is responsive.
+4. Confirm colors, backgrounds, stacking, clipping, spacing, and overflow against the surrounding design.
+5. Record the pages, viewport states, and interactions checked in the pull request verification notes. Do not commit or publish the frontend change if visual verification is blocked or incomplete.
+
 ### 8. Infrastructure
 
 Prefer:

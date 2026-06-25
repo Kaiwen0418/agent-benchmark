@@ -142,15 +142,11 @@ export function ConnectAgentCard() {
           <span className="mb-2 block text-[13px] text-[#5d574d]">Benchmark</span>
           <SiteSelect
             value={benchmark}
-            onChange={(event) => setBenchmark(event.target.value as typeof benchmark)}
+            onValueChange={(value) => setBenchmark(value as typeof benchmark)}
+            ariaLabel="Benchmark"
+            options={benchmarkOptions.map((item) => ({ value: item.value, label: item.label }))}
             compact
-          >
-            {benchmarkOptions.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </SiteSelect>
+          />
         </label>
 
         <div className="rounded-[1.15rem] bg-[#efede6] p-3.5 text-[13px] leading-6 text-[#5c574d]">

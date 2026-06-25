@@ -75,18 +75,16 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
           {otherBoards.length > 0 ? (
             <SiteSelect
               compact
-              aria-label="Other benchmark suites"
+              ariaLabel="Other benchmark suites"
               value={otherBoards.some((board) => board.version === activeVersion) ? activeVersion : ""}
-              onChange={(event) => selectVersion(event.target.value)}
-              className="min-w-[10rem] bg-white/55 py-2.5 text-xs text-[#625c52]"
-            >
-              <option value="" disabled>Other suites</option>
-              {otherBoards.map((board) => (
-                <option key={board.version} value={board.version}>
-                  Suite {board.version}
-                </option>
-              ))}
-            </SiteSelect>
+              onValueChange={selectVersion}
+              options={[
+                { value: "", label: "Other suites", disabled: true },
+                ...otherBoards.map((board) => ({ value: board.version, label: `Suite ${board.version}` })),
+              ]}
+              className="min-w-[10rem]"
+              triggerClassName="bg-white/55 py-2.5 text-xs text-[#625c52]"
+            />
           ) : null}
         </div>
         <div className="text-xs uppercase tracking-[0.16em] text-[#8a8378]">
