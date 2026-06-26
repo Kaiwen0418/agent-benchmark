@@ -20,9 +20,7 @@ export function createMergeRequest(
     makeId: (prefix: string) => string;
   },
 ) {
-  const changedFiles = session.state.files
-    .map((file) => ({ ...file }))
-    .filter((file) => file.path === "README.md");
+  const changedFiles = session.state.files.map((file) => ({ ...file }));
 
   const mr: RepoMergeRequest = {
     id: params.makeId("mr"),

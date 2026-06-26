@@ -20,12 +20,14 @@ function generatedTaskConfig(taskConfig: Record<string, unknown>, schemaVersion 
 
 function wikiTaskConfig(params: {
   targetArticleSlug: string;
-  kind: "date" | "duration" | "currency";
+  kind: "date" | "duration" | "currency" | "text";
   canonicalValue: string;
   normalization: "trim" | "trim-casefold" | "trim-casefold-punctuation";
+  secondaryArticleSlug?: string;
 }) {
   return generatedTaskConfig({
     targetArticleSlug: params.targetArticleSlug,
+    secondaryArticleSlug: params.secondaryArticleSlug,
     answerContract: {
       kind: params.kind,
       canonicalValue: params.canonicalValue,
@@ -64,15 +66,21 @@ const defaultTaskConfigs = {
 
 function makeShoppingSession(
   overrides?: Partial<ShoppingEvaluationSession["state"]>,
+  metadata?: Record<string, unknown>,
 ): ShoppingEvaluationSession {
   return {
     app: "shopping-lite",
     taskSlug: "shopping-constrained-checkout",
-    metadata: defaultTaskConfigs.shopping,
+    metadata: metadata ?? defaultTaskConfigs.shopping,
     state: {
       products: [
+        { id: "prod-charger-20w", name: "VoltEdge 20W USB-C Charger", category: "charger", price: 18.99 },
         { id: "prod-charger-30w", name: "VoltEdge 30W USB-C Charger", category: "charger", price: 24.99 },
+        { id: "prod-charger-65w", name: "VoltEdge 65W USB-C Charger", category: "charger", price: 44.99 },
+        { id: "prod-cable-1m", name: "Braided USB-C Cable 1m", category: "cable", price: 9.99 },
+        { id: "prod-cable-2m", name: "Braided USB-C Cable 2m", category: "cable", price: 14.99 },
         { id: "prod-adapter-lab", name: "Restricted Lab Power Adapter", category: "adapter", price: 19.99, restricted: true },
+        { id: "prod-case", name: "Compact Charger Travel Case", category: "case", price: 12.5 },
       ],
       orders: [
         {
@@ -141,6 +149,182 @@ test("evaluateShopping fails when restricted item is included", () => {
   assert.match(result.summary, /does not satisfy/i);
 });
 
+test("evaluateShopping passes for multi-item cart with secondary category", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_combo",
+            items: [
+              { productId: "prod-charger-20w", quantity: 1 },
+              { productId: "prod-cable-1m", quantity: 1 },
+            ],
+            subtotal: 28.98,
+            total: 28.98,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 35,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "cable",
+        secondaryQuantity: 1,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateShopping fails when secondary category is missing", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_single",
+            items: [{ productId: "prod-charger-20w", quantity: 1 }],
+            total: 18.99,
+            shippingMethod: "standard",
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 35,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "cable",
+        secondaryQuantity: 1,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateShopping passes with shipping threshold and free shipping", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_shipping",
+            items: [
+              { productId: "prod-charger-30w", quantity: 1 },
+              { productId: "prod-case", quantity: 1 },
+            ],
+            subtotal: 37.49,
+            total: 37.49,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 40,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "case",
+        secondaryQuantity: 1,
+        freeShippingThreshold: 35,
+        shippingCost: 5,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateShopping passes with shipping threshold and paid shipping", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_shipping",
+            items: [
+              { productId: "prod-charger-20w", quantity: 1 },
+              { productId: "prod-case", quantity: 1 },
+            ],
+            subtotal: 31.49,
+            total: 36.49,
+            shippingMethod: "standard",
+            shippingCost: 5,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 40,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "case",
+        secondaryQuantity: 1,
+        freeShippingThreshold: 35,
+        shippingCost: 5,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateShopping fails when paid shipping pushes total over budget", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        orders: [
+          {
+            id: "ord_shipping",
+            items: [
+              { productId: "prod-charger-20w", quantity: 1 },
+              { productId: "prod-case", quantity: 1 },
+            ],
+            subtotal: 31.49,
+            total: 36.49,
+            shippingMethod: "standard",
+            shippingCost: 5,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 1,
+        maxTotal: 35,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        secondaryCategory: "case",
+        secondaryQuantity: 1,
+        freeShippingThreshold: 35,
+        shippingCost: 5,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
 test("evaluateWiki passes when article was viewed and exact answer submitted", () => {
   const result = evaluateWiki(
     makeWikiSession({
@@ -169,13 +353,55 @@ test("evaluateWiki fails when article was not viewed even if answer matches", ()
   assert.match(result.summary, /requires opening the generated target article/i);
 });
 
+test("evaluateWiki passes when both target and secondary articles are viewed for multi-hop variant", () => {
+  const result = evaluateWiki(
+    makeWikiSession({
+      metadata: wikiTaskConfig({
+        targetArticleSlug: "usb-c-charger-faq",
+        kind: "currency",
+        canonicalValue: "$24.99",
+        normalization: "trim",
+        secondaryArticleSlug: "agentbench-release-history",
+      }),
+      events: [
+        { type: "page.load", url: "/wiki/article/agentbench-release-history?session=tok" },
+        { type: "page.load", url: "/wiki/article/usb-c-charger-faq?session=tok" },
+      ],
+      wikiAnswerSubmissions: [{ answer: "$24.99", submittedAt: "2026-06-01T00:00:00.000Z" }],
+    }),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateWiki fails when secondary article is required but not viewed", () => {
+  const result = evaluateWiki(
+    makeWikiSession({
+      metadata: wikiTaskConfig({
+        targetArticleSlug: "usb-c-charger-faq",
+        kind: "currency",
+        canonicalValue: "$24.99",
+        normalization: "trim",
+        secondaryArticleSlug: "agentbench-release-history",
+      }),
+      events: [{ type: "page.load", url: "/wiki/article/usb-c-charger-faq?session=tok" }],
+      wikiAnswerSubmissions: [{ answer: "$24.99", submittedAt: "2026-06-01T00:00:00.000Z" }],
+    }),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.match(result.summary, /secondary article/i);
+});
+
 function makeForumSession(
   overrides?: Partial<ForumEvaluationSession["state"]>,
+  metadata?: Record<string, unknown>,
 ): ForumEvaluationSession {
   return {
     app: "forum-lite",
     taskSlug: "forum-battery-moderation",
-    metadata: defaultTaskConfigs.forum,
+    metadata: metadata ?? defaultTaskConfigs.forum,
     state: {
       threads: [
         {
@@ -280,18 +506,199 @@ test("evaluateForum fails when agent reply is missing recall link", () => {
   assert.equal(result.score, 0);
 });
 
+test("evaluateForum passes when agent replies, locks, and pins the thread", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-battery",
+            title: "Battery swelling issue after firmware update",
+            category: "safety",
+            locked: true,
+            pinned: true,
+            posts: [
+              { id: "p-battery-1", author: "user123", body: "My device started swelling." },
+              { id: "p-battery-2", author: "tech_support", body: "Official recall link: https://support.example.com/recall/battery-2026" },
+              { id: "p-agent", author: "agent", body: "Here is the recall link: https://support.example.com/recall/battery-2026" },
+            ],
+          },
+        ],
+        moderationActions: [
+          { id: "mod_1", threadId: "thr-battery", action: "lock", reason: "safety escalation" },
+          { id: "mod_2", threadId: "thr-battery", action: "pin", reason: "safety escalation" },
+        ],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-battery",
+        expectedReplyValue: "https://support.example.com/recall/battery-2026",
+        expectedLockReason: "safety escalation",
+        requiresPin: true,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateForum fails when pin is required but missing", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-battery",
+            title: "Battery swelling issue after firmware update",
+            category: "safety",
+            locked: true,
+            posts: [
+              { id: "p-battery-1", author: "user123", body: "My device started swelling." },
+              { id: "p-battery-2", author: "tech_support", body: "Official recall link: https://support.example.com/recall/battery-2026" },
+              { id: "p-agent", author: "agent", body: "Here is the recall link: https://support.example.com/recall/battery-2026" },
+            ],
+          },
+        ],
+        moderationActions: [{ id: "mod_1", threadId: "thr-battery", action: "lock", reason: "safety escalation" }],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-battery",
+        expectedReplyValue: "https://support.example.com/recall/battery-2026",
+        expectedLockReason: "safety escalation",
+        requiresPin: true,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateForum passes when agent reports, replies, and locks the thread", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-wifi",
+            title: "WiFi connectivity drops on 5GHz",
+            category: "networking",
+            locked: true,
+            posts: [
+              { id: "p-wifi-1", author: "user123", body: "My 5GHz keeps dropping." },
+              { id: "p-wifi-2", author: "tech_support", body: "Reset guide: https://support.example.com/network/5ghz-reset" },
+              { id: "p-agent", author: "agent", body: "Use https://support.example.com/network/5ghz-reset" },
+            ],
+          },
+        ],
+        moderationActions: [
+          { id: "mod_1", threadId: "thr-wifi", action: "report", reason: "needs escalation" },
+          { id: "mod_2", threadId: "thr-wifi", action: "lock", reason: "resolved with guide" },
+        ],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-wifi",
+        expectedReplyValue: "https://support.example.com/network/5ghz-reset",
+        expectedLockReason: "resolved with guide",
+        requiresReport: true,
+        expectedReportReason: "needs escalation",
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateForum fails when report is required but missing", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-wifi",
+            title: "WiFi connectivity drops on 5GHz",
+            category: "networking",
+            locked: true,
+            posts: [
+              { id: "p-wifi-1", author: "user123", body: "My 5GHz keeps dropping." },
+              { id: "p-wifi-2", author: "tech_support", body: "Reset guide: https://support.example.com/network/5ghz-reset" },
+              { id: "p-agent", author: "agent", body: "Use https://support.example.com/network/5ghz-reset" },
+            ],
+          },
+        ],
+        moderationActions: [{ id: "mod_1", threadId: "thr-wifi", action: "lock", reason: "resolved with guide" }],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-wifi",
+        expectedReplyValue: "https://support.example.com/network/5ghz-reset",
+        expectedLockReason: "resolved with guide",
+        requiresReport: true,
+        expectedReportReason: "needs escalation",
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateForum passes when agent reports, replies, locks, and pins the thread", () => {
+  const result = evaluateForum(
+    makeForumSession(
+      {
+        threads: [
+          {
+            id: "thr-screen",
+            title: "Screen flickering in low brightness",
+            category: "display",
+            locked: true,
+            pinned: true,
+            posts: [
+              { id: "p-screen-1", author: "user123", body: "Screen flickers at low brightness." },
+              { id: "p-screen-2", author: "tech_support", body: "Calibration advisory: https://support.example.com/display/flicker-calibration" },
+              { id: "p-agent", author: "agent", body: "See https://support.example.com/display/flicker-calibration" },
+            ],
+          },
+        ],
+        moderationActions: [
+          { id: "mod_1", threadId: "thr-screen", action: "report", reason: "duplicate issue" },
+          { id: "mod_2", threadId: "thr-screen", action: "lock", reason: "known display issue" },
+          { id: "mod_3", threadId: "thr-screen", action: "pin", reason: "known display issue" },
+        ],
+      },
+      generatedTaskConfig({
+        targetThreadId: "thr-screen",
+        expectedReplyValue: "https://support.example.com/display/flicker-calibration",
+        expectedLockReason: "known display issue",
+        requiresReport: true,
+        expectedReportReason: "duplicate issue",
+        requiresPin: true,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
 function makeRepoSession(
   overrides?: Partial<RepoEvaluationSession["state"]>,
+  metadata?: Record<string, unknown>,
 ): RepoEvaluationSession {
   return {
     app: "repo-lite",
     taskSlug: "repo-readme-fix",
-    metadata: defaultTaskConfigs.repo,
+    metadata: metadata ?? defaultTaskConfigs.repo,
     state: {
       files: [
         {
           path: "README.md",
           content: "# Demo Project\n\nRun `npm install` to install dependencies.\n",
+        },
+        {
+          path: "package.json",
+          content: '{\n  "name": "demo-project",\n  "version": "1.0.0"\n}\n',
         },
       ],
       mergeRequests: [],
@@ -372,6 +779,86 @@ test("evaluateRepo fails when MR title does not match", () => {
   assert.equal(result.score, 0);
 });
 
+test("evaluateRepo passes when README and package.json are edited correctly", () => {
+  const result = evaluateRepo(
+    makeRepoSession(
+      {
+        files: [
+          {
+            path: "README.md",
+            content: "# Demo Project\n\nRun `pnpm install` to install dependencies.\n",
+          },
+          {
+            path: "package.json",
+            content: '{\n  "name": "demo-project",\n  "version": "1.0.1"\n}\n',
+          },
+        ],
+        mergeRequests: [
+          {
+            id: "mr_1",
+            title: "Fix install and bump version",
+            changedFiles: [],
+            targetBranch: "main",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        filePath: "README.md",
+        expectedText: "pnpm install",
+        forbiddenText: "npm install",
+        expectedMrTitle: "Fix install and bump version",
+        expectedTargetBranch: "main",
+        secondaryFilePath: "package.json",
+        secondaryExpectedText: "1.0.1",
+        secondaryForbiddenText: "1.0.0",
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateRepo fails when secondary file edit is missing", () => {
+  const result = evaluateRepo(
+    makeRepoSession(
+      {
+        files: [
+          {
+            path: "README.md",
+            content: "# Demo Project\n\nRun `pnpm install` to install dependencies.\n",
+          },
+          {
+            path: "package.json",
+            content: '{\n  "name": "demo-project",\n  "version": "1.0.0"\n}\n',
+          },
+        ],
+        mergeRequests: [
+          {
+            id: "mr_1",
+            title: "Fix install and bump version",
+            changedFiles: [],
+            targetBranch: "main",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        filePath: "README.md",
+        expectedText: "pnpm install",
+        forbiddenText: "npm install",
+        expectedMrTitle: "Fix install and bump version",
+        expectedTargetBranch: "main",
+        secondaryFilePath: "package.json",
+        secondaryExpectedText: "1.0.1",
+        secondaryForbiddenText: "1.0.0",
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
 function makeNotesSession(
   overrides?: Partial<NotesEvaluationSession["state"]>,
 ): NotesEvaluationSession {
@@ -412,6 +899,58 @@ test("evaluateNotes fails when the generated note tag is wrong", () => {
       },
     ],
   }));
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateNotes passes when targeted seeded note is updated", () => {
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note-seed-support",
+            title: "Support follow-up",
+            body: "Email Mira after the replacement adapter ships.",
+            tag: "support",
+            createdAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        expectedTitle: "Support follow-up",
+        expectedBody: "Email Mira after the replacement adapter ships.",
+        expectedTag: "support",
+        targetNoteId: "note-seed-support",
+      }),
+    ),
+  );
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateNotes fails when targeted seeded note is not updated", () => {
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note-seed-support",
+            title: "Old support follow-up",
+            body: "Follow up with Mira about the replacement adapter.",
+            tag: "support",
+            createdAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        expectedTitle: "Support follow-up",
+        expectedBody: "Email Mira after the replacement adapter ships.",
+        expectedTag: "support",
+        targetNoteId: "note-seed-support",
+      }),
+    ),
+  );
   assert.equal(result.status, "failed");
   assert.equal(result.score, 0);
 });

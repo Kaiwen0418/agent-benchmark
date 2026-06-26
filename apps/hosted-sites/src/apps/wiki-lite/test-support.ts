@@ -1,4 +1,4 @@
-import { configString, type HostedAppTestSupport } from "../../runtime/test-support.js";
+import { configString, configStringOrNull, type HostedAppTestSupport } from "../../runtime/test-support.js";
 
 export const wikiLiteTestSupport: HostedAppTestSupport<"wiki-lite"> = {
   exampleTaskConfig: {
@@ -13,6 +13,10 @@ export const wikiLiteTestSupport: HostedAppTestSupport<"wiki-lite"> = {
   applyPassingState(session, config) {
     const contract = config.answerContract as Record<string, unknown>;
     const slug = configString(config, "targetArticleSlug");
+    const secondarySlug = configStringOrNull(config, "secondaryArticleSlug");
+    if (secondarySlug) {
+      session.events.push({ type: "page.load", url: `/wiki/article/${secondarySlug}` });
+    }
     session.events.push({ type: "page.load", url: `/wiki/article/${slug}` });
     session.state.wikiAnswerSubmissions.push({
       answer: configString(contract, "canonicalValue"),

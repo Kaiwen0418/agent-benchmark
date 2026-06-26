@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addReplyToThread, lockThread } from "../../src/apps/forum-lite/actions.js";
-import { createNote } from "../../src/apps/notes-lite/actions.js";
+import { addReplyToThread, lockThread, pinThread, reportThread } from "../../src/apps/forum-lite/actions.js";
+import { createNote, updateNote } from "../../src/apps/notes-lite/actions.js";
 import { createMergeRequest, updateFileContent } from "../../src/apps/repo-lite/actions.js";
-import { addProductToCart, getCartTotal, submitCheckoutOrder } from "../../src/apps/shopping-lite/actions.js";
+import { addProductToCart, getCartTotal, removeProductFromCart, setCartItemQuantity, submitCheckoutOrder } from "../../src/apps/shopping-lite/actions.js";
 import { markArticleViewed, submitWikiAnswer } from "../../src/apps/wiki-lite/actions.js";
 import { buildInitialSessionState, defaultGoalForSession, defaultStartPathForApp } from "../../src/runtime/app-registry.js";
 import type { HostedAppId, HostedSessionFor } from "../../src/runtime/types.js";
@@ -60,8 +60,71 @@ test("shopping actions add products, submit order, and clear cart", () => {
 
   assert.equal(order.id, "ord_1");
   assert.equal(order.items.length, 1);
+  assert.equal(order.total, 49.98);
+  assert.equal(order.subtotal, 49.98);
+  assert.equal(order.shippingCost, 0);
   assert.equal(session.state.orders.length, 1);
   assert.deepEqual(session.state.cart, []);
+});
+
+test("submitCheckoutOrder includes shipping cost when threshold is not met", () => {
+  const session = makeSession("shopping-lite");
+  addProductToCart(session, "prod-charger-20w");
+  addProductToCart(session, "prod-case");
+
+  const order = submitCheckoutOrder(session, {
+    makeId: (prefix) => `${prefix}_1`,
+    now: () => "2026-06-01T00:00:00.000Z",
+    shippingMethod: "standard",
+    shippingCost: 5,
+  });
+
+  assert.equal(order.subtotal, 31.49);
+  assert.equal(order.shippingCost, 5);
+  assert.equal(order.total, 36.49);
+});
+
+test("submitCheckoutOrder includes zero shipping cost when threshold is met", () => {
+  const session = makeSession("shopping-lite");
+  addProductToCart(session, "prod-charger-30w");
+  addProductToCart(session, "prod-case");
+
+  const order = submitCheckoutOrder(session, {
+    makeId: (prefix) => `${prefix}_1`,
+    now: () => "2026-06-01T00:00:00.000Z",
+    shippingMethod: "standard",
+    shippingCost: 0,
+  });
+
+  assert.equal(order.subtotal, 37.49);
+  assert.equal(order.shippingCost, 0);
+  assert.equal(order.total, 37.49);
+});
+
+test("shopping actions remove cart items and adjust quantities", () => {
+  const session = makeSession("shopping-lite");
+  addProductToCart(session, "prod-charger-30w");
+  addProductToCart(session, "prod-charger-30w");
+  addProductToCart(session, "prod-cable-1m");
+
+  assert.deepEqual(session.state.cart, [
+    { productId: "prod-charger-30w", quantity: 2 },
+    { productId: "prod-cable-1m", quantity: 1 },
+  ]);
+
+  setCartItemQuantity(session, "prod-charger-30w", 1);
+  assert.deepEqual(session.state.cart, [
+    { productId: "prod-charger-30w", quantity: 1 },
+    { productId: "prod-cable-1m", quantity: 1 },
+  ]);
+
+  removeProductFromCart(session, "prod-cable-1m");
+  assert.deepEqual(session.state.cart, [{ productId: "prod-charger-30w", quantity: 1 }]);
+
+  setCartItemQuantity(session, "prod-charger-30w", 0);
+  assert.deepEqual(session.state.cart, []);
+
+  assert.throws(() => setCartItemQuantity(session, "prod-charger-30w", 1.5), /integer/);
 });
 
 test("wiki actions dedupe viewed articles and trim submitted answers", () => {
@@ -109,6 +172,45 @@ test("forum actions reject locked threads and persist moderation actions", () =>
   assert.deepEqual(rejected, { success: false, error: "Thread is locked" });
 });
 
+test("forum pin action requires thread to be locked first", () => {
+  const session = makeSession("forum-lite");
+
+  const pinBeforeLock = pinThread(session, {
+    threadId: "thr-battery",
+    reason: "important",
+    makeId: (prefix) => `${prefix}_1`,
+  });
+  assert.equal(pinBeforeLock.success, false);
+
+  lockThread(session, { threadId: "thr-battery", reason: "safety escalation", makeId: (prefix) => `${prefix}_2` });
+  const pinAfterLock = pinThread(session, {
+    threadId: "thr-battery",
+    reason: "important",
+    makeId: (prefix) => `${prefix}_3`,
+  });
+  assert.equal(pinAfterLock.success, true);
+  assert.equal(session.state.threads.find((thread) => thread.id === "thr-battery")?.pinned, true);
+});
+
+test("forum report action rejects locked threads", () => {
+  const session = makeSession("forum-lite");
+
+  const report = reportThread(session, {
+    threadId: "thr-battery",
+    reason: "needs escalation",
+    makeId: (prefix) => `${prefix}_1`,
+  });
+  assert.equal(report.success, true);
+
+  lockThread(session, { threadId: "thr-battery", reason: "safety escalation", makeId: (prefix) => `${prefix}_2` });
+  const reportAfterLock = reportThread(session, {
+    threadId: "thr-battery",
+    reason: "late report",
+    makeId: (prefix) => `${prefix}_3`,
+  });
+  assert.equal(reportAfterLock.success, false);
+});
+
 test("repo actions update README and create merge request snapshots", () => {
   const session = makeSession("repo-lite");
   const update = updateFileContent(session, "README.md", "# Demo Project\n\nRun `pnpm install`.\n");
@@ -123,7 +225,9 @@ test("repo actions update README and create merge request snapshots", () => {
   assert.equal(mr.success, true);
   assert.equal(session.state.mergeRequests.length, 1);
   assert.equal(session.state.mergeRequests[0].title, "Fix install instructions");
-  assert.equal(session.state.mergeRequests[0].changedFiles[0].content.includes("pnpm install"), true);
+  assert.equal(session.state.mergeRequests[0].changedFiles.length, session.state.files.length);
+  const readmeInMr = session.state.mergeRequests[0].changedFiles.find((file) => file.path === "README.md");
+  assert.equal(readmeInMr?.content.includes("pnpm install"), true);
 });
 
 test("notes actions create trimmed notes and reject missing fields", () => {
@@ -137,7 +241,7 @@ test("notes actions create trimmed notes and reject missing fields", () => {
   });
 
   assert.equal(created.success, true);
-  assert.deepEqual(session.state.notes[0], {
+  assert.deepEqual(session.state.notes.at(-1), {
     id: "note_1",
     title: "Support follow-up",
     body: "Email Mira after the replacement adapter ships.",
@@ -153,4 +257,51 @@ test("notes actions create trimmed notes and reject missing fields", () => {
     makeId: (prefix) => `${prefix}_2`,
   });
   assert.deepEqual(rejected, { success: false, error: "Title is required" });
+});
+
+test("notes update action updates an existing note and validates fields", () => {
+  const session = makeSession("notes-lite");
+  const created = createNote(session, {
+    title: "Original title",
+    body: "Original body.",
+    tag: "original",
+    now: () => "2026-06-01T00:00:00.000Z",
+    makeId: (prefix) => `${prefix}_1`,
+  });
+  assert.equal(created.success, true);
+  const createdId = created.note!.id;
+
+  const updated = updateNote(session, {
+    noteId: createdId,
+    title: "Updated title",
+    body: "Updated body.",
+    tag: "updated",
+  });
+  assert.equal(updated.success, true);
+  assert.deepEqual(
+    session.state.notes.find((note) => note.id === createdId),
+    {
+      id: createdId,
+      title: "Updated title",
+      body: "Updated body.",
+      tag: "updated",
+      createdAt: "2026-06-01T00:00:00.000Z",
+    },
+  );
+
+  const missing = updateNote(session, {
+    noteId: createdId,
+    title: "",
+    body: "Body",
+    tag: "tag",
+  });
+  assert.deepEqual(missing, { success: false, error: "Title is required" });
+
+  const notFound = updateNote(session, {
+    noteId: "note-missing",
+    title: "Title",
+    body: "Body",
+    tag: "tag",
+  });
+  assert.deepEqual(notFound, { success: false, error: "Note not found" });
 });

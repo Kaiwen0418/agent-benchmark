@@ -6,7 +6,7 @@ import {
   type HostedWebScoreResult,
 } from "@agentbench/scoring";
 import type { ForumThread, ModerationAction } from "./types.js";
-import { configString, readTaskConfig } from "../../runtime/question-config.js";
+import { configBooleanOrFalse, configString, readTaskConfig } from "../../runtime/question-config.js";
 
 export type ForumEvaluationSession = {
   app: "forum-lite" | string;
@@ -23,9 +23,20 @@ export function evaluateForum(session: ForumEvaluationSession): HostedWebScoreRe
   const targetThreadId = configString(config, "targetThreadId");
   const expectedReplyValue = configString(config, "expectedReplyValue");
   const expectedLockReason = configString(config, "expectedLockReason");
+  const requiresPin = configBooleanOrFalse(config, "requiresPin");
+  const requiresReport = configBooleanOrFalse(config, "requiresReport");
+  const expectedReportReason = requiresReport ? configString(config, "expectedReportReason") : null;
   const targetThread = session.state.threads.find((candidate) => candidate.id === targetThreadId);
   const retrieve = evaluateRetrieveValue(targetThread, targetThreadId, expectedReplyValue);
-  const backend = evaluateForumBackendState(session, targetThread, targetThreadId, expectedLockReason);
+  const backend = evaluateForumBackendState(
+    session,
+    targetThread,
+    targetThreadId,
+    expectedLockReason,
+    requiresPin,
+    requiresReport,
+    expectedReportReason,
+  );
   const ui = targetThread?.locked
     ? passedEvaluator({
         type: "ui_state",
@@ -42,7 +53,11 @@ export function evaluateForum(session: ForumEvaluationSession): HostedWebScoreRe
 
   return aggregateStrictScore({
     evaluators: [retrieve, backend, ui],
-    passSummary: "Agent found the generated target thread, replied with the required value, and locked it with the correct reason.",
+    passSummary: requiresPin
+      ? "Agent found the generated target thread, replied with the required value, locked it with the correct reason, and pinned it."
+      : requiresReport
+        ? "Agent found the generated target thread, reported it, replied with the required value, and locked it with the correct reason."
+        : "Agent found the generated target thread, replied with the required value, and locked it with the correct reason.",
     failSummary: "One or more required forum conditions were not met.",
   });
 }
@@ -84,12 +99,15 @@ function evaluateForumBackendState(
   targetThread: ForumThread | undefined,
   targetThreadId: string,
   expectedLockReason: string,
+  requiresPin: boolean,
+  requiresReport: boolean,
+  expectedReportReason: string | null,
 ): HostedWebEvaluatorResult {
   if (!targetThread) {
     return failedEvaluator({
       type: "backend_state",
       name: "generated target thread moderated and replied",
-      errorMessage: "Target battery thread not found.",
+      errorMessage: "Target thread not found.",
     });
   }
 
@@ -101,6 +119,24 @@ function evaluateForumBackendState(
   );
   const lockReasonMatches = lockAction?.reason.trim().toLowerCase() === expectedLockReason.toLowerCase();
 
+  const pinAction = requiresPin
+    ? session.state.moderationActions.find(
+        (action) => action.threadId === targetThreadId && action.action === "pin",
+      )
+    : null;
+  const hasPin = !requiresPin || pinAction != null;
+
+  const reportAction = requiresReport
+    ? session.state.moderationActions.find(
+        (action) => action.threadId === targetThreadId && action.action === "report",
+      )
+    : null;
+  const hasReport = !requiresReport || reportAction != null;
+  const reportReasonMatches =
+    !requiresReport ||
+    (reportAction != null &&
+      reportAction.reason.trim().toLowerCase() === (expectedReportReason ?? "").toLowerCase());
+
   const evidence = {
     threadId: targetThreadId,
     hasAgentReply,
@@ -108,9 +144,15 @@ function evaluateForumBackendState(
     isLocked,
     lockReason: lockAction?.reason ?? null,
     lockReasonMatches,
+    requiresPin,
+    hasPin,
+    requiresReport,
+    hasReport,
+    reportReason: reportAction?.reason ?? null,
+    reportReasonMatches,
   };
 
-  const pass = hasAgentReply && isLocked && lockReasonMatches;
+  const pass = hasAgentReply && isLocked && lockReasonMatches && hasPin && hasReport && reportReasonMatches;
 
   return pass
     ? passedEvaluator({
@@ -122,7 +164,7 @@ function evaluateForumBackendState(
         type: "backend_state",
         name: "generated target thread moderated and replied",
         errorMessage:
-          `Backend state must include an agent reply, the thread must be locked, and the lock reason must be '${expectedLockReason}'.`,
+          "Backend state must include an agent reply, the thread must be locked with the correct reason, and any required report or pin actions must be present.",
         evidence,
       });
 }

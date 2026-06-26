@@ -5,7 +5,7 @@ import {
   type HostedWebEvaluatorResult,
   type HostedWebScoreResult,
 } from "@agentbench/scoring";
-import { configString, readTaskConfig } from "../../runtime/question-config.js";
+import { configString, configStringOrNull, readTaskConfig } from "../../runtime/question-config.js";
 import type { Note } from "./types.js";
 
 export type NotesEvaluationSession = {
@@ -22,11 +22,14 @@ export function evaluateNotes(session: NotesEvaluationSession): HostedWebScoreRe
   const expectedTitle = configString(config, "expectedTitle");
   const expectedBody = configString(config, "expectedBody");
   const expectedTag = configString(config, "expectedTag");
-  const backend = evaluateNotesBackendState(session.state.notes, expectedTitle, expectedBody, expectedTag);
+  const targetNoteId = configStringOrNull(config, "targetNoteId");
+  const backend = evaluateNotesBackendState(session.state.notes, expectedTitle, expectedBody, expectedTag, targetNoteId);
 
   return aggregateStrictScore({
     evaluators: [backend],
-    passSummary: "Agent created the requested note with the exact generated title, body, and tag.",
+    passSummary: targetNoteId
+      ? "Agent updated the requested seeded note to the exact generated title, body, and tag."
+      : "Agent created the requested note with the exact generated title, body, and tag.",
     failSummary: "The requested note was not found in backend state.",
   });
 }
@@ -36,13 +39,16 @@ function evaluateNotesBackendState(
   expectedTitle: string,
   expectedBody: string,
   expectedTag: string,
+  targetNoteId: string | null,
 ): HostedWebEvaluatorResult {
-  const matchingNote = notes.find(
+  const candidateNotes = targetNoteId ? notes.filter((note) => note.id === targetNoteId) : notes;
+  const matchingNote = candidateNotes.find(
     (note) => note.title.trim() === expectedTitle && note.body.trim() === expectedBody && note.tag.trim() === expectedTag,
   );
   const evidence = {
     expectedTitle,
     expectedTag,
+    targetNoteId,
     noteCount: notes.length,
     matchingNoteId: matchingNote?.id ?? null,
   };
@@ -56,7 +62,9 @@ function evaluateNotesBackendState(
     : failedEvaluator({
         type: "backend_state",
         name: "generated note exists",
-        errorMessage: "No note exactly matches the generated title, body, and tag.",
+        errorMessage: targetNoteId
+          ? "The targeted seeded note was not updated to the expected title, body, and tag."
+          : "No note exactly matches the generated title, body, and tag.",
         evidence,
       });
 }

@@ -6,28 +6,28 @@ export const wikiSeedArticles: WikiArticle[] = [
     title: "Shipping Policy",
     summary: "AgentBench warehouse dispatch schedule and standard delivery notes.",
     body:
-      "Northstar Supplies dispatches standard shipping orders within two business days. Express orders ship same day before 3pm.",
+      "Northstar Supplies dispatches standard shipping orders within two business days. Express orders ship same day before 3pm. Restricted equipment policies are detailed in the Power Adapter Safety article.",
   },
   {
     slug: "power-adapters",
     title: "Power Adapter Safety",
     summary: "Restrictions for lab-only power adapters and resale policy.",
     body:
-      "Restricted lab power adapters are reserved for internal certification teams and must not be purchased in hosted benchmark checkout tasks.",
+      "Restricted lab power adapters are reserved for internal certification teams and must not be purchased in hosted benchmark checkout tasks. Dispatch timing for restricted equipment follows the standard Shipping Policy.",
   },
   {
     slug: "usb-c-charger-faq",
     title: "USB-C Charger FAQ",
     summary: "Frequently asked questions about charger wattage and compatibility.",
     body:
-      "The VoltEdge 30W USB-C Charger costs $24.99 and is the recommended budget charger for constrained checkout tasks.",
+      "The VoltEdge 30W USB-C Charger costs $24.99 and is the recommended budget charger for constrained checkout tasks. This charger was added to the catalog on June 1, 2026; see the AgentBench Release History article for platform milestones.",
   },
   {
     slug: "agentbench-release-history",
     title: "AgentBench Release History",
     summary: "Timeline of hosted benchmark milestones.",
     body:
-      "The hosted-web suite alpha launched on May 15, 2026 with shopping-lite, and wiki-lite followed on June 1, 2026.",
+      "The hosted-web suite alpha launched on May 15, 2026 with shopping-lite, and wiki-lite followed on June 1, 2026. For recommended accessories see the USB-C Charger FAQ article, and for delivery details see the Shipping Policy article.",
   },
 ];
 

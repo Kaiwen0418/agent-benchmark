@@ -60,6 +60,87 @@ test("calendar evaluator rejects the wrong schedule", () => {
   assert.equal(evaluateCalendarLite(session).status, "failed");
 });
 
+test("calendar action creates an event with two attendees and normalizes emails", () => {
+  const session = makeSession();
+  session.metadata = {
+    questionGeneration: {
+      schemaVersion: 3,
+      generationSeed: "calendar-test",
+      variantId: "architecture-review-plus-lead",
+      taskConfig: {
+        expectedTitle: "Architecture review",
+        expectedDate: "2026-07-08",
+        expectedStartTime: "14:30",
+        expectedDurationMinutes: 45,
+        expectedAttendeeEmail: "mira@example.com",
+        expectedSecondaryAttendeeEmail: "lead@example.com",
+      },
+    },
+  };
+  const result = createCalendarEvent(session, {
+    title: "Architecture review",
+    date: "2026-07-08",
+    startTime: "14:30",
+    durationMinutes: 45,
+    attendeeEmail: "MIRA@EXAMPLE.COM",
+    secondaryAttendeeEmail: " LEAD@EXAMPLE.COM ",
+    makeId: () => "event-1",
+    now: () => "2026-06-24T00:00:00.000Z",
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(session.state.calendarEvents[0]?.attendeeEmail, "mira@example.com");
+  assert.equal(session.state.calendarEvents[0]?.secondaryAttendeeEmail, "lead@example.com");
+  assert.equal(evaluateCalendarLite(session).status, "passed");
+});
+
+test("calendar action rejects an invalid secondary attendee email", () => {
+  const session = makeSession();
+  assert.deepEqual(
+    createCalendarEvent(session, {
+      title: "Architecture review",
+      date: "2026-07-08",
+      startTime: "14:30",
+      durationMinutes: 45,
+      attendeeEmail: "mira@example.com",
+      secondaryAttendeeEmail: "invalid",
+      makeId: () => "event-1",
+      now: () => "2026-06-24T00:00:00.000Z",
+    }),
+    { success: false, error: "Secondary attendee email is invalid" },
+  );
+});
+
+test("calendar evaluator fails when secondary attendee is required but missing", () => {
+  const session = makeSession();
+  session.metadata = {
+    questionGeneration: {
+      schemaVersion: 3,
+      generationSeed: "calendar-test",
+      variantId: "architecture-review-plus-lead",
+      taskConfig: {
+        expectedTitle: "Architecture review",
+        expectedDate: "2026-07-08",
+        expectedStartTime: "14:30",
+        expectedDurationMinutes: 45,
+        expectedAttendeeEmail: "mira@example.com",
+        expectedSecondaryAttendeeEmail: "lead@example.com",
+      },
+    },
+  };
+  createCalendarEvent(session, {
+    title: "Architecture review",
+    date: "2026-07-08",
+    startTime: "14:30",
+    durationMinutes: 45,
+    attendeeEmail: "mira@example.com",
+    makeId: () => "event-1",
+    now: () => "2026-06-24T00:00:00.000Z",
+  });
+
+  assert.equal(evaluateCalendarLite(session).status, "failed");
+});
+
 test("calendar action rejects invalid duration and attendee", () => {
   const session = makeSession();
   assert.deepEqual(

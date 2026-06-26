@@ -4,6 +4,7 @@ import type { HostedSessionFor } from "../../runtime/types.js";
 
 type ShoppingSession = HostedSessionFor<"shopping-lite">;
 import { getCartRows, getCartTotal } from "./actions.js";
+import { configNumberOrNull, readTaskConfig } from "../../runtime/question-config.js";
 import { escapeHtml, layout, money, sendHtml } from "../../templates.js";
 
 export function renderProducts(
@@ -41,6 +42,25 @@ export function renderProducts(
   );
 }
 
+function getShippingPreview(session: ShoppingSession): string {
+  try {
+    const config = readTaskConfig(session.metadata);
+    const freeShippingThreshold = configNumberOrNull(config, "freeShippingThreshold");
+    const shippingCost = configNumberOrNull(config, "shippingCost");
+    if (freeShippingThreshold == null || shippingCost == null) {
+      return "";
+    }
+    const cartTotal = getCartTotal(session);
+    const remaining = Math.max(0, freeShippingThreshold - cartTotal);
+    if (remaining === 0) {
+      return `<p class="accent">Standard shipping is free for this order.</p>`;
+    }
+    return `<p class="muted">Add ${money(remaining)} more for free standard shipping, or pay ${money(shippingCost)} shipping.</p>`;
+  } catch {
+    return "";
+  }
+}
+
 export function renderCart(
   session: ShoppingSession,
   response: ServerResponse,
@@ -52,11 +72,32 @@ export function renderCart(
     ? rows
         .map((row) => `<tr>
           <td>${escapeHtml(row.product?.name ?? row.item.productId)}</td>
-          <td>${row.item.quantity}</td>
+          <td>
+            <form method="post" action="/shopping/cart/update?session=${encodeURIComponent(session.token)}" class="inline">
+              <input type="hidden" name="productId" value="${escapeHtml(row.item.productId)}" />
+              <input type="hidden" name="quantity" value="${Math.max(0, row.item.quantity - 1)}" />
+              <button type="submit" ${row.item.quantity <= 1 ? "disabled" : ""} aria-label="Decrease quantity">−</button>
+            </form>
+            <span class="qty">${row.item.quantity}</span>
+            <form method="post" action="/shopping/cart/update?session=${encodeURIComponent(session.token)}" class="inline">
+              <input type="hidden" name="productId" value="${escapeHtml(row.item.productId)}" />
+              <input type="hidden" name="quantity" value="${row.item.quantity + 1}" />
+              <button type="submit" aria-label="Increase quantity">+</button>
+            </form>
+          </td>
           <td>${money(row.lineTotal)}</td>
+          <td>
+            <form method="post" action="/shopping/cart/update?session=${encodeURIComponent(session.token)}" class="inline">
+              <input type="hidden" name="productId" value="${escapeHtml(row.item.productId)}" />
+              <input type="hidden" name="action" value="remove" />
+              <button type="submit" class="danger">Remove</button>
+            </form>
+          </td>
         </tr>`)
         .join("")
-    : `<tr><td colspan="3" class="muted">Cart is empty.</td></tr>`;
+    : `<tr><td colspan="4" class="muted">Cart is empty.</td></tr>`;
+
+  const shippingPreview = getShippingPreview(session);
 
   sendHtml(
     response,
@@ -66,10 +107,11 @@ export function renderCart(
       session,
       body: `<section class="panel">
         <table>
-          <thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead>
+          <thead><tr><th>Product</th><th>Qty</th><th>Total</th><th></th></tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
         <p class="price">Cart total: ${money(getCartTotal(session))}</p>
+        ${shippingPreview}
         <form method="post" action="/shopping/checkout?session=${encodeURIComponent(session.token)}">
           <label>
             Shipping method
@@ -95,6 +137,13 @@ export function renderOrder(
   defaultStartPathForApp: (app: string) => string,
   score: { status: string; score: number; summary: string },
 ) {
+  let shippingDetail = escapeHtml(order.shippingMethod);
+  if (order.shippingCost != null && order.shippingCost > 0) {
+    shippingDetail += ` (+${money(order.shippingCost)})`;
+  } else if (order.shippingCost != null && order.shippingCost === 0 && order.shippingMethod === "standard") {
+    shippingDetail += " (free)";
+  }
+
   sendHtml(
     response,
     200,
@@ -105,7 +154,7 @@ export function renderOrder(
         <h2>Order submitted</h2>
         <p>Order id: <strong>${escapeHtml(order.id)}</strong></p>
         <p>Total: <strong>${money(order.total)}</strong></p>
-        <p>Shipping: <strong>${escapeHtml(order.shippingMethod)}</strong></p>
+        <p>Shipping: <strong>${shippingDetail}</strong></p>
         <h2>Evaluator preview</h2>
         <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
       </section>`,

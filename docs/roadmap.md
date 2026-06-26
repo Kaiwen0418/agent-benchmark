@@ -124,6 +124,23 @@ BQ.4 completion evidence: `develop@8e24b02` passed [Hosted deployment run 279414
 
 Completion criteria: a benchmark release is reproducible from a versioned case definition, evaluator set, generation seed, and retained artifacts.
 
+### P2.1 Hosted-Web Task Complexity Expansion
+
+Status: In Progress
+
+Increase difficulty of existing hosted-web apps by adding multi-step variants that require reasoning or cross-page state management, without app-specific orchestrator branches:
+
+- `shopping-lite`: multi-item carts, coupon codes, stock availability, and shipping-threshold decisions.
+- `forum-lite`: multi-thread moderation, category moves, report-before-lock, edit-then-lock, and pin/unpin.
+- `repo-lite`: multi-file changes, feature-branch creation, required commit messages, reviewer approval, and simple merge-conflict resolution.
+- `wiki-lite`: multi-hop lookup, cross-article comparison, section synthesis, and cross-reference verification.
+- `notes-lite`: linked notes, existing-note updates, multi-note creation, and tag-based search/organization.
+- `calendar-lite`: recurring events, multiple attendees, conflict detection and rescheduling, resource booking, and event updates/cancellations.
+
+Each expansion must keep deterministic scoring, variant-matrix coverage, redacted final evidence, and E2E lifecycle smoke. Bump task/seed versions and suite revision when semantic behavior changes.
+
+Exit criteria: every existing hosted app has at least one harder variant requiring multi-step reasoning or cross-page state, the expanded variant matrix passes unit and E2E checks, and `pnpm verify:ci` remains green.
+
 ## Explicit Non-Goals
 
 - Running untrusted agent code, browser sandboxes, or arbitrary workers inside Vercel functions.

@@ -46,13 +46,13 @@ This is the only documentation table that enumerates the changing suite contents
 <!-- generated:hosted-testcases:start -->
 | Task | App | Variants |
 | --- | --- | --- |
-| `shopping-constrained-checkout` | `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard` |
-| `forum-battery-moderation` | `forum-lite` | `battery-recall`, `wifi-reset`, `screen-advisory` |
-| `repo-readme-fix` | `repo-lite` | `pnpm-install`, `yarn-install`, `bun-install` |
-| `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price` |
-| `wiki-policy-answer` | `wiki-lite` | `adapter-restriction`, `standard-dispatch`, `express-cutoff` |
-| `notes-followup-create` | `notes-lite` | `support-followup`, `release-note`, `ops-check` |
-| `calendar-event-create` | `calendar-lite` | `architecture-review`, `release-readiness`, `scoring-retro` |
+| `shopping-constrained-checkout` | `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard`, `combo-charger-cable`, `travel-kit-free-shipping`, `cable-budget-shipping` |
+| `forum-battery-moderation` | `forum-lite` | `battery-recall`, `wifi-reset`, `screen-advisory`, `battery-recall-pin`, `wifi-reset-report`, `screen-advisory-both` |
+| `repo-readme-fix` | `repo-lite` | `pnpm-install`, `yarn-install`, `bun-install`, `pnpm-install-and-version`, `yarn-install-and-rename`, `bun-install-and-script` |
+| `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price`, `release-to-charger-price`, `dispatch-with-adapters` |
+| `wiki-policy-answer` | `wiki-lite` | `adapter-restriction`, `standard-dispatch`, `express-cutoff`, `adapter-to-shipping`, `express-to-history` |
+| `notes-followup-create` | `notes-lite` | `support-followup`, `release-note`, `ops-check`, `update-support-followup`, `update-release-note`, `update-ops-check` |
+| `calendar-event-create` | `calendar-lite` | `architecture-review`, `release-readiness`, `scoring-retro`, `architecture-review-plus-lead`, `release-readiness-plus-pm`, `scoring-retro-plus-analyst` |
 <!-- generated:hosted-testcases:end -->
 
 Each task declares at least two semantic variants. The generic matrix combines every declared variant with all supported layouts and themes; presentation must never affect actions or scoring. See [Benchmark Scoring And Testing](./benchmark-testing.md) for required matrix coverage.

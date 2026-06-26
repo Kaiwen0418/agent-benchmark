@@ -13,3 +13,27 @@ export function configString(config: Record<string, unknown>, key: string) {
   }
   return value;
 }
+
+export function configStringOrNull(config: Record<string, unknown>, key: string): string | null {
+  const value = config[key];
+  if (typeof value !== "string" || value.length === 0) {
+    return null;
+  }
+  return value;
+}
+
+export function configNumberOrNull(config: Record<string, unknown>, key: string): number | null {
+  const value = config[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return value;
+}
+
+export function configBooleanOrFalse(config: Record<string, unknown>, key: string): boolean {
+  const value = config[key];
+  if (typeof value !== "boolean") {
+    return false;
+  }
+  return value;
+}

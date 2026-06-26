@@ -26,6 +26,8 @@ function isOrder(value: unknown): value is Order {
     Array.isArray(value.items) &&
     value.items.every(isCartItem) &&
     typeof value.total === "number" &&
+    (value.subtotal === undefined || typeof value.subtotal === "number") &&
+    (value.shippingCost === undefined || typeof value.shippingCost === "number") &&
     (value.shippingMethod === "standard" || value.shippingMethod === "express") &&
     typeof value.submittedAt === "string"
   );

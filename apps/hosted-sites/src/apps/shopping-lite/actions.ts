@@ -1,4 +1,5 @@
 import type { HostedSessionFor } from "../../runtime/types.js";
+import { configNumberOrNull, readTaskConfig } from "../../runtime/question-config.js";
 
 type ShoppingSession = HostedSessionFor<"shopping-lite">;
 import type { Order } from "./types.js";
@@ -35,19 +36,67 @@ export function addProductToCart(session: ShoppingSession, productId: string) {
   session.state.cart.push({ productId, quantity: 1 });
 }
 
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+export function removeProductFromCart(session: ShoppingSession, productId: string) {
+  session.state.cart = session.state.cart.filter((item) => item.productId !== productId);
+}
+
+export function setCartItemQuantity(session: ShoppingSession, productId: string, quantity: number) {
+  if (!Number.isInteger(quantity)) {
+    throw new Error("Quantity must be an integer.");
+  }
+  if (quantity <= 0) {
+    removeProductFromCart(session, productId);
+    return;
+  }
+
+  const existing = session.state.cart.find((item) => item.productId === productId);
+  if (existing) {
+    existing.quantity = quantity;
+  } else {
+    session.state.cart.push({ productId, quantity });
+  }
+}
+
+export function getShippingCost(
+  session: ShoppingSession,
+  shippingMethod: "standard" | "express",
+  config?: Record<string, unknown>,
+): number {
+  if (shippingMethod === "express") {
+    return 0;
+  }
+  const taskConfig = config ?? readTaskConfig(session.metadata);
+  const freeShippingThreshold = configNumberOrNull(taskConfig, "freeShippingThreshold");
+  const shippingCost = configNumberOrNull(taskConfig, "shippingCost");
+  if (freeShippingThreshold == null || shippingCost == null) {
+    return 0;
+  }
+  const subtotal = getCartTotal(session);
+  return subtotal >= freeShippingThreshold ? 0 : shippingCost;
+}
+
 export function submitCheckoutOrder(
   session: ShoppingSession,
   params: {
     makeId: (prefix: string) => string;
     now: () => string;
     shippingMethod: "standard" | "express";
+    shippingCost?: number;
   },
 ) {
+  const subtotal = roundMoney(getCartTotal(session));
+  const shippingCost = roundMoney(params.shippingCost ?? 0);
   const order: Order = {
     id: params.makeId("ord"),
     items: session.state.cart.map((item) => ({ ...item })),
-    total: getCartTotal(session),
+    subtotal,
+    total: roundMoney(subtotal + shippingCost),
     shippingMethod: params.shippingMethod,
+    shippingCost,
     submittedAt: params.now(),
   };
   session.state.orders.push(order);

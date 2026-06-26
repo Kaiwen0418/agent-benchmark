@@ -8,12 +8,14 @@ export function createCalendarEvent(
     startTime: string;
     durationMinutes: number;
     attendeeEmail: string;
+    secondaryAttendeeEmail?: string;
     makeId: (prefix: string) => string;
     now: () => string;
   },
 ) {
   const title = input.title.trim();
   const attendeeEmail = input.attendeeEmail.trim().toLowerCase();
+  const secondaryAttendeeEmail = input.secondaryAttendeeEmail?.trim().toLowerCase();
   if (!title) return { success: false as const, error: "Title is required" };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return { success: false as const, error: "Date is invalid" };
   if (!/^\d{2}:\d{2}$/.test(input.startTime)) return { success: false as const, error: "Start time is invalid" };
@@ -23,6 +25,9 @@ export function createCalendarEvent(
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(attendeeEmail)) {
     return { success: false as const, error: "Attendee email is invalid" };
   }
+  if (secondaryAttendeeEmail !== undefined && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(secondaryAttendeeEmail)) {
+    return { success: false as const, error: "Secondary attendee email is invalid" };
+  }
 
   const calendarEvent = {
     id: input.makeId("event"),
@@ -31,6 +36,7 @@ export function createCalendarEvent(
     startTime: input.startTime,
     durationMinutes: input.durationMinutes,
     attendeeEmail,
+    secondaryAttendeeEmail,
     createdAt: input.now(),
   };
   session.state.calendarEvents.push(calendarEvent);
