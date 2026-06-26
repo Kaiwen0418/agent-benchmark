@@ -10,6 +10,11 @@ export const benchmarkOptions: Array<{
     label: "Hosted Web Suite",
     description: "Versioned multi-session benchmark with deterministic tasks and server-side scoring.",
   },
+  {
+    value: "hosted-web-hard-suite",
+    label: "Hosted Web Hard Suite",
+    description: "Harder deterministic hosted-web benchmark with multi-step reasoning and cross-page state tasks.",
+  },
 ];
 
 export const docsBlocks = {

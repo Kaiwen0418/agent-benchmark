@@ -1,16 +1,25 @@
-import { hostedWebSuiteCase } from "./index.js";
-import { createHostedWebCatalogRelease } from "./release.js";
+import { hostedWebHardSuiteCase, hostedWebSuiteCase } from "./index.js";
+import { createHostedWebCatalogRelease, createHostedWebHardCatalogRelease } from "./release.js";
 
 export function generateSupabaseSeedSql() {
-  const release = createHostedWebCatalogRelease();
-  const manifest = JSON.stringify(release.manifest, null, 2);
+  const easyRelease = createHostedWebCatalogRelease();
+  const easyManifest = JSON.stringify(easyRelease.manifest, null, 2);
+  const hardRelease = createHostedWebHardCatalogRelease();
+  const hardManifest = JSON.stringify(hardRelease.manifest, null, 2);
 
   return `-- Generated from packages/test-cases. Run \`pnpm catalog:generate\`; do not edit by hand.
 select public.publish_benchmark_case_catalog(
   $case$${JSON.stringify(hostedWebSuiteCase, null, 2)}$case$::jsonb,
-  '${release.revision}',
-  $catalog$${manifest}$catalog$::jsonb,
-  '${release.contentHash}'
+  '${easyRelease.revision}',
+  $catalog$${easyManifest}$catalog$::jsonb,
+  '${easyRelease.contentHash}'
+);
+
+select public.publish_benchmark_case_catalog(
+  $case$${JSON.stringify(hostedWebHardSuiteCase, null, 2)}$case$::jsonb,
+  '${hardRelease.revision}',
+  $catalog$${hardManifest}$catalog$::jsonb,
+  '${hardRelease.contentHash}'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)
