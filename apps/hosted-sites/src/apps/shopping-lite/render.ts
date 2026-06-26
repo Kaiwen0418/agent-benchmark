@@ -72,11 +72,30 @@ export function renderCart(
     ? rows
         .map((row) => `<tr>
           <td>${escapeHtml(row.product?.name ?? row.item.productId)}</td>
-          <td>${row.item.quantity}</td>
+          <td>
+            <form method="post" action="/shopping/cart/update?session=${encodeURIComponent(session.token)}" class="inline">
+              <input type="hidden" name="productId" value="${escapeHtml(row.item.productId)}" />
+              <input type="hidden" name="quantity" value="${Math.max(0, row.item.quantity - 1)}" />
+              <button type="submit" ${row.item.quantity <= 1 ? "disabled" : ""} aria-label="Decrease quantity">−</button>
+            </form>
+            <span class="qty">${row.item.quantity}</span>
+            <form method="post" action="/shopping/cart/update?session=${encodeURIComponent(session.token)}" class="inline">
+              <input type="hidden" name="productId" value="${escapeHtml(row.item.productId)}" />
+              <input type="hidden" name="quantity" value="${row.item.quantity + 1}" />
+              <button type="submit" aria-label="Increase quantity">+</button>
+            </form>
+          </td>
           <td>${money(row.lineTotal)}</td>
+          <td>
+            <form method="post" action="/shopping/cart/update?session=${encodeURIComponent(session.token)}" class="inline">
+              <input type="hidden" name="productId" value="${escapeHtml(row.item.productId)}" />
+              <input type="hidden" name="action" value="remove" />
+              <button type="submit" class="danger">Remove</button>
+            </form>
+          </td>
         </tr>`)
         .join("")
-    : `<tr><td colspan="3" class="muted">Cart is empty.</td></tr>`;
+    : `<tr><td colspan="4" class="muted">Cart is empty.</td></tr>`;
 
   const shippingPreview = getShippingPreview(session);
 
@@ -88,7 +107,7 @@ export function renderCart(
       session,
       body: `<section class="panel">
         <table>
-          <thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead>
+          <thead><tr><th>Product</th><th>Qty</th><th>Total</th><th></th></tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
         <p class="price">Cart total: ${money(getCartTotal(session))}</p>
