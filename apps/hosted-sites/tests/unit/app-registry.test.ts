@@ -44,6 +44,7 @@ function makeSession<TApp extends HostedAppId>(app: TApp): HostedSessionFor<TApp
     suiteVersion: "v1",
     taskSlug: `${app}-task`,
     taskVersion: "v1",
+    scorePreviewMode: "dev",
     sequenceIndex: 0,
     weight: 1,
     required: true,

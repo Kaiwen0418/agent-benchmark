@@ -1,6 +1,7 @@
 import type { ServerResponse } from "node:http";
 import type { Order } from "./types.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
+import { shouldRenderScorePreview } from "../../runtime/score-preview-policy.js";
 
 type ShoppingSession = HostedSessionFor<"shopping-lite">;
 import { getCartRows, getCartTotal } from "./actions.js";
@@ -144,6 +145,11 @@ export function renderOrder(
     shippingDetail += " (free)";
   }
 
+  const scorePreview = shouldRenderScorePreview(session)
+    ? `<h2>Evaluator preview</h2>
+        <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>`
+    : "";
+
   sendHtml(
     response,
     200,
@@ -155,8 +161,7 @@ export function renderOrder(
         <p>Order id: <strong>${escapeHtml(order.id)}</strong></p>
         <p>Total: <strong>${money(order.total)}</strong></p>
         <p>Shipping: <strong>${shippingDetail}</strong></p>
-        <h2>Evaluator preview</h2>
-        <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+        ${scorePreview}
       </section>`,
       publicBaseUrl,
       defaultStartPathForApp,

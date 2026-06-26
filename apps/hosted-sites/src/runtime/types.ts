@@ -24,6 +24,7 @@ type HostedSessionBase = {
   suiteVersion: string;
   taskSlug: string;
   taskVersion: string;
+  scorePreviewMode?: "disabled" | "dev" | "token";
   sequenceIndex: number;
   weight: number;
   required: boolean;
