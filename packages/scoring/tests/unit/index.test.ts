@@ -257,3 +257,57 @@ test("aggregateSuiteScore folds a failed required consistency check into status 
   assert.equal(failing.status, "failed");
   assert.equal(failing.score, 0.6667);
 });
+
+test("aggregateSuiteScore reports error when a required session errored", () => {
+  const result = aggregateSuiteScore({
+    sessions: [
+      {
+        sessionId: "session-1",
+        app: "wiki-lite",
+        taskSlug: "wiki-release-answer-hard",
+        status: "error",
+        score: 0,
+        weight: 1,
+        required: true,
+      },
+    ],
+  });
+
+  assert.equal(result.status, "error");
+});
+
+test("aggregateSuiteScore ignores an optional failed consistency check", () => {
+  const sessions = [
+    {
+      sessionId: "session-1",
+      app: "wiki-lite",
+      taskSlug: "wiki-release-answer-hard",
+      status: "passed" as const,
+      score: 1,
+      weight: 1,
+      required: true,
+    },
+  ];
+
+  const result = aggregateSuiteScore({
+    sessions,
+    consistency: evaluateSuiteConsistency(
+      [chain({ required: false })],
+      new Map<string, unknown>([
+        ["wiki-release-answer-hard", { latestAnswer: "2.4.0" }],
+        ["notes-followup-create-hard", { notes: [{ title: "Upgrade to 9.9.9" }] }],
+      ]),
+    ),
+  });
+
+  // The only required component (the session) passed, so the suite passes even
+  // though the optional consistency check failed and lowers the weighted score.
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 0.5);
+});
+
+test("aggregateSuiteScore returns zero for an empty, weightless suite", () => {
+  const result = aggregateSuiteScore({ sessions: [] });
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 0);
+});
