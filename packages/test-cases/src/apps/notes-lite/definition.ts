@@ -4,7 +4,10 @@ import { defineHostedTestcaseApp } from "../../app-definition.js";
 export const notesLiteTestcaseDefinition = defineHostedTestcaseApp({
   app: "notes-lite",
   taskConfigSchema: z.object({
-    expectedTitle: z.string().min(1),
+    // Optional so cross-app "carry" variants can leave the title unpinned: the
+    // title is whatever the agent retrieved in an earlier session, verified by a
+    // suite-level consistency check rather than this per-session evaluator.
+    expectedTitle: z.string().min(1).optional(),
     expectedBody: z.string().min(1),
     expectedTag: z.string().min(1),
     targetNoteId: z.string().min(1).optional(),
@@ -66,6 +69,29 @@ export const notesLiteTestcaseDefinition = defineHostedTestcaseApp({
           expectedBody: "Review Redis health metrics after the next hosted suite run.",
           expectedTag: "ops",
           targetNoteId: "note-seed-ops",
+        },
+      },
+    ],
+    // Hard cross-app carry variants (#115). The note title is intentionally not
+    // pinned here: the agent must reuse the exact answer it submitted in the
+    // earlier wiki release-lookup session. Per-session scoring stays
+    // deterministic (correct tag + body, non-empty title); the suite-level
+    // consistency check enforces that the carried title matches the wiki answer.
+    hard: [
+      {
+        id: "carry-release-answer",
+        goal: "Open the note you need to file as a follow-up. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'File the release-lookup result for the upgrade plan.', and the tag to 'release'.",
+        taskConfig: {
+          expectedBody: "File the release-lookup result for the upgrade plan.",
+          expectedTag: "release",
+        },
+      },
+      {
+        id: "carry-release-summary",
+        goal: "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'Summarize the release-lookup outcome for the team.', and the tag to 'summary'.",
+        taskConfig: {
+          expectedBody: "Summarize the release-lookup outcome for the team.",
+          expectedTag: "summary",
         },
       },
     ],

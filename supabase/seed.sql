@@ -1022,60 +1022,19 @@ select public.publish_benchmark_case_catalog(
       "metadata": {
         "questionVariants": [
           {
-            "id": "support-followup",
-            "goal": "Create a follow-up note titled 'Support follow-up' with body 'Email Mira after the replacement adapter ships.' and tag 'support'.",
+            "id": "carry-release-answer",
+            "goal": "Open the note you need to file as a follow-up. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'File the release-lookup result for the upgrade plan.', and the tag to 'release'.",
             "taskConfig": {
-              "expectedTitle": "Support follow-up",
-              "expectedBody": "Email Mira after the replacement adapter ships.",
-              "expectedTag": "support"
-            }
-          },
-          {
-            "id": "release-note",
-            "goal": "Create a follow-up note titled 'Release reminder' with body 'Confirm the hosted-web v3.0.1 smoke run before publishing notes.' and tag 'release'.",
-            "taskConfig": {
-              "expectedTitle": "Release reminder",
-              "expectedBody": "Confirm the hosted-web v3.0.1 smoke run before publishing notes.",
+              "expectedBody": "File the release-lookup result for the upgrade plan.",
               "expectedTag": "release"
             }
           },
           {
-            "id": "ops-check",
-            "goal": "Create a follow-up note titled 'Ops check' with body 'Review Redis health metrics after the next hosted suite run.' and tag 'ops'.",
+            "id": "carry-release-summary",
+            "goal": "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'Summarize the release-lookup outcome for the team.', and the tag to 'summary'.",
             "taskConfig": {
-              "expectedTitle": "Ops check",
-              "expectedBody": "Review Redis health metrics after the next hosted suite run.",
-              "expectedTag": "ops"
-            }
-          },
-          {
-            "id": "update-support-followup",
-            "goal": "Update the seeded note titled 'Old support follow-up' to title 'Support follow-up', body 'Email Mira after the replacement adapter ships.', and tag 'support'.",
-            "taskConfig": {
-              "expectedTitle": "Support follow-up",
-              "expectedBody": "Email Mira after the replacement adapter ships.",
-              "expectedTag": "support",
-              "targetNoteId": "note-seed-support"
-            }
-          },
-          {
-            "id": "update-release-note",
-            "goal": "Update the seeded note titled 'Old release reminder' to title 'Release reminder', body 'Confirm the hosted-web v3.0.1 smoke run before publishing notes.', and tag 'release'.",
-            "taskConfig": {
-              "expectedTitle": "Release reminder",
-              "expectedBody": "Confirm the hosted-web v3.0.1 smoke run before publishing notes.",
-              "expectedTag": "release",
-              "targetNoteId": "note-seed-release"
-            }
-          },
-          {
-            "id": "update-ops-check",
-            "goal": "Update the seeded note titled 'Old ops check' to title 'Ops check', body 'Review Redis health metrics after the next hosted suite run.', and tag 'ops'.",
-            "taskConfig": {
-              "expectedTitle": "Ops check",
-              "expectedBody": "Review Redis health metrics after the next hosted suite run.",
-              "expectedTag": "ops",
-              "targetNoteId": "note-seed-ops"
+              "expectedBody": "Summarize the release-lookup outcome for the team.",
+              "expectedTag": "summary"
             }
           }
         ]
@@ -1262,9 +1221,21 @@ select public.publish_benchmark_case_catalog(
         ]
       }
     }
+  ],
+  "consistencyChecks": [
+    {
+      "name": "Wiki release answer carried into note title",
+      "sourceTaskSlug": "wiki-release-answer-hard",
+      "sourcePath": "latestAnswer.answer",
+      "targetTaskSlug": "notes-followup-create-hard",
+      "targetPath": "notes[].title",
+      "rule": "equal-normalized",
+      "weight": 1,
+      "required": true
+    }
   ]
 }$catalog$::jsonb,
-  '643cda52d1d7260de6c9b2eb4acd8b25ae5a034c7e36e14cb670a3595a4f953f'
+  '3460f642bf312a81e8dca10758b3ee0d6f82a26ae8c10937e4f0fdc60d39cde1'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

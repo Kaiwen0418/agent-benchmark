@@ -1,14 +1,14 @@
 import { hostedTestcaseApps } from "../generated-app-registry.js";
 import { hostedSuiteMetadataSchema } from "../schemas.js";
 
-// TODO(#114 done): notes-lite is the last app still reusing its easy pool as a
-// placeholder. shopping-lite (#110), forum-lite (#112), wiki-lite (#111),
-// calendar-lite (#113), and repo-lite (#114) all use dedicated hard pools.
+// All apps now use dedicated hard pools: shopping-lite (#110), forum-lite
+// (#112), wiki-lite (#111), calendar-lite (#113), repo-lite (#114), and
+// notes-lite (#115, the cross-app carry target).
 const shoppingQuestionVariants = hostedTestcaseApps["shopping-lite"].variantPools.hard;
 const forumQuestionVariants = hostedTestcaseApps["forum-lite"].variantPools.hard;
 const repoQuestionVariants = hostedTestcaseApps["repo-lite"].variantPools.hard;
 const wikiHardQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.hard;
-const notesQuestionVariants = hostedTestcaseApps["notes-lite"].variantPools.default;
+const notesQuestionVariants = hostedTestcaseApps["notes-lite"].variantPools.hard;
 const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPools.hard;
 
 export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
@@ -98,6 +98,22 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       weight: 1,
       required: true,
       metadata: { questionVariants: calendarQuestionVariants },
+    },
+  ],
+  // First cross-app chain (#115): the agent must carry the exact answer it
+  // submitted in the wiki release-lookup session into the title of the note it
+  // files later. Verified against the agents' own session final states, never
+  // against private task config, so no hidden answer key is exposed.
+  consistencyChecks: [
+    {
+      name: "Wiki release answer carried into note title",
+      sourceTaskSlug: "wiki-release-answer-hard",
+      sourcePath: "latestAnswer.answer",
+      targetTaskSlug: "notes-followup-create-hard",
+      targetPath: "notes[].title",
+      rule: "equal-normalized",
+      weight: 1,
+      required: true,
     },
   ],
 });

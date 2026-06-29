@@ -2,11 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, HostedAttemptReadModel, HostedAttemptSessionStatus } from "@agentbench/shared";
 import {
   aggregateSuiteScore,
+  evaluateSuiteConsistency,
   hostedWebScoreResultSchema,
   hostedWebSuiteScoreResultSchema,
+  suiteConsistencyCheckSchema,
   type HostedWebScoreResult,
   type HostedWebSuiteScoreResult,
   type HostedWebSuiteSessionScore,
+  type SuiteConsistencyCheck,
 } from "@agentbench/scoring";
 
 export type AttemptStatus = "created" | "running" | "scoring" | "completed" | "failed" | "cancelled" | "timeout";
@@ -99,6 +102,24 @@ type AttemptLifecycleDeps = {
 
 const terminalAttemptStatuses = new Set<AttemptStatus>(["completed", "failed", "cancelled", "timeout"]);
 
+// Cross-app consistency checks are published in the service-role manifest and
+// copied onto attempt metadata at initialization. Re-parse defensively with the
+// scoring schema so malformed/legacy metadata simply yields no checks.
+function readConsistencyChecks(metadata: Record<string, unknown>): SuiteConsistencyCheck[] {
+  const raw = metadata.consistencyChecks;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const checks: SuiteConsistencyCheck[] = [];
+  for (const candidate of raw) {
+    const parsed = suiteConsistencyCheckSchema.safeParse(candidate);
+    if (parsed.success) {
+      checks.push(parsed.data);
+    }
+  }
+  return checks;
+}
+
 export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
   async function completePersistedSession(session: AttemptLifecycleSession, result: HostedWebScoreResult): Promise<{
     result: HostedWebScoreResult;
@@ -123,7 +144,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
 
     const { data: resultRows, error: resultsError } = await supabase
       .from("hosted_web_results")
-      .select("session_id, app, task_slug, score, status, weight")
+      .select("session_id, app, task_slug, score, status, weight, final_state")
       .eq("attempt_id", session.attemptId)
       .order("created_at", { ascending: true });
 
@@ -164,6 +185,17 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     });
 
     const completedSessionIds = new Set(latestResultBySessionId.keys());
+
+    // Map each session's agent-produced final state by task slug for suite-level
+    // consistency checks. The just-completed session's final state has not been
+    // persisted yet, so source it from the in-memory session.
+    const finalStateByTaskSlug = new Map<string, unknown>();
+    for (const row of resultRows) {
+      if (row.task_slug) {
+        finalStateByTaskSlug.set(row.task_slug, row.final_state ?? null);
+      }
+    }
+    finalStateByTaskSlug.set(session.taskSlug, session.finalState ?? null);
 
     const suiteSessions: HostedWebSuiteSessionScore[] = sessionRows.map((row) => {
       const latestResult = latestResultBySessionId.get(row.id);
@@ -209,8 +241,14 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
         },
       };
     } else {
+      const consistencyChecks = readConsistencyChecks(existingAttemptMetadata);
+      const consistency =
+        consistencyChecks.length > 0
+          ? evaluateSuiteConsistency(consistencyChecks, finalStateByTaskSlug)
+          : [];
       aggregate = aggregateSuiteScore({
         sessions: suiteSessions,
+        consistency,
         passSummary: `All required hosted sessions for ${session.suiteSlug} passed.`,
         failSummary: `One or more required hosted sessions for ${session.suiteSlug} failed.`,
       });

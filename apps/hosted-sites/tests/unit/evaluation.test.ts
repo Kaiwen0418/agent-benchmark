@@ -1446,11 +1446,12 @@ for (const variant of hardRepoVariants) {
 
 function makeNotesSession(
   overrides?: Partial<NotesEvaluationSession["state"]>,
+  metadata?: Record<string, unknown>,
 ): NotesEvaluationSession {
   return {
     app: "notes-lite",
     taskSlug: "notes-followup-create",
-    metadata: defaultTaskConfigs.notes,
+    metadata: metadata ?? defaultTaskConfigs.notes,
     state: {
       notes: [
         {
@@ -1534,6 +1535,56 @@ test("evaluateNotes fails when targeted seeded note is not updated", () => {
         expectedTag: "support",
         targetNoteId: "note-seed-support",
       }),
+    ),
+  );
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateNotes carry variant passes with any non-empty title when title is unpinned", () => {
+  const carryConfig = generatedTaskConfig({
+    expectedBody: "File the release-lookup result for the upgrade plan.",
+    expectedTag: "release",
+  });
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note_carry",
+            title: "90 days",
+            body: "File the release-lookup result for the upgrade plan.",
+            tag: "release",
+            createdAt: "2026-06-23T00:00:00.000Z",
+          },
+        ],
+      },
+      carryConfig,
+    ),
+  );
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateNotes carry variant fails when the title is empty", () => {
+  const carryConfig = generatedTaskConfig({
+    expectedBody: "File the release-lookup result for the upgrade plan.",
+    expectedTag: "release",
+  });
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note_carry",
+            title: "   ",
+            body: "File the release-lookup result for the upgrade plan.",
+            tag: "release",
+            createdAt: "2026-06-23T00:00:00.000Z",
+          },
+        ],
+      },
+      carryConfig,
     ),
   );
   assert.equal(result.status, "failed");

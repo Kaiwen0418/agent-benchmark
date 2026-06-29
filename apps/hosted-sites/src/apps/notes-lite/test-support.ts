@@ -21,7 +21,9 @@ export const notesLiteTestSupport: HostedAppTestSupport<"notes-lite"> = {
     }
     session.state.notes.push({
       id: "note-smoke-pass",
-      title: configString(config, "expectedTitle"),
+      // Carry variants leave the title unpinned; a non-empty placeholder
+      // satisfies the lenient per-session title check.
+      title: configStringOrNull(config, "expectedTitle") ?? "carried-value",
       body: configString(config, "expectedBody"),
       tag: configString(config, "expectedTag"),
       createdAt: "2026-06-23T00:00:00.000Z",
