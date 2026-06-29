@@ -3,7 +3,7 @@ import test from "node:test";
 import { addReplyToThread, lockThread, pinThread, reportThread } from "../../src/apps/forum-lite/actions.js";
 import { createNote, updateNote } from "../../src/apps/notes-lite/actions.js";
 import { createMergeRequest, updateFileContent } from "../../src/apps/repo-lite/actions.js";
-import { addProductToCart, getCartTotal, removeProductFromCart, setCartItemQuantity, submitCheckoutOrder } from "../../src/apps/shopping-lite/actions.js";
+import { addProductToCart, getCartTotal, removeProductFromCart, resolveCoupon, setCartItemQuantity, submitCheckoutOrder } from "../../src/apps/shopping-lite/actions.js";
 import { markArticleViewed, submitWikiAnswer } from "../../src/apps/wiki-lite/actions.js";
 import { buildInitialSessionState, defaultGoalForSession, defaultStartPathForApp } from "../../src/runtime/app-registry.js";
 import type { HostedAppId, HostedSessionFor } from "../../src/runtime/types.js";
@@ -125,6 +125,58 @@ test("shopping actions remove cart items and adjust quantities", () => {
   assert.deepEqual(session.state.cart, []);
 
   assert.throws(() => setCartItemQuantity(session, "prod-charger-30w", 1.5), /integer/);
+});
+
+test("addProductToCart refuses an out-of-stock product", () => {
+  const session = makeSession("shopping-lite");
+  const result = addProductToCart(session, "prod-charger-probook-100w");
+  assert.deepEqual(result, { success: false, error: "Out of stock" });
+  assert.deepEqual(session.state.cart, []);
+});
+
+test("addProductToCart refuses adding beyond the available stock", () => {
+  const session = makeSession("shopping-lite");
+  for (let count = 0; count < 6; count += 1) {
+    assert.equal(addProductToCart(session, "prod-charger-probook-30w").success, true);
+  }
+  const overflow = addProductToCart(session, "prod-charger-probook-30w");
+  assert.deepEqual(overflow, { success: false, error: "Out of stock" });
+  assert.deepEqual(session.state.cart, [{ productId: "prod-charger-probook-30w", quantity: 6 }]);
+});
+
+test("setCartItemQuantity refuses quantities beyond the available stock", () => {
+  const session = makeSession("shopping-lite");
+  addProductToCart(session, "prod-charger-probook-30w");
+  const result = setCartItemQuantity(session, "prod-charger-probook-30w", 7);
+  assert.deepEqual(result, { success: false, error: "Out of stock" });
+  assert.deepEqual(session.state.cart, [{ productId: "prod-charger-probook-30w", quantity: 1 }]);
+});
+
+test("resolveCoupon resolves known codes and rejects unknown ones", () => {
+  assert.deepEqual(resolveCoupon("CABLE20"), { code: "CABLE20", discountPercent: 20 });
+  assert.deepEqual(resolveCoupon("  cable20  "), { code: "CABLE20", discountPercent: 20 });
+  assert.equal(resolveCoupon("UNKNOWN"), null);
+  assert.equal(resolveCoupon(""), null);
+  assert.equal(resolveCoupon(null), null);
+});
+
+test("submitCheckoutOrder applies the resolved coupon discount", () => {
+  const session = makeSession("shopping-lite");
+  for (let count = 0; count < 3; count += 1) {
+    addProductToCart(session, "prod-cable-1m");
+  }
+
+  const order = submitCheckoutOrder(session, {
+    makeId: (prefix) => `${prefix}_1`,
+    now: () => "2026-06-01T00:00:00.000Z",
+    shippingMethod: "standard",
+    coupon: resolveCoupon("CABLE20"),
+  });
+
+  assert.equal(order.subtotal, 29.97);
+  assert.equal(order.discountAmount, 5.99);
+  assert.equal(order.total, 23.98);
+  assert.equal(order.couponCode, "CABLE20");
 });
 
 test("wiki actions dedupe viewed articles and trim submitted answers", () => {

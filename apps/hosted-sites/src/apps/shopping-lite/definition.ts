@@ -11,7 +11,10 @@ function isProduct(value: unknown): value is Product {
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     typeof value.category === "string" &&
-    typeof value.price === "number"
+    typeof value.price === "number" &&
+    (value.stock === undefined || typeof value.stock === "number") &&
+    (value.compatibleWith === undefined ||
+      (Array.isArray(value.compatibleWith) && value.compatibleWith.every((entry) => typeof entry === "string")))
   );
 }
 
@@ -28,6 +31,8 @@ function isOrder(value: unknown): value is Order {
     typeof value.total === "number" &&
     (value.subtotal === undefined || typeof value.subtotal === "number") &&
     (value.shippingCost === undefined || typeof value.shippingCost === "number") &&
+    (value.couponCode === undefined || typeof value.couponCode === "string") &&
+    (value.discountAmount === undefined || typeof value.discountAmount === "number") &&
     (value.shippingMethod === "standard" || value.shippingMethod === "express") &&
     typeof value.submittedAt === "string"
   );

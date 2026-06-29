@@ -17,14 +17,29 @@ export function renderProducts(
   const cards = session.state.products
     .map((product) => {
       const restricted = product.restricted ? `<p class="danger">Restricted product</p>` : "";
+      const compatibility = product.compatibleWith?.length
+        ? `<p class="muted">Compatible with: ${escapeHtml(product.compatibleWith.join(", "))}</p>`
+        : "";
+      const outOfStock = product.stock != null && product.stock <= 0;
+      const stockLine =
+        product.stock == null
+          ? ""
+          : outOfStock
+            ? `<p class="danger">Out of stock</p>`
+            : `<p class="muted">In stock: ${product.stock}</p>`;
+      const addButton = outOfStock
+        ? `<button type="submit" disabled>Out of stock</button>`
+        : `<button type="submit">Add to cart</button>`;
       return `<article class="card">
         <h2>${escapeHtml(product.name)}</h2>
         <p class="muted">Category: ${escapeHtml(product.category)}</p>
         <p class="price">${money(product.price)}</p>
+        ${compatibility}
+        ${stockLine}
         ${restricted}
         <form method="post" action="/shopping/cart?session=${encodeURIComponent(session.token)}">
           <input type="hidden" name="productId" value="${escapeHtml(product.id)}" />
-          <button type="submit">Add to cart</button>
+          ${addButton}
         </form>
       </article>`;
     })
@@ -121,6 +136,10 @@ export function renderCart(
               <option value="express">Express</option>
             </select>
           </label>
+          <label>
+            Coupon code
+            <input type="text" name="couponCode" placeholder="Optional coupon" autocomplete="off" />
+          </label>
           <button type="submit">Submit order</button>
         </form>
       </section>`,
@@ -150,6 +169,11 @@ export function renderOrder(
         <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>`
     : "";
 
+  const couponLine =
+    order.couponCode && order.discountAmount != null && order.discountAmount > 0
+      ? `<p>Coupon: <strong>${escapeHtml(order.couponCode)}</strong> (−${money(order.discountAmount)})</p>`
+      : "";
+
   sendHtml(
     response,
     200,
@@ -159,6 +183,7 @@ export function renderOrder(
       body: `<section class="panel">
         <h2>Order submitted</h2>
         <p>Order id: <strong>${escapeHtml(order.id)}</strong></p>
+        ${couponLine}
         <p>Total: <strong>${money(order.total)}</strong></p>
         <p>Shipping: <strong>${shippingDetail}</strong></p>
         ${scorePreview}

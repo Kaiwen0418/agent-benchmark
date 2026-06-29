@@ -14,14 +14,21 @@ export const shoppingLiteTestSupport: HostedAppTestSupport<"shopping-lite"> = {
   },
   applyPassingState(session, config) {
     const category = configString(config, "targetCategory");
-    const maxTotal = Number(config.maxTotal);
+    const quantity = Number(config.quantity);
+    const requiredDevice = configStringOrNull(config, "requiredDevice");
+    const couponCode = configStringOrNull(config, "couponCode");
+    const discountPercent = configNumberOrNull(config, "discountPercent");
+
     const product = session.state.products.find(
-      (candidate) => candidate.category === category && !candidate.restricted && candidate.price <= maxTotal,
+      (candidate) =>
+        candidate.category === category &&
+        !candidate.restricted &&
+        (candidate.stock == null || candidate.stock >= quantity) &&
+        (!requiredDevice || (candidate.compatibleWith?.includes(requiredDevice) ?? false)),
     );
     if (!product) {
       throw new Error(`missing valid ${category} fixture`);
     }
-    const quantity = Number(config.quantity);
     const items = [{ productId: product.id, quantity }];
     let subtotal = product.price * quantity;
 
@@ -29,7 +36,10 @@ export const shoppingLiteTestSupport: HostedAppTestSupport<"shopping-lite"> = {
     if (secondaryCategory) {
       const secondaryQuantity = configNumberOrNull(config, "secondaryQuantity") ?? 1;
       const secondaryProduct = session.state.products.find(
-        (candidate) => candidate.category === secondaryCategory && !candidate.restricted,
+        (candidate) =>
+          candidate.category === secondaryCategory &&
+          !candidate.restricted &&
+          (candidate.stock == null || candidate.stock >= secondaryQuantity),
       );
       if (!secondaryProduct) {
         throw new Error(`missing valid ${secondaryCategory} fixture`);
@@ -48,13 +58,16 @@ export const shoppingLiteTestSupport: HostedAppTestSupport<"shopping-lite"> = {
           : shippingCostConfig
         : 0;
 
+    const discountAmount = couponCode && discountPercent != null ? roundMoney((subtotal * discountPercent) / 100) : 0;
+
     session.state.orders.push({
       id: "order-matrix",
       items,
       subtotal: roundMoney(subtotal),
-      total: roundMoney(subtotal + shippingCost),
+      total: roundMoney(subtotal - discountAmount + shippingCost),
       shippingMethod,
       shippingCost: roundMoney(shippingCost),
+      ...(couponCode ? { couponCode, discountAmount } : {}),
       submittedAt: "2026-06-01T00:00:00.000Z",
     });
   },

@@ -66,6 +66,8 @@ export function evaluateShoppingBackendState(
   const avoidRestricted = configBoolean(config, "avoidRestricted");
   const secondaryCategory = configStringOrNull(config, "secondaryCategory");
   const secondaryQuantity = configNumberOrNull(config, "secondaryQuantity") ?? 1;
+  const requiredDevice = configStringOrNull(config, "requiredDevice");
+  const couponCode = configStringOrNull(config, "couponCode");
 
   const rows = order.items.map((item) => {
     const product = session.state.products.find((candidate) => candidate.id === item.productId);
@@ -82,6 +84,22 @@ export function evaluateShoppingBackendState(
   const secondaryItemQuantity = secondaryItems.reduce((sum, row) => sum + row.item.quantity, 0);
   const expectedItemCount = expectedQuantity + (secondaryCategory ? secondaryQuantity : 0);
 
+  // Hard variants require every target item to be certified for the generated
+  // device; easy variants leave requiredDevice unset and skip the check.
+  const compatibleTargets =
+    !requiredDevice ||
+    (targetItems.length > 0 &&
+      targetItems.every((row) => row.product?.compatibleWith?.includes(requiredDevice) ?? false));
+
+  // Stock can never be exceeded; this guards against persisted state that
+  // bypassed the cart action enforcement.
+  const stockRespected = order.items.every((item) => {
+    const product = session.state.products.find((candidate) => candidate.id === item.productId);
+    return product?.stock == null || item.quantity <= product.stock;
+  });
+
+  const couponApplied = !couponCode || order.couponCode === couponCode;
+
   const evidence = {
     orderId: order.id,
     itemCount,
@@ -90,6 +108,11 @@ export function evaluateShoppingBackendState(
     secondaryCategory,
     secondaryItems: secondaryItems.map((row) => row.product?.name),
     restrictedItems: restrictedItems.map((row) => row.product?.name),
+    requiredDevice,
+    couponCode,
+    appliedCoupon: order.couponCode ?? null,
+    discountAmount: order.discountAmount ?? 0,
+    subtotal: order.subtotal ?? order.total,
     total: order.total,
     shippingMethod: order.shippingMethod,
   };
@@ -99,6 +122,9 @@ export function evaluateShoppingBackendState(
     targetQuantity === expectedQuantity &&
     (!secondaryCategory || secondaryItemQuantity === secondaryQuantity) &&
     (!avoidRestricted || restrictedItems.length === 0) &&
+    compatibleTargets &&
+    stockRespected &&
+    couponApplied &&
     order.total <= maxTotal &&
     order.shippingMethod === shippingMethod;
 
@@ -112,6 +138,7 @@ export function evaluateShoppingBackendState(
         type: "backend_state",
         name: "submitted generated constrained order",
         evidence,
-        errorMessage: "Order does not satisfy the generated category, quantity, budget, restriction, and shipping constraints.",
+        errorMessage:
+          "Order does not satisfy the generated category, quantity, budget, restriction, compatibility, stock, coupon, and shipping constraints.",
       });
 }

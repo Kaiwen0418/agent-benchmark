@@ -4,9 +4,22 @@ export async function complete({ session, config, checkedFetch, postForm, requir
     cable: "prod-cable-1m",
     case: "prod-case",
   };
-  const primaryProductId = cheapestByCategory[config.targetCategory];
+  // In-stock products certified for a specific device, keyed by device then category.
+  const compatibleByDevice = {
+    ProBook: { charger: "prod-charger-probook-30w" },
+    AirLite: { charger: "prod-charger-airlite-45w" },
+  };
+
+  const requiredDevice = typeof config.requiredDevice === "string" ? config.requiredDevice : null;
+  const primaryProductId = requiredDevice
+    ? compatibleByDevice[requiredDevice]?.[config.targetCategory]
+    : cheapestByCategory[config.targetCategory];
   if (!primaryProductId) {
-    throw new Error(`Unsupported shopping category: ${config.targetCategory}`);
+    throw new Error(
+      requiredDevice
+        ? `No in-stock ${config.targetCategory} compatible with ${requiredDevice}`
+        : `Unsupported shopping category: ${config.targetCategory}`,
+    );
   }
   const quantity = Number(config.quantity);
   if (!Number.isInteger(quantity) || quantity < 1) {
@@ -29,7 +42,11 @@ export async function complete({ session, config, checkedFetch, postForm, requir
     }
   }
 
-  await postForm("/shopping/checkout", session.token, {
+  const checkoutValues = {
     shippingMethod: requireString(config.shippingMethod, "shopping shippingMethod"),
-  });
+  };
+  if (typeof config.couponCode === "string" && config.couponCode.length > 0) {
+    checkoutValues.couponCode = config.couponCode;
+  }
+  await postForm("/shopping/checkout", session.token, checkoutValues);
 }

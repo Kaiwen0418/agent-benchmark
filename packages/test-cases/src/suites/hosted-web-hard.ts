@@ -1,9 +1,10 @@
 import { hostedTestcaseApps } from "../generated-app-registry.js";
 import { hostedSuiteMetadataSchema } from "../schemas.js";
 
-// TODO(#110-#114): replace default/release/policy pools with hard-specific variant pools.
-// The hard suite currently reuses easy-suite pools as a placeholder while app hard variants are built.
-const shoppingQuestionVariants = hostedTestcaseApps["shopping-lite"].variantPools.default;
+// TODO(#111-#114): replace the remaining default/release/policy pools with
+// hard-specific variant pools. The shopping-lite session uses its dedicated
+// hard pool (#110); the other apps still reuse easy-suite pools as placeholders.
+const shoppingQuestionVariants = hostedTestcaseApps["shopping-lite"].variantPools.hard;
 const forumQuestionVariants = hostedTestcaseApps["forum-lite"].variantPools.default;
 const repoQuestionVariants = hostedTestcaseApps["repo-lite"].variantPools.default;
 const wikiReleaseQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.release;
