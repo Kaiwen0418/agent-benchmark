@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hostedWebSuiteMetadata } from "@agentbench/test-cases";
+import { hostedWebHardSuiteMetadata, hostedWebSuiteMetadata } from "@agentbench/test-cases";
 import { buildInitialSessionState, evaluateSession } from "../../src/runtime/app-registry.js";
 import { hostedAppTestSupport } from "../../src/runtime/generated-test-support.js";
 import type { HostedAppId, HostedSession } from "../../src/runtime/types.js";
@@ -18,17 +18,28 @@ type DeclaredSession = {
   metadata: { questionVariants: DeclaredVariant[] };
 };
 
+type DeclaredSuite = {
+  suiteSlug: string;
+  suiteVersion: string;
+  sessions: DeclaredSession[];
+};
+
 const uiVariants = ["workspace", "sidebar", "compact", "dashboard", "editorial"] as const;
 const uiThemes = ["light", "dark"] as const;
 
-function readDeclaredSessions() {
-  return hostedWebSuiteMetadata.sessions as DeclaredSession[];
-}
+// Every published suite must be swept independently: the easy and hard suites
+// have disjoint variant pools, and the hard suite (#107) must never weaken or
+// share coverage with the easy suite. Iterating both here guarantees each hard
+// variant gets positive, negative, and presentation-invariant assertions.
+const suites: DeclaredSuite[] = [
+  hostedWebSuiteMetadata as unknown as DeclaredSuite,
+  hostedWebHardSuiteMetadata as unknown as DeclaredSuite,
+];
 
-function makeSession(definition: DeclaredSession, variant: DeclaredVariant): HostedSession {
+function makeSession(suite: DeclaredSuite, definition: DeclaredSession, variant: DeclaredVariant): HostedSession {
   const state = buildInitialSessionState(definition.app);
   return {
-    id: `session-${definition.app}-${variant.id}`,
+    id: `session-${suite.suiteSlug}-${definition.taskSlug}-${variant.id}`,
     token: "matrix-token",
     accessMode: "write",
     runId: "matrix-run",
@@ -36,8 +47,8 @@ function makeSession(definition: DeclaredSession, variant: DeclaredVariant): Hos
     attemptId: "matrix-attempt",
     callbackSecret: null,
     app: definition.app,
-    suiteSlug: "hosted-web-suite-v1",
-    suiteVersion: "v2",
+    suiteSlug: suite.suiteSlug,
+    suiteVersion: suite.suiteVersion,
     taskSlug: definition.taskSlug,
     taskVersion: "matrix",
     sequenceIndex: definition.sequenceIndex,
@@ -72,25 +83,27 @@ function makeSession(definition: DeclaredSession, variant: DeclaredVariant): Hos
   } as HostedSession;
 }
 
-for (const definition of readDeclaredSessions()) {
-  for (const variant of definition.metadata.questionVariants) {
-    test(`${definition.app}/${variant.id} has positive, negative, and presentation-invariant scoring`, () => {
-      const passing = makeSession(definition, variant);
-      hostedAppTestSupport[definition.app].applyPassingState(passing, variant.taskConfig);
-      assert.equal(evaluateSession(passing).status, "passed");
+for (const suite of suites) {
+  for (const definition of suite.sessions) {
+    for (const variant of definition.metadata.questionVariants) {
+      test(`${suite.suiteSlug} ${definition.taskSlug}/${variant.id} has positive, negative, and presentation-invariant scoring`, () => {
+        const passing = makeSession(suite, definition, variant);
+        hostedAppTestSupport[definition.app].applyPassingState(passing, variant.taskConfig);
+        assert.equal(evaluateSession(passing).status, "passed");
 
-      for (const uiVariant of uiVariants) {
-        for (const uiTheme of uiThemes) {
-          const generation = passing.metadata.questionGeneration as Record<string, unknown>;
-          generation.uiVariant = uiVariant;
-          generation.uiTheme = uiTheme;
-          assert.equal(evaluateSession(passing).status, "passed", `${uiVariant}/${uiTheme}`);
+        for (const uiVariant of uiVariants) {
+          for (const uiTheme of uiThemes) {
+            const generation = passing.metadata.questionGeneration as Record<string, unknown>;
+            generation.uiVariant = uiVariant;
+            generation.uiTheme = uiTheme;
+            assert.equal(evaluateSession(passing).status, "passed", `${uiVariant}/${uiTheme}`);
+          }
         }
-      }
 
-      const failing = structuredClone(passing);
-      hostedAppTestSupport[definition.app].breakPassingState(failing);
-      assert.equal(evaluateSession(failing).status, "failed");
-    });
+        const failing = structuredClone(passing);
+        hostedAppTestSupport[definition.app].breakPassingState(failing);
+        assert.equal(evaluateSession(failing).status, "failed");
+      });
+    }
   }
 }

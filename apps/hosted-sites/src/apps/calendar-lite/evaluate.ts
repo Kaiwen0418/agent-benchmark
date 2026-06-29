@@ -10,6 +10,9 @@ export function evaluateCalendarLite(session: HostedSessionFor<"calendar-lite">)
   const expectedDurationMinutes = Number(config.expectedDurationMinutes);
   const expectedAttendeeEmail = configString(config, "expectedAttendeeEmail").toLowerCase();
   const expectedSecondaryAttendeeEmail = configStringOrNull(config, "expectedSecondaryAttendeeEmail")?.toLowerCase();
+  // The canonical expectedStartTime is, by construction, the earliest
+  // conflict-free slot for the hard availability variants, so an exact match
+  // already certifies the agent booked around every existing commitment.
   const match = session.state.calendarEvents.find(
     (calendarEvent) =>
       calendarEvent.title === expectedTitle &&

@@ -1,5 +1,11 @@
 import { configStringOrNull, readTaskConfig } from "../../runtime/question-config.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
+import {
+  additionalEditSatisfied,
+  computeCiStatuses,
+  readAdditionalFileEdits,
+  readCiChecks,
+} from "./workflow.js";
 
 export function buildRepoFinalState(session: HostedSessionFor<"repo-lite">) {
   const config = readTaskConfig(session.metadata);
@@ -11,6 +17,17 @@ export function buildRepoFinalState(session: HostedSessionFor<"repo-lite">) {
   const secondaryFile = secondaryFilePath
     ? session.state.files.find((f) => f.path === secondaryFilePath)
     : undefined;
+
+  // Derived observations only: file paths and pass/fail flags, never the
+  // configured expected text or CI tokens (the canonical answer).
+  const additionalEdits = readAdditionalFileEdits(config).map((edit) => ({
+    path: edit.filePath,
+    satisfied: additionalEditSatisfied(session.state.files, edit),
+  }));
+  const ciChecks = computeCiStatuses(session.state.files, readCiChecks(config)).map((status) => ({
+    name: status.name,
+    passed: status.passed,
+  }));
 
   return {
     app: "repo-lite",
@@ -33,6 +50,8 @@ export function buildRepoFinalState(session: HostedSessionFor<"repo-lite">) {
               containsStandaloneText(secondaryFile.content, secondaryForbiddenText),
           }
         : null,
+    additionalEdits: additionalEdits.length ? additionalEdits : null,
+    ciChecks: ciChecks.length ? ciChecks : null,
     latestMR: latestMR
       ? {
           id: latestMR.id,

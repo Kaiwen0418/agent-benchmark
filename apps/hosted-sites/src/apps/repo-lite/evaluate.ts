@@ -7,6 +7,7 @@ import {
 } from "@agentbench/scoring";
 import type { RepoFile, RepoMergeRequest } from "./types.js";
 import { configString, configStringOrNull, readTaskConfig } from "../../runtime/question-config.js";
+import { additionalEditSatisfied, readAdditionalFileEdits } from "./workflow.js";
 
 function containsStandaloneText(content: string, value: string) {
   const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -77,6 +78,16 @@ function evaluateRepoBackendState(
       ? false
       : secondaryFile != null && containsStandaloneText(secondaryFile.content, secondaryForbiddenText);
 
+  // Hard variants require additional coherent edits across further files. Each
+  // edit reports only its file path and a satisfied flag — never the expected
+  // text — so evidence does not leak the canonical answer.
+  const additionalFileEdits = readAdditionalFileEdits(config);
+  const additionalEditResults = additionalFileEdits.map((edit) => ({
+    filePath: edit.filePath,
+    satisfied: additionalEditSatisfied(session.state.files, edit),
+  }));
+  const additionalEditsSatisfied = additionalEditResults.every((result) => result.satisfied);
+
   if (!mr) {
     return failedEvaluator({
       type: "backend_state",
@@ -89,6 +100,7 @@ function evaluateRepoBackendState(
         secondaryFilePath,
         secondaryHasExpectedText,
         secondaryHasForbiddenText,
+        additionalEdits: additionalEditResults,
         mrTitle: null,
         targetBranch: null,
       },
@@ -103,7 +115,8 @@ function evaluateRepoBackendState(
     fileHasExpectedText &&
     !fileHasForbiddenText &&
     secondaryHasExpectedText &&
-    !secondaryHasForbiddenText;
+    !secondaryHasForbiddenText &&
+    additionalEditsSatisfied;
 
   const evidence = {
     mrTitle: mr.title,
@@ -116,6 +129,7 @@ function evaluateRepoBackendState(
     secondaryFilePath,
     secondaryHasExpectedText,
     secondaryHasForbiddenText,
+    additionalEdits: additionalEditResults,
   };
 
   return pass

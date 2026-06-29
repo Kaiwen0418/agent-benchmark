@@ -1,16 +1,15 @@
 import { hostedTestcaseApps } from "../generated-app-registry.js";
 import { hostedSuiteMetadataSchema } from "../schemas.js";
 
-// TODO(#111-#114): replace the remaining default/release/policy pools with
-// hard-specific variant pools. The shopping-lite session uses its dedicated
-// hard pool (#110); the other apps still reuse easy-suite pools as placeholders.
+// All apps now use dedicated hard pools: shopping-lite (#110), forum-lite
+// (#112), wiki-lite (#111), calendar-lite (#113), repo-lite (#114), and
+// notes-lite (#115, the cross-app carry target).
 const shoppingQuestionVariants = hostedTestcaseApps["shopping-lite"].variantPools.hard;
-const forumQuestionVariants = hostedTestcaseApps["forum-lite"].variantPools.default;
-const repoQuestionVariants = hostedTestcaseApps["repo-lite"].variantPools.default;
-const wikiReleaseQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.release;
-const wikiPolicyQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.policy;
-const notesQuestionVariants = hostedTestcaseApps["notes-lite"].variantPools.default;
-const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPools.default;
+const forumQuestionVariants = hostedTestcaseApps["forum-lite"].variantPools.hard;
+const repoQuestionVariants = hostedTestcaseApps["repo-lite"].variantPools.hard;
+const wikiHardQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.hard;
+const notesQuestionVariants = hostedTestcaseApps["notes-lite"].variantPools.hard;
+const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPools.hard;
 
 export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-hard-suite-v1",
@@ -42,8 +41,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
     },
     {
       app: "repo-lite",
-      taskSlug: "repo-readme-fix-hard",
-      title: "Repository README Fix (Hard)",
+      taskSlug: "repo-coherent-edit-hard",
+      title: "Repository Coherent Edit (Hard)",
       startPath: "/repo",
       taskVersion: "v2",
       seedVersion: "repo-lite-hard-v1",
@@ -62,7 +61,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 3,
       weight: 1,
       required: true,
-      metadata: { questionVariants: wikiReleaseQuestionVariants },
+      metadata: { questionVariants: wikiHardQuestionVariants },
     },
     {
       app: "wiki-lite",
@@ -74,7 +73,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 4,
       weight: 1,
       required: true,
-      metadata: { questionVariants: wikiPolicyQuestionVariants },
+      metadata: { questionVariants: wikiHardQuestionVariants },
     },
     {
       app: "notes-lite",
@@ -99,6 +98,22 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       weight: 1,
       required: true,
       metadata: { questionVariants: calendarQuestionVariants },
+    },
+  ],
+  // First cross-app chain (#115): the agent must carry the exact answer it
+  // submitted in the wiki release-lookup session into the title of the note it
+  // files later. Verified against the agents' own session final states, never
+  // against private task config, so no hidden answer key is exposed.
+  consistencyChecks: [
+    {
+      name: "Wiki release answer carried into note title",
+      sourceTaskSlug: "wiki-release-answer-hard",
+      sourcePath: "latestAnswer.answer",
+      targetTaskSlug: "notes-followup-create-hard",
+      targetPath: "notes[].title",
+      rule: "equal-normalized",
+      weight: 1,
+      required: true,
     },
   ],
 });

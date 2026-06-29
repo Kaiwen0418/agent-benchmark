@@ -99,3 +99,11 @@ export function configBooleanOrFalse(config: Record<string, unknown>, key: strin
   }
   return value;
 }
+
+export function configStringArray(config: Record<string, unknown>, key: string): string[] {
+  const value = config[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+}

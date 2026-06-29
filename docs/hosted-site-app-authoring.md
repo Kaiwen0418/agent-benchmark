@@ -166,6 +166,30 @@ If the app already exists under `apps/hosted-sites/src/apps/<app-slug>`, adding 
 
 The orchestrator reads the ordered suite manifest. Hosted-sites routes, state hydration, final-state projection, and scoring are resolved through the registered app definition.
 
+## Variant Pools And The Hard Suite
+
+An app declares one or more **named** variant pools in its `packages/test-cases/src/apps/<app-slug>/definition.ts` via `defineHostedTestcaseApp({ variantPools })`. Each pool must contain at least two semantic variants; pool validation runs at module load. A suite session references exactly one pool through `metadata: { questionVariants: <app>.variantPools.<name> }`.
+
+Two suites are published side by side and never share pools:
+
+- `hosted-web-suite-v1` (the easy suite) composes each app's `default` pool in `suites/hosted-web.ts`.
+- `hosted-web-hard-suite-v1` (the hard suite, roadmap P2.2) composes each app's `hard` pool in `suites/hosted-web-hard.ts`.
+
+Authoring guidance for `hard` pools:
+
+- A hard variant must require multi-step reasoning, cross-page state, or a non-obvious selection — not a harder string to type. Keep per-session scoring deterministic and fail-closed exactly as the easy pool does.
+- The easy `default` pool, its task/seed versions, and its evaluator behavior must remain byte-identical. Add new fields to the task-config schema as optional and only check them when present, so the easy manifest's content hash does not drift.
+- Every hard variant is swept by the generic matrix in `apps/hosted-sites/tests/unit/variant-matrix.test.ts`, which now iterates both published suites. CI fails if any hard variant lacks positive, negative, and presentation-invariant coverage.
+
+### Cross-App Consistency Checks
+
+The hard suite may also declare **suite-level** `consistencyChecks` in `suites/hosted-web-hard.ts`. A check links a `sourcePath` in one earlier session's final state to a `targetPath` in a later session's final state (for example, carrying the wiki release-lookup answer into a note title). Rules:
+
+- Checks are evaluated only by the scoring module (`evaluateSuiteConsistency`) and folded into `aggregateSuiteScore` by the orchestrator at suite completion. Apps never own suite-level logic.
+- A check reads only the agents' own published final states — never private `taskConfig` or a hidden answer key. Per-session evaluators stay lenient on the carried field (e.g. require a non-empty title) and let the suite-level check enforce the exact carry.
+- The source session's `sequenceIndex` must be strictly less than the target's; the schema's `superRefine` rejects an out-of-order or unknown-task-slug check.
+- Surfaced evidence includes only matched values, presence flags, and paths, so no corpus or private contract leaks to a browser.
+
 ## Add A New Hosted App
 
 Start with:

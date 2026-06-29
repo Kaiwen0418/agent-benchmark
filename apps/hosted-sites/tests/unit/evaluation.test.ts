@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateForum, type ForumEvaluationSession } from "../../src/apps/forum-lite/evaluate.js";
+import { forumSeedThreads } from "../../src/apps/forum-lite/seed.js";
+import { forumLiteTestSupport } from "../../src/apps/forum-lite/test-support.js";
 import { evaluateNotes, type NotesEvaluationSession } from "../../src/apps/notes-lite/evaluate.js";
 import { evaluateRepo, type RepoEvaluationSession } from "../../src/apps/repo-lite/evaluate.js";
+import { repoSeedFiles } from "../../src/apps/repo-lite/seed.js";
+import { repoLiteTestSupport } from "../../src/apps/repo-lite/test-support.js";
+import { computeCiStatuses, readCiChecks } from "../../src/apps/repo-lite/workflow.js";
 import { evaluateShopping, type ShoppingEvaluationSession } from "../../src/apps/shopping-lite/evaluate.js";
 import { evaluateWiki, type WikiEvaluationSession } from "../../src/apps/wiki-lite/evaluate.js";
 import { wikiSeedArticles } from "../../src/apps/wiki-lite/seed.js";
@@ -600,6 +605,156 @@ test("evaluateWiki fails when secondary article is required but not viewed", () 
   assert.match(result.summary, /secondary article/i);
 });
 
+// Hard multi-hop variants (#111): each follows a release note / index / compare
+// page to the article marked current, while a deprecated/legacy page offers a
+// stale value that must be rejected.
+const wikiHardVariants = [
+  {
+    id: "current-return-window",
+    target: "returns-policy",
+    secondary: "changelog-2026-q2",
+    kind: "duration" as const,
+    canonical: "30 days",
+    normalization: "trim-casefold" as const,
+    stale: "14 days",
+    staleArticle: "returns-policy-2025",
+  },
+  {
+    id: "current-warranty-coverage",
+    target: "warranty-policy",
+    secondary: "warranty-policy-legacy",
+    kind: "duration" as const,
+    canonical: "24 months",
+    normalization: "trim-casefold" as const,
+    stale: "12 months",
+    staleArticle: "warranty-policy-legacy",
+  },
+  {
+    id: "recommended-probook-charger",
+    target: "laptop-charger-guide",
+    secondary: "charger-compatibility-matrix",
+    kind: "text" as const,
+    canonical: "ProBook 30W Travel Charger",
+    normalization: "trim-casefold" as const,
+    stale: "AirLite 45W Charger",
+    staleArticle: "charger-compatibility-matrix",
+  },
+  {
+    id: "current-api-rate-limit",
+    target: "api-reference-v3",
+    secondary: "api-changelog",
+    kind: "text" as const,
+    canonical: "240 requests per minute",
+    normalization: "trim-casefold-punctuation" as const,
+    stale: "120 requests per minute",
+    staleArticle: "api-reference-v2",
+  },
+  {
+    id: "current-data-retention",
+    target: "data-retention-policy",
+    secondary: "security-overview",
+    kind: "duration" as const,
+    canonical: "90 days",
+    normalization: "trim-casefold" as const,
+    stale: "180 days",
+    staleArticle: "data-retention-2024",
+  },
+];
+
+test("wiki hard corpus is large enough that broad scanning is unreliable", () => {
+  assert.ok(
+    wikiSeedArticles.length >= 30,
+    `expected >= 30 wiki articles, found ${wikiSeedArticles.length}`,
+  );
+  const slugs = new Set(wikiSeedArticles.map((article) => article.slug));
+  assert.equal(slugs.size, wikiSeedArticles.length, "wiki article slugs must be unique");
+});
+
+for (const variant of wikiHardVariants) {
+  const bySlug = new Map(wikiSeedArticles.map((article) => [article.slug, article]));
+
+  test(`wiki hard variant ${variant.id}: canonical value is sourced from the current target article`, () => {
+    const target = bySlug.get(variant.target);
+    const secondary = bySlug.get(variant.secondary);
+    assert.ok(target, `target article ${variant.target} must exist in the corpus`);
+    assert.ok(secondary, `secondary article ${variant.secondary} must exist in the corpus`);
+    assert.ok(
+      target!.body.includes(variant.canonical),
+      `target ${variant.target} body must contain canonical "${variant.canonical}"`,
+    );
+    // The stale value lives in a distractor and must differ from the answer.
+    assert.notEqual(variant.stale, variant.canonical);
+    const staleArticle = bySlug.get(variant.staleArticle);
+    assert.ok(staleArticle, `stale distractor ${variant.staleArticle} must exist`);
+    assert.ok(
+      staleArticle!.body.includes(variant.stale),
+      `distractor ${variant.staleArticle} must contain stale value "${variant.stale}"`,
+    );
+  });
+
+  test(`wiki hard variant ${variant.id}: passes when the multi-hop path and current answer are used`, () => {
+    const result = evaluateWiki(
+      makeWikiSession({
+        metadata: wikiTaskConfig({
+          targetArticleSlug: variant.target,
+          kind: variant.kind,
+          canonicalValue: variant.canonical,
+          normalization: variant.normalization,
+          secondaryArticleSlug: variant.secondary,
+        }),
+        events: [
+          { type: "page.load", url: `/wiki/article/${variant.secondary}?session=tok` },
+          { type: "page.load", url: `/wiki/article/${variant.target}?session=tok` },
+        ],
+        wikiAnswerSubmissions: [{ answer: variant.canonical, submittedAt: "2026-06-01T00:00:00.000Z" }],
+      }),
+    );
+
+    assert.equal(result.status, "passed", result.summary);
+    assert.equal(result.score, 1);
+  });
+
+  test(`wiki hard variant ${variant.id}: fails when the stale/deprecated value is submitted`, () => {
+    const result = evaluateWiki(
+      makeWikiSession({
+        metadata: wikiTaskConfig({
+          targetArticleSlug: variant.target,
+          kind: variant.kind,
+          canonicalValue: variant.canonical,
+          normalization: variant.normalization,
+          secondaryArticleSlug: variant.secondary,
+        }),
+        events: [
+          { type: "page.load", url: `/wiki/article/${variant.secondary}?session=tok` },
+          { type: "page.load", url: `/wiki/article/${variant.target}?session=tok` },
+        ],
+        wikiAnswerSubmissions: [{ answer: variant.stale, submittedAt: "2026-06-01T00:00:00.000Z" }],
+      }),
+    );
+
+    assert.equal(result.status, "failed");
+  });
+
+  test(`wiki hard variant ${variant.id}: fails when the secondary hop is skipped`, () => {
+    const result = evaluateWiki(
+      makeWikiSession({
+        metadata: wikiTaskConfig({
+          targetArticleSlug: variant.target,
+          kind: variant.kind,
+          canonicalValue: variant.canonical,
+          normalization: variant.normalization,
+          secondaryArticleSlug: variant.secondary,
+        }),
+        events: [{ type: "page.load", url: `/wiki/article/${variant.target}?session=tok` }],
+        wikiAnswerSubmissions: [{ answer: variant.canonical, submittedAt: "2026-06-01T00:00:00.000Z" }],
+      }),
+    );
+
+    assert.equal(result.status, "failed");
+    assert.match(result.summary, /secondary article/i);
+  });
+}
+
 function makeForumSession(
   overrides?: Partial<ForumEvaluationSession["state"]>,
   metadata?: Record<string, unknown>,
@@ -888,6 +1043,111 @@ test("evaluateForum passes when agent reports, replies, locks, and pins the thre
   assert.equal(result.score, 1);
 });
 
+// Hard forum triage variants (#112). Build a session from the real seed so the
+// duplicate / miscategorized / vague-title threads exist, drive it to a passing
+// state via the shared test-support helper, then confirm both the positive path
+// and that removing the hard-specific action fails the evaluation.
+const forumHardVariants = [
+  {
+    id: "charge-duplicate-triage",
+    config: {
+      targetThreadId: "thr-charge-main",
+      expectedReplyValue: "https://support.example.com/hardware/usb-c-charging-fix",
+      expectedLockReason: "resolved with guide",
+      requiresMarkDuplicate: true,
+      canonicalThreadId: "thr-charge-main",
+      duplicateThreadIds: ["thr-charge-dup1", "thr-charge-dup2"],
+    },
+    breakAction: "mark_duplicate" as const,
+  },
+  {
+    id: "misfiled-safety-escalation",
+    config: {
+      targetThreadId: "thr-misfiled-safety",
+      expectedReplyValue: "https://support.example.com/safety/adapter-smoke",
+      expectedLockReason: "safety escalation",
+      requiresMove: true,
+      expectedCategory: "safety",
+    },
+    breakAction: "move" as const,
+  },
+  {
+    id: "vague-title-cleanup",
+    config: {
+      targetThreadId: "thr-vague-title",
+      expectedReplyValue: "https://support.example.com/network/dns-reset",
+      expectedLockReason: "resolved with guide",
+      requiresEditTitle: true,
+      expectedTitle: "DNS resolution failures on wired connection",
+    },
+    breakAction: "edit_title" as const,
+  },
+  {
+    id: "hot-charge-consolidate",
+    config: {
+      targetThreadId: "thr-hot-main",
+      expectedReplyValue: "https://support.example.com/safety/fast-charge-heat",
+      expectedLockReason: "safety escalation",
+      requiresMove: true,
+      expectedCategory: "safety",
+      requiresMarkDuplicate: true,
+      canonicalThreadId: "thr-hot-main",
+      duplicateThreadIds: ["thr-hot-dup"],
+    },
+    breakAction: "move" as const,
+  },
+];
+
+function makeForumHardSession(metadata: Record<string, unknown>): ForumEvaluationSession {
+  return {
+    app: "forum-lite",
+    taskSlug: "forum-triage-hard",
+    metadata,
+    state: {
+      threads: forumSeedThreads.map((thread) => ({
+        ...thread,
+        posts: thread.posts.map((post) => ({ ...post })),
+      })),
+      moderationActions: [],
+    },
+  };
+}
+
+for (const variant of forumHardVariants) {
+  test(`forum hard variant ${variant.id}: passes when the full triage sequence is applied`, () => {
+    const session = makeForumHardSession(generatedTaskConfig(variant.config));
+    forumLiteTestSupport.applyPassingState(
+      session as unknown as Parameters<typeof forumLiteTestSupport.applyPassingState>[0],
+      variant.config,
+    );
+    const result = evaluateForum(session);
+    assert.equal(result.status, "passed", result.summary);
+    assert.equal(result.score, 1);
+  });
+
+  test(`forum hard variant ${variant.id}: fails when the ${variant.breakAction} action is missing`, () => {
+    const session = makeForumHardSession(generatedTaskConfig(variant.config));
+    forumLiteTestSupport.applyPassingState(
+      session as unknown as Parameters<typeof forumLiteTestSupport.applyPassingState>[0],
+      variant.config,
+    );
+    // Drop the hard-specific moderation action while leaving lock/reply intact.
+    session.state.moderationActions = session.state.moderationActions.filter(
+      (action) => action.action !== variant.breakAction,
+    );
+    if (variant.breakAction === "move") {
+      const target = session.state.threads.find((thread) => thread.id === variant.config.targetThreadId);
+      if (target) target.category = "general";
+    }
+    if (variant.breakAction === "edit_title") {
+      const target = session.state.threads.find((thread) => thread.id === variant.config.targetThreadId);
+      if (target) target.title = "Help??? urgent!!!";
+    }
+    const result = evaluateForum(session);
+    assert.equal(result.status, "failed");
+  });
+}
+
 function makeRepoSession(
   overrides?: Partial<RepoEvaluationSession["state"]>,
   metadata?: Record<string, unknown>,
@@ -1065,13 +1325,133 @@ test("evaluateRepo fails when secondary file edit is missing", () => {
   assert.equal(result.score, 0);
 });
 
+// Hard repo workflow variants (#114): a coherent change must span the primary,
+// secondary, and additional files, and the simulated CI consistency check must
+// be green, before the terminal merge request scores a pass.
+type HardRepoVariant = {
+  id: string;
+  config: Record<string, unknown>;
+  // The additional-edit file reverted to seed content to break exactly one gate.
+  breakFile: { path: string; content: string };
+};
+
+const hardRepoVariants: HardRepoVariant[] = [
+  {
+    id: "release-2-0-0",
+    config: {
+      filePath: "package.json",
+      expectedText: '"version": "2.0.0"',
+      forbiddenText: '"version": "1.0.0"',
+      expectedMrTitle: "Release 2.0.0",
+      expectedTargetBranch: "release",
+      secondaryFilePath: "src/version.ts",
+      secondaryExpectedText: 'VERSION = "2.0.0"',
+      secondaryForbiddenText: 'VERSION = "1.0.0"',
+      additionalFileEdits: [{ filePath: "CHANGELOG.md", expectedText: "## 2.0.0" }],
+      ciChecks: [
+        { name: "Version consistency", token: "2.0.0", files: ["package.json", "src/version.ts", "CHANGELOG.md"] },
+      ],
+    },
+    breakFile: { path: "CHANGELOG.md", content: "# Changelog\n\n## 1.0.0\n\n- Initial release.\n" },
+  },
+  {
+    id: "rename-to-acme-cli",
+    config: {
+      filePath: "package.json",
+      expectedText: '"name": "acme-cli"',
+      forbiddenText: '"name": "demo-project"',
+      expectedMrTitle: "Rename project to acme-cli",
+      expectedTargetBranch: "main",
+      secondaryFilePath: "src/config.ts",
+      secondaryExpectedText: 'APP_NAME = "acme-cli"',
+      secondaryForbiddenText: 'APP_NAME = "demo-project"',
+      additionalFileEdits: [{ filePath: "README.md", expectedText: "acme-cli" }],
+      ciChecks: [
+        { name: "Project name consistency", token: "acme-cli", files: ["package.json", "src/config.ts", "README.md"] },
+      ],
+    },
+    breakFile: {
+      path: "README.md",
+      content: "# Demo Project\n\n## Install\n\nRun `npm install` to install dependencies.\n",
+    },
+  },
+  {
+    id: "api-v2-rollout",
+    config: {
+      filePath: "src/api.ts",
+      expectedText: 'API_VERSION = "v2"',
+      forbiddenText: 'API_VERSION = "v1"',
+      expectedMrTitle: "Roll out API v2",
+      expectedTargetBranch: "develop",
+      secondaryFilePath: "docs/API.md",
+      secondaryExpectedText: "Stable version: v2",
+      secondaryForbiddenText: "Stable version: v1",
+      additionalFileEdits: [{ filePath: "README.md", expectedText: "API v2" }],
+      ciChecks: [
+        { name: "API version consistency", token: "v2", files: ["src/api.ts", "docs/API.md", "README.md"] },
+      ],
+    },
+    breakFile: {
+      path: "README.md",
+      content: "# Demo Project\n\n## Install\n\nRun `npm install` to install dependencies.\n",
+    },
+  },
+];
+
+function makeHardRepoSession(metadata: Record<string, unknown>): RepoEvaluationSession {
+  return {
+    app: "repo-lite",
+    taskSlug: "repo-coherent-edit-hard",
+    metadata,
+    state: {
+      files: repoSeedFiles.map((file) => ({ ...file })),
+      mergeRequests: [],
+    },
+  };
+}
+
+for (const variant of hardRepoVariants) {
+  test(`repo hard variant ${variant.id}: passes when every coherent edit and CI check is satisfied`, () => {
+    const session = makeHardRepoSession(generatedTaskConfig(variant.config));
+    repoLiteTestSupport.applyPassingState(
+      session as unknown as Parameters<typeof repoLiteTestSupport.applyPassingState>[0],
+      variant.config,
+    );
+    const result = evaluateRepo(session);
+    assert.equal(result.status, "passed", result.summary);
+    assert.equal(result.score, 1);
+    // The simulated CI gate the agent observes must be green for the passing state.
+    const ciStatuses = computeCiStatuses(session.state.files, readCiChecks(variant.config));
+    assert.ok(ciStatuses.length > 0);
+    assert.ok(ciStatuses.every((status) => status.passed));
+  });
+
+  test(`repo hard variant ${variant.id}: fails when the additional ${variant.breakFile.path} edit is missing`, () => {
+    const session = makeHardRepoSession(generatedTaskConfig(variant.config));
+    repoLiteTestSupport.applyPassingState(
+      session as unknown as Parameters<typeof repoLiteTestSupport.applyPassingState>[0],
+      variant.config,
+    );
+    // Revert the additional file: the primary, secondary, and MR remain correct,
+    // so only the additionalFileEdit + CI gate can explain the failure.
+    const target = session.state.files.find((file) => file.path === variant.breakFile.path);
+    if (target) target.content = variant.breakFile.content;
+    const result = evaluateRepo(session);
+    assert.equal(result.status, "failed");
+    assert.equal(result.score, 0);
+    const ciStatuses = computeCiStatuses(session.state.files, readCiChecks(variant.config));
+    assert.ok(ciStatuses.some((status) => !status.passed));
+  });
+}
+
 function makeNotesSession(
   overrides?: Partial<NotesEvaluationSession["state"]>,
+  metadata?: Record<string, unknown>,
 ): NotesEvaluationSession {
   return {
     app: "notes-lite",
     taskSlug: "notes-followup-create",
-    metadata: defaultTaskConfigs.notes,
+    metadata: metadata ?? defaultTaskConfigs.notes,
     state: {
       notes: [
         {
@@ -1155,6 +1535,56 @@ test("evaluateNotes fails when targeted seeded note is not updated", () => {
         expectedTag: "support",
         targetNoteId: "note-seed-support",
       }),
+    ),
+  );
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateNotes carry variant passes with any non-empty title when title is unpinned", () => {
+  const carryConfig = generatedTaskConfig({
+    expectedBody: "File the release-lookup result for the upgrade plan.",
+    expectedTag: "release",
+  });
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note_carry",
+            title: "90 days",
+            body: "File the release-lookup result for the upgrade plan.",
+            tag: "release",
+            createdAt: "2026-06-23T00:00:00.000Z",
+          },
+        ],
+      },
+      carryConfig,
+    ),
+  );
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateNotes carry variant fails when the title is empty", () => {
+  const carryConfig = generatedTaskConfig({
+    expectedBody: "File the release-lookup result for the upgrade plan.",
+    expectedTag: "release",
+  });
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note_carry",
+            title: "   ",
+            body: "File the release-lookup result for the upgrade plan.",
+            tag: "release",
+            createdAt: "2026-06-23T00:00:00.000Z",
+          },
+        ],
+      },
+      carryConfig,
     ),
   );
   assert.equal(result.status, "failed");

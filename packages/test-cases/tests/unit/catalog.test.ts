@@ -73,3 +73,53 @@ test("hosted easy and hard suite cases are distinct", () => {
   assert.notEqual(hostedWebSuiteCase.slug, hostedWebHardSuiteCase.slug);
   assert.notEqual(hostedWebSuiteMetadata.suiteSlug, hostedWebHardSuiteMetadata.suiteSlug);
 });
+
+test("only the hard suite declares cross-app consistency checks", () => {
+  assert.equal((hostedWebSuiteMetadata as { consistencyChecks?: unknown[] }).consistencyChecks, undefined);
+  const checks = (hostedWebHardSuiteMetadata as { consistencyChecks?: unknown[] }).consistencyChecks ?? [];
+  assert.ok(checks.length > 0);
+});
+
+test("hard consistency checks reference real sessions with source before target", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const indexBySlug = new Map(suite.sessions.map((session) => [session.taskSlug, session.sequenceIndex]));
+  for (const check of suite.consistencyChecks ?? []) {
+    const source = indexBySlug.get(check.sourceTaskSlug);
+    const target = indexBySlug.get(check.targetTaskSlug);
+    assert.ok(source !== undefined, `unknown source ${check.sourceTaskSlug}`);
+    assert.ok(target !== undefined, `unknown target ${check.targetTaskSlug}`);
+    assert.ok(source! < target!, `${check.sourceTaskSlug} must precede ${check.targetTaskSlug}`);
+  }
+});
+
+test("schema rejects a consistency check with an unknown task slug", () => {
+  const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
+    consistencyChecks: Array<Record<string, unknown>>;
+  };
+  invalid.consistencyChecks = [
+    {
+      name: "bad",
+      sourceTaskSlug: "does-not-exist",
+      sourcePath: "latestAnswer.answer",
+      targetTaskSlug: "notes-followup-create-hard",
+      targetPath: "notes[].title",
+    },
+  ];
+  assert.throws(() => hostedSuiteMetadataSchema.parse(invalid));
+});
+
+test("schema rejects a consistency check whose source follows its target", () => {
+  const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
+    consistencyChecks: Array<Record<string, unknown>>;
+  };
+  invalid.consistencyChecks = [
+    {
+      name: "reversed",
+      sourceTaskSlug: "notes-followup-create-hard",
+      sourcePath: "notes[].title",
+      targetTaskSlug: "wiki-release-answer-hard",
+      targetPath: "latestAnswer.answer",
+    },
+  ];
+  assert.throws(() => hostedSuiteMetadataSchema.parse(invalid));
+});
