@@ -733,8 +733,8 @@ select public.publish_benchmark_case_catalog(
     },
     {
       "app": "repo-lite",
-      "taskSlug": "repo-readme-fix-hard",
-      "title": "Repository README Fix (Hard)",
+      "taskSlug": "repo-coherent-edit-hard",
+      "title": "Repository Coherent Edit (Hard)",
       "startPath": "/repo",
       "taskVersion": "v2",
       "seedVersion": "repo-lite-hard-v1",
@@ -744,77 +744,96 @@ select public.publish_benchmark_case_catalog(
       "metadata": {
         "questionVariants": [
           {
-            "id": "pnpm-install",
-            "goal": "Replace the README install command with `pnpm install`, remove `npm install`, then open a merge request titled `Fix install instructions` targeting `main`.",
+            "id": "release-2-0-0",
+            "goal": "Cut release 2.0.0: bump the version to `2.0.0` in both `package.json` and `src/version.ts`, add a `## 2.0.0` section to `CHANGELOG.md` so the version-consistency CI check passes, then open a merge request titled `Release 2.0.0` targeting `release`.",
             "taskConfig": {
-              "filePath": "README.md",
-              "expectedText": "pnpm install",
-              "forbiddenText": "npm install",
-              "expectedMrTitle": "Fix install instructions",
-              "expectedTargetBranch": "main"
+              "filePath": "package.json",
+              "expectedText": "\"version\": \"2.0.0\"",
+              "forbiddenText": "\"version\": \"1.0.0\"",
+              "expectedMrTitle": "Release 2.0.0",
+              "expectedTargetBranch": "release",
+              "secondaryFilePath": "src/version.ts",
+              "secondaryExpectedText": "VERSION = \"2.0.0\"",
+              "secondaryForbiddenText": "VERSION = \"1.0.0\"",
+              "additionalFileEdits": [
+                {
+                  "filePath": "CHANGELOG.md",
+                  "expectedText": "## 2.0.0"
+                }
+              ],
+              "ciChecks": [
+                {
+                  "name": "Version consistency",
+                  "token": "2.0.0",
+                  "files": [
+                    "package.json",
+                    "src/version.ts",
+                    "CHANGELOG.md"
+                  ]
+                }
+              ]
             }
           },
           {
-            "id": "yarn-install",
-            "goal": "Replace the README install command with `yarn install`, remove `npm install`, then open a merge request titled `Document Yarn setup` targeting `main`.",
+            "id": "rename-to-acme-cli",
+            "goal": "Rename the project to `acme-cli`: update `name` in `package.json`, `APP_NAME` in `src/config.ts`, and reference `acme-cli` in `README.md` so the project-name CI check passes, then open a merge request titled `Rename project to acme-cli` targeting `main`.",
             "taskConfig": {
-              "filePath": "README.md",
-              "expectedText": "yarn install",
-              "forbiddenText": "npm install",
-              "expectedMrTitle": "Document Yarn setup",
-              "expectedTargetBranch": "main"
-            }
-          },
-          {
-            "id": "bun-install",
-            "goal": "Replace the README install command with `bun install`, remove `npm install`, then open a merge request titled `Add Bun setup` targeting `develop`.",
-            "taskConfig": {
-              "filePath": "README.md",
-              "expectedText": "bun install",
-              "forbiddenText": "npm install",
-              "expectedMrTitle": "Add Bun setup",
-              "expectedTargetBranch": "develop"
-            }
-          },
-          {
-            "id": "pnpm-install-and-version",
-            "goal": "Replace the README install command with `pnpm install`, bump `package.json` version from `1.0.0` to `1.0.1`, then open a merge request titled `Fix install and bump version` targeting `main`.",
-            "taskConfig": {
-              "filePath": "README.md",
-              "expectedText": "pnpm install",
-              "forbiddenText": "npm install",
-              "expectedMrTitle": "Fix install and bump version",
+              "filePath": "package.json",
+              "expectedText": "\"name\": \"acme-cli\"",
+              "forbiddenText": "\"name\": \"demo-project\"",
+              "expectedMrTitle": "Rename project to acme-cli",
               "expectedTargetBranch": "main",
-              "secondaryFilePath": "package.json",
-              "secondaryExpectedText": "1.0.1",
-              "secondaryForbiddenText": "1.0.0"
+              "secondaryFilePath": "src/config.ts",
+              "secondaryExpectedText": "APP_NAME = \"acme-cli\"",
+              "secondaryForbiddenText": "APP_NAME = \"demo-project\"",
+              "additionalFileEdits": [
+                {
+                  "filePath": "README.md",
+                  "expectedText": "acme-cli"
+                }
+              ],
+              "ciChecks": [
+                {
+                  "name": "Project name consistency",
+                  "token": "acme-cli",
+                  "files": [
+                    "package.json",
+                    "src/config.ts",
+                    "README.md"
+                  ]
+                }
+              ]
             }
           },
           {
-            "id": "yarn-install-and-rename",
-            "goal": "Replace the README install command with `yarn install`, rename the project in `package.json` from `demo-project` to `demo-yarn-project`, then open a merge request titled `Update README and rename project` targeting `main`.",
+            "id": "api-v2-rollout",
+            "goal": "Roll out API v2: set `API_VERSION` to `v2` in `src/api.ts`, update the stable version to `v2` in `docs/API.md`, note `API v2` in `README.md` so the API-version CI check passes, then open a merge request titled `Roll out API v2` targeting `develop`.",
             "taskConfig": {
-              "filePath": "README.md",
-              "expectedText": "yarn install",
-              "forbiddenText": "npm install",
-              "expectedMrTitle": "Update README and rename project",
-              "expectedTargetBranch": "main",
-              "secondaryFilePath": "package.json",
-              "secondaryExpectedText": "demo-yarn-project",
-              "secondaryForbiddenText": "demo-project"
-            }
-          },
-          {
-            "id": "bun-install-and-script",
-            "goal": "Replace the README install command with `bun install`, add a `test` script to `package.json`, then open a merge request titled `Add Bun and test script` targeting `develop`.",
-            "taskConfig": {
-              "filePath": "README.md",
-              "expectedText": "bun install",
-              "forbiddenText": "npm install",
-              "expectedMrTitle": "Add Bun and test script",
+              "filePath": "src/api.ts",
+              "expectedText": "API_VERSION = \"v2\"",
+              "forbiddenText": "API_VERSION = \"v1\"",
+              "expectedMrTitle": "Roll out API v2",
               "expectedTargetBranch": "develop",
-              "secondaryFilePath": "package.json",
-              "secondaryExpectedText": "test"
+              "secondaryFilePath": "docs/API.md",
+              "secondaryExpectedText": "Stable version: v2",
+              "secondaryForbiddenText": "Stable version: v1",
+              "additionalFileEdits": [
+                {
+                  "filePath": "README.md",
+                  "expectedText": "API v2"
+                }
+              ],
+              "ciChecks": [
+                {
+                  "name": "API version consistency",
+                  "token": "v2",
+                  "files": [
+                    "src/api.ts",
+                    "docs/API.md",
+                    "README.md"
+                  ]
+                }
+              ]
             }
           }
         ]
@@ -1245,7 +1264,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '80ef7ea6b70b4b53a504ef89d62dacb925b5e9ba3e5a63f8fe4216f2197ce46a'
+  '643cda52d1d7260de6c9b2eb4acd8b25ae5a034c7e36e14cb670a3595a4f953f'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

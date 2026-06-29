@@ -5,6 +5,9 @@ import { forumSeedThreads } from "../../src/apps/forum-lite/seed.js";
 import { forumLiteTestSupport } from "../../src/apps/forum-lite/test-support.js";
 import { evaluateNotes, type NotesEvaluationSession } from "../../src/apps/notes-lite/evaluate.js";
 import { evaluateRepo, type RepoEvaluationSession } from "../../src/apps/repo-lite/evaluate.js";
+import { repoSeedFiles } from "../../src/apps/repo-lite/seed.js";
+import { repoLiteTestSupport } from "../../src/apps/repo-lite/test-support.js";
+import { computeCiStatuses, readCiChecks } from "../../src/apps/repo-lite/workflow.js";
 import { evaluateShopping, type ShoppingEvaluationSession } from "../../src/apps/shopping-lite/evaluate.js";
 import { evaluateWiki, type WikiEvaluationSession } from "../../src/apps/wiki-lite/evaluate.js";
 import { wikiSeedArticles } from "../../src/apps/wiki-lite/seed.js";
@@ -1321,6 +1324,125 @@ test("evaluateRepo fails when secondary file edit is missing", () => {
   assert.equal(result.status, "failed");
   assert.equal(result.score, 0);
 });
+
+// Hard repo workflow variants (#114): a coherent change must span the primary,
+// secondary, and additional files, and the simulated CI consistency check must
+// be green, before the terminal merge request scores a pass.
+type HardRepoVariant = {
+  id: string;
+  config: Record<string, unknown>;
+  // The additional-edit file reverted to seed content to break exactly one gate.
+  breakFile: { path: string; content: string };
+};
+
+const hardRepoVariants: HardRepoVariant[] = [
+  {
+    id: "release-2-0-0",
+    config: {
+      filePath: "package.json",
+      expectedText: '"version": "2.0.0"',
+      forbiddenText: '"version": "1.0.0"',
+      expectedMrTitle: "Release 2.0.0",
+      expectedTargetBranch: "release",
+      secondaryFilePath: "src/version.ts",
+      secondaryExpectedText: 'VERSION = "2.0.0"',
+      secondaryForbiddenText: 'VERSION = "1.0.0"',
+      additionalFileEdits: [{ filePath: "CHANGELOG.md", expectedText: "## 2.0.0" }],
+      ciChecks: [
+        { name: "Version consistency", token: "2.0.0", files: ["package.json", "src/version.ts", "CHANGELOG.md"] },
+      ],
+    },
+    breakFile: { path: "CHANGELOG.md", content: "# Changelog\n\n## 1.0.0\n\n- Initial release.\n" },
+  },
+  {
+    id: "rename-to-acme-cli",
+    config: {
+      filePath: "package.json",
+      expectedText: '"name": "acme-cli"',
+      forbiddenText: '"name": "demo-project"',
+      expectedMrTitle: "Rename project to acme-cli",
+      expectedTargetBranch: "main",
+      secondaryFilePath: "src/config.ts",
+      secondaryExpectedText: 'APP_NAME = "acme-cli"',
+      secondaryForbiddenText: 'APP_NAME = "demo-project"',
+      additionalFileEdits: [{ filePath: "README.md", expectedText: "acme-cli" }],
+      ciChecks: [
+        { name: "Project name consistency", token: "acme-cli", files: ["package.json", "src/config.ts", "README.md"] },
+      ],
+    },
+    breakFile: {
+      path: "README.md",
+      content: "# Demo Project\n\n## Install\n\nRun `npm install` to install dependencies.\n",
+    },
+  },
+  {
+    id: "api-v2-rollout",
+    config: {
+      filePath: "src/api.ts",
+      expectedText: 'API_VERSION = "v2"',
+      forbiddenText: 'API_VERSION = "v1"',
+      expectedMrTitle: "Roll out API v2",
+      expectedTargetBranch: "develop",
+      secondaryFilePath: "docs/API.md",
+      secondaryExpectedText: "Stable version: v2",
+      secondaryForbiddenText: "Stable version: v1",
+      additionalFileEdits: [{ filePath: "README.md", expectedText: "API v2" }],
+      ciChecks: [
+        { name: "API version consistency", token: "v2", files: ["src/api.ts", "docs/API.md", "README.md"] },
+      ],
+    },
+    breakFile: {
+      path: "README.md",
+      content: "# Demo Project\n\n## Install\n\nRun `npm install` to install dependencies.\n",
+    },
+  },
+];
+
+function makeHardRepoSession(metadata: Record<string, unknown>): RepoEvaluationSession {
+  return {
+    app: "repo-lite",
+    taskSlug: "repo-coherent-edit-hard",
+    metadata,
+    state: {
+      files: repoSeedFiles.map((file) => ({ ...file })),
+      mergeRequests: [],
+    },
+  };
+}
+
+for (const variant of hardRepoVariants) {
+  test(`repo hard variant ${variant.id}: passes when every coherent edit and CI check is satisfied`, () => {
+    const session = makeHardRepoSession(generatedTaskConfig(variant.config));
+    repoLiteTestSupport.applyPassingState(
+      session as unknown as Parameters<typeof repoLiteTestSupport.applyPassingState>[0],
+      variant.config,
+    );
+    const result = evaluateRepo(session);
+    assert.equal(result.status, "passed", result.summary);
+    assert.equal(result.score, 1);
+    // The simulated CI gate the agent observes must be green for the passing state.
+    const ciStatuses = computeCiStatuses(session.state.files, readCiChecks(variant.config));
+    assert.ok(ciStatuses.length > 0);
+    assert.ok(ciStatuses.every((status) => status.passed));
+  });
+
+  test(`repo hard variant ${variant.id}: fails when the additional ${variant.breakFile.path} edit is missing`, () => {
+    const session = makeHardRepoSession(generatedTaskConfig(variant.config));
+    repoLiteTestSupport.applyPassingState(
+      session as unknown as Parameters<typeof repoLiteTestSupport.applyPassingState>[0],
+      variant.config,
+    );
+    // Revert the additional file: the primary, secondary, and MR remain correct,
+    // so only the additionalFileEdit + CI gate can explain the failure.
+    const target = session.state.files.find((file) => file.path === variant.breakFile.path);
+    if (target) target.content = variant.breakFile.content;
+    const result = evaluateRepo(session);
+    assert.equal(result.status, "failed");
+    assert.equal(result.score, 0);
+    const ciStatuses = computeCiStatuses(session.state.files, readCiChecks(variant.config));
+    assert.ok(ciStatuses.some((status) => !status.passed));
+  });
+}
 
 function makeNotesSession(
   overrides?: Partial<NotesEvaluationSession["state"]>,

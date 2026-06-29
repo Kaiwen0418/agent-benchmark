@@ -1,13 +1,12 @@
 import { hostedTestcaseApps } from "../generated-app-registry.js";
 import { hostedSuiteMetadataSchema } from "../schemas.js";
 
-// TODO(#114): replace the remaining default pools with hard-specific
-// variant pools. shopping-lite (#110), wiki-lite (#111), forum-lite (#112), and
-// calendar-lite (#113) use dedicated hard pools; repo-lite and notes-lite still
-// reuse easy-suite pools as placeholders.
+// TODO(#114 done): notes-lite is the last app still reusing its easy pool as a
+// placeholder. shopping-lite (#110), forum-lite (#112), wiki-lite (#111),
+// calendar-lite (#113), and repo-lite (#114) all use dedicated hard pools.
 const shoppingQuestionVariants = hostedTestcaseApps["shopping-lite"].variantPools.hard;
 const forumQuestionVariants = hostedTestcaseApps["forum-lite"].variantPools.hard;
-const repoQuestionVariants = hostedTestcaseApps["repo-lite"].variantPools.default;
+const repoQuestionVariants = hostedTestcaseApps["repo-lite"].variantPools.hard;
 const wikiHardQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.hard;
 const notesQuestionVariants = hostedTestcaseApps["notes-lite"].variantPools.default;
 const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPools.hard;
@@ -42,8 +41,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
     },
     {
       app: "repo-lite",
-      taskSlug: "repo-readme-fix-hard",
-      title: "Repository README Fix (Hard)",
+      taskSlug: "repo-coherent-edit-hard",
+      title: "Repository Coherent Edit (Hard)",
       startPath: "/repo",
       taskVersion: "v2",
       seedVersion: "repo-lite-hard-v1",
