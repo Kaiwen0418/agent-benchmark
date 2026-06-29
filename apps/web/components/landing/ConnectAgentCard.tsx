@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { benchmarkOptions } from "./data";
 import { RunConnectionCard } from "./RunConnectionCard";
 import { RunDetailTabs } from "./RunDetailTabs";
 import { usePlaygroundStore } from "@/lib/playground-store";
@@ -9,6 +8,7 @@ import { SiteSelect } from "@/components/ui/SiteSelect";
 
 export function ConnectAgentCard() {
   const benchmark = usePlaygroundStore((state) => state.benchmark);
+  const benchmarks = usePlaygroundStore((state) => state.benchmarks);
   const phase = usePlaygroundStore((state) => state.phase);
   const quota = usePlaygroundStore((state) => state.quota);
   const quotaLoading = usePlaygroundStore((state) => state.quotaLoading);
@@ -16,6 +16,7 @@ export function ConnectAgentCard() {
   const score = usePlaygroundStore((state) => state.score);
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
   const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
+  const fetchBenchmarks = usePlaygroundStore((state) => state.fetchBenchmarks);
   const startRun = usePlaygroundStore((state) => state.startRun);
   const stopRun = usePlaygroundStore((state) => state.stopRun);
   const reset = usePlaygroundStore((state) => state.reset);
@@ -23,10 +24,12 @@ export function ConnectAgentCard() {
   const isRunning = phase === "booting" || phase === "running";
   const isDone = phase === "completed" || phase === "failed";
   const isQuotaBlocked = Boolean(quota && quota.remaining <= 0);
+  const selectedBenchmark = benchmarks.find((item) => item.id === benchmark);
 
   useEffect(() => {
     void fetchQuota();
-  }, [fetchQuota]);
+    void fetchBenchmarks();
+  }, [fetchQuota, fetchBenchmarks]);
 
   const quotaBadge = quotaLoading
     ? "Loading quota"
@@ -44,7 +47,7 @@ export function ConnectAgentCard() {
           <div>
             <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Connect Agent</div>
             <h3 className="mt-1.5 text-[1.2rem] font-medium text-[#111111]">
-              {benchmarkOptions.find((b) => b.value === benchmark)?.label ?? "Running"}
+              {selectedBenchmark?.label ?? "Running"}
             </h3>
           </div>
           <div className="rounded-full bg-[#d7ff00] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-[#111111]">
@@ -73,7 +76,7 @@ export function ConnectAgentCard() {
           <div>
             <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Connect Agent</div>
             <h3 className="mt-1.5 text-[1.2rem] font-medium text-[#111111]">
-              {benchmarkOptions.find((b) => b.value === benchmark)?.label ?? "Run complete"}
+              {selectedBenchmark?.label ?? "Run complete"}
             </h3>
           </div>
           <div className="rounded-full bg-[#d7ff00] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-[#111111]">
@@ -142,15 +145,15 @@ export function ConnectAgentCard() {
           <span className="mb-2 block text-[13px] text-[#5d574d]">Benchmark</span>
           <SiteSelect
             value={benchmark}
-            onValueChange={(value) => setBenchmark(value as typeof benchmark)}
+            onValueChange={(value) => setBenchmark(value)}
             ariaLabel="Benchmark"
-            options={benchmarkOptions.map((item) => ({ value: item.value, label: item.label }))}
+            options={benchmarks.map((item) => ({ value: item.id, label: item.label }))}
             compact
           />
         </label>
 
         <div className="rounded-[1.15rem] bg-[#efede6] p-3.5 text-[13px] leading-6 text-[#5c574d]">
-          {benchmarkOptions.find((item) => item.value === benchmark)?.description}
+          {selectedBenchmark?.description ?? "Loading available benchmark suites…"}
         </div>
 
         <p className="text-[12px] leading-5 text-[#777064]">
@@ -166,7 +169,7 @@ export function ConnectAgentCard() {
         <button
           type="button"
           onClick={() => void startRun("external-agent")}
-          disabled={quotaLoading || isQuotaBlocked}
+          disabled={quotaLoading || isQuotaBlocked || !benchmark}
           className="w-full rounded-full bg-[#111111] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#d7ff00] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isQuotaBlocked
