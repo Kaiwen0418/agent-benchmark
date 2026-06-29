@@ -1,16 +1,16 @@
 import { hostedTestcaseApps } from "../generated-app-registry.js";
 import { hostedSuiteMetadataSchema } from "../schemas.js";
 
-// TODO(#113-#114): replace the remaining default pools with hard-specific
-// variant pools. shopping-lite (#110), wiki-lite (#111), and forum-lite (#112)
-// use dedicated hard pools; the other apps still reuse easy-suite pools as
-// placeholders.
+// TODO(#114): replace the remaining default pools with hard-specific
+// variant pools. shopping-lite (#110), wiki-lite (#111), forum-lite (#112), and
+// calendar-lite (#113) use dedicated hard pools; repo-lite and notes-lite still
+// reuse easy-suite pools as placeholders.
 const shoppingQuestionVariants = hostedTestcaseApps["shopping-lite"].variantPools.hard;
 const forumQuestionVariants = hostedTestcaseApps["forum-lite"].variantPools.hard;
 const repoQuestionVariants = hostedTestcaseApps["repo-lite"].variantPools.default;
 const wikiHardQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.hard;
 const notesQuestionVariants = hostedTestcaseApps["notes-lite"].variantPools.default;
-const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPools.default;
+const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPools.hard;
 
 export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-hard-suite-v1",

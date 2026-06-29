@@ -1,6 +1,8 @@
 import type { ServerResponse } from "node:http";
+import { readTaskConfig } from "../../runtime/question-config.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
+import { readBusyEvents } from "./scheduling.js";
 
 export function renderCalendarLite(
   session: HostedSessionFor<"calendar-lite">,
@@ -16,6 +18,28 @@ export function renderCalendarLite(
         <p class="muted">${escapeHtml(calendarEvent.attendeeEmail)}${calendarEvent.secondaryAttendeeEmail ? `, ${escapeHtml(calendarEvent.secondaryAttendeeEmail)}` : ""}</p>
       </article>`).join("")
     : '<article class="card"><p class="muted">No events scheduled.</p></article>';
+
+  // Hard variants surface read-only existing commitments the agent must avoid.
+  let busyEvents: ReturnType<typeof readBusyEvents> = [];
+  try {
+    busyEvents = readBusyEvents(readTaskConfig(session.metadata));
+  } catch {
+    busyEvents = [];
+  }
+  const commitmentsHtml = busyEvents.length
+    ? `<section class="panel" style="margin-top:16px;">
+      <h2>Existing commitments</h2>
+      <p class="muted">These slots are already booked and cannot be double-booked for the listed attendees.</p>
+      ${busyEvents
+        .map((busy) => `
+        <article class="card">
+          <h3>${escapeHtml(busy.title)}</h3>
+          <p>${escapeHtml(busy.date)} at ${escapeHtml(busy.startTime)} for ${busy.durationMinutes} minutes</p>
+          <p class="muted">${escapeHtml(busy.attendeeEmail)}${busy.secondaryAttendeeEmail ? `, ${escapeHtml(busy.secondaryAttendeeEmail)}` : ""}</p>
+        </article>`)
+        .join("")}
+    </section>`
+    : "";
 
   sendHtml(response, 200, layout({
     title: "AgentBench Calendar",
@@ -42,6 +66,7 @@ export function renderCalendarLite(
         <button type="submit" style="margin-top:12px;">Create event</button>
       </form>
     </section>
+    ${commitmentsHtml}
     <section class="grid" style="margin-top:16px;">${eventsHtml}</section>`,
   }));
 }
