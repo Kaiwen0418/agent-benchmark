@@ -1,6 +1,7 @@
 import type { ServerResponse } from "node:http";
 import type { RepoFile, RepoMergeRequest } from "./types.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
+import { shouldRenderScorePreview } from "../../runtime/score-preview-policy.js";
 
 type RepoSession = HostedSessionFor<"repo-lite">;
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
@@ -148,6 +149,11 @@ export function renderMRDetail(
     )
     .join("");
 
+  const scorePreview = shouldRenderScorePreview(session)
+    ? `<h3 style="margin-top:16px;">Evaluator preview</h3>
+        <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>`
+    : "";
+
   sendHtml(
     response,
     200,
@@ -159,8 +165,7 @@ export function renderMRDetail(
         <p class="muted">Target branch: <strong>${escapeHtml(mr.targetBranch)}</strong></p>
         <h3>Changed files</h3>
         ${changedFilesHtml}
-        <h3 style="margin-top:16px;">Evaluator preview</h3>
-        <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+        ${scorePreview}
       </section>`,
       publicBaseUrl,
       defaultStartPathForApp,

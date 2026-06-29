@@ -1,6 +1,7 @@
 import type { ServerResponse } from "node:http";
 import type { ForumThread } from "./types.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
+import { shouldRenderScorePreview } from "../../runtime/score-preview-policy.js";
 
 type ForumSession = HostedSessionFor<"forum-lite">;
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
@@ -127,6 +128,13 @@ export function renderThread(
     : "";
 
 
+  const scorePreview = shouldRenderScorePreview(session)
+    ? `<section class="panel" style="margin-top:16px;">
+        <h2>Evaluator preview</h2>
+        <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+      </section>`
+    : "";
+
   sendHtml(
     response,
     200,
@@ -146,10 +154,7 @@ export function renderThread(
         ${lockForm}
         ${pinForm}
         ${moderationLogSection}
-        <section class="panel" style="margin-top:16px;">
-          <h2>Evaluator preview</h2>
-          <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
-        </section>`,
+        ${scorePreview}`,
       publicBaseUrl,
       defaultStartPathForApp,
     }),

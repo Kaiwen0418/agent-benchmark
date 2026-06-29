@@ -22,6 +22,7 @@ function makeSession(accessMode: "write" | "viewer" = "write"): HostedSession {
     suiteVersion: "v1",
     taskSlug: "shopping-lite-task",
     taskVersion: "v1",
+    scorePreviewMode: "dev",
     sequenceIndex: 0,
     weight: 1,
     required: true,
@@ -63,6 +64,7 @@ async function withApiServer<T>(
   handler: (baseUrl: string) => Promise<T>,
   accessMode: "write" | "viewer" = "write",
   status: HostedSession["status"] = "active",
+  scorePreviewMode: HostedSession["scorePreviewMode"] = "dev",
 ) {
   const requestedTokens: string[] = [];
   const completedSessions: string[] = [];
@@ -70,6 +72,7 @@ async function withApiServer<T>(
   const recordedEvents: string[] = [];
   const session = makeSession(accessMode);
   session.status = status;
+  session.scorePreviewMode = scorePreviewMode;
   const persistedResult = {
     status: "failed" as const,
     score: 0,
@@ -286,4 +289,55 @@ test("viewer token in complete route cannot complete a session", async () => {
   assert.equal(result.body.error, "Viewer sessions are read-only");
   assert.deepEqual(requestedTokens, ["tok_1"]);
   assert.deepEqual(completedSessions, []);
+});
+
+test("score route denies active sessions when score preview is disabled", async () => {
+  const { result } = await withApiServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/sessions/tok_1/score`);
+    return {
+      status: response.status,
+      body: (await response.json()) as Record<string, unknown>,
+    };
+  }, "write", "active", "disabled");
+
+  assert.equal(result.status, 403);
+  assert.equal(result.body.error, "Score preview is not available for this session.");
+});
+
+test("score route denies active write sessions in token mode", async () => {
+  const { result } = await withApiServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/sessions/tok_1/score`);
+    return {
+      status: response.status,
+      body: (await response.json()) as Record<string, unknown>,
+    };
+  }, "write", "active", "token");
+
+  assert.equal(result.status, 403);
+});
+
+test("score route allows active viewer sessions in token mode", async () => {
+  const { result } = await withApiServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/sessions/tok_1/score`);
+    return {
+      status: response.status,
+      body: (await response.json()) as Record<string, unknown>,
+    };
+  }, "viewer", "active", "token");
+
+  assert.equal(result.status, 200);
+  assert.equal(typeof result.body.score, "number");
+});
+
+test("score route allows terminal sessions even when score preview is disabled", async () => {
+  const { result } = await withApiServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/sessions/tok_1/score`);
+    return {
+      status: response.status,
+      body: (await response.json()) as Record<string, unknown>,
+    };
+  }, "write", "completed", "disabled");
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.summary, "first persisted result");
 });

@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import type { HostedSession } from "../runtime/types.js";
 import { sendJson } from "../runtime/http.js";
+import { isActiveScoreApiAllowed } from "../runtime/score-preview-policy.js";
 
 function sanitizeTelemetryUrl(value: unknown, publicBaseUrl: string) {
   if (typeof value !== "string") {
@@ -170,6 +171,10 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
       const session = await deps.getSessionByToken(token, request);
       if (!session) {
         deps.notFound(response);
+        return true;
+      }
+      if (!isActiveScoreApiAllowed(session)) {
+        sendJson(response, 403, { error: "Score preview is not available for this session." });
         return true;
       }
       sendJson(response, 200, await deps.resolveSessionResult(session));

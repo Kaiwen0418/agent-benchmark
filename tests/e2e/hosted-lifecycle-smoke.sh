@@ -69,6 +69,7 @@ if [[ "${START_LOCAL_SERVICES}" == "true" ]]; then
   HOSTED_ORCHESTRATOR_URL="${ORCHESTRATOR_BASE_URL}" \
   AGENTBENCH_WEB_URL="${WEB_URL}" \
   RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
+  HOSTED_SCORE_PREVIEW_MODE="dev" \
   pnpm --filter hosted-sites exec tsx src/server.ts >/tmp/agentbench-hosted-sites-smoke.log 2>&1 &
   HOSTED_PID=$!
 fi

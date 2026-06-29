@@ -40,6 +40,7 @@ function createStore(params: {
     publicBaseUrl: "http://localhost:3003",
     now: () => "2026-06-01T00:00:00.000Z",
     makeId: (prefix) => `${prefix}_1`,
+    scorePreviewMode: "dev",
     recoverSession: params.recoverSession ?? (async () => null),
     persistSessionSnapshotDurably: async () => undefined,
     persistSessionAccess: async () => undefined,

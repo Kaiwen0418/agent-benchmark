@@ -1,6 +1,7 @@
 import type { ServerResponse } from "node:http";
 import type { Note } from "./types.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
+import { shouldRenderScorePreview } from "../../runtime/score-preview-policy.js";
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
 
 type NotesSession = HostedSessionFor<"notes-lite">;
@@ -24,6 +25,13 @@ export function renderNotesIndex(
         )
         .join("")
     : `<article class="card"><p class="muted">No notes have been created yet.</p></article>`;
+
+  const scorePreview = shouldRenderScorePreview(session)
+    ? `<section class="panel" style="margin-top:16px;">
+          <h2>Evaluator preview</h2>
+          <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+        </section>`
+    : "";
 
   sendHtml(
     response,
@@ -51,10 +59,7 @@ export function renderNotesIndex(
           </form>
         </section>
         <section class="grid" style="margin-top:16px;">${notesHtml}</section>
-        <section class="panel" style="margin-top:16px;">
-          <h2>Evaluator preview</h2>
-          <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
-        </section>`,
+        ${scorePreview}`,
       publicBaseUrl,
       defaultStartPathForApp,
     }),

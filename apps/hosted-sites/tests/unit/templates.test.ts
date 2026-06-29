@@ -6,12 +6,13 @@ import type { HostedSession } from "../../src/runtime/types.js";
 type UiVariant = "workspace" | "sidebar" | "compact" | "dashboard" | "editorial";
 type UiTheme = "light" | "dark";
 
-function makeSession(uiVariant: UiVariant, uiTheme: UiTheme) {
+function makeSession(uiVariant: UiVariant, uiTheme: UiTheme, scorePreviewMode: HostedSession["scorePreviewMode"] = "dev") {
   return {
     app: "wiki-lite",
     token: "tok_layout",
     taskSlug: "wiki-generated",
     goal: "Find and submit the requested value.",
+    scorePreviewMode,
     metadata: {
       questionGeneration: {
         schemaVersion: 1,
@@ -81,4 +82,70 @@ test("terminal layout disables forms and does not emit telemetry", () => {
   assert.match(html, /return to the AgentBench Connection Page to continue/);
   assert.match(html, /href="http:\/\/localhost:3000\/runs\/run-1\/connect"/);
   assert.doesNotMatch(html, /abTelemetry/);
+});
+
+test("layout renders Score JSON link in dev mode for active sessions", () => {
+  const html = layout({
+    title: "Dev preview",
+    session: makeSession("workspace", "light", "dev"),
+    body: '<section class="panel">Body</section>',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+
+  assert.match(html, /Score JSON/);
+  assert.match(html, /href="\/api\/sessions\/tok_layout\/score"/);
+});
+
+test("layout hides Score JSON link in disabled mode for active sessions", () => {
+  const html = layout({
+    title: "Disabled preview",
+    session: makeSession("workspace", "light", "disabled"),
+    body: '<section class="panel">Body</section>',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+
+  assert.doesNotMatch(html, /Score JSON/);
+  assert.doesNotMatch(html, /href="\/api\/sessions\/tok_layout\/score"/);
+});
+
+test("layout hides Score JSON link in token mode for non-viewer active sessions", () => {
+  const html = layout({
+    title: "Token preview",
+    session: makeSession("workspace", "light", "token"),
+    body: '<section class="panel">Body</section>',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+
+  assert.doesNotMatch(html, /Score JSON/);
+});
+
+test("layout renders Score JSON link in token mode for viewer sessions", () => {
+  const session = makeSession("workspace", "light", "token");
+  session.accessMode = "viewer";
+  const html = layout({
+    title: "Viewer preview",
+    session,
+    body: '<section class="panel">Body</section>',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+
+  assert.match(html, /Score JSON/);
+});
+
+test("layout renders Score JSON link for terminal sessions regardless of mode", () => {
+  const session = makeSession("workspace", "light", "disabled");
+  session.status = "failed";
+  const html = layout({
+    title: "Terminal disabled preview",
+    session,
+    body: '<section class="panel">Body</section>',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+
+  assert.match(html, /Score JSON/);
 });
