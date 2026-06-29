@@ -1,14 +1,13 @@
 import { hostedTestcaseApps } from "../generated-app-registry.js";
 import { hostedSuiteMetadataSchema } from "../schemas.js";
 
-// TODO(#111-#114): replace the remaining default/release/policy pools with
-// hard-specific variant pools. The shopping-lite session uses its dedicated
-// hard pool (#110); the other apps still reuse easy-suite pools as placeholders.
+// TODO(#112-#114): replace the remaining default pools with hard-specific
+// variant pools. shopping-lite (#110) and wiki-lite (#111) use dedicated hard
+// pools; the other apps still reuse easy-suite pools as placeholders.
 const shoppingQuestionVariants = hostedTestcaseApps["shopping-lite"].variantPools.hard;
 const forumQuestionVariants = hostedTestcaseApps["forum-lite"].variantPools.default;
 const repoQuestionVariants = hostedTestcaseApps["repo-lite"].variantPools.default;
-const wikiReleaseQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.release;
-const wikiPolicyQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.policy;
+const wikiHardQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.hard;
 const notesQuestionVariants = hostedTestcaseApps["notes-lite"].variantPools.default;
 const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPools.default;
 
@@ -62,7 +61,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 3,
       weight: 1,
       required: true,
-      metadata: { questionVariants: wikiReleaseQuestionVariants },
+      metadata: { questionVariants: wikiHardQuestionVariants },
     },
     {
       app: "wiki-lite",
@@ -74,7 +73,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 4,
       weight: 1,
       required: true,
-      metadata: { questionVariants: wikiPolicyQuestionVariants },
+      metadata: { questionVariants: wikiHardQuestionVariants },
     },
     {
       app: "notes-lite",

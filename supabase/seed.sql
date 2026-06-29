@@ -840,69 +840,72 @@ select public.publish_benchmark_case_catalog(
       "metadata": {
         "questionVariants": [
           {
-            "id": "release-date",
-            "goal": "Use the hosted wiki to find when wiki-lite followed the hosted-web suite alpha, then submit only the date.",
+            "id": "current-return-window",
+            "goal": "A Q2 2026 changelog announces an updated return window. Follow the changelog to the current returns policy, ignore the deprecated 2025 policy, and submit only the current return window duration.",
             "taskConfig": {
-              "targetArticleSlug": "agentbench-release-history",
+              "targetArticleSlug": "returns-policy",
+              "secondaryArticleSlug": "changelog-2026-q2",
               "answerContract": {
-                "kind": "date",
-                "canonicalValue": "June 1, 2026",
+                "kind": "duration",
+                "canonicalValue": "30 days",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "returns-policy"
+              }
+            }
+          },
+          {
+            "id": "current-warranty-coverage",
+            "goal": "Compare the legacy and current warranty policies. Open the legacy page for context, then submit only the current warranty coverage duration from the current Warranty Policy article.",
+            "taskConfig": {
+              "targetArticleSlug": "warranty-policy",
+              "secondaryArticleSlug": "warranty-policy-legacy",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "24 months",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "warranty-policy"
+              }
+            }
+          },
+          {
+            "id": "recommended-probook-charger",
+            "goal": "The laptop charger buying guide recommends an in-stock charger for the ProBook. Verify compatibility in the charger compatibility matrix, then submit the exact recommended charger name.",
+            "taskConfig": {
+              "targetArticleSlug": "laptop-charger-guide",
+              "secondaryArticleSlug": "charger-compatibility-matrix",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "ProBook 30W Travel Charger",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "laptop-charger-guide"
+              }
+            }
+          },
+          {
+            "id": "current-api-rate-limit",
+            "goal": "Use the API changelog to identify the current API reference version, open that version's article (not a deprecated one), and submit only its current per-token rate limit.",
+            "taskConfig": {
+              "targetArticleSlug": "api-reference-v3",
+              "secondaryArticleSlug": "api-changelog",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "240 requests per minute",
                 "normalization": "trim-casefold-punctuation",
-                "sourceArticleSlug": "agentbench-release-history"
+                "sourceArticleSlug": "api-reference-v3"
               }
             }
           },
           {
-            "id": "dispatch-window",
-            "goal": "Use the hosted wiki to find how quickly standard shipping orders are dispatched, then submit only the duration without surrounding words.",
+            "id": "current-data-retention",
+            "goal": "The security overview references the current data retention policy. Open both, ignore the deprecated 2024 retention note, and submit only the current retention period.",
             "taskConfig": {
-              "targetArticleSlug": "shipping-policy",
+              "targetArticleSlug": "data-retention-policy",
+              "secondaryArticleSlug": "security-overview",
               "answerContract": {
                 "kind": "duration",
-                "canonicalValue": "two business days",
+                "canonicalValue": "90 days",
                 "normalization": "trim-casefold",
-                "sourceArticleSlug": "shipping-policy"
-              }
-            }
-          },
-          {
-            "id": "charger-price",
-            "goal": "Use the hosted wiki to find the listed price of the recommended budget USB-C charger, then submit only the exact price.",
-            "taskConfig": {
-              "targetArticleSlug": "usb-c-charger-faq",
-              "answerContract": {
-                "kind": "currency",
-                "canonicalValue": "$24.99",
-                "normalization": "trim",
-                "sourceArticleSlug": "usb-c-charger-faq"
-              }
-            }
-          },
-          {
-            "id": "release-to-charger-price",
-            "goal": "The release history article references the USB-C Charger FAQ for recommended accessories. Open both articles and submit the exact price of the recommended budget charger.",
-            "taskConfig": {
-              "targetArticleSlug": "usb-c-charger-faq",
-              "secondaryArticleSlug": "agentbench-release-history",
-              "answerContract": {
-                "kind": "currency",
-                "canonicalValue": "$24.99",
-                "normalization": "trim",
-                "sourceArticleSlug": "usb-c-charger-faq"
-              }
-            }
-          },
-          {
-            "id": "dispatch-with-adapters",
-            "goal": "The power adapter safety article references the shipping policy for dispatch timing. Open both articles and submit the standard shipping dispatch window.",
-            "taskConfig": {
-              "targetArticleSlug": "shipping-policy",
-              "secondaryArticleSlug": "power-adapters",
-              "answerContract": {
-                "kind": "duration",
-                "canonicalValue": "two business days",
-                "normalization": "trim-casefold",
-                "sourceArticleSlug": "shipping-policy"
+                "sourceArticleSlug": "data-retention-policy"
               }
             }
           }
@@ -922,69 +925,72 @@ select public.publish_benchmark_case_catalog(
       "metadata": {
         "questionVariants": [
           {
-            "id": "adapter-restriction",
-            "goal": "Use the hosted wiki to find who restricted lab power adapters are reserved for, then submit only the group name.",
+            "id": "current-return-window",
+            "goal": "A Q2 2026 changelog announces an updated return window. Follow the changelog to the current returns policy, ignore the deprecated 2025 policy, and submit only the current return window duration.",
             "taskConfig": {
-              "targetArticleSlug": "power-adapters",
-              "answerContract": {
-                "kind": "text",
-                "canonicalValue": "internal certification teams",
-                "normalization": "trim-casefold-punctuation",
-                "sourceArticleSlug": "power-adapters"
-              }
-            }
-          },
-          {
-            "id": "standard-dispatch",
-            "goal": "Use the hosted wiki to find the standard shipping dispatch window, then submit only the duration.",
-            "taskConfig": {
-              "targetArticleSlug": "shipping-policy",
+              "targetArticleSlug": "returns-policy",
+              "secondaryArticleSlug": "changelog-2026-q2",
               "answerContract": {
                 "kind": "duration",
-                "canonicalValue": "two business days",
+                "canonicalValue": "30 days",
                 "normalization": "trim-casefold",
-                "sourceArticleSlug": "shipping-policy"
+                "sourceArticleSlug": "returns-policy"
               }
             }
           },
           {
-            "id": "express-cutoff",
-            "goal": "Use the hosted wiki to find the express order same-day shipping cutoff time, then submit only the time.",
+            "id": "current-warranty-coverage",
+            "goal": "Compare the legacy and current warranty policies. Open the legacy page for context, then submit only the current warranty coverage duration from the current Warranty Policy article.",
             "taskConfig": {
-              "targetArticleSlug": "shipping-policy",
+              "targetArticleSlug": "warranty-policy",
+              "secondaryArticleSlug": "warranty-policy-legacy",
               "answerContract": {
-                "kind": "text",
-                "canonicalValue": "3pm",
-                "normalization": "trim-casefold-punctuation",
-                "sourceArticleSlug": "shipping-policy"
+                "kind": "duration",
+                "canonicalValue": "24 months",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "warranty-policy"
               }
             }
           },
           {
-            "id": "adapter-to-shipping",
-            "goal": "The shipping policy references the power adapter safety article for restricted equipment rules. Open both articles and submit who restricted lab power adapters are reserved for.",
+            "id": "recommended-probook-charger",
+            "goal": "The laptop charger buying guide recommends an in-stock charger for the ProBook. Verify compatibility in the charger compatibility matrix, then submit the exact recommended charger name.",
             "taskConfig": {
-              "targetArticleSlug": "power-adapters",
-              "secondaryArticleSlug": "shipping-policy",
+              "targetArticleSlug": "laptop-charger-guide",
+              "secondaryArticleSlug": "charger-compatibility-matrix",
               "answerContract": {
                 "kind": "text",
-                "canonicalValue": "internal certification teams",
-                "normalization": "trim-casefold-punctuation",
-                "sourceArticleSlug": "power-adapters"
+                "canonicalValue": "ProBook 30W Travel Charger",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "laptop-charger-guide"
               }
             }
           },
           {
-            "id": "express-to-history",
-            "goal": "The release history article references the shipping policy for delivery details. Open both articles and submit the express order same-day shipping cutoff time.",
+            "id": "current-api-rate-limit",
+            "goal": "Use the API changelog to identify the current API reference version, open that version's article (not a deprecated one), and submit only its current per-token rate limit.",
             "taskConfig": {
-              "targetArticleSlug": "shipping-policy",
-              "secondaryArticleSlug": "agentbench-release-history",
+              "targetArticleSlug": "api-reference-v3",
+              "secondaryArticleSlug": "api-changelog",
               "answerContract": {
                 "kind": "text",
-                "canonicalValue": "3pm",
+                "canonicalValue": "240 requests per minute",
                 "normalization": "trim-casefold-punctuation",
-                "sourceArticleSlug": "shipping-policy"
+                "sourceArticleSlug": "api-reference-v3"
+              }
+            }
+          },
+          {
+            "id": "current-data-retention",
+            "goal": "The security overview references the current data retention policy. Open both, ignore the deprecated 2024 retention note, and submit only the current retention period.",
+            "taskConfig": {
+              "targetArticleSlug": "data-retention-policy",
+              "secondaryArticleSlug": "security-overview",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "90 days",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "data-retention-policy"
               }
             }
           }
@@ -1149,7 +1155,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '1c76afdb05313397ab4b5f13064a75420afca8d581c8605d795a2e7fd110d338'
+  '699b4976767130f0bd4084ebaec23e9a6b9988ab6ac6de9cd543626fc63be33d'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

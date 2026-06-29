@@ -600,6 +600,156 @@ test("evaluateWiki fails when secondary article is required but not viewed", () 
   assert.match(result.summary, /secondary article/i);
 });
 
+// Hard multi-hop variants (#111): each follows a release note / index / compare
+// page to the article marked current, while a deprecated/legacy page offers a
+// stale value that must be rejected.
+const wikiHardVariants = [
+  {
+    id: "current-return-window",
+    target: "returns-policy",
+    secondary: "changelog-2026-q2",
+    kind: "duration" as const,
+    canonical: "30 days",
+    normalization: "trim-casefold" as const,
+    stale: "14 days",
+    staleArticle: "returns-policy-2025",
+  },
+  {
+    id: "current-warranty-coverage",
+    target: "warranty-policy",
+    secondary: "warranty-policy-legacy",
+    kind: "duration" as const,
+    canonical: "24 months",
+    normalization: "trim-casefold" as const,
+    stale: "12 months",
+    staleArticle: "warranty-policy-legacy",
+  },
+  {
+    id: "recommended-probook-charger",
+    target: "laptop-charger-guide",
+    secondary: "charger-compatibility-matrix",
+    kind: "text" as const,
+    canonical: "ProBook 30W Travel Charger",
+    normalization: "trim-casefold" as const,
+    stale: "AirLite 45W Charger",
+    staleArticle: "charger-compatibility-matrix",
+  },
+  {
+    id: "current-api-rate-limit",
+    target: "api-reference-v3",
+    secondary: "api-changelog",
+    kind: "text" as const,
+    canonical: "240 requests per minute",
+    normalization: "trim-casefold-punctuation" as const,
+    stale: "120 requests per minute",
+    staleArticle: "api-reference-v2",
+  },
+  {
+    id: "current-data-retention",
+    target: "data-retention-policy",
+    secondary: "security-overview",
+    kind: "duration" as const,
+    canonical: "90 days",
+    normalization: "trim-casefold" as const,
+    stale: "180 days",
+    staleArticle: "data-retention-2024",
+  },
+];
+
+test("wiki hard corpus is large enough that broad scanning is unreliable", () => {
+  assert.ok(
+    wikiSeedArticles.length >= 30,
+    `expected >= 30 wiki articles, found ${wikiSeedArticles.length}`,
+  );
+  const slugs = new Set(wikiSeedArticles.map((article) => article.slug));
+  assert.equal(slugs.size, wikiSeedArticles.length, "wiki article slugs must be unique");
+});
+
+for (const variant of wikiHardVariants) {
+  const bySlug = new Map(wikiSeedArticles.map((article) => [article.slug, article]));
+
+  test(`wiki hard variant ${variant.id}: canonical value is sourced from the current target article`, () => {
+    const target = bySlug.get(variant.target);
+    const secondary = bySlug.get(variant.secondary);
+    assert.ok(target, `target article ${variant.target} must exist in the corpus`);
+    assert.ok(secondary, `secondary article ${variant.secondary} must exist in the corpus`);
+    assert.ok(
+      target!.body.includes(variant.canonical),
+      `target ${variant.target} body must contain canonical "${variant.canonical}"`,
+    );
+    // The stale value lives in a distractor and must differ from the answer.
+    assert.notEqual(variant.stale, variant.canonical);
+    const staleArticle = bySlug.get(variant.staleArticle);
+    assert.ok(staleArticle, `stale distractor ${variant.staleArticle} must exist`);
+    assert.ok(
+      staleArticle!.body.includes(variant.stale),
+      `distractor ${variant.staleArticle} must contain stale value "${variant.stale}"`,
+    );
+  });
+
+  test(`wiki hard variant ${variant.id}: passes when the multi-hop path and current answer are used`, () => {
+    const result = evaluateWiki(
+      makeWikiSession({
+        metadata: wikiTaskConfig({
+          targetArticleSlug: variant.target,
+          kind: variant.kind,
+          canonicalValue: variant.canonical,
+          normalization: variant.normalization,
+          secondaryArticleSlug: variant.secondary,
+        }),
+        events: [
+          { type: "page.load", url: `/wiki/article/${variant.secondary}?session=tok` },
+          { type: "page.load", url: `/wiki/article/${variant.target}?session=tok` },
+        ],
+        wikiAnswerSubmissions: [{ answer: variant.canonical, submittedAt: "2026-06-01T00:00:00.000Z" }],
+      }),
+    );
+
+    assert.equal(result.status, "passed", result.summary);
+    assert.equal(result.score, 1);
+  });
+
+  test(`wiki hard variant ${variant.id}: fails when the stale/deprecated value is submitted`, () => {
+    const result = evaluateWiki(
+      makeWikiSession({
+        metadata: wikiTaskConfig({
+          targetArticleSlug: variant.target,
+          kind: variant.kind,
+          canonicalValue: variant.canonical,
+          normalization: variant.normalization,
+          secondaryArticleSlug: variant.secondary,
+        }),
+        events: [
+          { type: "page.load", url: `/wiki/article/${variant.secondary}?session=tok` },
+          { type: "page.load", url: `/wiki/article/${variant.target}?session=tok` },
+        ],
+        wikiAnswerSubmissions: [{ answer: variant.stale, submittedAt: "2026-06-01T00:00:00.000Z" }],
+      }),
+    );
+
+    assert.equal(result.status, "failed");
+  });
+
+  test(`wiki hard variant ${variant.id}: fails when the secondary hop is skipped`, () => {
+    const result = evaluateWiki(
+      makeWikiSession({
+        metadata: wikiTaskConfig({
+          targetArticleSlug: variant.target,
+          kind: variant.kind,
+          canonicalValue: variant.canonical,
+          normalization: variant.normalization,
+          secondaryArticleSlug: variant.secondary,
+        }),
+        events: [{ type: "page.load", url: `/wiki/article/${variant.target}?session=tok` }],
+        wikiAnswerSubmissions: [{ answer: variant.canonical, submittedAt: "2026-06-01T00:00:00.000Z" }],
+      }),
+    );
+
+    assert.equal(result.status, "failed");
+    assert.match(result.summary, /secondary article/i);
+  });
+}
+
 function makeForumSession(
   overrides?: Partial<ForumEvaluationSession["state"]>,
   metadata?: Record<string, unknown>,
