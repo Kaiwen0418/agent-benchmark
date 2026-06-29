@@ -141,6 +141,28 @@ Each expansion must keep deterministic scoring, variant-matrix coverage, redacte
 
 Exit criteria: every existing hosted app has at least one harder variant requiring multi-step reasoning or cross-page state, the expanded variant matrix passes unit and E2E checks, and `pnpm verify:ci` remains green.
 
+### P2.2 Hosted-Web Hard Suite
+
+Status: In Progress
+
+P2.1 raised the difficulty of individual apps in place. P2.2 (epic #107) instead publishes a **separate** hard suite, `hosted-web-hard-suite-v1`, that composes each app's `hard` variant pool and is ranked independently from the easy suite on public surfaces. The easy suite (`hosted-web-suite-v1`) is unchanged and keeps its revision identity and content hash.
+
+Confidentiality is the gating constraint for the epic: scorer oracle surfaces (variant pools, canonical answers, evaluator parameters, private task config) stay service-role-only; public sessions and browsers see only display-safe goals, stable scores, and redacted final evidence; final evidence never leaks the corpus or the private answer contract.
+
+| Sub-issue | Status | Exit criteria |
+| --- | --- | --- |
+| #111 Wiki hard pool | Complete | Multi-hop / cross-article release-lookup variants with deterministic canonical answers. |
+| #112 Forum hard pool | Complete | Multi-thread triage and moderation variants behind the hard suite only. |
+| #113 Calendar hard pool | Complete | Conflict-avoidance, shared-window, timezone-overlap, and reschedule variants. |
+| #114 Repo hard pool | Complete | Coherent multi-edit / rename / rollout variants with required messages. |
+| #110 Shopping hard pool | Complete | Stock-aware, compatibility, and coupon constrained-checkout variants. |
+| #115 First cross-app chain | In Progress | The agent must carry the exact wiki release-lookup answer into a later note title; enforced only by a suite-level consistency check against the agents' own final states. |
+| #116 Verification matrix and docs | In Progress | Both suites swept independently by the generic matrix; independent semantic versioning, cross-app consistency, and scorer oracle policy documented. |
+
+Each hard variant receives positive, negative, and presentation-invariant matrix coverage in `apps/hosted-sites/tests/unit/variant-matrix.test.ts`, which iterates every published suite. Per-session scoring stays deterministic; suite-level checks live solely in the scoring module (`evaluateSuiteConsistency`) and orchestrator aggregation. The easy and hard suites version and publish independently; a hard-suite change must not alter the easy manifest's content hash.
+
+Exit criteria: the hard suite is published as its own immutable revision, every hard variant and the first cross-app chain pass unit and E2E checks, public surfaces rank the hard suite separately without exposing oracle data, and `pnpm verify:ci` remains green.
+
 ## Explicit Non-Goals
 
 - Running untrusted agent code, browser sandboxes, or arbitrary workers inside Vercel functions.
