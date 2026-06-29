@@ -14,7 +14,7 @@ import {
   type HostedSessionBreakdown,
 } from "./hosted-scoring";
 
-export type PlaygroundBenchmark = "hosted-web-suite";
+export type PlaygroundBenchmark = "hosted-web-suite" | "hosted-web-hard-suite";
 
 export type RunPhase = "idle" | "booting" | "running" | "completed" | "failed";
 export type PanelTab = "events" | "files" | "screenshots" | "score";
@@ -76,6 +76,7 @@ type RunSnapshot = {
 
 const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
   "hosted-web-suite": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
+  "hosted-web-hard-suite": "bb7e5cd4-f3ed-4aa0-9fcc-46fec39997eb",
 };
 
 const initialState = {
