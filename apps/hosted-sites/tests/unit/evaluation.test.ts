@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateForum, type ForumEvaluationSession } from "../../src/apps/forum-lite/evaluate.js";
+import { forumSeedThreads } from "../../src/apps/forum-lite/seed.js";
+import { forumLiteTestSupport } from "../../src/apps/forum-lite/test-support.js";
 import { evaluateNotes, type NotesEvaluationSession } from "../../src/apps/notes-lite/evaluate.js";
 import { evaluateRepo, type RepoEvaluationSession } from "../../src/apps/repo-lite/evaluate.js";
 import { evaluateShopping, type ShoppingEvaluationSession } from "../../src/apps/shopping-lite/evaluate.js";
@@ -1037,6 +1039,111 @@ test("evaluateForum passes when agent reports, replies, locks, and pins the thre
   assert.equal(result.status, "passed");
   assert.equal(result.score, 1);
 });
+
+// Hard forum triage variants (#112). Build a session from the real seed so the
+// duplicate / miscategorized / vague-title threads exist, drive it to a passing
+// state via the shared test-support helper, then confirm both the positive path
+// and that removing the hard-specific action fails the evaluation.
+const forumHardVariants = [
+  {
+    id: "charge-duplicate-triage",
+    config: {
+      targetThreadId: "thr-charge-main",
+      expectedReplyValue: "https://support.example.com/hardware/usb-c-charging-fix",
+      expectedLockReason: "resolved with guide",
+      requiresMarkDuplicate: true,
+      canonicalThreadId: "thr-charge-main",
+      duplicateThreadIds: ["thr-charge-dup1", "thr-charge-dup2"],
+    },
+    breakAction: "mark_duplicate" as const,
+  },
+  {
+    id: "misfiled-safety-escalation",
+    config: {
+      targetThreadId: "thr-misfiled-safety",
+      expectedReplyValue: "https://support.example.com/safety/adapter-smoke",
+      expectedLockReason: "safety escalation",
+      requiresMove: true,
+      expectedCategory: "safety",
+    },
+    breakAction: "move" as const,
+  },
+  {
+    id: "vague-title-cleanup",
+    config: {
+      targetThreadId: "thr-vague-title",
+      expectedReplyValue: "https://support.example.com/network/dns-reset",
+      expectedLockReason: "resolved with guide",
+      requiresEditTitle: true,
+      expectedTitle: "DNS resolution failures on wired connection",
+    },
+    breakAction: "edit_title" as const,
+  },
+  {
+    id: "hot-charge-consolidate",
+    config: {
+      targetThreadId: "thr-hot-main",
+      expectedReplyValue: "https://support.example.com/safety/fast-charge-heat",
+      expectedLockReason: "safety escalation",
+      requiresMove: true,
+      expectedCategory: "safety",
+      requiresMarkDuplicate: true,
+      canonicalThreadId: "thr-hot-main",
+      duplicateThreadIds: ["thr-hot-dup"],
+    },
+    breakAction: "move" as const,
+  },
+];
+
+function makeForumHardSession(metadata: Record<string, unknown>): ForumEvaluationSession {
+  return {
+    app: "forum-lite",
+    taskSlug: "forum-triage-hard",
+    metadata,
+    state: {
+      threads: forumSeedThreads.map((thread) => ({
+        ...thread,
+        posts: thread.posts.map((post) => ({ ...post })),
+      })),
+      moderationActions: [],
+    },
+  };
+}
+
+for (const variant of forumHardVariants) {
+  test(`forum hard variant ${variant.id}: passes when the full triage sequence is applied`, () => {
+    const session = makeForumHardSession(generatedTaskConfig(variant.config));
+    forumLiteTestSupport.applyPassingState(
+      session as unknown as Parameters<typeof forumLiteTestSupport.applyPassingState>[0],
+      variant.config,
+    );
+    const result = evaluateForum(session);
+    assert.equal(result.status, "passed", result.summary);
+    assert.equal(result.score, 1);
+  });
+
+  test(`forum hard variant ${variant.id}: fails when the ${variant.breakAction} action is missing`, () => {
+    const session = makeForumHardSession(generatedTaskConfig(variant.config));
+    forumLiteTestSupport.applyPassingState(
+      session as unknown as Parameters<typeof forumLiteTestSupport.applyPassingState>[0],
+      variant.config,
+    );
+    // Drop the hard-specific moderation action while leaving lock/reply intact.
+    session.state.moderationActions = session.state.moderationActions.filter(
+      (action) => action.action !== variant.breakAction,
+    );
+    if (variant.breakAction === "move") {
+      const target = session.state.threads.find((thread) => thread.id === variant.config.targetThreadId);
+      if (target) target.category = "general";
+    }
+    if (variant.breakAction === "edit_title") {
+      const target = session.state.threads.find((thread) => thread.id === variant.config.targetThreadId);
+      if (target) target.title = "Help??? urgent!!!";
+    }
+    const result = evaluateForum(session);
+    assert.equal(result.status, "failed");
+  });
+}
 
 function makeRepoSession(
   overrides?: Partial<RepoEvaluationSession["state"]>,

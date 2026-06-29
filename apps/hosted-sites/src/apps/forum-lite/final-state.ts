@@ -14,6 +14,15 @@ export function buildForumFinalState(session: HostedSessionFor<"forum-lite">) {
   const reportAction = session.state.moderationActions.find(
     (action) => action.threadId === targetThreadId && action.action === "report",
   );
+  const moveAction = session.state.moderationActions.find(
+    (action) => action.threadId === targetThreadId && action.action === "move",
+  );
+  const editTitleAction = session.state.moderationActions.find(
+    (action) => action.threadId === targetThreadId && action.action === "edit_title",
+  );
+  const duplicateActions = session.state.moderationActions.filter(
+    (action) => action.action === "mark_duplicate" && action.duplicateOfThreadId === targetThreadId,
+  );
 
   return {
     app: "forum-lite",
@@ -22,6 +31,7 @@ export function buildForumFinalState(session: HostedSessionFor<"forum-lite">) {
       ? {
           id: targetThread.id,
           title: targetThread.title,
+          category: targetThread.category,
           locked: Boolean(targetThread.locked),
           pinned: Boolean(targetThread.pinned),
           postCount: targetThread.posts.length,
@@ -46,5 +56,21 @@ export function buildForumFinalState(session: HostedSessionFor<"forum-lite">) {
           reason: reportAction.reason,
         }
       : null,
+    moveAction: moveAction
+      ? {
+          id: moveAction.id,
+          targetCategory: moveAction.targetCategory ?? null,
+        }
+      : null,
+    editTitleAction: editTitleAction
+      ? {
+          id: editTitleAction.id,
+          newTitle: editTitleAction.newTitle ?? null,
+        }
+      : null,
+    duplicateActions: duplicateActions.map((action) => ({
+      id: action.id,
+      duplicateThreadId: action.threadId,
+    })),
   };
 }

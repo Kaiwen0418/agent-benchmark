@@ -1,4 +1,4 @@
-import { configBooleanOrFalse, configString, type HostedAppTestSupport } from "../../runtime/test-support.js";
+import { configBooleanOrFalse, configString, configStringArray, configStringOrNull, type HostedAppTestSupport } from "../../runtime/test-support.js";
 
 export const forumLiteTestSupport: HostedAppTestSupport<"forum-lite"> = {
   exampleTaskConfig: {
@@ -20,6 +20,44 @@ export const forumLiteTestSupport: HostedAppTestSupport<"forum-lite"> = {
         threadId,
         action: "report",
         reason: configString(config, "expectedReportReason"),
+      });
+    }
+
+    if (configBooleanOrFalse(config, "requiresMove")) {
+      const expectedCategory = configString(config, "expectedCategory");
+      thread.category = expectedCategory;
+      session.state.moderationActions.push({
+        id: "mod-move-matrix",
+        threadId,
+        action: "move",
+        reason: "recategorized",
+        targetCategory: expectedCategory,
+      });
+    }
+
+    if (configBooleanOrFalse(config, "requiresEditTitle")) {
+      const expectedTitle = configString(config, "expectedTitle");
+      thread.title = expectedTitle;
+      session.state.moderationActions.push({
+        id: "mod-edit-title-matrix",
+        threadId,
+        action: "edit_title",
+        reason: "title cleanup",
+        newTitle: expectedTitle,
+      });
+    }
+
+    if (configBooleanOrFalse(config, "requiresMarkDuplicate")) {
+      const canonicalThreadId = configStringOrNull(config, "canonicalThreadId") ?? threadId;
+      const duplicateThreadIds = configStringArray(config, "duplicateThreadIds");
+      duplicateThreadIds.forEach((duplicateId, index) => {
+        session.state.moderationActions.push({
+          id: `mod-duplicate-matrix-${index}`,
+          threadId: duplicateId,
+          action: "mark_duplicate",
+          reason: "duplicate",
+          duplicateOfThreadId: canonicalThreadId,
+        });
       });
     }
 
