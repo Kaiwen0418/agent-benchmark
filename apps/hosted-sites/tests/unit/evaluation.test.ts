@@ -325,6 +325,212 @@ test("evaluateShopping fails when paid shipping pushes total over budget", () =>
   assert.equal(result.score, 0);
 });
 
+const hardShoppingProducts: ShoppingEvaluationSession["state"]["products"] = [
+  { id: "prod-charger-20w", name: "VoltEdge 20W USB-C Charger", category: "charger", price: 18.99, stock: 10 },
+  { id: "prod-charger-30w", name: "VoltEdge 30W USB-C Charger", category: "charger", price: 24.99 },
+  { id: "prod-cable-1m", name: "Braided USB-C Cable 1m", category: "cable", price: 9.99, stock: 20 },
+  {
+    id: "prod-charger-probook-100w",
+    name: "ProBook 100W GaN Charger",
+    category: "charger",
+    price: 32.99,
+    stock: 0,
+    compatibleWith: ["ProBook"],
+  },
+  {
+    id: "prod-charger-probook-30w",
+    name: "ProBook 30W Travel Charger",
+    category: "charger",
+    price: 27.99,
+    stock: 6,
+    compatibleWith: ["ProBook"],
+  },
+];
+
+const compatibleChargerConfig = generatedTaskConfig({
+  targetCategory: "charger",
+  quantity: 1,
+  maxTotal: 35,
+  shippingMethod: "standard",
+  avoidRestricted: true,
+  requiredDevice: "ProBook",
+});
+
+test("evaluateShopping passes when a compatible in-stock charger is ordered for the required device", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        products: hardShoppingProducts,
+        orders: [
+          {
+            id: "ord_probook",
+            items: [{ productId: "prod-charger-probook-30w", quantity: 1 }],
+            subtotal: 27.99,
+            total: 27.99,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      compatibleChargerConfig,
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateShopping fails when the ordered charger is not compatible with the required device", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        products: hardShoppingProducts,
+        orders: [
+          {
+            id: "ord_incompatible",
+            items: [{ productId: "prod-charger-30w", quantity: 1 }],
+            subtotal: 24.99,
+            total: 24.99,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      compatibleChargerConfig,
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateShopping fails when an order exceeds available stock", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        products: hardShoppingProducts,
+        orders: [
+          {
+            id: "ord_overstock",
+            items: [{ productId: "prod-charger-probook-30w", quantity: 9 }],
+            subtotal: 251.91,
+            total: 30,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 9,
+        maxTotal: 300,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+        requiredDevice: "ProBook",
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+const couponBundleConfig = generatedTaskConfig({
+  targetCategory: "cable",
+  quantity: 3,
+  maxTotal: 28,
+  shippingMethod: "standard",
+  avoidRestricted: true,
+  couponCode: "CABLE20",
+  discountPercent: 20,
+});
+
+test("evaluateShopping passes when the required coupon brings the bundle under budget", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        products: hardShoppingProducts,
+        orders: [
+          {
+            id: "ord_coupon",
+            items: [{ productId: "prod-cable-1m", quantity: 3 }],
+            subtotal: 29.97,
+            total: 23.98,
+            couponCode: "CABLE20",
+            discountAmount: 5.99,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      couponBundleConfig,
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
+test("evaluateShopping fails when the coupon is missing and the bundle exceeds budget", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        products: hardShoppingProducts,
+        orders: [
+          {
+            id: "ord_nocoupon",
+            items: [{ productId: "prod-cable-1m", quantity: 3 }],
+            subtotal: 29.97,
+            total: 29.97,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      couponBundleConfig,
+    ),
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
+test("evaluateShopping passes for a five-unit team charger order within budget", () => {
+  const result = evaluateShopping(
+    makeShoppingSession(
+      {
+        products: hardShoppingProducts,
+        orders: [
+          {
+            id: "ord_team",
+            items: [{ productId: "prod-charger-20w", quantity: 5 }],
+            subtotal: 94.95,
+            total: 94.95,
+            shippingMethod: "standard",
+            shippingCost: 0,
+            submittedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({
+        targetCategory: "charger",
+        quantity: 5,
+        maxTotal: 120,
+        shippingMethod: "standard",
+        avoidRestricted: true,
+      }),
+    ),
+  );
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+});
+
 test("evaluateWiki passes when article was viewed and exact answer submitted", () => {
   const result = evaluateWiki(
     makeWikiSession({
