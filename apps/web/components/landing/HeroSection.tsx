@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { HeroMacFrame } from "./HeroMacFrame";
 import { cn } from "@/lib/utils";
+import { usePlaygroundStore } from "@/lib/playground-store";
 
 const stats = [
   { label: "Practical Tasks", value: "Real workflows, not toy demos" },
@@ -19,6 +21,24 @@ export function HeroSection({
   embedded?: boolean;
   sectionId?: string;
 }) {
+  const quota = usePlaygroundStore((state) => state.quota);
+  const quotaLoading = usePlaygroundStore((state) => state.quotaLoading);
+  const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
+
+  useEffect(() => {
+    void fetchQuota();
+  }, [fetchQuota]);
+
+  const quotaBadge = quotaLoading
+    ? "Loading quota…"
+    : quota
+      ? quota.mode === "guest"
+        ? quota.remaining <= 0
+          ? "Guest trial used"
+          : `${Math.max(quota.remaining, 0)} free run${quota.remaining === 1 ? "" : "s"} today`
+        : `${Math.max(quota.remaining, 0)} of ${quota.limit} runs today`
+      : "1 free run today";
+
   return (
     <section
       id={sectionId}
@@ -47,7 +67,7 @@ export function HeroSection({
                 Run Your Agent
               </a>
               <div className="rounded-full bg-[#f0f0ed] px-6 py-4 text-base font-medium text-[#111111]">
-                1 free run today
+                {quotaBadge}
               </div>
             </div>
             <div className="mt-10 grid max-w-[35rem] gap-3 sm:grid-cols-2">
