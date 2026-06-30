@@ -43,6 +43,8 @@ flowchart TD
 
 This is the only documentation table that enumerates the changing suite contents. The catalog source remains authoritative; update this summary when publishing a revision instead of copying the list into other documents.
 
+> This table reflects the easy `hosted-web-suite`. All published suites (easy and hard) live as independent rows in `public.benchmark_cases`, differentiated only by their `difficulty` tag — see [Suites & Difficulty](./hosted-web-benchmark.md#suites--difficulty).
+
 <!-- generated:hosted-testcases:start -->
 | Task | App | Variants |
 | --- | --- | --- |

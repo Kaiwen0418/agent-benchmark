@@ -127,8 +127,39 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
   }));
 }
 
-export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {
+export type PublicBenchmarkCase = Pick<
+  BenchmarkCase,
+  "id" | "slug" | "title" | "description" | "difficulty"
+>;
+
+// Display-safe projection for the public suite picker. Deliberately omits
+// `metadata` and `current_revision_id` so scorer-oracle surfaces never leak to
+// unauthenticated clients. Ordered easy-before-hard deterministically.
+export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkCase[]> {
   const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("benchmark_cases")
+    .select("id, slug, title, description, difficulty, created_at")
+    .eq("is_public", true)
+    .eq("provider", "hosted-web")
+    .order("difficulty", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to list public benchmark cases");
+  }
+
+  return data.map((item) => ({
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    description: item.description,
+    difficulty: item.difficulty,
+  }));
+}
+
+export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {  const supabase = getSupabase();
 
   const byId = await supabase
     .from("benchmark_cases")

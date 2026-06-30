@@ -1,22 +1,3 @@
-import type { PlaygroundBenchmark } from "@/lib/playground-store";
-
-export const benchmarkOptions: Array<{
-  value: PlaygroundBenchmark;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "hosted-web-suite",
-    label: "Hosted Web Suite",
-    description: "Versioned multi-session benchmark with deterministic tasks and server-side scoring.",
-  },
-  {
-    value: "hosted-web-hard-suite",
-    label: "Hosted Web Hard Suite",
-    description: "Harder deterministic hosted-web benchmark with multi-step reasoning and cross-page state tasks.",
-  },
-];
-
 export const docsBlocks = {
   createRun: `curl -X POST https://agentbench.app/api/runs \\
   -H "Content-Type: application/json" \\

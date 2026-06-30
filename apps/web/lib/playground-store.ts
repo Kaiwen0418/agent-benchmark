@@ -14,7 +14,17 @@ import {
   type HostedSessionBreakdown,
 } from "./hosted-scoring";
 
-export type PlaygroundBenchmark = "hosted-web-suite" | "hosted-web-hard-suite";
+// The selected benchmark is a catalog case id; suites are discovered at runtime
+// from the public catalog rather than hardcoded.
+export type PlaygroundBenchmark = string;
+
+export type BenchmarkOption = {
+  id: string;
+  slug: string;
+  label: string;
+  description: string;
+  difficulty: string;
+};
 
 export type RunPhase = "idle" | "booting" | "running" | "completed" | "failed";
 export type PanelTab = "events" | "files" | "screenshots" | "score";
@@ -39,6 +49,8 @@ type PlaygroundStore = {
   endpoint: string;
   apiKey: string;
   benchmark: PlaygroundBenchmark;
+  benchmarks: BenchmarkOption[];
+  benchmarksLoading: boolean;
   currentRunId: string | null;
   currentExecutionMode: RunExecutionMode | null;
   liveViewUrl: string | null;
@@ -63,6 +75,7 @@ type PlaygroundStore = {
   setActiveTab: (value: PanelTab) => void;
   setLiveSlide: (index: number) => void;
   fetchQuota: () => Promise<void>;
+  fetchBenchmarks: () => Promise<void>;
   startRun: (mode?: RunExecutionMode) => Promise<void>;
   stopRun: () => void;
   reset: () => void;
@@ -74,15 +87,12 @@ type RunSnapshot = {
   artifacts: Artifact[];
 };
 
-const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
-  "hosted-web-suite": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
-  "hosted-web-hard-suite": "bb7e5cd4-f3ed-4aa0-9fcc-46fec39997eb",
-};
-
 const initialState = {
   endpoint: "",
   apiKey: "",
-  benchmark: "hosted-web-suite" as PlaygroundBenchmark,
+  benchmark: "" as PlaygroundBenchmark,
+  benchmarks: [] as BenchmarkOption[],
+  benchmarksLoading: false,
   currentRunId: null,
   currentExecutionMode: null,
   liveViewUrl: null,
@@ -422,6 +432,21 @@ async function requestQuota() {
   return (await response.json()) as { quota: QuotaStatus };
 }
 
+async function requestBenchmarks() {
+  const response = await fetch("/api/benchmark-cases", {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to load benchmark cases");
+  }
+
+  return (await response.json()) as {
+    cases: Array<{ id: string; slug: string; title: string; description: string; difficulty: string }>;
+  };
+}
+
 async function fetchRunSnapshot(runId: string) {
   const [runResponse, eventsResponse, artifactsResponse] = await Promise.all([
     fetch(`/api/runs/${runId}`, { cache: "no-store" }),
@@ -544,6 +569,27 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       set({ quotaLoading: false, runError: "Failed to load quota." });
     }
   },
+  fetchBenchmarks: async () => {
+    set({ benchmarksLoading: true });
+
+    try {
+      const result = await requestBenchmarks();
+      const benchmarks: BenchmarkOption[] = result.cases.map((item) => ({
+        id: item.id,
+        slug: item.slug,
+        label: item.title,
+        description: item.description,
+        difficulty: item.difficulty,
+      }));
+      set((state) => ({
+        benchmarks,
+        benchmarksLoading: false,
+        benchmark: state.benchmark || benchmarks[0]?.id || "",
+      }));
+    } catch {
+      set({ benchmarksLoading: false, runError: "Failed to load benchmark catalog." });
+    }
+  },
   stopRun: () => {
     clearRunSync();
     set({ phase: "failed", statusLine: "Stopped", streamMode: "idle" });
@@ -569,6 +615,16 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
     try {
       const state = get();
       const benchmark = state.benchmark;
+      if (!benchmark) {
+        set({
+          quotaLoading: false,
+          runError: "Select a benchmark suite first.",
+          phase: "idle",
+          statusLine: "Select a benchmark suite first.",
+          streamMode: "idle",
+        });
+        return;
+      }
       const response = await fetch("/api/runs", {
         method: "POST",
         headers: {
@@ -576,7 +632,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         },
         credentials: "include",
         body: JSON.stringify({
-          caseId: BENCHMARK_CASE_IDS[benchmark],
+          caseId: benchmark,
           executionMode: mode,
           isPublic: true,
         }),

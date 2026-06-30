@@ -19,6 +19,14 @@ benchmark run
 
 The published testcase catalog defines the current app list and ordered sessions. See the single authoritative [current testcase table](./hosted-site-app-authoring.md#current-hosted-testcases). Each session defines app, task and seed versions, order, weight, required flag, goal, and start path.
 
+## Suites & Difficulty
+
+There can be more than one published suite (today: `hosted-web-suite` and `hosted-web-hard-suite`). They are treated uniformly — difficulty is a tag, not a code path.
+
+- **Boundary.** Each suite is one row in `public.benchmark_cases` with its own `id`, `slug`, `title`, and immutable published `revision`. Suites are independent catalog entries, not modes of a single entry, so their sessions, versions, and scores evolve separately.
+- **Shared components.** Suites reuse the same hosted apps (definitions, evaluators, render/actions under `apps/hosted-sites/src/apps/*` and `packages/test-cases/src/apps/*`), the same release/publish/seed machinery (the single `hostedWebSuites` registry in [packages/test-cases/src/suites/registry.ts](../packages/test-cases/src/suites/registry.ts), consumed by `release.ts`, `scripts/publish.ts`, and `seed-sql.ts`), and the same run flow (`POST /api/runs` → `getBenchmarkCase` → hosted connect). Neither the backend tooling nor the frontend branches on which suite was chosen.
+- **Difficulty dimension.** The `difficulty` column tags each row (`"easy"` / `"hard"`). Easy sessions draw from each app's `default` variant pools; hard sessions draw from `hard` variant pools and additionally declare cross-app `consistencyChecks` in the suite manifest. Adding a suite means creating a suite source file and appending one entry to `hostedWebSuites` — the row's `difficulty` is all that distinguishes it. The frontend picker is populated dynamically from the public catalog (`GET /api/benchmark-cases`), so new suites appear without code changes.
+
 ## Session Isolation
 
 - Every task URL contains an opaque token.
