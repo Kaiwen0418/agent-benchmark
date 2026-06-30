@@ -13,6 +13,7 @@ import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
+import { hostedWebCatalogReleases } from "@agentbench/test-cases/release";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
@@ -130,11 +131,12 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
 export type PublicBenchmarkCase = Pick<
   BenchmarkCase,
   "id" | "slug" | "title" | "description" | "difficulty"
->;
+> & { tag: string; version: string };
 
 // Display-safe projection for the public suite picker. Deliberately omits
 // `metadata` and `current_revision_id` so scorer-oracle surfaces never leak to
-// unauthenticated clients. Ordered easy-before-hard deterministically.
+// unauthenticated clients. `difficulty` is exposed as the suite tag and the
+// backend orders rows so the default suite (hard, when published) is first.
 export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkCase[]> {
   const supabase = getSupabase();
 
@@ -143,20 +145,28 @@ export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkC
     .select("id, slug, title, description, difficulty, created_at")
     .eq("is_public", true)
     .eq("provider", "hosted-web")
-    .order("difficulty", { ascending: true })
+    .order("difficulty", { ascending: false })
     .order("created_at", { ascending: true });
 
   if (error || !data) {
     throw error ?? new Error("Failed to list public benchmark cases");
   }
 
-  return data.map((item) => ({
-    id: item.id,
-    slug: item.slug,
-    title: item.title,
-    description: item.description,
-    difficulty: item.difficulty,
-  }));
+  const releases = hostedWebCatalogReleases();
+  const releaseByCaseId = new Map(releases.map((release) => [release.benchmarkCase.id, release]));
+
+  return data.map((item) => {
+    const release = releaseByCaseId.get(item.id);
+    return {
+      id: item.id,
+      slug: item.slug,
+      title: item.title,
+      description: item.description,
+      difficulty: item.difficulty,
+      tag: item.difficulty,
+      version: release?.manifest.suiteVersion ?? "",
+    };
+  });
 }
 
 export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {  const supabase = getSupabase();
@@ -655,7 +665,13 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
   };
 }
 
-export async function listPublicLeaderboardVersions(): Promise<string[]> {
+export type LeaderboardVersion = {
+  version: string;
+  slug: string;
+  tag: string;
+};
+
+export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersion[]> {
   const supabase = getSupabase();
 
   const { data: publicRuns, error: runError } = await supabase
@@ -675,28 +691,62 @@ export async function listPublicLeaderboardVersions(): Promise<string[]> {
 
   const { data: attempts, error: attemptError } = await supabase
     .from("public_hosted_run_summaries")
-    .select("suite_version")
-    .in("run_id", publicRuns.map((run) => run.id))
-    .order("suite_version", { ascending: false });
+    .select("suite_slug, suite_version")
+    .in("run_id", publicRuns.map((run) => run.id));
 
   if (attemptError || !attempts) {
     throw attemptError ?? new Error("Failed to load leaderboard versions");
   }
 
-  return [...new Set(attempts.map((attempt) => attempt.suite_version).filter((version): version is string => Boolean(version)))]
-    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }));
+  const { data: cases, error: casesError } = await supabase
+    .from("benchmark_cases")
+    .select("slug, difficulty")
+    .eq("provider", "hosted-web");
+
+  if (casesError || !cases) {
+    throw casesError ?? new Error("Failed to load benchmark case tags");
+  }
+
+  const tagBySlug = new Map((cases ?? []).map((item) => [item.slug, item.difficulty]));
+
+  const seen = new Set<string>();
+  const versions: LeaderboardVersion[] = [];
+  for (const attempt of attempts) {
+    if (!attempt.suite_version || !attempt.suite_slug) continue;
+    const key = `${attempt.suite_slug}:${attempt.suite_version}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    versions.push({
+      version: attempt.suite_version,
+      slug: attempt.suite_slug,
+      tag: tagBySlug.get(attempt.suite_slug) ?? "",
+    });
+  }
+
+  return versions.sort((left, right) => {
+    if (left.tag !== right.tag) {
+      return right.tag.localeCompare(left.tag);
+    }
+    return right.version.localeCompare(left.version, undefined, { numeric: true, sensitivity: "base" });
+  });
 }
 
-export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): Promise<LeaderboardEntry[]> {
+export async function listPublicLeaderboard(limit = 20, suiteVersion?: string, suiteSlug?: string): Promise<LeaderboardEntry[]> {
   const supabase = getSupabase();
 
   let versionRunIds: string[] | null = null;
   if (suiteVersion) {
-    const { data: versionAttempts, error: versionError } = await supabase
+    let versionAttemptsQuery = supabase
       .from("public_hosted_run_summaries")
       .select("run_id")
       .eq("suite_version", suiteVersion)
       .limit(1000);
+
+    if (suiteSlug) {
+      versionAttemptsQuery = versionAttemptsQuery.eq("suite_slug", suiteSlug);
+    }
+
+    const { data: versionAttempts, error: versionError } = await versionAttemptsQuery;
 
     if (versionError || !versionAttempts) {
       throw versionError ?? new Error("Failed to load leaderboard version");

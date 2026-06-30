@@ -7,6 +7,8 @@ import { SiteSelect } from "@/components/ui/SiteSelect";
 
 export type LeaderboardBoard = {
   version: string;
+  tag: string;
+  slug: string;
   entries: LeaderboardEntry[];
 };
 
@@ -16,6 +18,46 @@ function formatDuration(durationMs: number | null) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function boardValue(board: LeaderboardBoard) {
+  return board.version === "all" ? "all" : `${board.slug}:${board.version}`;
+}
+
+function tagColor(tag: string) {
+  let hash = 0;
+  for (let index = 0; index < tag.length; index += 1) {
+    hash = tag.charCodeAt(index) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return {
+    background: `hsla(${hue}, 75%, 55%, 0.15)`,
+    text: `hsl(${hue}, 75%, 55%)`,
+  };
+}
+
+function SuiteTag({ tag, compact = false }: { tag: string; compact?: boolean }) {
+  const colors = tagColor(tag);
+  return (
+    <span
+      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${compact ? "text-[9px]" : "text-[10px]"}`}
+      style={{ backgroundColor: colors.background, color: colors.text }}
+    >
+      {tag}
+    </span>
+  );
+}
+
+function SuiteLabel({ board }: { board: LeaderboardBoard }) {
+  if (board.version === "all") {
+    return <span>All versions</span>;
+  }
+  return (
+    <span className="flex items-center gap-2">
+      <SuiteTag tag={board.tag} compact />
+      <span>{board.version}</span>
+    </span>
+  );
 }
 
 function PlaceholderRow({ position }: { position: number }) {
@@ -34,11 +76,12 @@ function PlaceholderRow({ position }: { position: number }) {
 }
 
 export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
-  const [activeVersion, setActiveVersion] = useState(boards[0]?.version ?? "all");
+  const defaultBoard = boards[0];
+  const [activeVersion, setActiveVersion] = useState(boardValue(defaultBoard) ?? "all");
   const [page, setPage] = useState(1);
   const latestBoard = boards[0];
   const otherBoards = boards.slice(1);
-  const activeBoard = boards.find((board) => board.version === activeVersion) ?? boards[0];
+  const activeBoard = boards.find((board) => boardValue(board) === activeVersion) ?? boards[0];
   const pagination = paginateLeaderboard(activeBoard?.entries ?? [], page);
   const { entries, page: currentPage, pageCount, pageEntries, placeholderPositions } = pagination;
 
@@ -54,24 +97,24 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
           {latestBoard ? (
             <button
               type="button"
-              aria-pressed={latestBoard.version === activeVersion}
-              onClick={() => selectVersion(latestBoard.version)}
-              className={latestBoard.version === activeVersion
+              aria-pressed={boardValue(latestBoard) === activeVersion}
+              onClick={() => selectVersion(boardValue(latestBoard))}
+              className={boardValue(latestBoard) === activeVersion
                 ? "rounded-[0.6rem] bg-[#111111] px-4 py-2.5 text-xs font-medium text-white"
                 : "rounded-[0.6rem] border border-[#d8d0c2] bg-white/55 px-4 py-2.5 text-xs text-[#625c52] transition-colors hover:border-[#111111] hover:text-[#111111]"}
             >
-              {latestBoard.version === "all" ? "All versions" : `Suite ${latestBoard.version}`}
+              <SuiteLabel board={latestBoard} />
             </button>
           ) : null}
           {otherBoards.length > 0 ? (
             <SiteSelect
               compact
               ariaLabel="Other benchmark suites"
-              value={otherBoards.some((board) => board.version === activeVersion) ? activeVersion : ""}
+              value={otherBoards.some((board) => boardValue(board) === activeVersion) ? activeVersion : ""}
               onValueChange={selectVersion}
               options={[
                 { value: "", label: "Other suites", disabled: true },
-                ...otherBoards.map((board) => ({ value: board.version, label: `Suite ${board.version}` })),
+                ...otherBoards.map((board) => ({ value: boardValue(board), label: <SuiteLabel board={board} /> })),
               ]}
               className="min-w-[10rem]"
               triggerClassName="bg-white/55 py-2.5 text-xs text-[#625c52]"
