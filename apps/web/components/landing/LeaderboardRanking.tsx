@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { LeaderboardEntry } from "@/lib/db";
 import { LEADERBOARD_MAX_ENTRIES, LEADERBOARD_PAGE_SIZE, paginateLeaderboard } from "@/lib/leaderboard-pagination";
 import { SiteSelect } from "@/components/ui/SiteSelect";
+import { SuiteTag } from "@/components/ui/SuiteTag";
 
 export type LeaderboardBoard = {
   version: string;
@@ -22,30 +23,6 @@ function formatDuration(durationMs: number | null) {
 
 function boardValue(board: LeaderboardBoard) {
   return board.version === "all" ? "all" : `${board.slug}:${board.version}`;
-}
-
-function tagColor(tag: string) {
-  let hash = 0;
-  for (let index = 0; index < tag.length; index += 1) {
-    hash = tag.charCodeAt(index) + ((hash << 5) - hash);
-  }
-  const hue = Math.abs(hash % 360);
-  return {
-    background: `hsla(${hue}, 75%, 55%, 0.15)`,
-    text: `hsl(${hue}, 75%, 55%)`,
-  };
-}
-
-function SuiteTag({ tag, compact = false }: { tag: string; compact?: boolean }) {
-  const colors = tagColor(tag);
-  return (
-    <span
-      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${compact ? "text-[9px]" : "text-[10px]"}`}
-      style={{ backgroundColor: colors.background, color: colors.text }}
-    >
-      {tag}
-    </span>
-  );
 }
 
 function SuiteLabel({ board }: { board: LeaderboardBoard }) {
