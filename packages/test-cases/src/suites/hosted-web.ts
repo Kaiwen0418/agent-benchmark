@@ -11,7 +11,7 @@ const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPool
 
 export const hostedWebSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-suite-v1",
-  suiteVersion: "v3.0.8",
+  suiteVersion: "v3.0.9",
   timeLimitMinutesPerTestcase: 30,
   sessions: [
     { app: "shopping-lite", taskSlug: "shopping-constrained-checkout", title: "Shopping Checkout", taskVersion: "v2", seedVersion: "shopping-lite-v2", sequenceIndex: 0, weight: 1, required: true, metadata: { questionVariants: shoppingQuestionVariants } },
@@ -24,7 +24,7 @@ export const hostedWebSuiteMetadata = hostedSuiteMetadataSchema.parse({
   ],
 });
 
-export const hostedWebSuiteRevision = "hosted-web-suite-v3.0.8";
+export const hostedWebSuiteRevision = "hosted-web-suite-v3.0.9";
 
 export const hostedWebSuiteCase = {
   id: "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",

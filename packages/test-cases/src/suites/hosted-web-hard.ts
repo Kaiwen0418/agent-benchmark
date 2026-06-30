@@ -13,7 +13,7 @@ const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPool
 
 export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-hard-suite-v1",
-  suiteVersion: "v1.0.0",
+  suiteVersion: "v1.0.1",
   timeLimitMinutesPerTestcase: 60,
   sessions: [
     {
@@ -125,7 +125,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   ],
 });
 
-export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.0";
+export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.1";
 
 export const hostedWebHardSuiteCase = {
   id: "bb7e5cd4-f3ed-4aa0-9fcc-46fec39997eb",
