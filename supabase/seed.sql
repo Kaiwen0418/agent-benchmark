@@ -11,10 +11,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-suite-v3.0.8',
+  'hosted-web-suite-v3.0.9',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3.0.8",
+  "suiteVersion": "v3.0.9",
   "timeLimitMinutesPerTestcase": 30,
   "sessions": [
     {
@@ -593,7 +593,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '878f213de9cbdae693b265de097bd588d22a3ef7a04fcb362e3b2c05a76dff4d'
+  '080899876b1c3b548a38bf4b94215ffc8c201c4fc28fcf3860e9f797c5a67b32'
 );
 
 select public.publish_benchmark_case_catalog(
@@ -608,10 +608,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-hard-suite-v1.0.0',
+  'hosted-web-hard-suite-v1.0.1',
   $catalog${
   "suiteSlug": "hosted-web-hard-suite-v1",
-  "suiteVersion": "v1.0.0",
+  "suiteVersion": "v1.0.1",
   "timeLimitMinutesPerTestcase": 60,
   "sessions": [
     {
@@ -1237,7 +1237,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  'fbd404f24cbb010caa3c364af9bec3861399d9f1939f96660eef92ccbe1a1ef2'
+  '0c603bb52ef501e7be5e6adf9eb79c3de35f696baab5f17744e284278010addb'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)
