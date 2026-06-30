@@ -10,6 +10,7 @@ import { SuiteTag } from "@/components/ui/SuiteTag";
 export function ConnectAgentCard() {
   const benchmark = usePlaygroundStore((state) => state.benchmark);
   const benchmarks = usePlaygroundStore((state) => state.benchmarks);
+  const currentRunId = usePlaygroundStore((state) => state.currentRunId);
   const phase = usePlaygroundStore((state) => state.phase);
   const quota = usePlaygroundStore((state) => state.quota);
   const quotaLoading = usePlaygroundStore((state) => state.quotaLoading);
@@ -18,6 +19,7 @@ export function ConnectAgentCard() {
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
   const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
   const fetchBenchmarks = usePlaygroundStore((state) => state.fetchBenchmarks);
+  const resumeRun = usePlaygroundStore((state) => state.resumeRun);
   const startRun = usePlaygroundStore((state) => state.startRun);
   const stopRun = usePlaygroundStore((state) => state.stopRun);
   const reset = usePlaygroundStore((state) => state.reset);
@@ -30,7 +32,16 @@ export function ConnectAgentCard() {
   useEffect(() => {
     void fetchQuota();
     void fetchBenchmarks();
-  }, [fetchQuota, fetchBenchmarks]);
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const latestRunId = window.localStorage.getItem("agentbench:latestRunId");
+    if (latestRunId && phase === "idle" && !currentRunId) {
+      void resumeRun(latestRunId);
+    }
+  }, [fetchQuota, fetchBenchmarks, resumeRun, phase, currentRunId]);
 
   const quotaBadge = quotaLoading
     ? "Loading quota"
