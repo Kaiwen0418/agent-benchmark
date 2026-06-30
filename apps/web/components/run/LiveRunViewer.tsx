@@ -174,8 +174,8 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
 
   if (embedded) {
     return (
-      <main className="h-full bg-[#111111] text-[#f7f2e7]">
-        <div className="relative h-full bg-[#111111]">
+      <main className="h-screen bg-[#111111] text-[#f7f2e7]">
+        <div className="relative h-screen bg-[#111111]">
           {viewerUrl ? (
             <iframe
               key={`${viewerUrl}:${viewerRevision}`}
