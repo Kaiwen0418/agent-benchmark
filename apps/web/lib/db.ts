@@ -135,8 +135,8 @@ export type PublicBenchmarkCase = Pick<
 
 // Display-safe projection for the public suite picker. Deliberately omits
 // `metadata` and `current_revision_id` so scorer-oracle surfaces never leak to
-// unauthenticated clients. The default suite (hard, when published) is ordered
-// first so the frontend can simply select the first option.
+// unauthenticated clients. `difficulty` is exposed as the suite tag and the
+// backend orders rows so the default suite (hard, when published) is first.
 export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkCase[]> {
   const supabase = getSupabase();
 
@@ -163,7 +163,7 @@ export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkC
       title: item.title,
       description: item.description,
       difficulty: item.difficulty,
-      tag: item.difficulty === "hard" ? "hard" : "easy",
+      tag: item.difficulty,
       version: release?.manifest.suiteVersion ?? "",
     };
   });
@@ -698,6 +698,17 @@ export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersio
     throw attemptError ?? new Error("Failed to load leaderboard versions");
   }
 
+  const { data: cases, error: casesError } = await supabase
+    .from("benchmark_cases")
+    .select("slug, difficulty")
+    .eq("provider", "hosted-web");
+
+  if (casesError || !cases) {
+    throw casesError ?? new Error("Failed to load benchmark case tags");
+  }
+
+  const tagBySlug = new Map((cases ?? []).map((item) => [item.slug, item.difficulty]));
+
   const seen = new Set<string>();
   const versions: LeaderboardVersion[] = [];
   for (const attempt of attempts) {
@@ -708,13 +719,13 @@ export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersio
     versions.push({
       version: attempt.suite_version,
       slug: attempt.suite_slug,
-      tag: attempt.suite_slug.includes("hard") ? "hard" : "easy",
+      tag: tagBySlug.get(attempt.suite_slug) ?? "",
     });
   }
 
   return versions.sort((left, right) => {
     if (left.tag !== right.tag) {
-      return left.tag === "hard" ? -1 : 1;
+      return right.tag.localeCompare(left.tag);
     }
     return right.version.localeCompare(left.version, undefined, { numeric: true, sensitivity: "base" });
   });

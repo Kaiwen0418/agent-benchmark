@@ -4,7 +4,7 @@ import { LeaderboardRanking, type LeaderboardBoard } from "./LeaderboardRanking"
 async function loadBoards(): Promise<LeaderboardBoard[]> {
   const versions = await listPublicLeaderboardVersions();
   if (versions.length === 0) {
-    return [{ version: "all", tag: "easy", slug: "", entries: await listPublicLeaderboard(20) }];
+    return [{ version: "all", tag: "", slug: "", entries: await listPublicLeaderboard(20) }];
   }
 
   return Promise.all(versions.map(async (item) => ({
@@ -18,7 +18,7 @@ async function loadBoards(): Promise<LeaderboardBoard[]> {
 export async function Leaderboard() {
   const boards = await loadBoards().catch((error) => {
     console.error("[web] failed to load public leaderboard", error);
-    return [{ version: "all", tag: "easy" as const, slug: "", entries: [] }];
+    return [{ version: "all", tag: "", slug: "", entries: [] }];
   });
 
   return (

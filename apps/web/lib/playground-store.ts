@@ -585,10 +585,13 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         tag: item.tag,
         version: item.version,
       }));
+      // The backend orders suites with the default (hard) first; the frontend
+      // simply selects the first option without hardcoding any tag.
+      const defaultBenchmark = benchmarks[0]?.id ?? "";
       set((state) => ({
         benchmarks,
         benchmarksLoading: false,
-        benchmark: state.benchmark || benchmarks[0]?.id || "",
+        benchmark: state.benchmark || defaultBenchmark,
       }));
     } catch {
       set({ benchmarksLoading: false, runError: "Failed to load benchmark catalog." });

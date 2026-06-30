@@ -76,7 +76,7 @@ function PlaceholderRow({ position }: { position: number }) {
 }
 
 export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
-  const defaultBoard = boards.find((board) => board.tag === "hard") ?? boards[0];
+  const defaultBoard = boards[0];
   const [activeVersion, setActiveVersion] = useState(boardValue(defaultBoard) ?? "all");
   const [page, setPage] = useState(1);
   const latestBoard = boards[0];
