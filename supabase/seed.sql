@@ -15,6 +15,7 @@ select public.publish_benchmark_case_catalog(
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
   "suiteVersion": "v3.0.8",
+  "timeLimitMinutesPerTestcase": 30,
   "sessions": [
     {
       "app": "shopping-lite",
@@ -592,7 +593,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '7e4bc4d598f3240e29487673714fccee5eac5d8e97572806c3910cdd1852bf5f'
+  '878f213de9cbdae693b265de097bd588d22a3ef7a04fcb362e3b2c05a76dff4d'
 );
 
 select public.publish_benchmark_case_catalog(
@@ -611,6 +612,7 @@ select public.publish_benchmark_case_catalog(
   $catalog${
   "suiteSlug": "hosted-web-hard-suite-v1",
   "suiteVersion": "v1.0.0",
+  "timeLimitMinutesPerTestcase": 60,
   "sessions": [
     {
       "app": "shopping-lite",
@@ -1235,7 +1237,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '3460f642bf312a81e8dca10758b3ee0d6f82a26ae8c10937e4f0fdc60d39cde1'
+  'fbd404f24cbb010caa3c364af9bec3861399d9f1939f96660eef92ccbe1a1ef2'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

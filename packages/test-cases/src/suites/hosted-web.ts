@@ -12,6 +12,7 @@ const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPool
 export const hostedWebSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-suite-v1",
   suiteVersion: "v3.0.8",
+  timeLimitMinutesPerTestcase: 30,
   sessions: [
     { app: "shopping-lite", taskSlug: "shopping-constrained-checkout", title: "Shopping Checkout", taskVersion: "v2", seedVersion: "shopping-lite-v2", sequenceIndex: 0, weight: 1, required: true, metadata: { questionVariants: shoppingQuestionVariants } },
     { app: "forum-lite", taskSlug: "forum-battery-moderation", title: "Forum Moderation", startPath: "/forum", taskVersion: "v2", seedVersion: "forum-lite-v2", sequenceIndex: 1, weight: 1, required: true, metadata: { questionVariants: forumQuestionVariants } },
