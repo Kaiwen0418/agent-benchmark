@@ -674,6 +674,45 @@ export type LeaderboardVersion = {
 export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersion[]> {
   const supabase = getSupabase();
 
+  // Start from the published catalog so every public suite appears in the
+  // selector (even before it has public runs). The backend ordering puts the
+  // default suite first; the frontend just picks boards[0].
+  const { data: cases, error: casesError } = await supabase
+    .from("benchmark_cases")
+    .select("id, slug, difficulty, metadata")
+    .eq("is_public", true)
+    .eq("provider", "hosted-web");
+
+  if (casesError || !cases) {
+    throw casesError ?? new Error("Failed to load benchmark case tags");
+  }
+
+  const releases = hostedWebCatalogReleases();
+  const releaseByCaseId = new Map(releases.map((release) => [release.benchmarkCase.id, release]));
+
+  const seen = new Set<string>();
+  const versions: LeaderboardVersion[] = [];
+  const tagBySuiteSlug = new Map<string, string>();
+
+  for (const item of cases) {
+    const release = releaseByCaseId.get(item.id);
+    if (!release) continue;
+
+    const suiteSlug = release.manifest.suiteSlug;
+    const suiteVersion = release.manifest.suiteVersion;
+    const tag = item.difficulty;
+
+    tagBySuiteSlug.set(suiteSlug, tag);
+
+    const key = `${suiteSlug}:${suiteVersion}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    versions.push({ version: suiteVersion, slug: suiteSlug, tag });
+  }
+
+  // Also surface any historical versions that have public runs but are no
+  // longer in the current catalog release.
   const { data: publicRuns, error: runError } = await supabase
     .from("benchmark_runs")
     .select("id")
@@ -685,42 +724,28 @@ export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersio
   if (runError || !publicRuns) {
     throw runError ?? new Error("Failed to load leaderboard versions");
   }
-  if (publicRuns.length === 0) {
-    return [];
-  }
 
-  const { data: attempts, error: attemptError } = await supabase
-    .from("public_hosted_run_summaries")
-    .select("suite_slug, suite_version")
-    .in("run_id", publicRuns.map((run) => run.id));
+  if (publicRuns.length > 0) {
+    const { data: attempts, error: attemptError } = await supabase
+      .from("public_hosted_run_summaries")
+      .select("suite_slug, suite_version")
+      .in("run_id", publicRuns.map((run) => run.id));
 
-  if (attemptError || !attempts) {
-    throw attemptError ?? new Error("Failed to load leaderboard versions");
-  }
+    if (attemptError || !attempts) {
+      throw attemptError ?? new Error("Failed to load leaderboard versions");
+    }
 
-  const { data: cases, error: casesError } = await supabase
-    .from("benchmark_cases")
-    .select("slug, difficulty")
-    .eq("provider", "hosted-web");
-
-  if (casesError || !cases) {
-    throw casesError ?? new Error("Failed to load benchmark case tags");
-  }
-
-  const tagBySlug = new Map((cases ?? []).map((item) => [item.slug, item.difficulty]));
-
-  const seen = new Set<string>();
-  const versions: LeaderboardVersion[] = [];
-  for (const attempt of attempts) {
-    if (!attempt.suite_version || !attempt.suite_slug) continue;
-    const key = `${attempt.suite_slug}:${attempt.suite_version}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    versions.push({
-      version: attempt.suite_version,
-      slug: attempt.suite_slug,
-      tag: tagBySlug.get(attempt.suite_slug) ?? "",
-    });
+    for (const attempt of attempts) {
+      if (!attempt.suite_version || !attempt.suite_slug) continue;
+      const key = `${attempt.suite_slug}:${attempt.suite_version}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      versions.push({
+        version: attempt.suite_version,
+        slug: attempt.suite_slug,
+        tag: tagBySuiteSlug.get(attempt.suite_slug) ?? "",
+      });
+    }
   }
 
   return versions.sort((left, right) => {
