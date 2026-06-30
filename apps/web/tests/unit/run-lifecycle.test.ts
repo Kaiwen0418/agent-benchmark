@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { RunStatus } from "@agentbench/protocol";
 import { runStatusSchema } from "@agentbench/protocol";
 import { completableRunStatuses, terminalRunStatuses } from "../../lib/run-lifecycle";
 
 test("every run status is either completable or terminal", () => {
-  const completable = new Set(completableRunStatuses);
+  const completable = new Set<RunStatus>(completableRunStatuses);
 
   for (const status of runStatusSchema.options) {
     assert.notEqual(
