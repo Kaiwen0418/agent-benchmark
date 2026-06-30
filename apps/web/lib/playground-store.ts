@@ -579,8 +579,8 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       const benchmarks: BenchmarkOption[] = result.cases.map((item) => ({
         id: item.id,
         slug: item.slug,
-        label: item.title,
-        description: item.description,
+        label: `agent benchmark [${item.tag}-${item.version}]`,
+        description: `Run the ${item.tag} agent benchmark suite.`,
         difficulty: item.difficulty,
         tag: item.tag,
         version: item.version,

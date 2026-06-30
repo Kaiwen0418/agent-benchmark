@@ -153,9 +153,7 @@ export function ConnectAgentCard() {
               label: (
                 <span className="flex items-center gap-2">
                   <SuiteTag tag={item.tag} />
-                  <span className="truncate">
-                    {item.version} · {item.label}
-                  </span>
+                  <span className="truncate">{item.label}</span>
                 </span>
               ),
             }))}
