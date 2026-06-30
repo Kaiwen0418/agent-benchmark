@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveHostedScoring } from "../../lib/hosted-scoring.js";
+import { deriveHostedScoring, type HostedScoringEvent } from "../../lib/hosted-scoring.js";
 
 test("deriveHostedScoring reports earned progress across the full suite weight", () => {
-  const events = [0, 1, 2, 3].map((sequenceIndex) => ({
+  const events: HostedScoringEvent[] = [0, 1, 2, 3].map((sequenceIndex) => ({
     type: "hosted.session.created",
     payload: { sessionId: `session-${sequenceIndex}`, sequenceIndex, weight: 1 },
   }));
@@ -51,7 +51,7 @@ test("deriveHostedScoring preserves evaluator failure reasons", () => {
 });
 
 test("deriveHostedScoring ignores sessions from superseded attempts", () => {
-  const events = ["old", "current"].flatMap((attemptId) =>
+  const events: HostedScoringEvent[] = ["old", "current"].flatMap((attemptId) =>
     [0, 1, 2, 3].map((sequenceIndex) => ({
       type: "hosted.session.created",
       payload: { attemptId, sessionId: `${attemptId}-${sequenceIndex}`, sequenceIndex, weight: 1 },

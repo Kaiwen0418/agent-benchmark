@@ -1,4 +1,4 @@
-type HostedScoringEvent = {
+export type HostedScoringEvent = {
   type: string;
   payload: Record<string, unknown>;
 };
