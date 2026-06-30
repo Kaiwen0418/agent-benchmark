@@ -78,6 +78,7 @@ type PlaygroundStore = {
   setLiveSlide: (index: number) => void;
   fetchQuota: () => Promise<void>;
   fetchBenchmarks: () => Promise<void>;
+  resumeRun: (runId: string) => Promise<void>;
   startRun: (mode?: RunExecutionMode) => Promise<void>;
   stopRun: () => void;
   reset: () => void;
@@ -117,6 +118,20 @@ const initialState = {
 
 let pollInterval: number | null = null;
 let streamSource: EventSource | null = null;
+
+const LATEST_RUN_STORAGE_KEY = "agentbench:latestRunId";
+
+function setStoredLatestRunId(runId: string | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (runId) {
+    window.localStorage.setItem(LATEST_RUN_STORAGE_KEY, runId);
+  } else {
+    window.localStorage.removeItem(LATEST_RUN_STORAGE_KEY);
+  }
+}
 
 function clearRunSync() {
   if (typeof window === "undefined") {
@@ -597,12 +612,43 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       set({ benchmarksLoading: false, runError: "Failed to load benchmark catalog." });
     }
   },
+  resumeRun: async (runId) => {
+    if (!runId || get().phase !== "idle" || get().currentRunId) {
+      return;
+    }
+
+    clearRunSync();
+    set({ quotaLoading: true, runError: null });
+
+    try {
+      const snapshot = await fetchRunSnapshot(runId);
+      applyRunSnapshot(snapshot, set);
+      setStoredLatestRunId(runId);
+      set({ quotaLoading: false });
+
+      if (typeof window !== "undefined" && !isTerminalStatus(snapshot.run.status)) {
+        startRunStream(runId, set, get);
+      } else {
+        set({ streamMode: "idle" });
+      }
+    } catch {
+      setStoredLatestRunId(null);
+      set({
+        quotaLoading: false,
+        runError: "Failed to resume the previous run.",
+        phase: "idle",
+        statusLine: "Failed to resume the previous run.",
+        streamMode: "idle",
+      });
+    }
+  },
   stopRun: () => {
     clearRunSync();
     set({ phase: "failed", statusLine: "Stopped", streamMode: "idle" });
   },
   reset: () => {
     clearRunSync();
+    setStoredLatestRunId(null);
     set((state) => ({
       ...initialState,
       quota: state.quota,
@@ -682,6 +728,8 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         quota: result.quota ?? get().quota,
         quotaLoading: false,
       });
+
+      setStoredLatestRunId(result.run.id);
 
       if (typeof window !== "undefined") {
         startRunStream(result.run.id, set, get);
