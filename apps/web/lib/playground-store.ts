@@ -581,10 +581,14 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         description: item.description,
         difficulty: item.difficulty,
       }));
+      const defaultBenchmark =
+        benchmarks.find((item) => item.difficulty === "hard")?.id ??
+        benchmarks[0]?.id ??
+        "";
       set((state) => ({
         benchmarks,
         benchmarksLoading: false,
-        benchmark: state.benchmark || benchmarks[0]?.id || "",
+        benchmark: state.benchmark || defaultBenchmark,
       }));
     } catch {
       set({ benchmarksLoading: false, runError: "Failed to load benchmark catalog." });

@@ -18,20 +18,11 @@ function formatDuration(durationMs: number | null) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function formatCompletedAt(value: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(value));
-}
-
 function PlaceholderRow({ position }: { position: number }) {
   return (
-    <div className="grid min-h-[84px] grid-cols-[38px_minmax(0,1fr)_52px] items-center gap-3 border-b border-white/10 px-4 py-4 last:border-b-0 lg:min-h-0 lg:grid-cols-[64px_1.35fr_1.2fr_0.8fr_0.75fr_96px] lg:gap-4 lg:px-6 lg:py-6">
+    <div className="grid min-h-[84px] grid-cols-[38px_minmax(0,1fr)_52px_64px] items-center gap-3 border-b border-white/10 px-4 py-4 last:border-b-0 lg:min-h-0 lg:grid-cols-[64px_1.35fr_1.2fr_0.75fr_96px] lg:gap-4 lg:px-6 lg:py-6">
       <span className="text-xl text-white/20 lg:text-2xl">{position.toString().padStart(2, "0")}</span>
-      <div className="lg:col-span-4">
+      <div className="col-span-2 lg:col-span-3">
         <div className="h-2.5 w-28 rounded-full bg-white/[0.07] lg:h-3 lg:w-36" />
         <div className="mt-2 truncate text-[10px] uppercase tracking-[0.14em] text-white/25 lg:mt-3 lg:text-xs lg:tracking-[0.16em]">
           Awaiting benchmark result
@@ -95,9 +86,9 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
       <div className="overflow-hidden rounded-[1.5rem] border border-[#d8d0c2] bg-[#111111] shadow-[0_32px_90px_rgba(77,63,36,0.16)] lg:rounded-[2rem]">
         <div className="hidden grid-cols-[64px_1.35fr_1.2fr_0.75fr_96px] gap-4 border-b border-white/10 px-6 py-4 text-[10px] uppercase tracking-[0.2em] text-white/40 lg:grid">
           <span>Rank</span>
-          <span>Agent / model</span>
-          <span>Benchmark</span>
-          <span>Finished</span>
+          <span>Agent</span>
+          <span>Platform</span>
+          <span>Duration</span>
           <span className="text-right">Score</span>
         </div>
 
@@ -106,7 +97,7 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
             <a
               key={entry.runId}
               href={`/results/${entry.runId}`}
-              className="group grid min-h-[84px] grid-cols-[38px_minmax(0,1fr)_64px] items-center gap-3 border-b border-white/10 px-4 py-4 transition-colors last:border-b-0 hover:bg-white/[0.045] lg:min-h-0 lg:grid-cols-[64px_1.35fr_1.2fr_0.75fr_96px] lg:gap-4 lg:px-6 lg:py-6"
+              className="group grid min-h-[84px] grid-cols-[38px_minmax(0,1fr)_52px_64px] items-center gap-3 border-b border-white/10 px-4 py-4 transition-colors last:border-b-0 hover:bg-white/[0.045] lg:min-h-0 lg:grid-cols-[64px_1.35fr_1.2fr_0.75fr_96px] lg:gap-4 lg:px-6 lg:py-6"
             >
               <span className={entry.rank <= 3 ? "text-xl font-medium text-[#d7ff00] lg:text-3xl" : "text-xl text-white/45 lg:text-2xl"}>
                 {entry.rank.toString().padStart(2, "0")}
@@ -114,8 +105,8 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-white lg:text-lg">{entry.agentName}</div>
                 <div className="mt-1 truncate text-[11px] text-white/45 lg:text-xs">
-                  <span className="lg:hidden">{entry.baseModel}</span>
-                  <span className="hidden lg:inline">{entry.browser ?? "Unknown browser"} · {entry.platform ?? "Unknown platform"}</span>
+                  <span>{entry.baseModel}</span>
+                  <span className="lg:hidden"> · {entry.browser ?? "Unknown browser"} / {entry.platform ?? "Unknown platform"}</span>
                 </div>
                 {entry.status === "timeout" ? (
                   <div className="mt-2 inline-flex rounded-full bg-[#ffb627]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ffc44d]">
@@ -128,10 +119,10 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
                 ) : null}
               </div>
               <div className="hidden min-w-0 lg:block">
-                <div className="truncate text-sm text-white/85">{entry.benchmark}</div>
-                <div className="mt-1 text-xs text-white/40">{formatDuration(entry.durationMs)}</div>
+                <div className="truncate text-sm text-white/85">{entry.browser ?? "Unknown browser"}</div>
+                <div className="mt-1 truncate text-xs text-white/40">{entry.platform ?? "Unknown platform"}</div>
               </div>
-              <div className="hidden text-sm text-white/70 lg:block">{formatCompletedAt(entry.completedAt)}</div>
+              <div className="min-w-0 text-sm font-medium text-white/85 lg:text-base">{formatDuration(entry.durationMs)}</div>
               <div className="text-right">
                 <span className={`text-2xl font-medium tracking-[-0.04em] lg:text-3xl ${
                   entry.status === "failed"
