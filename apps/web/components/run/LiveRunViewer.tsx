@@ -175,39 +175,33 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   if (embedded) {
     return (
       <main className="h-full bg-[#111111] text-[#f7f2e7]">
-        <div className="flex h-full flex-col">
-          <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-[9px] uppercase tracking-[0.16em] text-[#8f897e]">
-            <span className="truncate">browser-session.live</span>
-            <span>{status}</span>
-          </div>
-          <div className="relative flex-1 bg-[#111111]">
-            {viewerUrl ? (
-              <iframe
-                key={`${viewerUrl}:${viewerRevision}`}
-                src={viewerUrl}
-                title="Read-only hosted session"
-                sandbox="allow-same-origin"
-                referrerPolicy="no-referrer"
-                className="h-full w-full border-0 bg-white"
-              />
-            ) : frameUrl ? (
-              <img
-                src={frameUrl}
-                alt="Live browser session"
-                className="h-full w-full object-contain"
-              />
-            ) : (
-              <HostedEventFallback events={hostedEvents} compact />
-            )}
-            {latestHostedEvent ? (
-              <div className="pointer-events-none absolute left-2 top-2 max-w-[75%] rounded-full bg-black/70 px-3 py-1.5 text-[9px] text-[#f1ebde]">
-                {hostedEventLabel(latestHostedEvent)}
-              </div>
-            ) : null}
-            <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between rounded-full bg-black/55 px-3 py-1.5 text-[9px] uppercase tracking-[0.15em] text-[#f1ebde]">
-              <span className="truncate">{initialTitle}</span>
-              <span>Score {score === null ? "--" : `${Math.round(score * 100)}%`}</span>
+        <div className="relative h-full bg-[#111111]">
+          {viewerUrl ? (
+            <iframe
+              key={`${viewerUrl}:${viewerRevision}`}
+              src={viewerUrl}
+              title="Read-only hosted session"
+              sandbox="allow-same-origin"
+              referrerPolicy="no-referrer"
+              className="h-full w-full border-0 bg-white"
+            />
+          ) : frameUrl ? (
+            <img
+              src={frameUrl}
+              alt="Live browser session"
+              className="h-full w-full object-contain"
+            />
+          ) : (
+            <HostedEventFallback events={hostedEvents} compact />
+          )}
+          {latestHostedEvent ? (
+            <div className="pointer-events-none absolute left-2 top-2 max-w-[75%] rounded-full bg-black/70 px-3 py-1.5 text-[9px] text-[#f1ebde]">
+              {hostedEventLabel(latestHostedEvent)}
             </div>
+          ) : null}
+          <div className="pointer-events-none absolute bottom-2 left-2 right-2 flex items-center justify-between rounded-full bg-black/55 px-3 py-1.5 text-[9px] uppercase tracking-[0.15em] text-[#f1ebde]">
+            <span className="truncate">{initialTitle}</span>
+            <span>Score {score === null ? "--" : `${Math.round(score * 100)}%`}</span>
           </div>
         </div>
       </main>

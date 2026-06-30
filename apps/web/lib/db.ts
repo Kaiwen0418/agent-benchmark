@@ -812,7 +812,8 @@ export async function getQuotaStatus(params: {
     const countResult = await getSupabase()
       .from("benchmark_runs")
       .select("*", { count: "exact", head: true })
-      .eq("guest_id", guestId);
+      .eq("guest_id", guestId)
+      .gte("created_at", startOfUtcDay());
     if (countResult.error) {
       throw countResult.error;
     }

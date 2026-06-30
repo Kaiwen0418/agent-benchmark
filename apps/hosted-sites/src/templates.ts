@@ -1,7 +1,6 @@
 import type { ServerResponse } from "node:http";
 import type { HostedSession } from "./runtime/types.js";
 import { readUiTheme, readUiVariant } from "./runtime/question-config.js";
-import { shouldRenderScorePreview } from "./runtime/score-preview-policy.js";
 
 export function escapeHtml(value: string) {
   return value
@@ -344,7 +343,6 @@ export function layout(params: {
       </div>
       <nav class="nav">
         ${appNav}
-        ${shouldRenderScorePreview(params.session) ? `<a href="/api/sessions/${encodeURIComponent(params.session.token)}/score">Score JSON</a>` : ""}
       </nav>
     </header>
     <main>${params.body}</main>
