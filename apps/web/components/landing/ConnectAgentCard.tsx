@@ -6,6 +6,22 @@ import { RunDetailTabs } from "./RunDetailTabs";
 import { usePlaygroundStore } from "@/lib/playground-store";
 import { SiteSelect } from "@/components/ui/SiteSelect";
 
+function BenchmarkTag({ tag }: { tag: string }) {
+  let hash = 0;
+  for (let index = 0; index < tag.length; index += 1) {
+    hash = tag.charCodeAt(index) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return (
+    <span
+      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider"
+      style={{ backgroundColor: `hsla(${hue}, 75%, 55%, 0.15)`, color: `hsl(${hue}, 75%, 55%)` }}
+    >
+      {tag}
+    </span>
+  );
+}
+
 export function ConnectAgentCard() {
   const benchmark = usePlaygroundStore((state) => state.benchmark);
   const benchmarks = usePlaygroundStore((state) => state.benchmarks);
@@ -147,12 +163,28 @@ export function ConnectAgentCard() {
             value={benchmark}
             onValueChange={(value) => setBenchmark(value)}
             ariaLabel="Benchmark"
-            options={benchmarks.map((item) => ({ value: item.id, label: item.label }))}
+            options={benchmarks.map((item) => ({
+              value: item.id,
+              label: (
+                <span className="flex items-center gap-2">
+                  <BenchmarkTag tag={item.tag} />
+                  <span className="truncate">
+                    {item.version} · {item.label}
+                  </span>
+                </span>
+              ),
+            }))}
             compact
           />
         </label>
 
         <div className="rounded-[1.15rem] bg-[#efede6] p-3.5 text-[13px] leading-6 text-[#5c574d]">
+          <div className="mb-1.5 flex items-center gap-2">
+            {selectedBenchmark ? <BenchmarkTag tag={selectedBenchmark.tag} /> : null}
+            <span className="text-[11px] font-medium uppercase tracking-wider text-[#777064]">
+              {selectedBenchmark?.version ?? ""}
+            </span>
+          </div>
           {selectedBenchmark?.description ?? "Loading available benchmark suites…"}
         </div>
 

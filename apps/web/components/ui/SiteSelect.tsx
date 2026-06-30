@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export type SiteSelectOption = {
   value: string;
-  label: string;
+  label: ReactNode;
   disabled?: boolean;
 };
 

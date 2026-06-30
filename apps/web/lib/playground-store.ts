@@ -24,6 +24,8 @@ export type BenchmarkOption = {
   label: string;
   description: string;
   difficulty: string;
+  tag: string;
+  version: string;
 };
 
 export type RunPhase = "idle" | "booting" | "running" | "completed" | "failed";
@@ -443,7 +445,7 @@ async function requestBenchmarks() {
   }
 
   return (await response.json()) as {
-    cases: Array<{ id: string; slug: string; title: string; description: string; difficulty: string }>;
+    cases: Array<{ id: string; slug: string; title: string; description: string; difficulty: string; tag: string; version: string }>;
   };
 }
 
@@ -580,15 +582,13 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         label: item.title,
         description: item.description,
         difficulty: item.difficulty,
+        tag: item.tag,
+        version: item.version,
       }));
-      const defaultBenchmark =
-        benchmarks.find((item) => item.difficulty === "hard")?.id ??
-        benchmarks[0]?.id ??
-        "";
       set((state) => ({
         benchmarks,
         benchmarksLoading: false,
-        benchmark: state.benchmark || defaultBenchmark,
+        benchmark: state.benchmark || benchmarks[0]?.id || "",
       }));
     } catch {
       set({ benchmarksLoading: false, runError: "Failed to load benchmark catalog." });
