@@ -46,6 +46,15 @@ test("every hosted suite catalog release has a stable revision identity and cont
   }
 });
 
+test("every hosted suite declares a positive per-testcase time limit", () => {
+  for (const { case: benchmarkCase, metadata } of hostedWebSuites) {
+    assert.ok(
+      typeof metadata.timeLimitMinutesPerTestcase === "number" && metadata.timeLimitMinutesPerTestcase > 0,
+      `${benchmarkCase.slug} declares a positive timeLimitMinutesPerTestcase`,
+    );
+  }
+});
+
 test("hosted suite cases have distinct ids, slugs, and suite slugs", () => {
   const ids = hostedWebSuites.map((suite) => suite.case.id);
   const slugs = hostedWebSuites.map((suite) => suite.case.slug);

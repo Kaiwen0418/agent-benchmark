@@ -589,7 +589,7 @@ export async function submitBenchmarkRunMetadata(
 export type LeaderboardEntry = {
   runId: string;
   rank: number;
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "timeout";
   score: number;
   completedAt: string;
   durationMs: number | null;
@@ -661,7 +661,7 @@ export async function listPublicLeaderboardVersions(): Promise<string[]> {
   const { data: publicRuns, error: runError } = await supabase
     .from("benchmark_runs")
     .select("id")
-    .in("status", ["completed", "failed"])
+    .in("status", ["completed", "failed", "timeout"])
     .eq("is_public", true)
     .not("score", "is", null)
     .limit(1000);
@@ -710,17 +710,18 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
   let runsQuery = supabase
     .from("benchmark_runs")
     .select("id, case_id, status, score, started_at, completed_at, agent_name, agent_version, base_model, browser_environment")
-    .in("status", ["completed", "failed"])
+    .in("status", ["completed", "failed", "timeout"])
     .eq("is_public", true)
     .not("score", "is", null)
-    .order("score", { ascending: false })
-    .order("completed_at", { ascending: true });
+    .order("score", { ascending: false });
 
   if (versionRunIds) {
     runsQuery = runsQuery.in("id", versionRunIds);
   }
 
-  const { data: runs, error } = await runsQuery.limit(Math.max(1, Math.min(limit, 100)));
+  const fetchLimit = Math.max(limit, Math.min(limit * 5, 100));
+
+  const { data: runs, error } = await runsQuery.limit(fetchLimit);
 
   if (error || !runs) {
     throw error ?? new Error("Failed to load leaderboard");
@@ -737,21 +738,22 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
   }
 
   const summaryByRun = new Map((summaries ?? []).map((item) => [item.run_id, item]));
-  return runs.map((run, index) => {
+  const entries = runs.map((run) => {
     const browser = run.browser_environment && typeof run.browser_environment === "object" && !Array.isArray(run.browser_environment)
       ? run.browser_environment as Record<string, unknown>
       : {};
     const summary = summaryByRun.get(run.id);
     const observedBrowser = parseBrowserEnvironment(summary?.observed_user_agent ?? null);
+    const durationMs = run.started_at && run.completed_at
+      ? Math.max(0, new Date(run.completed_at).getTime() - new Date(run.started_at).getTime())
+      : null;
     return {
       runId: run.id,
-      rank: index + 1,
+      rank: 0,
       status: run.status as LeaderboardEntry["status"],
       score: Number(run.score),
       completedAt: run.completed_at!,
-      durationMs: run.started_at && run.completed_at
-        ? Math.max(0, new Date(run.completed_at).getTime() - new Date(run.started_at).getTime())
-        : null,
+      durationMs,
       benchmark: summary?.benchmark_title ?? "Hosted benchmark",
       suiteVersion: summary?.suite_version ?? null,
       agentName: run.agent_name ?? "Unreported agent",
@@ -761,6 +763,17 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
       platform: observedBrowser?.platform ?? (typeof browser.platform === "string" ? browser.platform : null),
     };
   });
+
+  entries.sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+    const leftDuration = left.durationMs ?? Number.MAX_SAFE_INTEGER;
+    const rightDuration = right.durationMs ?? Number.MAX_SAFE_INTEGER;
+    return leftDuration - rightDuration;
+  });
+
+  return entries.slice(0, limit).map((entry, index) => ({ ...entry, rank: index + 1 }));
 }
 
 export async function getQuotaStatus(params: {

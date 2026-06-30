@@ -93,11 +93,10 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
       </div>
 
       <div className="overflow-hidden rounded-[1.5rem] border border-[#d8d0c2] bg-[#111111] shadow-[0_32px_90px_rgba(77,63,36,0.16)] lg:rounded-[2rem]">
-        <div className="hidden grid-cols-[64px_1.35fr_1.2fr_0.8fr_0.75fr_96px] gap-4 border-b border-white/10 px-6 py-4 text-[10px] uppercase tracking-[0.2em] text-white/40 lg:grid">
+        <div className="hidden grid-cols-[64px_1.35fr_1.2fr_0.75fr_96px] gap-4 border-b border-white/10 px-6 py-4 text-[10px] uppercase tracking-[0.2em] text-white/40 lg:grid">
           <span>Rank</span>
           <span>Agent / model</span>
           <span>Benchmark</span>
-          <span>Browser</span>
           <span>Finished</span>
           <span className="text-right">Score</span>
         </div>
@@ -107,7 +106,7 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
             <a
               key={entry.runId}
               href={`/results/${entry.runId}`}
-              className="group grid min-h-[84px] grid-cols-[38px_minmax(0,1fr)_64px] items-center gap-3 border-b border-white/10 px-4 py-4 transition-colors last:border-b-0 hover:bg-white/[0.045] lg:min-h-0 lg:grid-cols-[64px_1.35fr_1.2fr_0.8fr_0.75fr_96px] lg:gap-4 lg:px-6 lg:py-6"
+              className="group grid min-h-[84px] grid-cols-[38px_minmax(0,1fr)_64px] items-center gap-3 border-b border-white/10 px-4 py-4 transition-colors last:border-b-0 hover:bg-white/[0.045] lg:min-h-0 lg:grid-cols-[64px_1.35fr_1.2fr_0.75fr_96px] lg:gap-4 lg:px-6 lg:py-6"
             >
               <span className={entry.rank <= 3 ? "text-xl font-medium text-[#d7ff00] lg:text-3xl" : "text-xl text-white/45 lg:text-2xl"}>
                 {entry.rank.toString().padStart(2, "0")}
@@ -116,9 +115,13 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
                 <div className="truncate text-sm font-medium text-white lg:text-lg">{entry.agentName}</div>
                 <div className="mt-1 truncate text-[11px] text-white/45 lg:text-xs">
                   <span className="lg:hidden">{entry.baseModel}</span>
-                  <span className="hidden lg:inline">{entry.agentVersion} · {entry.baseModel}</span>
+                  <span className="hidden lg:inline">{entry.browser ?? "Unknown browser"} · {entry.platform ?? "Unknown platform"}</span>
                 </div>
-                {entry.status === "failed" ? (
+                {entry.status === "timeout" ? (
+                  <div className="mt-2 inline-flex rounded-full bg-[#ffb627]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ffc44d]">
+                    Timed out
+                  </div>
+                ) : entry.status === "failed" ? (
                   <div className="mt-2 inline-flex rounded-full bg-[#ff8d7a]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ff9f90]">
                     Failed run
                   </div>
@@ -126,18 +129,16 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
               </div>
               <div className="hidden min-w-0 lg:block">
                 <div className="truncate text-sm text-white/85">{entry.benchmark}</div>
-                <div className="mt-1 text-xs text-white/40">
-                  {entry.suiteVersion ?? "suite version unavailable"} · {formatDuration(entry.durationMs)}
-                </div>
-              </div>
-              <div className="hidden text-sm text-white/70 lg:block">
-                {entry.browser ?? "Unknown browser"}
-                <div className="mt-1 text-xs text-white/35">{entry.platform ?? "Unknown platform"}</div>
+                <div className="mt-1 text-xs text-white/40">{formatDuration(entry.durationMs)}</div>
               </div>
               <div className="hidden text-sm text-white/70 lg:block">{formatCompletedAt(entry.completedAt)}</div>
               <div className="text-right">
                 <span className={`text-2xl font-medium tracking-[-0.04em] lg:text-3xl ${
-                  entry.status === "failed" ? "text-[#ff9f90]" : "text-white group-hover:text-[#d7ff00]"
+                  entry.status === "failed"
+                    ? "text-[#ff9f90]"
+                    : entry.status === "timeout"
+                      ? "text-[#ffc44d]"
+                      : "text-white group-hover:text-[#d7ff00]"
                 }`}>
                   {Math.round(entry.score * 100)}
                 </span>

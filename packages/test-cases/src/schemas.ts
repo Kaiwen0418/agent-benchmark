@@ -23,6 +23,7 @@ export type HostedSuiteConsistencyCheck = z.infer<typeof hostedSuiteConsistencyC
 export const hostedSuiteMetadataSchema = z.object({
   suiteSlug: z.string().min(1),
   suiteVersion: z.string().min(1),
+  timeLimitMinutesPerTestcase: z.number().int().positive().optional(),
   sessions: z.array(hostedSessionDefinitionSchema).min(1),
   // Optional so suites without a chain (the easy suite) parse to byte-identical
   // manifests — the key is simply absent rather than defaulted in.
