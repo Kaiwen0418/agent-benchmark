@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { deriveHostedViewerRevision, deriveHostedViewerUrl } from "@/lib/hosted-viewer";
 import { deriveHostedScoring } from "@/lib/hosted-scoring";
+import type { HostedSessionDeadline } from "@/lib/db";
 
 type LiveRunViewerProps = {
   runId: string;
@@ -40,6 +41,22 @@ type HostedSuiteSession = {
   sequenceIndex: number;
   startUrl: string | null;
 };
+
+function useNow(intervalMs = 1000) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+function formatCountdown(durationMs: number) {
+  const totalSeconds = Math.max(0, Math.ceil(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
 
 function deriveLiveFrameUrl(payload: StreamPayload) {
   const liveEvent = [...payload.events]
@@ -112,6 +129,22 @@ function deriveHostedSuiteSessions(events: StreamEvent[]) {
   return [...sessions.values()].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
 }
 
+function deriveSessionStatusLabel(deadline: HostedSessionDeadline | undefined, now: number) {
+  if (!deadline) return null;
+
+  if (deadline.status === "active" && deadline.expiresAt) {
+    const remaining = new Date(deadline.expiresAt).getTime() - now;
+    if (remaining <= 0) return { text: "Timed out", urgent: true };
+    return { text: `Time left: ${formatCountdown(remaining)}`, urgent: remaining < 60_000 };
+  }
+
+  if (deadline.status === "completed") return { text: "Completed", urgent: false };
+  if (deadline.status === "failed") return { text: "Failed", urgent: true };
+  if (deadline.status === "created") return { text: "Pending", urgent: false };
+
+  return { text: deadline.status, urgent: false };
+}
+
 export function LiveRunViewer(props: LiveRunViewerProps) {
   const {
     runId,
@@ -131,6 +164,8 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   const [viewerRevision, setViewerRevision] = useState(0);
   const [hostedEvents, setHostedEvents] = useState<StreamEvent[]>([]);
   const [suiteSessions, setSuiteSessions] = useState<HostedSuiteSession[]>([]);
+  const [sessionDeadlines, setSessionDeadlines] = useState<Map<string, HostedSessionDeadline>>(new Map());
+  const now = useNow();
 
   useEffect(() => {
     const source = new EventSource(`/api/runs/${runId}/stream`);
@@ -162,7 +197,28 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
     return () => {
       source.close();
     };
-  }, [initialScore, initialStatus, runId]);
+  }, [initialScore, initialStatus, initialErrorMessage, runId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    async function fetchDeadlines() {
+      try {
+        const response = await fetch(`/api/runs/${runId}/hosted-sessions`, {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const result = (await response.json()) as { sessions: HostedSessionDeadline[] };
+        setSessionDeadlines(new Map(result.sessions.map((session) => [session.sessionId, session])));
+      } catch (error) {
+        console.error("[live-viewer] failed to refresh session deadlines", error);
+      }
+    }
+
+    void fetchDeadlines();
+    const interval = window.setInterval(fetchDeadlines, 5000);
+    return () => window.clearInterval(interval);
+  }, [runId]);
 
   const terminalSummary =
     status === "timeout"
@@ -273,22 +329,35 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
           <section className="mt-6 rounded-[1.6rem] border border-white/10 bg-white/[0.04] p-5">
             <div className="text-xs uppercase tracking-[0.18em] text-[#8f897e]">Hosted Suite Progress</div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {suiteSessions.map((session, index) => (
-                <div
-                  key={session.sessionId}
-                  className={`rounded-[1rem] border px-4 py-3 ${
-                    status === "timeout" || status === "failed"
-                      ? "border-[#6b2d22] bg-[#1b1312]"
-                      : "border-white/10 bg-black/20"
-                  }`}
-                >
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-[#8f897e]">
-                    Session {index + 1}
+              {suiteSessions.map((session, index) => {
+                const deadline = sessionDeadlines.get(session.sessionId);
+                const statusLabel = deriveSessionStatusLabel(deadline, now);
+                return (
+                  <div
+                    key={session.sessionId}
+                    className={`rounded-[1rem] border px-4 py-3 ${
+                      status === "timeout" || status === "failed"
+                        ? "border-[#6b2d22] bg-[#1b1312]"
+                        : "border-white/10 bg-black/20"
+                    }`}
+                  >
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-[#8f897e]">
+                      Session {index + 1}
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-white">{session.taskSlug}</div>
+                    <div className="mt-1 text-xs text-[#c8c2b5]">{session.app}</div>
+                    {statusLabel ? (
+                      <div
+                        className={`mt-2 text-xs font-medium uppercase tracking-wider ${
+                          statusLabel.urgent ? "text-[#ff9f90]" : "text-[#8f897e]"
+                        }`}
+                      >
+                        {statusLabel.text}
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="mt-1 text-sm font-medium text-white">{session.taskSlug}</div>
-                  <div className="mt-1 text-xs text-[#c8c2b5]">{session.app}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         ) : null}
