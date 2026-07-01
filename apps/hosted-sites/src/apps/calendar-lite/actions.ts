@@ -9,6 +9,8 @@ export function createCalendarEvent(
     durationMinutes: number;
     attendeeEmail: string;
     secondaryAttendeeEmail?: string;
+    resource?: string;
+    occurrences?: number;
     makeId: (prefix: string) => string;
     now: () => string;
   },
@@ -37,6 +39,8 @@ export function createCalendarEvent(
     durationMinutes: input.durationMinutes,
     attendeeEmail,
     secondaryAttendeeEmail,
+    resource: input.resource?.trim() || undefined,
+    occurrences: input.occurrences && input.occurrences > 1 ? input.occurrences : undefined,
     createdAt: input.now(),
   };
   session.state.calendarEvents.push(calendarEvent);

@@ -63,6 +63,8 @@ export function renderCalendarLite(
         </div>
         <label style="display:block;margin-top:12px;">Attendee email <input type="email" name="attendeeEmail" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
         <label style="display:block;margin-top:12px;">Secondary attendee email <input type="email" name="secondaryAttendeeEmail" placeholder="Optional" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+        <label style="display:block;margin-top:12px;">Resource <input name="resource" placeholder="Optional room or resource" /></label>
+        <label style="display:block;margin-top:12px;">Weekly occurrences <input type="number" min="1" name="occurrences" value="1" /></label>
         <button type="submit" style="margin-top:12px;">Create event</button>
       </form>
     </section>

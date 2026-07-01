@@ -29,6 +29,8 @@ export function createCalendarLiteRoutes(deps: HostedAppRouteDeps) {
       const durationMinutes = Number(form.get("durationMinutes"));
       const attendeeEmail = form.get("attendeeEmail");
       const secondaryAttendeeEmail = form.get("secondaryAttendeeEmail");
+      const resource = form.get("resource");
+      const occurrences = Number(form.get("occurrences") || 1);
       if (
         typeof title !== "string" ||
         typeof date !== "string" ||
@@ -45,6 +47,8 @@ export function createCalendarLiteRoutes(deps: HostedAppRouteDeps) {
         durationMinutes,
         attendeeEmail,
         secondaryAttendeeEmail: typeof secondaryAttendeeEmail === "string" ? secondaryAttendeeEmail : undefined,
+        resource: typeof resource === "string" ? resource : undefined,
+        occurrences,
         makeId: deps.makeId,
         now: deps.now,
       });

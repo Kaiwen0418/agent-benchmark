@@ -107,6 +107,11 @@ test("hard v1.0.2 requires both wiki answers to be carried into distinct note fi
         targetPath: "notes[].body",
         required: true,
       },
+      {
+        sourceTaskSlug: "notes-followup-create-hard",
+        targetPath: "calendarEvents[].title",
+        required: true,
+      },
     ],
   );
 });
@@ -160,6 +165,17 @@ test("hard v1.0.2 includes a multi-record notes workflow on the v2 seed", () => 
   assert.equal(notes.taskVersion, "v3");
   assert.equal(notes.seedVersion, "notes-lite-hard-v2");
   assert.ok(notes.metadata.questionVariants.some((variant) => variant.id === "release-rollout-note-set"));
+});
+
+test("hard v1.0.2 includes recurring resource calendar workflow on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const calendar = suite.sessions.find((session) => session.app === "calendar-lite");
+  assert.ok(calendar);
+  assert.equal(calendar.taskVersion, "v3");
+  assert.equal(calendar.seedVersion, "calendar-lite-hard-v2");
+  assert.ok(
+    calendar.metadata.questionVariants.some((variant) => variant.id === "recurring-resource-review"),
+  );
 });
 
 test("schema rejects a consistency check with an unknown task slug", () => {
