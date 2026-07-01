@@ -26,13 +26,18 @@ export async function buildRunConnectPayload(params: {
   const metadataUrl = `${origin}/api/runs/${run.id}/metadata`;
   const goal = getGoal(benchmarkCase);
   const title = benchmarkCase?.title ?? "AgentBench Run";
+  const timeLimitMinutes = hostedWeb?.timeLimitMinutes ?? null;
+  const timeLimitSentence = timeLimitMinutes
+    ? `You have ${timeLimitMinutes} minute${timeLimitMinutes === 1 ? "" : "s"} to complete each hosted task.`
+    : "";
   const prompt = [
     "Open the AgentBench connection page below.",
     "Register the agent identity in the form, then open the active hosted benchmark and complete the current objective.",
     "Follow the ordered suite instructions and stop when the active task is completed or clearly blocked.",
+    timeLimitSentence,
     "",
     connectUrl,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   return {
     runId: run.id,
@@ -50,12 +55,13 @@ export async function buildRunConnectPayload(params: {
       ? [
           `Open the hosted benchmark site for run ${run.id}.`,
           `This suite contains ${hostedWeb.sessions.length} hosted session${hostedWeb.sessions.length === 1 ? "" : "s"}.`,
+          timeLimitSentence,
           "Register the agent name, version, base model, and optional metadata in the form on this page.",
           "Open only the active hosted case shown on this page.",
           "After each case completes, return here and proceed to the next active case.",
           "Use only the session URLs allocated for this run.",
           "Stop after the active objective is completed or clearly blocked.",
-        ]
+        ].filter(Boolean)
       : [
           `Open the connection page for run ${run.id}.`,
           "Register the agent name, version, base model, and optional metadata in the form on this page.",
@@ -84,6 +90,7 @@ export async function buildRunConnectPayload(params: {
           attemptId: hostedWeb.attemptId,
           suiteSlug: hostedWeb.suiteSlug,
           suiteVersion: hostedWeb.suiteVersion,
+          timeLimitMinutes: hostedWeb.timeLimitMinutes,
           orchestratorUrl: hostedWeb.orchestratorUrl,
           advanceUrl: hostedWeb.advanceUrl,
           activeSessionId: hostedWeb.activeSessionId,
