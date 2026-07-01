@@ -87,6 +87,30 @@ test("hard consistency checks reference real sessions with source before target"
   }
 });
 
+test("hard v1.0.2 requires both wiki answers to be carried into distinct note fields", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  assert.equal(suite.suiteVersion, "v1.0.2");
+  assert.deepEqual(
+    suite.consistencyChecks?.map((check) => ({
+      sourceTaskSlug: check.sourceTaskSlug,
+      targetPath: check.targetPath,
+      required: check.required,
+    })),
+    [
+      {
+        sourceTaskSlug: "wiki-release-answer-hard",
+        targetPath: "notes[].title",
+        required: true,
+      },
+      {
+        sourceTaskSlug: "wiki-policy-answer-hard",
+        targetPath: "notes[].body",
+        required: true,
+      },
+    ],
+  );
+});
+
 test("schema rejects a consistency check with an unknown task slug", () => {
   const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
     consistencyChecks: Array<Record<string, unknown>>;

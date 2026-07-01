@@ -156,12 +156,31 @@ Confidentiality is the gating constraint for the epic: scorer oracle surfaces (v
 | #113 Calendar hard pool | Complete | Conflict-avoidance, shared-window, timezone-overlap, and reschedule variants. |
 | #114 Repo hard pool | Complete | Coherent multi-edit / rename / rollout variants with required messages. |
 | #110 Shopping hard pool | Complete | Stock-aware, compatibility, and coupon constrained-checkout variants. |
-| #115 First cross-app chain | In Progress | The agent must carry the exact wiki release-lookup answer into a later note title; enforced only by a suite-level consistency check against the agents' own final states. |
+| #115 Cross-app chain | In Progress | Hard v1.0.2 requires the agent to carry two exact wiki answers into a later note's title and body; enforced only by suite-level consistency checks against the agent's own final states. |
 | #116 Verification matrix and docs | In Progress | Both suites swept independently by the generic matrix; independent semantic versioning, cross-app consistency, and scorer oracle policy documented. |
+| #140 Hard v1.0.2 scale expansion | In Progress | Expand all six hard pools, add a required workflow spanning at least three sessions, and complete deterministic, confidentiality, browser, and lifecycle verification before publishing v1.0.2. |
 
 Each hard variant receives positive, negative, and presentation-invariant matrix coverage in `apps/hosted-sites/tests/unit/variant-matrix.test.ts`, which iterates every published suite. Per-session scoring stays deterministic; suite-level checks live solely in the scoring module (`evaluateSuiteConsistency`) and orchestrator aggregation. The easy and hard suites version and publish independently; a hard-suite change must not alter the easy manifest's content hash.
 
-Exit criteria: the hard suite is published as its own immutable revision, every hard variant and the first cross-app chain pass unit and E2E checks, public surfaces rank the hard suite separately without exposing oracle data, and `pnpm verify:ci` remains green.
+Issue #140 is the umbrella work item for the unpublished `v1.0.2` revision. The
+revision remains `v1.0.2` while this scope is assembled; affected task and seed
+versions still advance whenever their semantics or fixtures change. Delivery is
+split into four increments:
+
+1. Complete the two-value Wiki-to-Notes carry chain and its fail-closed
+   aggregation coverage.
+2. Expand Shopping, Forum, Repo, Wiki, Notes, and Calendar with materially
+   distinct multi-step hard variants. The target capabilities include combined
+   cart optimization, coordinated moderation, branch/review/conflict workflows,
+   bounded multi-article synthesis, linked or organized notes, and recurring or
+   resource-constrained scheduling.
+3. Add at least one required cross-app workflow spanning three or more sessions
+   without adding app-specific orchestrator branches or durable tables.
+4. Expand deterministic seed coverage, oracle-confidentiality assertions,
+   desktop and narrow-viewport browser verification, and full lifecycle smoke
+   coverage before publishing the immutable revision.
+
+Exit criteria: the hard suite is published as its own immutable revision, every hard variant and the cross-app carry checks pass unit and E2E checks, public surfaces rank the hard suite separately without exposing oracle data, and `pnpm verify:ci` remains green.
 
 ## Explicit Non-Goals
 

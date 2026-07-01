@@ -608,10 +608,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-hard-suite-v1.0.1',
+  'hosted-web-hard-suite-v1.0.2',
   $catalog${
   "suiteSlug": "hosted-web-hard-suite-v1",
-  "suiteVersion": "v1.0.1",
+  "suiteVersion": "v1.0.2",
   "timeLimitMinutesPerTestcase": 60,
   "sessions": [
     {
@@ -1025,17 +1025,16 @@ select public.publish_benchmark_case_catalog(
         "questionVariants": [
           {
             "id": "carry-release-answer",
-            "goal": "Open the note you need to file as a follow-up. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'File the release-lookup result for the upgrade plan.', and the tag to 'release'.",
+            "goal": "Open the note you need to file as a follow-up. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task, set the body to exactly the answer you submitted in the later wiki policy-lookup task (no extra words in either field), and set the tag to 'release'.",
             "taskConfig": {
-              "expectedBody": "File the release-lookup result for the upgrade plan.",
-              "expectedTag": "release"
+              "expectedTag": "release",
+              "targetNoteId": "note-seed-release"
             }
           },
           {
             "id": "carry-release-summary",
-            "goal": "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'Summarize the release-lookup outcome for the team.', and the tag to 'summary'.",
+            "goal": "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task, set the body to exactly the answer you submitted in the later wiki policy-lookup task (no extra words in either field), and set the tag to 'summary'.",
             "taskConfig": {
-              "expectedBody": "Summarize the release-lookup outcome for the team.",
               "expectedTag": "summary"
             }
           }
@@ -1234,10 +1233,20 @@ select public.publish_benchmark_case_catalog(
       "rule": "equal-normalized",
       "weight": 1,
       "required": true
+    },
+    {
+      "name": "Wiki policy answer carried into note body",
+      "sourceTaskSlug": "wiki-policy-answer-hard",
+      "sourcePath": "latestAnswer.answer",
+      "targetTaskSlug": "notes-followup-create-hard",
+      "targetPath": "notes[].body",
+      "rule": "equal-normalized",
+      "weight": 1,
+      "required": true
     }
   ]
 }$catalog$::jsonb,
-  '0c603bb52ef501e7be5e6adf9eb79c3de35f696baab5f17744e284278010addb'
+  '2658125a40968c9cab26f1de53864007faec2b862a539d38b2dc5dcb46a5fe8c'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

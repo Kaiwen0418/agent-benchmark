@@ -48,13 +48,13 @@ The generic matrix iterates every published suite. The easy suite (`hosted-web-s
 
 ## Independent Suite Versioning
 
-The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.9` and `hosted-web-hard-suite-v1.0.1`). A change to a hard variant, the hard pool composition, or a hard cross-app chain bumps only the hard suite's version and content hash; the easy suite's revision identity must stay byte-identical.
+The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.9` and `hosted-web-hard-suite-v1.0.2`). A change to a hard variant, the hard pool composition, or a hard cross-app chain bumps only the hard suite's version and content hash; the easy suite's revision identity must stay byte-identical.
 
 This is enforced mechanically: new task-config fields used by hard variants are optional and only inspected when present, and `consistencyChecks` is an optional manifest key that is absent from the easy manifest. The easy catalog's "stable revision identity and content hash" test fails if a hard-suite change leaks into the easy manifest.
 
 ## Cross-App Consistency
 
-The hard suite declares the first cross-app chain. A suite-level consistency check links one earlier session's published final state to a later session's final state and is evaluated only by the scoring module (`evaluateSuiteConsistency`), then folded into `aggregateSuiteScore` by the orchestrator at suite completion as a first-class weighted-required component. Required behavior:
+The hard suite declares a two-value cross-app chain: the release-lookup answer must become the later note title, and the policy-lookup answer must become its body. Suite-level consistency checks link each earlier session's published final state to the later session's final state and are evaluated only by the scoring module (`evaluateSuiteConsistency`), then folded into `aggregateSuiteScore` by the orchestrator at suite completion as first-class weighted-required components. Required behavior:
 
 - Suite-level checks live solely in the scoring module and orchestrator aggregation. Apps never compute them and never see other sessions' state.
 - A check reads only the agents' own final states, never private `taskConfig`. The matching per-session evaluator stays lenient on the carried field so the carry is enforced only at suite level.

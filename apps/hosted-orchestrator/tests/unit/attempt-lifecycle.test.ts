@@ -590,6 +590,7 @@ const consistencyChain = {
 // the lifecycle hands to the completion RPC.
 function createConsistencySupabase(options: {
   wikiFinalState: unknown;
+  policyFinalState?: unknown;
   consistencyChecks?: unknown[];
 }) {
   const rpcCalls: Record<string, unknown>[] = [];
@@ -602,13 +603,25 @@ function createConsistencySupabase(options: {
       required: true,
       sequence_index: 0,
     },
+    ...(options.policyFinalState === undefined
+      ? []
+      : [
+          {
+            id: "session-wiki-policy",
+            app: "wiki-lite",
+            task_slug: "wiki-policy-answer-hard",
+            weight: 1,
+            required: true,
+            sequence_index: 1,
+          },
+        ]),
     {
       id: "session-notes",
       app: "notes-lite",
       task_slug: "notes-followup-create-hard",
       weight: 1,
       required: true,
-      sequence_index: 1,
+      sequence_index: options.policyFinalState === undefined ? 1 : 2,
     },
   ];
   const supabase = {
@@ -645,6 +658,19 @@ function createConsistencySupabase(options: {
                     weight: 1,
                     final_state: options.wikiFinalState,
                   },
+                  ...(options.policyFinalState === undefined
+                    ? []
+                    : [
+                        {
+                          session_id: "session-wiki-policy",
+                          app: "wiki-lite",
+                          task_slug: "wiki-policy-answer-hard",
+                          score: 1,
+                          status: "passed",
+                          weight: 1,
+                          final_state: options.policyFinalState,
+                        },
+                      ]),
                 ],
                 error: null,
               }),
@@ -713,6 +739,38 @@ test("complete-session passes the suite when the agent carries the value across 
   assert.equal(aggregate.breakdown.consistency?.length, 1);
   assert.equal(aggregate.breakdown.consistency?.[0]?.status, "passed");
   assert.equal(aggregate.breakdown.consistency?.[0]?.evidence?.matchedValue, "90 days");
+});
+
+test("complete-session requires both hard v1.0.2 wiki answers in distinct note fields", async () => {
+  const bodyChain = {
+    ...consistencyChain,
+    name: "Wiki policy answer carried into note body",
+    sourceTaskSlug: "wiki-policy-answer-hard",
+    targetPath: "notes[].body",
+  };
+  const { supabase } = createConsistencySupabase({
+    wikiFinalState: { app: "wiki-lite", latestAnswer: { answer: "30 days" } },
+    policyFinalState: { app: "wiki-lite", latestAnswer: { answer: "90 days" } },
+    consistencyChecks: [consistencyChain, bodyChain],
+  });
+  const lifecycle = createLifecycle({ getSupabaseAdmin: () => supabase });
+
+  const result = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeNotesTargetSession({
+      app: "notes-lite",
+      notes: [{ id: "n1", title: "30 days", body: "wrong value", tag: "release" }],
+    }),
+    result: makeScoreResult(),
+  });
+
+  const aggregate = result.attemptResult.aggregate!;
+  assert.equal(aggregate.status, "failed");
+  assert.equal(aggregate.score, 0.8);
+  assert.deepEqual(
+    aggregate.breakdown.consistency?.map((check) => check.status),
+    ["passed", "failed"],
+  );
 });
 
 test("complete-session fails the suite on a cross-app consistency mismatch", async () => {

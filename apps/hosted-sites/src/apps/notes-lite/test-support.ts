@@ -13,8 +13,8 @@ export const notesLiteTestSupport: HostedAppTestSupport<"notes-lite"> = {
       if (!note) {
         throw new Error(`missing seeded note ${targetNoteId}`);
       }
-      note.title = configString(config, "expectedTitle");
-      note.body = configString(config, "expectedBody");
+      note.title = configStringOrNull(config, "expectedTitle") ?? "carried-value";
+      note.body = configStringOrNull(config, "expectedBody") ?? "second-carried-value";
       note.tag = configString(config, "expectedTag");
       session.metadata = { ...session.metadata, _testTargetNoteId: targetNoteId };
       return;
@@ -24,7 +24,7 @@ export const notesLiteTestSupport: HostedAppTestSupport<"notes-lite"> = {
       // Carry variants leave the title unpinned; a non-empty placeholder
       // satisfies the lenient per-session title check.
       title: configStringOrNull(config, "expectedTitle") ?? "carried-value",
-      body: configString(config, "expectedBody"),
+      body: configStringOrNull(config, "expectedBody") ?? "second-carried-value",
       tag: configString(config, "expectedTag"),
       createdAt: "2026-06-23T00:00:00.000Z",
     });

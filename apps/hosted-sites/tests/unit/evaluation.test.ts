@@ -1591,6 +1591,50 @@ test("evaluateNotes carry variant fails when the title is empty", () => {
   assert.equal(result.score, 0);
 });
 
+test("evaluateNotes dual-carry variant passes with non-empty unpinned title and body", () => {
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note_dual_carry",
+            title: "30 days",
+            body: "90 days",
+            tag: "release",
+            createdAt: "2026-06-23T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({ expectedTag: "release" }),
+    ),
+  );
+  assert.equal(result.status, "passed");
+  assert.equal(result.score, 1);
+  assert.equal(result.evaluators[0]?.evidence?.titlePinned, false);
+  assert.equal(result.evaluators[0]?.evidence?.bodyPinned, false);
+});
+
+test("evaluateNotes dual-carry variant fails when the carried body is empty", () => {
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          {
+            id: "note_dual_carry",
+            title: "30 days",
+            body: "   ",
+            tag: "release",
+            createdAt: "2026-06-23T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({ expectedTag: "release" }),
+    ),
+  );
+  assert.equal(result.status, "failed");
+  assert.equal(result.score, 0);
+});
+
 test("generated shopping config changes the accepted category and shipping method", () => {
   const session = makeShoppingSession({
     products: [{ id: "prod-cable", name: "USB-C Cable", category: "cable", price: 9.99 }],
