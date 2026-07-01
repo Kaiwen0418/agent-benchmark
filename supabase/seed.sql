@@ -801,8 +801,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "repo-coherent-edit-hard",
       "title": "Repository Coherent Edit (Hard)",
       "startPath": "/repo",
-      "taskVersion": "v2",
-      "seedVersion": "repo-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "repo-lite-hard-v2",
       "sequenceIndex": 2,
       "weight": 1,
       "required": true,
@@ -892,6 +892,41 @@ select public.publish_benchmark_case_catalog(
                 {
                   "name": "API version consistency",
                   "token": "v2",
+                  "files": [
+                    "src/api.ts",
+                    "docs/API.md",
+                    "README.md"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": "api-v3-conflict-rollout",
+            "goal": "Roll out API v3 from feature branch `feature/api-v3`: update `API_VERSION` to `v3` in `src/api.ts`, set `Stable version: v3` in `docs/API.md`, and add `API v3` to `README.md`. Resolve the simulated target-branch conflict, commit with message `feat: roll out api v3`, request review from `mira`, then open merge request `Roll out API v3` targeting `develop`.",
+            "taskConfig": {
+              "filePath": "src/api.ts",
+              "expectedText": "API_VERSION = \"v3\"",
+              "forbiddenText": "API_VERSION = \"v1\"",
+              "expectedMrTitle": "Roll out API v3",
+              "expectedTargetBranch": "develop",
+              "expectedSourceBranch": "feature/api-v3",
+              "expectedCommitMessage": "feat: roll out api v3",
+              "expectedReviewer": "mira",
+              "requiresConflictResolution": true,
+              "secondaryFilePath": "docs/API.md",
+              "secondaryExpectedText": "Stable version: v3",
+              "secondaryForbiddenText": "Stable version: v1",
+              "additionalFileEdits": [
+                {
+                  "filePath": "README.md",
+                  "expectedText": "API v3"
+                }
+              ],
+              "ciChecks": [
+                {
+                  "name": "API version consistency",
+                  "token": "v3",
                   "files": [
                     "src/api.ts",
                     "docs/API.md",
@@ -1309,7 +1344,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  'b0db8a7ae8815b7ae47a7bf01020dd7bab870065219d36dc92e06786c4b8c384'
+  '6cb35d7c7b2784a391bd59439146790a3df4988cbd961c269c97f7ff7d0cb9f0'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

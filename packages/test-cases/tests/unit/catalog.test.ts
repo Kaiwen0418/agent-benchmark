@@ -133,6 +133,15 @@ test("hard v1.0.2 includes ordered forum escalation on the v2 seed", () => {
   );
 });
 
+test("hard v1.0.2 includes conflict-aware repo workflow on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const repo = suite.sessions.find((session) => session.app === "repo-lite");
+  assert.ok(repo);
+  assert.equal(repo.taskVersion, "v3");
+  assert.equal(repo.seedVersion, "repo-lite-hard-v2");
+  assert.ok(repo.metadata.questionVariants.some((variant) => variant.id === "api-v3-conflict-rollout"));
+});
+
 test("schema rejects a consistency check with an unknown task slug", () => {
   const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
     consistencyChecks: Array<Record<string, unknown>>;

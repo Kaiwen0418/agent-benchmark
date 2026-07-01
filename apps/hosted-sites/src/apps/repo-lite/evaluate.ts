@@ -61,6 +61,10 @@ function evaluateRepoBackendState(
   const secondaryFilePath = configStringOrNull(config, "secondaryFilePath");
   const secondaryExpectedText = configStringOrNull(config, "secondaryExpectedText");
   const secondaryForbiddenText = configStringOrNull(config, "secondaryForbiddenText");
+  const expectedSourceBranch = configStringOrNull(config, "expectedSourceBranch");
+  const expectedCommitMessage = configStringOrNull(config, "expectedCommitMessage");
+  const expectedReviewer = configStringOrNull(config, "expectedReviewer");
+  const requiresConflictResolution = config.requiresConflictResolution === true;
 
   const file = session.state.files.find((candidate) => candidate.path === filePath);
   const fileHasExpectedText = file ? file.content.includes(expectedText) : false;
@@ -109,6 +113,13 @@ function evaluateRepoBackendState(
 
   const titleMatches = mr.title.trim() === expectedMrTitle;
   const targetBranchMatches = mr.targetBranch.trim().toLowerCase() === expectedTargetBranch.toLowerCase();
+  const sourceBranchMatches =
+    expectedSourceBranch == null || mr.sourceBranch?.trim() === expectedSourceBranch;
+  const commitMessageMatches =
+    expectedCommitMessage == null || mr.commitMessage?.trim() === expectedCommitMessage;
+  const reviewerMatches =
+    expectedReviewer == null || mr.reviewer?.trim().toLowerCase() === expectedReviewer.toLowerCase();
+  const conflictResolutionMatches = !requiresConflictResolution || mr.conflictResolved === true;
   const pass =
     titleMatches &&
     targetBranchMatches &&
@@ -116,13 +127,25 @@ function evaluateRepoBackendState(
     !fileHasForbiddenText &&
     secondaryHasExpectedText &&
     !secondaryHasForbiddenText &&
-    additionalEditsSatisfied;
+    additionalEditsSatisfied &&
+    sourceBranchMatches &&
+    commitMessageMatches &&
+    reviewerMatches &&
+    conflictResolutionMatches;
 
   const evidence = {
     mrTitle: mr.title,
     targetBranch: mr.targetBranch,
     titleMatches,
     targetBranchMatches,
+    sourceBranch: mr.sourceBranch ?? null,
+    sourceBranchMatches,
+    commitMessage: mr.commitMessage ?? null,
+    commitMessageMatches,
+    reviewer: mr.reviewer ?? null,
+    reviewerMatches,
+    conflictResolved: mr.conflictResolved ?? false,
+    conflictResolutionMatches,
     filePath,
     fileHasExpectedText,
     fileHasForbiddenText,

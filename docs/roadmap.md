@@ -187,6 +187,8 @@ subtotal, discount, shipping, and final total before accepting an order. The
 Forum increment adds a full escalation workflow whose report, move, title edit,
 duplicate consolidation, lock, and pin actions must occur in the declared
 order.
+The Repo increment adds feature-branch, exact commit-message, reviewer, and
+simulated conflict-resolution requirements to coherent multi-file changes.
 
 Exit criteria: the hard suite is published as its own immutable revision, every hard variant and the cross-app carry checks pass unit and E2E checks, public surfaces rank the hard suite separately without exposing oracle data, and `pnpm verify:ci` remains green.
 
