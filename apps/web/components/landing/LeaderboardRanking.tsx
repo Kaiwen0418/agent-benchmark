@@ -32,7 +32,7 @@ function SuiteLabel({ board }: { board: LeaderboardBoard }) {
   return (
     <span className="flex items-center gap-2">
       <SuiteTag tag={board.tag} compact />
-      <span className="truncate">agent benchmark [{board.tag}-{board.version}]</span>
+      <span className="truncate">benchmark [{board.tag}-{board.version}]</span>
     </span>
   );
 }
