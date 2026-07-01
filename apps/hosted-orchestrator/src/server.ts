@@ -656,6 +656,9 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     activeSessionId: null,
     activeSequenceIndex: 0,
     completedSessionIds: [],
+    // Carry the suite's per-testcase time limit onto attempt metadata so the
+    // connection prompt and frontends can show the same deadline.
+    timeLimitMinutesPerTestcase: revision.timeLimitMinutesPerTestcase,
     // Carry the suite's cross-app consistency checks onto attempt metadata so
     // completion-time aggregation can evaluate them without re-reading the
     // manifest. Absent for suites without a chain.

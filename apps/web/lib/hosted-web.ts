@@ -27,6 +27,7 @@ export type HostedWebAttemptConnection = {
   attemptId: string | null;
   suiteSlug: string;
   suiteVersion: string;
+  timeLimitMinutes: number | null;
   orchestratorUrl: string | null;
   advanceUrl: string | null;
   activeSessionId: string | null;
@@ -110,6 +111,11 @@ function toAttemptConnection(params: {
     attemptId: params.attempt.id ?? null,
     suiteSlug: params.attempt.suiteSlug,
     suiteVersion: params.attempt.suiteVersion,
+    timeLimitMinutes:
+      typeof params.attempt.metadata.timeLimitMinutesPerTestcase === "number" &&
+      Number.isFinite(params.attempt.metadata.timeLimitMinutesPerTestcase)
+        ? params.attempt.metadata.timeLimitMinutesPerTestcase
+        : null,
     orchestratorUrl: activeSession?.startUrl ?? null,
     advanceUrl:
       activeSession?.token
