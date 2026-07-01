@@ -16,6 +16,8 @@ export function renderCalendarLite(
         <h2>${escapeHtml(calendarEvent.title)}</h2>
         <p>${escapeHtml(calendarEvent.date)} at ${escapeHtml(calendarEvent.startTime)} for ${calendarEvent.durationMinutes} minutes</p>
         <p class="muted">${escapeHtml(calendarEvent.attendeeEmail)}${calendarEvent.secondaryAttendeeEmail ? `, ${escapeHtml(calendarEvent.secondaryAttendeeEmail)}` : ""}</p>
+        ${calendarEvent.resource ? `<p class="muted">Resource: ${escapeHtml(calendarEvent.resource)}</p>` : ""}
+        ${calendarEvent.occurrences ? `<p class="muted">Weekly occurrences: ${calendarEvent.occurrences}</p>` : ""}
       </article>`).join("")
     : '<article class="card"><p class="muted">No events scheduled.</p></article>';
 
