@@ -166,15 +166,6 @@ function BoltIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-function CircleCheckIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-      <path d="M22 4L12 14.01l-3-3" />
-    </svg>
-  );
-}
-
 function SectionTitle({ icon, title, action }: { icon: React.ReactNode; title: string; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
@@ -190,36 +181,49 @@ function SectionTitle({ icon, title, action }: { icon: React.ReactNode; title: s
 function SessionStepper({
   sessions,
   currentIndex,
-  completed,
+  scoringSessions,
 }: {
   sessions: RunConnectPayload["hostedWeb"]["sessions"];
   currentIndex: number | null;
-  completed: number;
+  scoringSessions: HostedSessionBreakdown[];
 }) {
   const sorted = [...sessions].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+  const scoringBySessionId = new Map(scoringSessions.map((session) => [session.sessionId, session]));
 
   return (
     <div className="flex flex-wrap items-start gap-2">
       {sorted.map((session, index) => {
-        const isCompleted = index < completed;
+        const isPassed = session.status === "completed";
+        const isFailed = session.status === "failed";
+        const isExpired = session.status === "expired" || session.status === "timeout";
         const isCurrent = index === currentIndex;
+        const score = scoringBySessionId.get(session.sessionId);
         return (
           <div
             key={session.sessionId}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold"
+            className="group relative flex h-8 w-8 items-center justify-center"
             title={`Session ${index + 1}`}
           >
             <div
-              className={`flex h-full w-full items-center justify-center rounded-full ${
-                isCompleted
+              className={`flex h-full w-full items-center justify-center rounded-full text-xs font-semibold ${
+                isPassed
                   ? "bg-[#4da66a] text-white"
-                  : isCurrent
-                    ? "bg-[#d7ff00] text-[#111111] ring-2 ring-[#d7ff00]/30"
-                    : "border border-[#d8d1c4] bg-white text-[#6a655c]"
+                  : isFailed
+                    ? "bg-[#d45b45] text-white"
+                    : isExpired
+                      ? "bg-[#ff8f6b] text-[#111111]"
+                      : isCurrent
+                        ? "bg-[#d7ff00] text-[#111111] ring-2 ring-[#d7ff00]/30"
+                        : "border border-[#d8d1c4] bg-white text-[#6a655c]"
               }`}
             >
-              {isCompleted ? <CheckIcon /> : index + 1}
+              {isPassed ? <CheckIcon /> : index + 1}
             </div>
+            {score ? (
+              <div className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 hidden w-64 -translate-x-1/2 rounded-[0.9rem] border border-[#e2ddd3] bg-white p-3 shadow-[0_8px_30px_rgba(17,17,17,0.12)] group-hover:block">
+                <ScoreHoverDetails session={score} />
+              </div>
+            ) : null}
           </div>
         );
       })}
@@ -227,9 +231,9 @@ function SessionStepper({
   );
 }
 
-function ScoreCheck({ session }: { session: HostedSessionBreakdown }) {
+function ScoreHoverDetails({ session }: { session: HostedSessionBreakdown }) {
   return (
-    <div className="group rounded-[0.9rem] border border-[#e2ddd3] bg-white px-3 py-3 transition hover:border-[#111111]">
+    <div>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-[#111111]">{session.taskSlug}</div>
@@ -244,7 +248,7 @@ function ScoreCheck({ session }: { session: HostedSessionBreakdown }) {
         </div>
       </div>
       {session.evaluators.length > 0 ? (
-        <div className="mt-3 hidden space-y-1.5 group-hover:block">
+        <div className="mt-2 space-y-1">
           {session.evaluators.map((evaluator) => (
             <div key={`${evaluator.type}:${evaluator.name}`} className="flex items-start gap-2 text-xs leading-5">
               <span
@@ -300,14 +304,6 @@ export function RunConnectionCard() {
   const [collapsed, setCollapsed] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
-
-  useEffect(() => {
-    if (phase === "booting") {
-      setCollapsed(false);
-    } else if (phase === "running" || phase === "completed" || phase === "failed") {
-      setCollapsed(true);
-    }
-  }, [phase]);
 
   useEffect(() => {
     if (!runId) {
@@ -451,7 +447,13 @@ export function RunConnectionCard() {
         <div className="flex items-center gap-3">
           <span className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Run Status</span>
           <div
-            className={`rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] ${statusBadgeTone(payload.status)}`}
+            className={`rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] ${
+              isTerminalRun
+                ? statusBadgeTone(payload.status)
+                : isActive
+                  ? "bg-[#d7ff00] text-[#111111]"
+                  : "bg-[#efede6] text-[#4d483f]"
+            }`}
           >
             {isTerminalRun ? statusLabel(payload.status) : isActive ? "Running" : "Run created"}
           </div>
@@ -558,21 +560,11 @@ export function RunConnectionCard() {
                 <SessionStepper
                   sessions={sortedSessions}
                   currentIndex={payload.hostedWeb.progress.currentIndex}
-                  completed={payload.hostedWeb.progress.completed}
+                  scoringSessions={scoringSessions}
                 />
               </section>
 
               <hr className="border-[#e8e4da]" />
-
-              {scoringSessions.length > 0 ? (
-                <section className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                  {[...scoringSessions].reverse().map((session) => (
-                    <ScoreCheck key={session.sessionId} session={session} />
-                  ))}
-                </section>
-              ) : null}
-
-              {scoringSessions.length > 0 ? <hr className="border-[#e8e4da]" /> : null}
 
               <section>
                 <SectionTitle
