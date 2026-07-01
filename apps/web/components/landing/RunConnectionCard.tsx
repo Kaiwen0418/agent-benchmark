@@ -166,15 +166,6 @@ function BoltIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-function CircleCheckIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-      <path d="M22 4L12 14.01l-3-3" />
-    </svg>
-  );
-}
-
 function SectionTitle({ icon, title, action }: { icon: React.ReactNode; title: string; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
@@ -190,62 +181,96 @@ function SectionTitle({ icon, title, action }: { icon: React.ReactNode; title: s
 function SessionStepper({
   sessions,
   currentIndex,
-  completed,
+  selectedIndex,
+  onSelect,
 }: {
   sessions: RunConnectPayload["hostedWeb"]["sessions"];
   currentIndex: number | null;
-  completed: number;
+  selectedIndex: number;
+  onSelect: (index: number) => void;
 }) {
   const sorted = [...sessions].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
 
   return (
-    <div className="flex flex-wrap items-start gap-2">
+    <div className="relative flex w-full items-center justify-between">
+      <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2 bg-[#e2ddd3]" />
       {sorted.map((session, index) => {
-        const isCompleted = index < completed;
+        const isPassed = session.status === "completed";
+        const isFailed = session.status === "failed";
+        const isExpired = session.status === "expired" || session.status === "timeout";
         const isCurrent = index === currentIndex;
+        const isSelected = index === selectedIndex;
         return (
-          <div
+          <button
             key={session.sessionId}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold"
+            type="button"
+            onClick={() => onSelect(index)}
             title={`Session ${index + 1}`}
+            className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition ${
+              isPassed
+                ? "bg-[#4da66a] text-white"
+                : isFailed
+                  ? "bg-[#d45b45] text-white"
+                  : isExpired
+                    ? "bg-[#ff8f6b] text-[#111111]"
+                    : isCurrent
+                      ? "bg-[#d7ff00] text-[#111111]"
+                      : "border border-[#d8d1c4] bg-white text-[#6a655c]"
+            } ${isSelected ? "ring-2 ring-[#111111]/25" : ""}`}
           >
-            <div
-              className={`flex h-full w-full items-center justify-center rounded-full ${
-                isCompleted
-                  ? "bg-[#4da66a] text-white"
-                  : isCurrent
-                    ? "bg-[#d7ff00] text-[#111111] ring-2 ring-[#d7ff00]/30"
-                    : "border border-[#d8d1c4] bg-white text-[#6a655c]"
-              }`}
-            >
-              {isCompleted ? <CheckIcon /> : index + 1}
-            </div>
-          </div>
+            {isPassed ? <CheckIcon /> : index + 1}
+          </button>
         );
       })}
     </div>
   );
 }
 
-function ScoreCheck({ session }: { session: HostedSessionBreakdown }) {
+function SessionDetailPanel({
+  session,
+  score,
+  isActive,
+  countdownText,
+  countdownUrgent,
+}: {
+  session: RunConnectPayload["hostedWeb"]["sessions"][number];
+  score: HostedSessionBreakdown | null;
+  isActive: boolean;
+  countdownText: string | null;
+  countdownUrgent: boolean;
+}) {
   return (
-    <div className="group rounded-[0.9rem] border border-[#e2ddd3] bg-white px-3 py-3 transition hover:border-[#111111]">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-[#111111]">{session.taskSlug}</div>
-          <div className="mt-0.5 text-xs text-[#6a655c]">{session.summary}</div>
-        </div>
+    <div className="rounded-[1rem] border border-[#e8e4da] bg-[#fbf8f3] px-4 py-3">
+      <div className="text-sm font-semibold text-[#111111]">{session.title ?? session.taskSlug}</div>
+      <p className="max-h-28 overflow-y-auto pr-1 text-sm leading-7 text-[#585248] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4]">
+        {session.goal}
+      </p>
+      <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#8f897e]">
+        <span>{session.app}</span>
+        <span>·</span>
+        <span>Session {session.sequenceIndex + 1}</span>
+        {score ? (
+          <span
+            className={`ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${
+              score.status === "passed" ? "bg-[#e8f7ec] text-[#1f6b35]" : "bg-[#fff1ed] text-[#8a2d1f]"
+            }`}
+          >
+            {Math.round(score.score * 100)}%
+          </span>
+        ) : null}
+      </div>
+      {isActive && countdownText ? (
         <div
-          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
-            session.status === "passed" ? "bg-[#e8f7ec] text-[#1f6b35]" : "bg-[#fff1ed] text-[#8a2d1f]"
+          className={`mt-2 text-[10px] font-semibold uppercase tracking-wider ${
+            countdownUrgent ? "text-[#d45b45]" : "text-[#6a655c]"
           }`}
         >
-          {Math.round(session.score * 100)}%
+          {countdownText}
         </div>
-      </div>
-      {session.evaluators.length > 0 ? (
-        <div className="mt-3 hidden space-y-1.5 group-hover:block">
-          {session.evaluators.map((evaluator) => (
+      ) : null}
+      {score && score.evaluators.length > 0 ? (
+        <div className="mt-3 space-y-1.5 border-t border-[#e2ddd3] pt-3">
+          {score.evaluators.map((evaluator) => (
             <div key={`${evaluator.type}:${evaluator.name}`} className="flex items-start gap-2 text-xs leading-5">
               <span
                 className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
@@ -298,16 +323,9 @@ export function RunConnectionCard() {
   const [connectError, setConnectError] = useState<RunConnectError | null>(null);
   const [copyState, setCopyState] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [selectedSessionIndex, setSelectedSessionIndex] = useState(0);
   const [showAllEvents, setShowAllEvents] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
-
-  useEffect(() => {
-    if (phase === "booting") {
-      setCollapsed(false);
-    } else if (phase === "running" || phase === "completed" || phase === "failed") {
-      setCollapsed(true);
-    }
-  }, [phase]);
 
   useEffect(() => {
     if (!runId) {
@@ -355,6 +373,13 @@ export function RunConnectionCard() {
       cancelled = true;
     };
   }, [connectionRefreshKey, runId, retryNonce]);
+
+  useEffect(() => {
+    const currentIndex = payload?.hostedWeb.progress.currentIndex;
+    if (currentIndex !== null && currentIndex !== undefined) {
+      setSelectedSessionIndex(currentIndex);
+    }
+  }, [payload?.hostedWeb.progress.currentIndex]);
 
   if (!runId || executionMode !== "external-agent") {
     return null;
@@ -410,9 +435,6 @@ export function RunConnectionCard() {
     payload.status === "failed" ||
     payload.status === "cancelled" ||
     payload.status === "timeout";
-  const activeHostedSession = payload.hostedWeb.sessions.find(
-    (session) => session.sessionId === payload.hostedWeb.activeSessionId,
-  );
 
   const terminalSummary =
     payload.status === "timeout"
@@ -426,15 +448,19 @@ export function RunConnectionCard() {
   const sortedSessions = [...payload.hostedWeb.sessions].sort(
     (left, right) => left.sequenceIndex - right.sequenceIndex,
   );
+  const scoringBySessionId = new Map(scoringSessions.map((session) => [session.sessionId, session]));
+  const selectedSession = sortedSessions[selectedSessionIndex] ?? sortedSessions[0];
+  const selectedScore = selectedSession ? (scoringBySessionId.get(selectedSession.sessionId) ?? null) : null;
+  const isSelectedActive = selectedSession?.sessionId === payload.hostedWeb.activeSessionId;
 
   const countdownText = (() => {
-    if (!activeDeadline?.expiresAt) return null;
+    if (!isSelectedActive || !activeDeadline?.expiresAt) return null;
     const remaining = new Date(activeDeadline.expiresAt).getTime() - now;
     if (remaining <= 0) return "Timed out";
     return `Time left: ${formatCountdown(remaining)}`;
   })();
   const countdownUrgent = Boolean(
-    activeDeadline?.expiresAt && new Date(activeDeadline.expiresAt).getTime() - now < 60_000,
+    isSelectedActive && activeDeadline?.expiresAt && new Date(activeDeadline.expiresAt).getTime() - now < 60_000,
   );
 
   const displayedEvents = showAllEvents
@@ -451,7 +477,13 @@ export function RunConnectionCard() {
         <div className="flex items-center gap-3">
           <span className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Run Status</span>
           <div
-            className={`rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] ${statusBadgeTone(payload.status)}`}
+            className={`rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] ${
+              isTerminalRun
+                ? statusBadgeTone(payload.status)
+                : isActive
+                  ? "bg-[#d7ff00] text-[#111111]"
+                  : "bg-[#efede6] text-[#4d483f]"
+            }`}
           >
             {isTerminalRun ? statusLabel(payload.status) : isActive ? "Running" : "Run created"}
           </div>
@@ -512,40 +544,6 @@ export function RunConnectionCard() {
               <hr className="border-[#e8e4da]" />
 
               <section>
-                <SectionTitle icon={<DocumentIcon />} title="Current Task" />
-                {activeHostedSession ? (
-                  <div className="rounded-[1rem] border border-[#e8e4da] bg-[#fbf8f3] px-4 py-3">
-                    <div className="text-sm font-semibold text-[#111111]">
-                      {activeHostedSession.title ?? activeHostedSession.taskSlug}
-                    </div>
-                    <p className="max-h-28 overflow-y-auto pr-1 text-sm leading-7 text-[#585248] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4]">
-                      {activeHostedSession.goal}
-                    </p>
-                    <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#8f897e]">
-                      <span>{activeHostedSession.app}</span>
-                      <span>·</span>
-                      <span>Session {activeHostedSession.sequenceIndex + 1}</span>
-                    </div>
-                    {countdownText ? (
-                      <div
-                        className={`mt-2 text-[10px] font-semibold uppercase tracking-wider ${
-                          countdownUrgent ? "text-[#d45b45]" : "text-[#6a655c]"
-                        }`}
-                      >
-                        {countdownText}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="rounded-[1rem] border border-dashed border-[#d8d1c4] bg-white/60 px-4 py-3 text-sm text-[#7a7469]">
-                    No active hosted task.
-                  </div>
-                )}
-              </section>
-
-              <hr className="border-[#e8e4da]" />
-
-              <section>
                 <SectionTitle
                   icon={<ChartIcon />}
                   title="Progress"
@@ -558,21 +556,23 @@ export function RunConnectionCard() {
                 <SessionStepper
                   sessions={sortedSessions}
                   currentIndex={payload.hostedWeb.progress.currentIndex}
-                  completed={payload.hostedWeb.progress.completed}
+                  selectedIndex={selectedSessionIndex}
+                  onSelect={setSelectedSessionIndex}
                 />
+                {selectedSession ? (
+                  <div className="mt-4">
+                    <SessionDetailPanel
+                      session={selectedSession}
+                      score={selectedScore}
+                      isActive={isSelectedActive}
+                      countdownText={countdownText}
+                      countdownUrgent={countdownUrgent}
+                    />
+                  </div>
+                ) : null}
               </section>
 
               <hr className="border-[#e8e4da]" />
-
-              {scoringSessions.length > 0 ? (
-                <section className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                  {[...scoringSessions].reverse().map((session) => (
-                    <ScoreCheck key={session.sessionId} session={session} />
-                  ))}
-                </section>
-              ) : null}
-
-              {scoringSessions.length > 0 ? <hr className="border-[#e8e4da]" /> : null}
 
               <section>
                 <SectionTitle
