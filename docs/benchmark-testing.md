@@ -46,6 +46,11 @@ CI must fail when a declared variant lacks both positive and negative scorer cov
 
 The generic matrix iterates every published suite. The easy suite (`hosted-web-suite-v1`) and the hard suite (`hosted-web-hard-suite-v1`) have disjoint variant pools, so the hard suite cannot weaken or inherit easy-suite coverage. Each hard variant receives the same positive, negative, and presentation-invariant assertions as an easy variant, and a hard cross-app chain additionally asserts suite-level carry behavior (see [Cross-App Consistency](#cross-app-consistency)).
 
+Hard shopping orders are also checked for amount integrity. The evaluator
+recomputes the product subtotal, configured discount, pre-discount
+shipping-threshold result, and final total from persisted backend state; a
+matching coupon code or under-budget forged total is insufficient.
+
 ## Independent Suite Versioning
 
 The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.9` and `hosted-web-hard-suite-v1.0.2`). A change to a hard variant, the hard pool composition, or a hard cross-app chain bumps only the hard suite's version and content hash; the easy suite's revision identity must stay byte-identical.

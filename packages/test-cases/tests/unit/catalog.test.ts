@@ -111,6 +111,17 @@ test("hard v1.0.2 requires both wiki answers to be carried into distinct note fi
   );
 });
 
+test("hard v1.0.2 includes combined-constraint shopping variants on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const shopping = suite.sessions.find((session) => session.app === "shopping-lite");
+  assert.ok(shopping);
+  assert.equal(shopping.taskVersion, "v3");
+  assert.equal(shopping.seedVersion, "shopping-lite-hard-v2");
+  const variantIds = shopping.metadata.questionVariants.map((variant) => variant.id);
+  assert.ok(variantIds.includes("probook-team-travel-kit"));
+  assert.ok(variantIds.includes("airlite-field-kit"));
+});
+
 test("schema rejects a consistency check with an unknown task slug", () => {
   const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
     consistencyChecks: Array<Record<string, unknown>>;

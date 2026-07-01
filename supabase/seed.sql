@@ -619,8 +619,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "shopping-constrained-checkout-hard",
       "title": "Shopping Checkout (Hard)",
       "startPath": "/shopping",
-      "taskVersion": "v2",
-      "seedVersion": "shopping-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "shopping-lite-hard-v2",
       "sequenceIndex": 0,
       "weight": 1,
       "required": true,
@@ -660,6 +660,40 @@ select public.publish_benchmark_case_catalog(
               "maxTotal": 120,
               "shippingMethod": "standard",
               "avoidRestricted": true
+            }
+          },
+          {
+            "id": "probook-team-travel-kit",
+            "goal": "Equip two ProBook users: buy exactly two ProBook-compatible chargers and two USB-C cables, avoid restricted and out-of-stock products, and use standard shipping. Apply coupon CABLE20 for 20% off. Standard shipping is free when the pre-discount subtotal reaches $70; otherwise it costs $8. Keep the final total at or below $61.",
+            "taskConfig": {
+              "targetCategory": "charger",
+              "quantity": 2,
+              "maxTotal": 61,
+              "shippingMethod": "standard",
+              "avoidRestricted": true,
+              "secondaryCategory": "cable",
+              "secondaryQuantity": 2,
+              "freeShippingThreshold": 70,
+              "shippingCost": 8,
+              "requiredDevice": "ProBook",
+              "couponCode": "CABLE20",
+              "discountPercent": 20
+            }
+          },
+          {
+            "id": "airlite-field-kit",
+            "goal": "Assemble three AirLite field kits: buy exactly three AirLite-compatible chargers and three travel cases, avoid restricted and out-of-stock products, and use standard shipping. Standard shipping is free when the subtotal reaches $120; otherwise it costs $9. Keep the final total at or below $130.",
+            "taskConfig": {
+              "targetCategory": "charger",
+              "quantity": 3,
+              "maxTotal": 130,
+              "shippingMethod": "standard",
+              "avoidRestricted": true,
+              "secondaryCategory": "case",
+              "secondaryQuantity": 3,
+              "freeShippingThreshold": 120,
+              "shippingCost": 9,
+              "requiredDevice": "AirLite"
             }
           }
         ]
@@ -1246,7 +1280,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '2658125a40968c9cab26f1de53864007faec2b862a539d38b2dc5dcb46a5fe8c'
+  'd5ce6bf8f69ac2d0f6e83b41c1e9193419f663d86e328a34f2d49a74eb61d350'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

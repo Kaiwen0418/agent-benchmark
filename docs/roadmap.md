@@ -180,6 +180,11 @@ split into four increments:
    desktop and narrow-viewport browser verification, and full lifecycle smoke
    coverage before publishing the immutable revision.
 
+Current #140 progress: increment 1 is implemented, and the Shopping increment
+adds combined compatibility, stock, multi-item, coupon, and pre-discount
+shipping-threshold variants. Shopping evaluation now independently recomputes
+subtotal, discount, shipping, and final total before accepting an order.
+
 Exit criteria: the hard suite is published as its own immutable revision, every hard variant and the cross-app carry checks pass unit and E2E checks, public surfaces rank the hard suite separately without exposing oracle data, and `pnpm verify:ci` remains green.
 
 ## Explicit Non-Goals
