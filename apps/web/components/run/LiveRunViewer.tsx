@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { deriveHostedViewerRevision, deriveHostedViewerUrl } from "@/lib/hosted-viewer";
 import { deriveHostedScoring } from "@/lib/hosted-scoring";
-import type { HostedSessionDeadline } from "@/lib/db";
+import type { HostedSessionDeadline } from "@/lib/hosted-web";
 
 type LiveRunViewerProps = {
   runId: string;

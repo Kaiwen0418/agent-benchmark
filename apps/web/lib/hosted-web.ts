@@ -165,6 +165,23 @@ type HostedAttemptCompleteResponse = {
   evaluators: unknown[];
 };
 
+export type HostedSessionDeadline = {
+  sessionId: string;
+  taskSlug: string;
+  status: string;
+  sequenceIndex: number;
+  expiresAt: string | null;
+  timeLimitMinutes: number | null;
+};
+
+export async function listHostedSessionDeadlines(runId: string): Promise<HostedSessionDeadline[]> {
+  const result = await fetchHostedOrchestrator<{ sessions: HostedSessionDeadline[] }>(
+    `/api/runs/${encodeURIComponent(runId)}/sessions`,
+  );
+  if (!result) throw new Error("Failed to load hosted session deadlines");
+  return result.sessions;
+}
+
 function runnerSecretOrThrow() {
   const runnerSecret = process.env.RUNNER_SHARED_SECRET;
   if (!runnerSecret) {

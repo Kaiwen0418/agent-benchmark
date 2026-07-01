@@ -1350,6 +1350,42 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    const runSessionsMatch = url.pathname.match(/^\/api\/runs\/([^/]+)\/sessions$/);
+    if (request.method === "GET" && runSessionsMatch) {
+      const supabase = getSupabaseAdmin();
+      if (!supabase) {
+        sendJson(response, 503, { error: "database_unavailable" });
+        return;
+      }
+      const runId = decodeURIComponent(runSessionsMatch[1]!);
+      const { data, error } = await supabase
+        .from("hosted_web_sessions")
+        .select("id, task_slug, status, sequence_index, expires_at, metadata")
+        .eq("run_id", runId)
+        .order("sequence_index", { ascending: true });
+      if (error) {
+        sendJson(response, 500, { error: "session_read_failed" });
+        return;
+      }
+      sendJson(response, 200, {
+        sessions: (data ?? []).map((item) => {
+          const metadata = extractMetadata(item.metadata as Record<string, unknown> | null);
+          return {
+            sessionId: item.id,
+            taskSlug: item.task_slug ?? "hosted-task",
+            status: item.status ?? "created",
+            sequenceIndex: item.sequence_index ?? 0,
+            expiresAt: item.expires_at ?? null,
+            timeLimitMinutes:
+              typeof metadata.timeLimitMinutesPerTestcase === "number"
+                ? metadata.timeLimitMinutesPerTestcase
+                : null,
+          };
+        }),
+      });
+      return;
+    }
+
     const replayDeadLetterMatch = url.pathname.match(/^\/api\/commands\/dead-letters\/([^/]+)\/replay$/);
     if (request.method === "POST" && replayDeadLetterMatch) {
       const supabase = getSupabaseAdmin();
