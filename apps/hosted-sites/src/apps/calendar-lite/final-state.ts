@@ -11,6 +11,9 @@ export function buildCalendarLiteFinalState(session: HostedSessionFor<"calendar-
       startTime: calendarEvent.startTime,
       durationMinutes: calendarEvent.durationMinutes,
       attendeeEmail: calendarEvent.attendeeEmail,
+      secondaryAttendeeEmail: calendarEvent.secondaryAttendeeEmail ?? null,
+      resource: calendarEvent.resource ?? null,
+      occurrences: calendarEvent.occurrences ?? 1,
     })),
   };
 }

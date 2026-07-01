@@ -608,10 +608,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-hard-suite-v1.0.1',
+  'hosted-web-hard-suite-v1.0.2',
   $catalog${
   "suiteSlug": "hosted-web-hard-suite-v1",
-  "suiteVersion": "v1.0.1",
+  "suiteVersion": "v1.0.2",
   "timeLimitMinutesPerTestcase": 60,
   "sessions": [
     {
@@ -619,8 +619,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "shopping-constrained-checkout-hard",
       "title": "Shopping Checkout (Hard)",
       "startPath": "/shopping",
-      "taskVersion": "v2",
-      "seedVersion": "shopping-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "shopping-lite-hard-v2",
       "sequenceIndex": 0,
       "weight": 1,
       "required": true,
@@ -661,6 +661,40 @@ select public.publish_benchmark_case_catalog(
               "shippingMethod": "standard",
               "avoidRestricted": true
             }
+          },
+          {
+            "id": "probook-team-travel-kit",
+            "goal": "Equip two ProBook users: buy exactly two ProBook-compatible chargers and two USB-C cables, avoid restricted and out-of-stock products, and use standard shipping. Apply coupon CABLE20 for 20% off. Standard shipping is free when the pre-discount subtotal reaches $70; otherwise it costs $8. Keep the final total at or below $61.",
+            "taskConfig": {
+              "targetCategory": "charger",
+              "quantity": 2,
+              "maxTotal": 61,
+              "shippingMethod": "standard",
+              "avoidRestricted": true,
+              "secondaryCategory": "cable",
+              "secondaryQuantity": 2,
+              "freeShippingThreshold": 70,
+              "shippingCost": 8,
+              "requiredDevice": "ProBook",
+              "couponCode": "CABLE20",
+              "discountPercent": 20
+            }
+          },
+          {
+            "id": "airlite-field-kit",
+            "goal": "Assemble three AirLite field kits: buy exactly three AirLite-compatible chargers and three travel cases, avoid restricted and out-of-stock products, and use standard shipping. Standard shipping is free when the subtotal reaches $120; otherwise it costs $9. Keep the final total at or below $130.",
+            "taskConfig": {
+              "targetCategory": "charger",
+              "quantity": 3,
+              "maxTotal": 130,
+              "shippingMethod": "standard",
+              "avoidRestricted": true,
+              "secondaryCategory": "case",
+              "secondaryQuantity": 3,
+              "freeShippingThreshold": 120,
+              "shippingCost": 9,
+              "requiredDevice": "AirLite"
+            }
           }
         ]
       }
@@ -670,8 +704,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "forum-battery-moderation-hard",
       "title": "Forum Moderation (Hard)",
       "startPath": "/forum",
-      "taskVersion": "v2",
-      "seedVersion": "forum-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "forum-lite-hard-v2",
       "sequenceIndex": 1,
       "weight": 1,
       "required": true,
@@ -729,6 +763,35 @@ select public.publish_benchmark_case_catalog(
                 "thr-hot-dup"
               ]
             }
+          },
+          {
+            "id": "hot-charge-full-escalation",
+            "goal": "Fully triage the fast-charge overheating incident in this exact moderation order: report the main thread with reason 'thermal incident', move it to 'safety', rename it to 'Fast-charge overheating safety incident', mark 'thr-hot-dup' as its duplicate, reply with the official advisory link, lock it with reason 'safety escalation', then pin it. Do not lock early.",
+            "taskConfig": {
+              "targetThreadId": "thr-hot-main",
+              "expectedReplyValue": "https://support.example.com/safety/fast-charge-heat",
+              "expectedLockReason": "safety escalation",
+              "requiresPin": true,
+              "requiresReport": true,
+              "expectedReportReason": "thermal incident",
+              "requiresMove": true,
+              "expectedCategory": "safety",
+              "requiresEditTitle": true,
+              "expectedTitle": "Fast-charge overheating safety incident",
+              "requiresMarkDuplicate": true,
+              "canonicalThreadId": "thr-hot-main",
+              "duplicateThreadIds": [
+                "thr-hot-dup"
+              ],
+              "requiredActionOrder": [
+                "report",
+                "move",
+                "edit_title",
+                "mark_duplicate",
+                "lock",
+                "pin"
+              ]
+            }
           }
         ]
       }
@@ -738,8 +801,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "repo-coherent-edit-hard",
       "title": "Repository Coherent Edit (Hard)",
       "startPath": "/repo",
-      "taskVersion": "v2",
-      "seedVersion": "repo-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "repo-lite-hard-v2",
       "sequenceIndex": 2,
       "weight": 1,
       "required": true,
@@ -837,6 +900,41 @@ select public.publish_benchmark_case_catalog(
                 }
               ]
             }
+          },
+          {
+            "id": "api-v3-conflict-rollout",
+            "goal": "Roll out API v3 from feature branch `feature/api-v3`: update `API_VERSION` to `v3` in `src/api.ts`, set `Stable version: v3` in `docs/API.md`, and add `API v3` to `README.md`. Resolve the simulated target-branch conflict, commit with message `feat: roll out api v3`, request review from `mira`, then open merge request `Roll out API v3` targeting `develop`.",
+            "taskConfig": {
+              "filePath": "src/api.ts",
+              "expectedText": "API_VERSION = \"v3\"",
+              "forbiddenText": "API_VERSION = \"v1\"",
+              "expectedMrTitle": "Roll out API v3",
+              "expectedTargetBranch": "develop",
+              "expectedSourceBranch": "feature/api-v3",
+              "expectedCommitMessage": "feat: roll out api v3",
+              "expectedReviewer": "mira",
+              "requiresConflictResolution": true,
+              "secondaryFilePath": "docs/API.md",
+              "secondaryExpectedText": "Stable version: v3",
+              "secondaryForbiddenText": "Stable version: v1",
+              "additionalFileEdits": [
+                {
+                  "filePath": "README.md",
+                  "expectedText": "API v3"
+                }
+              ],
+              "ciChecks": [
+                {
+                  "name": "API version consistency",
+                  "token": "v3",
+                  "files": [
+                    "src/api.ts",
+                    "docs/API.md",
+                    "README.md"
+                  ]
+                }
+              ]
+            }
           }
         ]
       }
@@ -846,8 +944,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "wiki-release-answer-hard",
       "title": "Wiki Release Lookup (Hard)",
       "startPath": "/wiki",
-      "taskVersion": "v3",
-      "seedVersion": "wiki-lite-hard-v1",
+      "taskVersion": "v4",
+      "seedVersion": "wiki-lite-hard-v2",
       "sequenceIndex": 3,
       "weight": 1,
       "required": true,
@@ -922,6 +1020,24 @@ select public.publish_benchmark_case_catalog(
                 "sourceArticleSlug": "data-retention-policy"
               }
             }
+          },
+          {
+            "id": "verified-api-rate-limit",
+            "goal": "Triangulate the current API rate limit: open the API changelog, the current v3 API reference, and the security overview that defines token scope. Ignore deprecated API versions and submit only the current per-token rate limit.",
+            "taskConfig": {
+              "targetArticleSlug": "api-reference-v3",
+              "requiredArticleSlugs": [
+                "api-changelog",
+                "api-reference-v3",
+                "security-overview"
+              ],
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "240 requests per minute",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "api-reference-v3"
+              }
+            }
           }
         ]
       }
@@ -931,8 +1047,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "wiki-policy-answer-hard",
       "title": "Wiki Policy Lookup (Hard)",
       "startPath": "/wiki",
-      "taskVersion": "v2",
-      "seedVersion": "wiki-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "wiki-lite-hard-v2",
       "sequenceIndex": 4,
       "weight": 1,
       "required": true,
@@ -1007,6 +1123,24 @@ select public.publish_benchmark_case_catalog(
                 "sourceArticleSlug": "data-retention-policy"
               }
             }
+          },
+          {
+            "id": "verified-api-rate-limit",
+            "goal": "Triangulate the current API rate limit: open the API changelog, the current v3 API reference, and the security overview that defines token scope. Ignore deprecated API versions and submit only the current per-token rate limit.",
+            "taskConfig": {
+              "targetArticleSlug": "api-reference-v3",
+              "requiredArticleSlugs": [
+                "api-changelog",
+                "api-reference-v3",
+                "security-overview"
+              ],
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "240 requests per minute",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "api-reference-v3"
+              }
+            }
           }
         ]
       }
@@ -1016,8 +1150,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "notes-followup-create-hard",
       "title": "Notes Follow-up (Hard)",
       "startPath": "/notes",
-      "taskVersion": "v2",
-      "seedVersion": "notes-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "notes-lite-hard-v2",
       "sequenceIndex": 5,
       "weight": 1,
       "required": true,
@@ -1025,18 +1159,41 @@ select public.publish_benchmark_case_catalog(
         "questionVariants": [
           {
             "id": "carry-release-answer",
-            "goal": "Open the note you need to file as a follow-up. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'File the release-lookup result for the upgrade plan.', and the tag to 'release'.",
+            "goal": "Open the note you need to file as a follow-up. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task, set the body to exactly the answer you submitted in the later wiki policy-lookup task (no extra words in either field), and set the tag to 'release'.",
             "taskConfig": {
-              "expectedBody": "File the release-lookup result for the upgrade plan.",
-              "expectedTag": "release"
+              "expectedTag": "release",
+              "targetNoteId": "note-seed-release"
             }
           },
           {
             "id": "carry-release-summary",
-            "goal": "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'Summarize the release-lookup outcome for the team.', and the tag to 'summary'.",
+            "goal": "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task, set the body to exactly the answer you submitted in the later wiki policy-lookup task (no extra words in either field), and set the tag to 'summary'.",
             "taskConfig": {
-              "expectedBody": "Summarize the release-lookup outcome for the team.",
               "expectedTag": "summary"
+            }
+          },
+          {
+            "id": "release-rollout-note-set",
+            "goal": "Create and organize all three rollout notes: (1) title 'API v3 implementation', body 'Track the implementation branch and conflict resolution.', tag 'implementation'; (2) title 'API v3 verification', body 'Record CI, reviewer, and compatibility evidence.', tag 'verification'; and (3) title 'API v3 release', body 'Schedule publication after verification passes.', tag 'release'. Create exactly these required notes.",
+            "taskConfig": {
+              "expectedTag": "project",
+              "expectedNotes": [
+                {
+                  "title": "API v3 implementation",
+                  "body": "Track the implementation branch and conflict resolution.",
+                  "tag": "implementation"
+                },
+                {
+                  "title": "API v3 verification",
+                  "body": "Record CI, reviewer, and compatibility evidence.",
+                  "tag": "verification"
+                },
+                {
+                  "title": "API v3 release",
+                  "body": "Schedule publication after verification passes.",
+                  "tag": "release"
+                }
+              ]
             }
           }
         ]
@@ -1047,8 +1204,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "calendar-event-create-hard",
       "title": "Calendar Event (Hard)",
       "startPath": "/calendar",
-      "taskVersion": "v2",
-      "seedVersion": "calendar-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "calendar-lite-hard-v2",
       "sequenceIndex": 6,
       "weight": 1,
       "required": true,
@@ -1056,9 +1213,8 @@ select public.publish_benchmark_case_catalog(
         "questionVariants": [
           {
             "id": "conflict-avoidance-single",
-            "goal": "Mira needs a 45-minute 'Sprint planning' on July 9, 2026 with attendee mira@example.com. Book it within business hours (09:00–17:00) at the earliest time that does not overlap any of mira@example.com's existing commitments shown on the calendar.",
+            "goal": "Mira needs a 45-minute event on July 9, 2026 with attendee mira@example.com. Use exactly the title of the note you completed earlier. Book it within business hours (09:00–17:00) at the earliest conflict-free time.",
             "taskConfig": {
-              "expectedTitle": "Sprint planning",
               "expectedDate": "2026-07-09",
               "expectedStartTime": "12:00",
               "expectedDurationMinutes": 45,
@@ -1095,9 +1251,8 @@ select public.publish_benchmark_case_catalog(
           },
           {
             "id": "shared-window-two-attendees",
-            "goal": "Schedule a 30-minute 'Launch sync' on July 13, 2026 with attendees mira@example.com and lead@example.com. Book it within business hours (09:00–17:00) at the earliest time that is free for BOTH attendees given the commitments shown on the calendar.",
+            "goal": "Schedule a 30-minute event on July 13, 2026 with attendees mira@example.com and lead@example.com, using exactly the title of the note you completed earlier. Book the earliest time free for both attendees.",
             "taskConfig": {
-              "expectedTitle": "Launch sync",
               "expectedDate": "2026-07-13",
               "expectedStartTime": "10:30",
               "expectedDurationMinutes": 30,
@@ -1143,9 +1298,8 @@ select public.publish_benchmark_case_catalog(
           },
           {
             "id": "timezone-overlap",
-            "goal": "Schedule a 30-minute 'Berlin handoff' on July 15, 2026 with attendees ny@example.com and berlin@example.com. All calendar times are US Eastern (ET). ny@example.com is available 09:00–17:00 ET. berlin@example.com is available 14:00–18:00 Central European Summer Time, which is ET+6. Book the event in ET at the earliest time inside the attendees' shared availability that does not overlap any commitment shown on the calendar.",
+            "goal": "Schedule a 30-minute event on July 15, 2026 with attendees ny@example.com and berlin@example.com, using exactly the title of the note you completed earlier. All times are ET; account for Berlin being ET+6 and book the earliest shared free time.",
             "taskConfig": {
-              "expectedTitle": "Berlin handoff",
               "expectedDate": "2026-07-15",
               "expectedStartTime": "10:00",
               "expectedDurationMinutes": 30,
@@ -1175,9 +1329,8 @@ select public.publish_benchmark_case_catalog(
           },
           {
             "id": "reschedule-longer-meeting",
-            "goal": "Book a 60-minute 'Quarterly planning' on July 16, 2026 with attendee evals@example.com. Book it within business hours (09:00–17:00) at the earliest time that does not overlap any of evals@example.com's existing commitments shown on the calendar.",
+            "goal": "Book a 60-minute event on July 16, 2026 with attendee evals@example.com, using exactly the title of the note you completed earlier. Book the earliest conflict-free business-hours time.",
             "taskConfig": {
-              "expectedTitle": "Quarterly planning",
               "expectedDate": "2026-07-16",
               "expectedStartTime": "12:00",
               "expectedDurationMinutes": 60,
@@ -1219,6 +1372,19 @@ select public.publish_benchmark_case_catalog(
               "schedulingWindowStart": "09:00",
               "schedulingWindowEnd": "17:00"
             }
+          },
+          {
+            "id": "recurring-resource-review",
+            "goal": "Create a weekly three-occurrence event beginning July 20, 2026, using exactly the title of the note you completed earlier. Start at 15:00 ET for 30 minutes with mira@example.com and lead@example.com, and reserve resource 'Room Atlas'.",
+            "taskConfig": {
+              "expectedDate": "2026-07-20",
+              "expectedStartTime": "15:00",
+              "expectedDurationMinutes": 30,
+              "expectedAttendeeEmail": "mira@example.com",
+              "expectedSecondaryAttendeeEmail": "lead@example.com",
+              "expectedResource": "Room Atlas",
+              "expectedOccurrences": 3
+            }
           }
         ]
       }
@@ -1234,10 +1400,30 @@ select public.publish_benchmark_case_catalog(
       "rule": "equal-normalized",
       "weight": 1,
       "required": true
+    },
+    {
+      "name": "Wiki policy answer carried into note body",
+      "sourceTaskSlug": "wiki-policy-answer-hard",
+      "sourcePath": "latestAnswer.answer",
+      "targetTaskSlug": "notes-followup-create-hard",
+      "targetPath": "notes[].body",
+      "rule": "equal-normalized",
+      "weight": 1,
+      "required": true
+    },
+    {
+      "name": "Note title carried into calendar title",
+      "sourceTaskSlug": "notes-followup-create-hard",
+      "sourcePath": "notes[].title",
+      "targetTaskSlug": "calendar-event-create-hard",
+      "targetPath": "calendarEvents[].title",
+      "rule": "equal-normalized",
+      "weight": 1,
+      "required": true
     }
   ]
 }$catalog$::jsonb,
-  '0c603bb52ef501e7be5e6adf9eb79c3de35f696baab5f17744e284278010addb'
+  '2bdd486a2d9421ae0b1980d99cdd8ea768dd7127ebc3aaf3a2a9bd70cd37cdaa'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

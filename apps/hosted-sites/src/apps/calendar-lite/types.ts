@@ -6,6 +6,8 @@ export type CalendarEvent = {
   durationMinutes: number;
   attendeeEmail: string;
   secondaryAttendeeEmail?: string;
+  resource?: string;
+  occurrences?: number;
   createdAt: string;
 };
 

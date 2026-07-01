@@ -70,5 +70,9 @@ export async function complete({ session, config, hostedBaseUrl, checkedFetch, p
   await postForm("/repo/mr/new", session.token, {
     title: requireString(config.expectedMrTitle, "repo expectedMrTitle"),
     targetBranch: requireString(config.expectedTargetBranch, "repo expectedTargetBranch"),
+    sourceBranch: typeof config.expectedSourceBranch === "string" ? config.expectedSourceBranch : "",
+    commitMessage: typeof config.expectedCommitMessage === "string" ? config.expectedCommitMessage : "",
+    reviewer: typeof config.expectedReviewer === "string" ? config.expectedReviewer : "",
+    ...(config.requiresConflictResolution ? { conflictResolved: "yes" } : {}),
   });
 }

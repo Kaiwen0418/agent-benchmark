@@ -19,7 +19,7 @@ const busyEventSchema = z.object({
 export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
   app: "calendar-lite",
   taskConfigSchema: z.object({
-    expectedTitle: z.string().min(1),
+    expectedTitle: z.string().min(1).optional(),
     expectedDate: z.string().regex(isoDate),
     expectedStartTime: z.string().regex(clockTime),
     expectedDurationMinutes: z.number().int().positive(),
@@ -29,6 +29,8 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
     seedBusyEvents: z.array(busyEventSchema).min(1).optional(),
     schedulingWindowStart: z.string().regex(clockTime).optional(),
     schedulingWindowEnd: z.string().regex(clockTime).optional(),
+    expectedResource: z.string().min(1).optional(),
+    expectedOccurrences: z.number().int().min(2).optional(),
   }),
   variantPools: {
     default: [
@@ -69,9 +71,8 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
     hard: [
       {
         id: "conflict-avoidance-single",
-        goal: "Mira needs a 45-minute 'Sprint planning' on July 9, 2026 with attendee mira@example.com. Book it within business hours (09:00–17:00) at the earliest time that does not overlap any of mira@example.com's existing commitments shown on the calendar.",
+        goal: "Mira needs a 45-minute event on July 9, 2026 with attendee mira@example.com. Use exactly the title of the note you completed earlier. Book it within business hours (09:00–17:00) at the earliest conflict-free time.",
         taskConfig: {
-          expectedTitle: "Sprint planning",
           expectedDate: "2026-07-09",
           expectedStartTime: "12:00",
           expectedDurationMinutes: 45,
@@ -87,9 +88,8 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
       },
       {
         id: "shared-window-two-attendees",
-        goal: "Schedule a 30-minute 'Launch sync' on July 13, 2026 with attendees mira@example.com and lead@example.com. Book it within business hours (09:00–17:00) at the earliest time that is free for BOTH attendees given the commitments shown on the calendar.",
+        goal: "Schedule a 30-minute event on July 13, 2026 with attendees mira@example.com and lead@example.com, using exactly the title of the note you completed earlier. Book the earliest time free for both attendees.",
         taskConfig: {
-          expectedTitle: "Launch sync",
           expectedDate: "2026-07-13",
           expectedStartTime: "10:30",
           expectedDurationMinutes: 30,
@@ -107,9 +107,8 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
       },
       {
         id: "timezone-overlap",
-        goal: "Schedule a 30-minute 'Berlin handoff' on July 15, 2026 with attendees ny@example.com and berlin@example.com. All calendar times are US Eastern (ET). ny@example.com is available 09:00–17:00 ET. berlin@example.com is available 14:00–18:00 Central European Summer Time, which is ET+6. Book the event in ET at the earliest time inside the attendees' shared availability that does not overlap any commitment shown on the calendar.",
+        goal: "Schedule a 30-minute event on July 15, 2026 with attendees ny@example.com and berlin@example.com, using exactly the title of the note you completed earlier. All times are ET; account for Berlin being ET+6 and book the earliest shared free time.",
         taskConfig: {
-          expectedTitle: "Berlin handoff",
           expectedDate: "2026-07-15",
           expectedStartTime: "10:00",
           expectedDurationMinutes: 30,
@@ -125,9 +124,8 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
       },
       {
         id: "reschedule-longer-meeting",
-        goal: "Book a 60-minute 'Quarterly planning' on July 16, 2026 with attendee evals@example.com. Book it within business hours (09:00–17:00) at the earliest time that does not overlap any of evals@example.com's existing commitments shown on the calendar.",
+        goal: "Book a 60-minute event on July 16, 2026 with attendee evals@example.com, using exactly the title of the note you completed earlier. Book the earliest conflict-free business-hours time.",
         taskConfig: {
-          expectedTitle: "Quarterly planning",
           expectedDate: "2026-07-16",
           expectedStartTime: "12:00",
           expectedDurationMinutes: 60,
@@ -140,6 +138,19 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
             { id: "busy-evals-lunch", title: "Lunch & learn", date: "2026-07-16", startTime: "13:00", durationMinutes: 60, attendeeEmail: "evals@example.com" },
             { id: "busy-evals-pm", title: "Customer review", date: "2026-07-16", startTime: "14:30", durationMinutes: 150, attendeeEmail: "evals@example.com" },
           ],
+        },
+      },
+      {
+        id: "recurring-resource-review",
+        goal: "Create a weekly three-occurrence event beginning July 20, 2026, using exactly the title of the note you completed earlier. Start at 15:00 ET for 30 minutes with mira@example.com and lead@example.com, and reserve resource 'Room Atlas'.",
+        taskConfig: {
+          expectedDate: "2026-07-20",
+          expectedStartTime: "15:00",
+          expectedDurationMinutes: 30,
+          expectedAttendeeEmail: "mira@example.com",
+          expectedSecondaryAttendeeEmail: "lead@example.com",
+          expectedResource: "Room Atlas",
+          expectedOccurrences: 3,
         },
       },
     ],

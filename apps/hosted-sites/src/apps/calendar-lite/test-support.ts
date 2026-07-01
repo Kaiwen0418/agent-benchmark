@@ -11,19 +11,21 @@ export const calendarLiteTestSupport: HostedAppTestSupport<"calendar-lite"> = {
   applyPassingState(session, config) {
     session.state.calendarEvents.push({
       id: "event-test",
-      title: configString(config, "expectedTitle"),
+      title: configStringOrNull(config, "expectedTitle") ?? "carried-value",
       date: configString(config, "expectedDate"),
       startTime: configString(config, "expectedStartTime"),
       durationMinutes: Number(config.expectedDurationMinutes),
       attendeeEmail: configString(config, "expectedAttendeeEmail"),
       secondaryAttendeeEmail: configStringOrNull(config, "expectedSecondaryAttendeeEmail") ?? undefined,
+      resource: configStringOrNull(config, "expectedResource") ?? undefined,
+      occurrences: typeof config.expectedOccurrences === "number" ? config.expectedOccurrences : undefined,
       createdAt: "2026-06-24T00:00:00.000Z",
     });
   },
   breakPassingState(session) {
     const event = session.state.calendarEvents.at(-1);
     if (event) {
-      event.title = "Wrong event title";
+      event.startTime = "00:00";
     }
   },
 };

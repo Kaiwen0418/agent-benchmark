@@ -28,6 +28,10 @@ function isRepoMergeRequest(value: unknown): value is RepoMergeRequest {
     Array.isArray(value.changedFiles) &&
     value.changedFiles.every(isRepoFile) &&
     typeof value.targetBranch === "string"
+    && (value.sourceBranch === undefined || typeof value.sourceBranch === "string")
+    && (value.commitMessage === undefined || typeof value.commitMessage === "string")
+    && (value.reviewer === undefined || typeof value.reviewer === "string")
+    && (value.conflictResolved === undefined || typeof value.conflictResolved === "boolean")
   );
 }
 

@@ -156,6 +156,19 @@ export function renderNewMR(
             Target branch
             <input name="targetBranch" placeholder="Enter the required target branch" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
           </label>
+          <label style="display:block;margin-top:12px;">Source branch
+            <input name="sourceBranch" placeholder="Optional feature branch" />
+          </label>
+          <label style="display:block;margin-top:12px;">Commit message
+            <input name="commitMessage" placeholder="Optional required commit message" />
+          </label>
+          <label style="display:block;margin-top:12px;">Reviewer
+            <input name="reviewer" placeholder="Optional reviewer username" />
+          </label>
+          <label style="display:block;margin-top:12px;">
+            <input type="checkbox" name="conflictResolved" value="yes" />
+            Simulated target-branch conflict resolved
+          </label>
           <button type="submit" style="margin-top:12px;">Create merge request</button>
         </form>
       </section>`,
@@ -196,6 +209,9 @@ export function renderMRDetail(
       body: `<section class="panel">
         <h2>${escapeHtml(mr.title)}</h2>
         <p class="muted">Target branch: <strong>${escapeHtml(mr.targetBranch)}</strong></p>
+        ${mr.sourceBranch ? `<p class="muted">Source branch: <strong>${escapeHtml(mr.sourceBranch)}</strong></p>` : ""}
+        ${mr.commitMessage ? `<p class="muted">Commit: <strong>${escapeHtml(mr.commitMessage)}</strong></p>` : ""}
+        ${mr.reviewer ? `<p class="muted">Reviewer: <strong>${escapeHtml(mr.reviewer)}</strong></p>` : ""}
         <h3>Changed files</h3>
         ${changedFilesHtml}
         ${scorePreview}

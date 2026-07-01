@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listHostedSessionDeadlines } from "@/lib/db";
+import { listHostedSessionDeadlines } from "@/lib/hosted-web";
 
 export async function GET(
   _request: Request,

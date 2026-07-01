@@ -13,7 +13,7 @@ const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPool
 
 export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-hard-suite-v1",
-  suiteVersion: "v1.0.1",
+  suiteVersion: "v1.0.2",
   timeLimitMinutesPerTestcase: 60,
   sessions: [
     {
@@ -21,8 +21,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       taskSlug: "shopping-constrained-checkout-hard",
       title: "Shopping Checkout (Hard)",
       startPath: "/shopping",
-      taskVersion: "v2",
-      seedVersion: "shopping-lite-hard-v1",
+      taskVersion: "v3",
+      seedVersion: "shopping-lite-hard-v2",
       sequenceIndex: 0,
       weight: 1,
       required: true,
@@ -33,8 +33,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       taskSlug: "forum-battery-moderation-hard",
       title: "Forum Moderation (Hard)",
       startPath: "/forum",
-      taskVersion: "v2",
-      seedVersion: "forum-lite-hard-v1",
+      taskVersion: "v3",
+      seedVersion: "forum-lite-hard-v2",
       sequenceIndex: 1,
       weight: 1,
       required: true,
@@ -46,8 +46,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       taskSlug: "repo-coherent-edit-hard",
       title: "Repository Coherent Edit (Hard)",
       startPath: "/repo",
-      taskVersion: "v2",
-      seedVersion: "repo-lite-hard-v1",
+      taskVersion: "v3",
+      seedVersion: "repo-lite-hard-v2",
       sequenceIndex: 2,
       weight: 1,
       required: true,
@@ -59,8 +59,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       taskSlug: "wiki-release-answer-hard",
       title: "Wiki Release Lookup (Hard)",
       startPath: "/wiki",
-      taskVersion: "v3",
-      seedVersion: "wiki-lite-hard-v1",
+      taskVersion: "v4",
+      seedVersion: "wiki-lite-hard-v2",
       sequenceIndex: 3,
       weight: 1,
       required: true,
@@ -72,8 +72,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       taskSlug: "wiki-policy-answer-hard",
       title: "Wiki Policy Lookup (Hard)",
       startPath: "/wiki",
-      taskVersion: "v2",
-      seedVersion: "wiki-lite-hard-v1",
+      taskVersion: "v3",
+      seedVersion: "wiki-lite-hard-v2",
       sequenceIndex: 4,
       weight: 1,
       required: true,
@@ -85,8 +85,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       taskSlug: "notes-followup-create-hard",
       title: "Notes Follow-up (Hard)",
       startPath: "/notes",
-      taskVersion: "v2",
-      seedVersion: "notes-lite-hard-v1",
+      taskVersion: "v3",
+      seedVersion: "notes-lite-hard-v2",
       sequenceIndex: 5,
       weight: 1,
       required: true,
@@ -98,8 +98,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       taskSlug: "calendar-event-create-hard",
       title: "Calendar Event (Hard)",
       startPath: "/calendar",
-      taskVersion: "v2",
-      seedVersion: "calendar-lite-hard-v1",
+      taskVersion: "v3",
+      seedVersion: "calendar-lite-hard-v2",
       sequenceIndex: 6,
       weight: 1,
       required: true,
@@ -107,10 +107,9 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       metadata: { questionVariants: calendarQuestionVariants },
     },
   ],
-  // First cross-app chain (#115): the agent must carry the exact answer it
-  // submitted in the wiki release-lookup session into the title of the note it
-  // files later. Verified against the agents' own session final states, never
-  // against private task config, so no hidden answer key is exposed.
+  // The agent must carry two independently submitted wiki answers into distinct
+  // note fields. Checks compare only the agent's own final states, never private
+  // task config, so no hidden answer key is exposed.
   consistencyChecks: [
     {
       name: "Wiki release answer carried into note title",
@@ -122,10 +121,30 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       weight: 1,
       required: true,
     },
+    {
+      name: "Wiki policy answer carried into note body",
+      sourceTaskSlug: "wiki-policy-answer-hard",
+      sourcePath: "latestAnswer.answer",
+      targetTaskSlug: "notes-followup-create-hard",
+      targetPath: "notes[].body",
+      rule: "equal-normalized",
+      weight: 1,
+      required: true,
+    },
+    {
+      name: "Note title carried into calendar title",
+      sourceTaskSlug: "notes-followup-create-hard",
+      sourcePath: "notes[].title",
+      targetTaskSlug: "calendar-event-create-hard",
+      targetPath: "calendarEvents[].title",
+      rule: "equal-normalized",
+      weight: 1,
+      required: true,
+    },
   ],
 });
 
-export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.1";
+export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.2";
 
 export const hostedWebHardSuiteCase = {
   id: "bb7e5cd4-f3ed-4aa0-9fcc-46fec39997eb",

@@ -68,6 +68,9 @@ export function evaluateShoppingBackendState(
   const secondaryQuantity = configNumberOrNull(config, "secondaryQuantity") ?? 1;
   const requiredDevice = configStringOrNull(config, "requiredDevice");
   const couponCode = configStringOrNull(config, "couponCode");
+  const discountPercent = configNumberOrNull(config, "discountPercent");
+  const freeShippingThreshold = configNumberOrNull(config, "freeShippingThreshold");
+  const configuredShippingCost = configNumberOrNull(config, "shippingCost");
 
   const rows = order.items.map((item) => {
     const product = session.state.products.find((candidate) => candidate.id === item.productId);
@@ -99,6 +102,27 @@ export function evaluateShoppingBackendState(
   });
 
   const couponApplied = !couponCode || order.couponCode === couponCode;
+  const computedSubtotal = roundMoney(
+    rows.reduce((sum, row) => sum + (row.product?.price ?? 0) * row.item.quantity, 0),
+  );
+  const recordedSubtotal = roundMoney(order.subtotal ?? order.total);
+  const expectedDiscount =
+    couponCode && discountPercent != null ? roundMoney((computedSubtotal * discountPercent) / 100) : 0;
+  const recordedDiscount = roundMoney(order.discountAmount ?? 0);
+  const expectedShipping =
+    shippingMethod === "standard" &&
+    freeShippingThreshold != null &&
+    configuredShippingCost != null &&
+    computedSubtotal < freeShippingThreshold
+      ? configuredShippingCost
+      : 0;
+  const recordedShipping = roundMoney(order.shippingCost ?? 0);
+  const computedTotal = roundMoney(computedSubtotal - expectedDiscount + expectedShipping);
+  const amountIntegrity =
+    recordedSubtotal === computedSubtotal &&
+    recordedDiscount === expectedDiscount &&
+    recordedShipping === roundMoney(expectedShipping) &&
+    roundMoney(order.total) === computedTotal;
 
   const evidence = {
     orderId: order.id,
@@ -112,7 +136,12 @@ export function evaluateShoppingBackendState(
     couponCode,
     appliedCoupon: order.couponCode ?? null,
     discountAmount: order.discountAmount ?? 0,
-    subtotal: order.subtotal ?? order.total,
+    subtotal: recordedSubtotal,
+    computedSubtotal,
+    expectedDiscount,
+    expectedShipping,
+    computedTotal,
+    amountIntegrity,
     total: order.total,
     shippingMethod: order.shippingMethod,
   };
@@ -125,6 +154,7 @@ export function evaluateShoppingBackendState(
     compatibleTargets &&
     stockRespected &&
     couponApplied &&
+    amountIntegrity &&
     order.total <= maxTotal &&
     order.shippingMethod === shippingMethod;
 
@@ -141,4 +171,8 @@ export function evaluateShoppingBackendState(
         errorMessage:
           "Order does not satisfy the generated category, quantity, budget, restriction, compatibility, stock, coupon, and shipping constraints.",
       });
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
 }

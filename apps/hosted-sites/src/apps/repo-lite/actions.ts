@@ -17,6 +17,10 @@ export function createMergeRequest(
   params: {
     title: string;
     targetBranch: string;
+    sourceBranch?: string;
+    commitMessage?: string;
+    reviewer?: string;
+    conflictResolved?: boolean;
     makeId: (prefix: string) => string;
   },
 ) {
@@ -27,6 +31,10 @@ export function createMergeRequest(
     title: params.title,
     changedFiles,
     targetBranch: params.targetBranch,
+    sourceBranch: params.sourceBranch,
+    commitMessage: params.commitMessage,
+    reviewer: params.reviewer,
+    conflictResolved: params.conflictResolved,
   };
   session.state.mergeRequests.push(mr);
   return { success: true, mr } as const;
