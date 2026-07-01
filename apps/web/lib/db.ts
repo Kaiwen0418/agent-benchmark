@@ -13,6 +13,7 @@ import fs from "node:fs";
 import { createSupabaseAdminClient } from "./supabase/admin";
 import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
+import { hostedWebCatalogReleases } from "@agentbench/test-cases/release";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
@@ -127,8 +128,48 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
   }));
 }
 
-export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {
+export type PublicBenchmarkCase = Pick<
+  BenchmarkCase,
+  "id" | "slug" | "title" | "description" | "difficulty"
+> & { tag: string; version: string };
+
+// Display-safe projection for the public suite picker. Deliberately omits
+// `metadata` and `current_revision_id` so scorer-oracle surfaces never leak to
+// unauthenticated clients. `difficulty` is exposed as the suite tag and the
+// backend orders rows so the default suite (hard, when published) is first.
+export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkCase[]> {
   const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("benchmark_cases")
+    .select("id, slug, title, description, difficulty, created_at")
+    .eq("is_public", true)
+    .eq("provider", "hosted-web")
+    .order("difficulty", { ascending: false })
+    .order("created_at", { ascending: true });
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to list public benchmark cases");
+  }
+
+  const releases = hostedWebCatalogReleases();
+  const releaseByCaseId = new Map(releases.map((release) => [release.benchmarkCase.id, release]));
+
+  return data.map((item) => {
+    const release = releaseByCaseId.get(item.id);
+    return {
+      id: item.id,
+      slug: item.slug,
+      title: item.title,
+      description: item.description,
+      difficulty: item.difficulty,
+      tag: item.difficulty,
+      version: release?.manifest.suiteVersion ?? "",
+    };
+  });
+}
+
+export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {  const supabase = getSupabase();
 
   const byId = await supabase
     .from("benchmark_cases")
@@ -558,7 +599,7 @@ export async function submitBenchmarkRunMetadata(
 export type LeaderboardEntry = {
   runId: string;
   rank: number;
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "timeout";
   score: number;
   completedAt: string;
   durationMs: number | null;
@@ -624,13 +665,58 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
   };
 }
 
-export async function listPublicLeaderboardVersions(): Promise<string[]> {
+export type LeaderboardVersion = {
+  version: string;
+  slug: string;
+  tag: string;
+};
+
+export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersion[]> {
   const supabase = getSupabase();
 
+  // Start from the published catalog so every public suite appears in the
+  // selector (even before it has public runs). The backend ordering puts the
+  // default suite first; the frontend just picks boards[0].
+  const { data: cases, error: casesError } = await supabase
+    .from("benchmark_cases")
+    .select("id, slug, difficulty, metadata")
+    .eq("is_public", true)
+    .eq("provider", "hosted-web");
+
+  if (casesError || !cases) {
+    throw casesError ?? new Error("Failed to load benchmark case tags");
+  }
+
+  const releases = hostedWebCatalogReleases();
+  const releaseByCaseId = new Map(releases.map((release) => [release.benchmarkCase.id, release]));
+
+  const seen = new Set<string>();
+  const versions: LeaderboardVersion[] = [];
+  const tagBySuiteSlug = new Map<string, string>();
+
+  for (const item of cases) {
+    const release = releaseByCaseId.get(item.id);
+    if (!release) continue;
+
+    const suiteSlug = release.manifest.suiteSlug;
+    const suiteVersion = release.manifest.suiteVersion;
+    const tag = item.difficulty;
+
+    tagBySuiteSlug.set(suiteSlug, tag);
+
+    const key = `${suiteSlug}:${suiteVersion}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    versions.push({ version: suiteVersion, slug: suiteSlug, tag });
+  }
+
+  // Also surface any historical versions that have public runs but are no
+  // longer in the current catalog release.
   const { data: publicRuns, error: runError } = await supabase
     .from("benchmark_runs")
     .select("id")
-    .in("status", ["completed", "failed"])
+    .in("status", ["completed", "failed", "timeout"])
     .eq("is_public", true)
     .not("score", "is", null)
     .limit(1000);
@@ -638,34 +724,54 @@ export async function listPublicLeaderboardVersions(): Promise<string[]> {
   if (runError || !publicRuns) {
     throw runError ?? new Error("Failed to load leaderboard versions");
   }
-  if (publicRuns.length === 0) {
-    return [];
+
+  if (publicRuns.length > 0) {
+    const { data: attempts, error: attemptError } = await supabase
+      .from("public_hosted_run_summaries")
+      .select("suite_slug, suite_version")
+      .in("run_id", publicRuns.map((run) => run.id));
+
+    if (attemptError || !attempts) {
+      throw attemptError ?? new Error("Failed to load leaderboard versions");
+    }
+
+    for (const attempt of attempts) {
+      if (!attempt.suite_version || !attempt.suite_slug) continue;
+      const key = `${attempt.suite_slug}:${attempt.suite_version}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      versions.push({
+        version: attempt.suite_version,
+        slug: attempt.suite_slug,
+        tag: tagBySuiteSlug.get(attempt.suite_slug) ?? "",
+      });
+    }
   }
 
-  const { data: attempts, error: attemptError } = await supabase
-    .from("public_hosted_run_summaries")
-    .select("suite_version")
-    .in("run_id", publicRuns.map((run) => run.id))
-    .order("suite_version", { ascending: false });
-
-  if (attemptError || !attempts) {
-    throw attemptError ?? new Error("Failed to load leaderboard versions");
-  }
-
-  return [...new Set(attempts.map((attempt) => attempt.suite_version).filter((version): version is string => Boolean(version)))]
-    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }));
+  return versions.sort((left, right) => {
+    if (left.tag !== right.tag) {
+      return right.tag.localeCompare(left.tag);
+    }
+    return right.version.localeCompare(left.version, undefined, { numeric: true, sensitivity: "base" });
+  });
 }
 
-export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): Promise<LeaderboardEntry[]> {
+export async function listPublicLeaderboard(limit = 20, suiteVersion?: string, suiteSlug?: string): Promise<LeaderboardEntry[]> {
   const supabase = getSupabase();
 
   let versionRunIds: string[] | null = null;
   if (suiteVersion) {
-    const { data: versionAttempts, error: versionError } = await supabase
+    let versionAttemptsQuery = supabase
       .from("public_hosted_run_summaries")
       .select("run_id")
       .eq("suite_version", suiteVersion)
       .limit(1000);
+
+    if (suiteSlug) {
+      versionAttemptsQuery = versionAttemptsQuery.eq("suite_slug", suiteSlug);
+    }
+
+    const { data: versionAttempts, error: versionError } = await versionAttemptsQuery;
 
     if (versionError || !versionAttempts) {
       throw versionError ?? new Error("Failed to load leaderboard version");
@@ -679,17 +785,18 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
   let runsQuery = supabase
     .from("benchmark_runs")
     .select("id, case_id, status, score, started_at, completed_at, agent_name, agent_version, base_model, browser_environment")
-    .in("status", ["completed", "failed"])
+    .in("status", ["completed", "failed", "timeout"])
     .eq("is_public", true)
     .not("score", "is", null)
-    .order("score", { ascending: false })
-    .order("completed_at", { ascending: true });
+    .order("score", { ascending: false });
 
   if (versionRunIds) {
     runsQuery = runsQuery.in("id", versionRunIds);
   }
 
-  const { data: runs, error } = await runsQuery.limit(Math.max(1, Math.min(limit, 100)));
+  const fetchLimit = Math.max(limit, Math.min(limit * 5, 100));
+
+  const { data: runs, error } = await runsQuery.limit(fetchLimit);
 
   if (error || !runs) {
     throw error ?? new Error("Failed to load leaderboard");
@@ -706,21 +813,22 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
   }
 
   const summaryByRun = new Map((summaries ?? []).map((item) => [item.run_id, item]));
-  return runs.map((run, index) => {
+  const entries = runs.map((run) => {
     const browser = run.browser_environment && typeof run.browser_environment === "object" && !Array.isArray(run.browser_environment)
       ? run.browser_environment as Record<string, unknown>
       : {};
     const summary = summaryByRun.get(run.id);
     const observedBrowser = parseBrowserEnvironment(summary?.observed_user_agent ?? null);
+    const durationMs = run.started_at && run.completed_at
+      ? Math.max(0, new Date(run.completed_at).getTime() - new Date(run.started_at).getTime())
+      : null;
     return {
       runId: run.id,
-      rank: index + 1,
+      rank: 0,
       status: run.status as LeaderboardEntry["status"],
       score: Number(run.score),
       completedAt: run.completed_at!,
-      durationMs: run.started_at && run.completed_at
-        ? Math.max(0, new Date(run.completed_at).getTime() - new Date(run.started_at).getTime())
-        : null,
+      durationMs,
       benchmark: summary?.benchmark_title ?? "Hosted benchmark",
       suiteVersion: summary?.suite_version ?? null,
       agentName: run.agent_name ?? "Unreported agent",
@@ -730,6 +838,17 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string): 
       platform: observedBrowser?.platform ?? (typeof browser.platform === "string" ? browser.platform : null),
     };
   });
+
+  entries.sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+    const leftDuration = left.durationMs ?? Number.MAX_SAFE_INTEGER;
+    const rightDuration = right.durationMs ?? Number.MAX_SAFE_INTEGER;
+    return leftDuration - rightDuration;
+  });
+
+  return entries.slice(0, limit).map((entry, index) => ({ ...entry, rank: index + 1 }));
 }
 
 export async function getQuotaStatus(params: {
@@ -781,7 +900,8 @@ export async function getQuotaStatus(params: {
     const countResult = await getSupabase()
       .from("benchmark_runs")
       .select("*", { count: "exact", head: true })
-      .eq("guest_id", guestId);
+      .eq("guest_id", guestId)
+      .gte("created_at", startOfUtcDay());
     if (countResult.error) {
       throw countResult.error;
     }
@@ -796,4 +916,47 @@ export async function getQuotaStatus(params: {
     remaining: Math.max(0, limit - used),
     resetAt: null,
   };
+}
+
+export type HostedSessionDeadline = {
+  sessionId: string;
+  taskSlug: string;
+  status: string;
+  sequenceIndex: number;
+  expiresAt: string | null;
+  timeLimitMinutes: number | null;
+};
+
+export async function listHostedSessionDeadlines(runId: string): Promise<HostedSessionDeadline[]> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("hosted_web_sessions")
+    .select("id, task_slug, status, sequence_index, expires_at, metadata")
+    .eq("run_id", runId)
+    .order("sequence_index", { ascending: true });
+
+  if (error || !data) {
+    throw error ?? new Error("Failed to load hosted session deadlines");
+  }
+
+  return data.map((item) => {
+    const metadata =
+      typeof item.metadata === "object" && item.metadata !== null
+        ? (item.metadata as Record<string, unknown>)
+        : {};
+    const timeLimitMinutes =
+      typeof metadata.timeLimitMinutesPerTestcase === "number" && Number.isFinite(metadata.timeLimitMinutesPerTestcase)
+        ? metadata.timeLimitMinutesPerTestcase
+        : null;
+
+    return {
+      sessionId: item.id,
+      taskSlug: item.task_slug ?? "hosted-task",
+      status: item.status ?? "created",
+      sequenceIndex: item.sequence_index ?? 0,
+      expiresAt: item.expires_at ?? null,
+      timeLimitMinutes,
+    };
+  });
 }

@@ -1,5 +1,7 @@
 import type { ServerResponse } from "node:http";
+import type { Note } from "./types.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
+import { shouldRenderScorePreview } from "../../runtime/score-preview-policy.js";
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
 
 type NotesSession = HostedSessionFor<"notes-lite">;
@@ -18,10 +20,18 @@ export function renderNotesIndex(
             <p class="muted" style="margin-top:0;">${escapeHtml(note.tag)} · ${escapeHtml(note.createdAt)}</p>
             <h2>${escapeHtml(note.title)}</h2>
             <p>${escapeHtml(note.body)}</p>
+            <a href="/notes/${encodeURIComponent(note.id)}/edit?session=${encodeURIComponent(session.token)}">Edit</a>
           </article>`,
         )
         .join("")
     : `<article class="card"><p class="muted">No notes have been created yet.</p></article>`;
+
+  const scorePreview = shouldRenderScorePreview(session)
+    ? `<section class="panel" style="margin-top:16px;">
+          <h2>Evaluator preview</h2>
+          <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+        </section>`
+    : "";
 
   sendHtml(
     response,
@@ -49,9 +59,44 @@ export function renderNotesIndex(
           </form>
         </section>
         <section class="grid" style="margin-top:16px;">${notesHtml}</section>
-        <section class="panel" style="margin-top:16px;">
-          <h2>Evaluator preview</h2>
-          <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+        ${scorePreview}`,
+      publicBaseUrl,
+      defaultStartPathForApp,
+    }),
+  );
+}
+
+export function renderNoteEdit(
+  session: NotesSession,
+  note: Note,
+  response: ServerResponse,
+  publicBaseUrl: string,
+  defaultStartPathForApp: (app: string) => string,
+) {
+  sendHtml(
+    response,
+    200,
+    layout({
+      title: `Edit ${note.title}`,
+      session,
+      body: `
+        <section class="panel">
+          <h2>Edit note</h2>
+          <form method="post" action="/notes/${encodeURIComponent(note.id)}/edit?session=${encodeURIComponent(session.token)}">
+            <label>
+              Title
+              <input name="title" value="${escapeHtml(note.title)}" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+            </label>
+            <label style="display:block;margin-top:12px;">
+              Body
+              <textarea name="body" rows="5" style="display:block;width:100%;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;font-family:inherit;">${escapeHtml(note.body)}</textarea>
+            </label>
+            <label style="display:block;margin-top:12px;">
+              Tag
+              <input name="tag" value="${escapeHtml(note.tag)}" style="display:block;width:100%;min-height:40px;margin-top:8px;border:1px solid #d8d2c7;border-radius:6px;padding:8px 10px;" />
+            </label>
+            <button type="submit" style="margin-top:12px;">Save note</button>
+          </form>
         </section>`,
       publicBaseUrl,
       defaultStartPathForApp,

@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
 import { redirect, sendJson } from "../../runtime/http.js";
+import { readTaskConfig } from "../../runtime/question-config.js";
 import { isHostedSessionForApp } from "../../runtime/types.js";
-import { addProductToCart, submitCheckoutOrder } from "./actions.js";
+import { addProductToCart, getShippingCost, removeProductFromCart, resolveCoupon, setCartItemQuantity, submitCheckoutOrder } from "./actions.js";
 import { renderCart, renderOrder, renderProducts } from "./render.js";
 
 export function createShoppingRoutes(deps: HostedAppRouteDeps) {
@@ -38,7 +39,11 @@ export function createShoppingRoutes(deps: HostedAppRouteDeps) {
         return true;
       }
 
-      addProductToCart(session, productId);
+      const added = addProductToCart(session, productId);
+      if (!added.success) {
+        deps.badRequest(response, added.error);
+        return true;
+      }
       await deps.persistSessionSnapshot(session);
       await deps.recordEvent(session, { type: "task.signal", name: "cart.item_added", productId });
       await deps.forwardRunEvent(session, "hosted.task_signal", {
@@ -46,6 +51,50 @@ export function createShoppingRoutes(deps: HostedAppRouteDeps) {
         sessionId: session.id,
         taskSlug: session.taskSlug,
         name: "cart.item_added",
+        productId,
+      });
+      redirect(response, `/shopping/cart?session=${encodeURIComponent(session.token)}`);
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/shopping/cart/update") {
+      const session = await getShoppingSession(url, request);
+      if (!session) {
+        deps.badRequest(response, "Missing or invalid session");
+        return true;
+      }
+      if (deps.rejectTerminalMutation(session, response)) return true;
+
+      const form = await deps.readForm(request);
+      const productId = form.get("productId");
+      if (typeof productId !== "string" || !session.state.products.some((product) => product.id === productId)) {
+        deps.badRequest(response, "Invalid product");
+        return true;
+      }
+
+      const action = form.get("action");
+      if (action === "remove") {
+        removeProductFromCart(session, productId);
+      } else {
+        const quantity = Number(form.get("quantity"));
+        if (!Number.isInteger(quantity) || quantity < 0) {
+          deps.badRequest(response, "Invalid quantity");
+          return true;
+        }
+        const updated = setCartItemQuantity(session, productId, quantity);
+        if (!updated.success) {
+          deps.badRequest(response, updated.error);
+          return true;
+        }
+      }
+
+      await deps.persistSessionSnapshot(session);
+      await deps.recordEvent(session, { type: "task.signal", name: "cart.updated", productId });
+      await deps.forwardRunEvent(session, "hosted.task_signal", {
+        source: "hosted-sites",
+        sessionId: session.id,
+        taskSlug: session.taskSlug,
+        name: "cart.updated",
         productId,
       });
       redirect(response, `/shopping/cart?session=${encodeURIComponent(session.token)}`);
@@ -77,10 +126,15 @@ export function createShoppingRoutes(deps: HostedAppRouteDeps) {
 
       const form = await deps.readForm(request);
       const shippingMethod = form.get("shippingMethod") === "express" ? "express" : "standard";
+      const coupon = resolveCoupon(form.get("couponCode"));
+      const taskConfig = readTaskConfig(session.metadata);
+      const shippingCost = getShippingCost(session, shippingMethod, taskConfig);
       const order = submitCheckoutOrder(session, {
         makeId: deps.makeId,
         now: deps.now,
         shippingMethod,
+        shippingCost,
+        coupon,
       });
       await deps.persistSessionSnapshot(session);
       await deps.recordEvent(session, { type: "task.signal", name: "order.submitted", orderId: order.id });

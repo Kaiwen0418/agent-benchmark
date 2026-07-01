@@ -43,16 +43,18 @@ flowchart TD
 
 This is the only documentation table that enumerates the changing suite contents. The catalog source remains authoritative; update this summary when publishing a revision instead of copying the list into other documents.
 
+> This table reflects the easy `hosted-web-suite`. All published suites (easy and hard) live as independent rows in `public.benchmark_cases`, differentiated only by their `difficulty` tag — see [Suites & Difficulty](./hosted-web-benchmark.md#suites--difficulty).
+
 <!-- generated:hosted-testcases:start -->
 | Task | App | Variants |
 | --- | --- | --- |
-| `shopping-constrained-checkout` | `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard` |
-| `forum-battery-moderation` | `forum-lite` | `battery-recall`, `wifi-reset`, `screen-advisory` |
-| `repo-readme-fix` | `repo-lite` | `pnpm-install`, `yarn-install`, `bun-install` |
-| `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price` |
-| `wiki-policy-answer` | `wiki-lite` | `adapter-restriction`, `standard-dispatch`, `express-cutoff` |
-| `notes-followup-create` | `notes-lite` | `support-followup`, `release-note`, `ops-check` |
-| `calendar-event-create` | `calendar-lite` | `architecture-review`, `release-readiness`, `scoring-retro` |
+| `shopping-constrained-checkout` | `shopping-lite` | `budget-charger-standard`, `cable-express`, `travel-case-standard`, `combo-charger-cable`, `travel-kit-free-shipping`, `cable-budget-shipping` |
+| `forum-battery-moderation` | `forum-lite` | `battery-recall`, `wifi-reset`, `screen-advisory`, `battery-recall-pin`, `wifi-reset-report`, `screen-advisory-both` |
+| `repo-readme-fix` | `repo-lite` | `pnpm-install`, `yarn-install`, `bun-install`, `pnpm-install-and-version`, `yarn-install-and-rename`, `bun-install-and-script` |
+| `wiki-release-answer` | `wiki-lite` | `release-date`, `dispatch-window`, `charger-price`, `release-to-charger-price`, `dispatch-with-adapters` |
+| `wiki-policy-answer` | `wiki-lite` | `adapter-restriction`, `standard-dispatch`, `express-cutoff`, `adapter-to-shipping`, `express-to-history` |
+| `notes-followup-create` | `notes-lite` | `support-followup`, `release-note`, `ops-check`, `update-support-followup`, `update-release-note`, `update-ops-check` |
+| `calendar-event-create` | `calendar-lite` | `architecture-review`, `release-readiness`, `scoring-retro`, `architecture-review-plus-lead`, `release-readiness-plus-pm`, `scoring-retro-plus-analyst` |
 <!-- generated:hosted-testcases:end -->
 
 Each task declares at least two semantic variants. The generic matrix combines every declared variant with all supported layouts and themes; presentation must never affect actions or scoring. See [Benchmark Scoring And Testing](./benchmark-testing.md) for required matrix coverage.
@@ -165,6 +167,30 @@ If the app already exists under `apps/hosted-sites/src/apps/<app-slug>`, adding 
 3. Run `pnpm catalog:generate` and `pnpm catalog:check`.
 
 The orchestrator reads the ordered suite manifest. Hosted-sites routes, state hydration, final-state projection, and scoring are resolved through the registered app definition.
+
+## Variant Pools And The Hard Suite
+
+An app declares one or more **named** variant pools in its `packages/test-cases/src/apps/<app-slug>/definition.ts` via `defineHostedTestcaseApp({ variantPools })`. Each pool must contain at least two semantic variants; pool validation runs at module load. A suite session references exactly one pool through `metadata: { questionVariants: <app>.variantPools.<name> }`.
+
+Two suites are published side by side and never share pools:
+
+- `hosted-web-suite-v1` (the easy suite) composes each app's `default` pool in `suites/hosted-web.ts`.
+- `hosted-web-hard-suite-v1` (the hard suite, roadmap P2.2) composes each app's `hard` pool in `suites/hosted-web-hard.ts`.
+
+Authoring guidance for `hard` pools:
+
+- A hard variant must require multi-step reasoning, cross-page state, or a non-obvious selection — not a harder string to type. Keep per-session scoring deterministic and fail-closed exactly as the easy pool does.
+- The easy `default` pool, its task/seed versions, and its evaluator behavior must remain byte-identical. Add new fields to the task-config schema as optional and only check them when present, so the easy manifest's content hash does not drift.
+- Every hard variant is swept by the generic matrix in `apps/hosted-sites/tests/unit/variant-matrix.test.ts`, which now iterates both published suites. CI fails if any hard variant lacks positive, negative, and presentation-invariant coverage.
+
+### Cross-App Consistency Checks
+
+The hard suite may also declare **suite-level** `consistencyChecks` in `suites/hosted-web-hard.ts`. A check links a `sourcePath` in one earlier session's final state to a `targetPath` in a later session's final state (for example, carrying the wiki release-lookup answer into a note title). Rules:
+
+- Checks are evaluated only by the scoring module (`evaluateSuiteConsistency`) and folded into `aggregateSuiteScore` by the orchestrator at suite completion. Apps never own suite-level logic.
+- A check reads only the agents' own published final states — never private `taskConfig` or a hidden answer key. Per-session evaluators stay lenient on the carried field (e.g. require a non-empty title) and let the suite-level check enforce the exact carry.
+- The source session's `sequenceIndex` must be strictly less than the target's; the schema's `superRefine` rejects an out-of-order or unknown-task-slug check.
+- Surfaced evidence includes only matched values, presence flags, and paths, so no corpus or private contract leaks to a browser.
 
 ## Add A New Hosted App
 

@@ -17,7 +17,8 @@ function isForumThread(value: unknown): value is ForumThread {
     typeof value.category === "string" &&
     Array.isArray(value.posts) &&
     value.posts.every(isForumPost) &&
-    (value.locked === undefined || typeof value.locked === "boolean")
+    (value.locked === undefined || typeof value.locked === "boolean") &&
+    (value.pinned === undefined || typeof value.pinned === "boolean")
   );
 }
 
@@ -26,8 +27,17 @@ function isModerationAction(value: unknown): value is ModerationAction {
     isStateRecord(value) &&
     typeof value.id === "string" &&
     typeof value.threadId === "string" &&
-    (value.action === "lock" || value.action === "pin" || value.action === "remove_post") &&
-    typeof value.reason === "string"
+    (value.action === "lock" ||
+      value.action === "pin" ||
+      value.action === "remove_post" ||
+      value.action === "report" ||
+      value.action === "move" ||
+      value.action === "mark_duplicate" ||
+      value.action === "edit_title") &&
+    typeof value.reason === "string" &&
+    (value.targetCategory === undefined || typeof value.targetCategory === "string") &&
+    (value.duplicateOfThreadId === undefined || typeof value.duplicateOfThreadId === "string") &&
+    (value.newTitle === undefined || typeof value.newTitle === "string")
   );
 }
 

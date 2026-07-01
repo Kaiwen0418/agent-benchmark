@@ -6,7 +6,13 @@ import {
   type HostedWebScoreResult,
 } from "@agentbench/scoring";
 import type { ForumThread, ModerationAction } from "./types.js";
-import { configString, readTaskConfig } from "../../runtime/question-config.js";
+import {
+  configBooleanOrFalse,
+  configString,
+  configStringArray,
+  configStringOrNull,
+  readTaskConfig,
+} from "../../runtime/question-config.js";
 
 export type ForumEvaluationSession = {
   app: "forum-lite" | string;
@@ -23,9 +29,33 @@ export function evaluateForum(session: ForumEvaluationSession): HostedWebScoreRe
   const targetThreadId = configString(config, "targetThreadId");
   const expectedReplyValue = configString(config, "expectedReplyValue");
   const expectedLockReason = configString(config, "expectedLockReason");
+  const requiresPin = configBooleanOrFalse(config, "requiresPin");
+  const requiresReport = configBooleanOrFalse(config, "requiresReport");
+  const expectedReportReason = requiresReport ? configString(config, "expectedReportReason") : null;
+  const requiresMove = configBooleanOrFalse(config, "requiresMove");
+  const expectedCategory = requiresMove ? configString(config, "expectedCategory") : null;
+  const requiresEditTitle = configBooleanOrFalse(config, "requiresEditTitle");
+  const expectedTitle = requiresEditTitle ? configString(config, "expectedTitle") : null;
+  const requiresMarkDuplicate = configBooleanOrFalse(config, "requiresMarkDuplicate");
+  const canonicalThreadId = requiresMarkDuplicate
+    ? configStringOrNull(config, "canonicalThreadId") ?? targetThreadId
+    : null;
+  const duplicateThreadIds = requiresMarkDuplicate ? configStringArray(config, "duplicateThreadIds") : [];
   const targetThread = session.state.threads.find((candidate) => candidate.id === targetThreadId);
   const retrieve = evaluateRetrieveValue(targetThread, targetThreadId, expectedReplyValue);
-  const backend = evaluateForumBackendState(session, targetThread, targetThreadId, expectedLockReason);
+  const backend = evaluateForumBackendState(session, targetThread, targetThreadId, {
+    expectedLockReason,
+    requiresPin,
+    requiresReport,
+    expectedReportReason,
+    requiresMove,
+    expectedCategory,
+    requiresEditTitle,
+    expectedTitle,
+    requiresMarkDuplicate,
+    canonicalThreadId,
+    duplicateThreadIds,
+  });
   const ui = targetThread?.locked
     ? passedEvaluator({
         type: "ui_state",
@@ -42,9 +72,33 @@ export function evaluateForum(session: ForumEvaluationSession): HostedWebScoreRe
 
   return aggregateStrictScore({
     evaluators: [retrieve, backend, ui],
-    passSummary: "Agent found the generated target thread, replied with the required value, and locked it with the correct reason.",
+    passSummary: buildPassSummary({
+      requiresPin,
+      requiresReport,
+      requiresMove,
+      requiresEditTitle,
+      requiresMarkDuplicate,
+    }),
     failSummary: "One or more required forum conditions were not met.",
   });
+}
+
+function buildPassSummary(flags: {
+  requiresPin: boolean;
+  requiresReport: boolean;
+  requiresMove: boolean;
+  requiresEditTitle: boolean;
+  requiresMarkDuplicate: boolean;
+}): string {
+  const extras: string[] = [];
+  if (flags.requiresMove) extras.push("recategorized it");
+  if (flags.requiresEditTitle) extras.push("renamed it");
+  if (flags.requiresMarkDuplicate) extras.push("consolidated the duplicate threads");
+  if (flags.requiresReport) extras.push("filed the required report");
+  if (flags.requiresPin) extras.push("pinned it");
+  const base =
+    "Agent found the generated target thread, replied with the required value, and locked it with the correct reason";
+  return extras.length > 0 ? `${base}, and ${extras.join(", ")}.` : `${base}.`;
 }
 
 function evaluateRetrieveValue(
@@ -83,13 +137,39 @@ function evaluateForumBackendState(
   session: ForumEvaluationSession,
   targetThread: ForumThread | undefined,
   targetThreadId: string,
-  expectedLockReason: string,
+  options: {
+    expectedLockReason: string;
+    requiresPin: boolean;
+    requiresReport: boolean;
+    expectedReportReason: string | null;
+    requiresMove: boolean;
+    expectedCategory: string | null;
+    requiresEditTitle: boolean;
+    expectedTitle: string | null;
+    requiresMarkDuplicate: boolean;
+    canonicalThreadId: string | null;
+    duplicateThreadIds: string[];
+  },
 ): HostedWebEvaluatorResult {
+  const {
+    expectedLockReason,
+    requiresPin,
+    requiresReport,
+    expectedReportReason,
+    requiresMove,
+    expectedCategory,
+    requiresEditTitle,
+    expectedTitle,
+    requiresMarkDuplicate,
+    canonicalThreadId,
+    duplicateThreadIds,
+  } = options;
+
   if (!targetThread) {
     return failedEvaluator({
       type: "backend_state",
       name: "generated target thread moderated and replied",
-      errorMessage: "Target battery thread not found.",
+      errorMessage: "Target thread not found.",
     });
   }
 
@@ -101,6 +181,58 @@ function evaluateForumBackendState(
   );
   const lockReasonMatches = lockAction?.reason.trim().toLowerCase() === expectedLockReason.toLowerCase();
 
+  const pinAction = requiresPin
+    ? session.state.moderationActions.find(
+        (action) => action.threadId === targetThreadId && action.action === "pin",
+      )
+    : null;
+  const hasPin = !requiresPin || pinAction != null;
+
+  const reportAction = requiresReport
+    ? session.state.moderationActions.find(
+        (action) => action.threadId === targetThreadId && action.action === "report",
+      )
+    : null;
+  const hasReport = !requiresReport || reportAction != null;
+  const reportReasonMatches =
+    !requiresReport ||
+    (reportAction != null &&
+      reportAction.reason.trim().toLowerCase() === (expectedReportReason ?? "").toLowerCase());
+
+  const moveAction = requiresMove
+    ? session.state.moderationActions.find(
+        (action) => action.threadId === targetThreadId && action.action === "move",
+      )
+    : null;
+  const moveMatches =
+    !requiresMove ||
+    (moveAction != null &&
+      (moveAction.targetCategory ?? "").trim().toLowerCase() === (expectedCategory ?? "").toLowerCase() &&
+      targetThread.category.trim().toLowerCase() === (expectedCategory ?? "").toLowerCase());
+
+  const editTitleAction = requiresEditTitle
+    ? session.state.moderationActions.find(
+        (action) => action.threadId === targetThreadId && action.action === "edit_title",
+      )
+    : null;
+  const editTitleMatches =
+    !requiresEditTitle ||
+    (editTitleAction != null &&
+      (editTitleAction.newTitle ?? "").trim() === (expectedTitle ?? "").trim() &&
+      targetThread.title.trim() === (expectedTitle ?? "").trim());
+
+  const duplicatesConsolidated =
+    !requiresMarkDuplicate ||
+    (duplicateThreadIds.length > 0 &&
+      duplicateThreadIds.every((duplicateId) =>
+        session.state.moderationActions.some(
+          (action) =>
+            action.action === "mark_duplicate" &&
+            action.threadId === duplicateId &&
+            action.duplicateOfThreadId === canonicalThreadId,
+        ),
+      ));
+
   const evidence = {
     threadId: targetThreadId,
     hasAgentReply,
@@ -108,9 +240,36 @@ function evaluateForumBackendState(
     isLocked,
     lockReason: lockAction?.reason ?? null,
     lockReasonMatches,
+    requiresPin,
+    hasPin,
+    requiresReport,
+    hasReport,
+    reportReason: reportAction?.reason ?? null,
+    reportReasonMatches,
+    requiresMove,
+    movedToCategory: moveAction?.targetCategory ?? null,
+    currentCategory: targetThread.category,
+    moveMatches,
+    requiresEditTitle,
+    newTitle: editTitleAction?.newTitle ?? null,
+    currentTitle: targetThread.title,
+    editTitleMatches,
+    requiresMarkDuplicate,
+    canonicalThreadId,
+    duplicateThreadIds,
+    duplicatesConsolidated,
   };
 
-  const pass = hasAgentReply && isLocked && lockReasonMatches;
+  const pass =
+    hasAgentReply &&
+    isLocked &&
+    lockReasonMatches &&
+    hasPin &&
+    hasReport &&
+    reportReasonMatches &&
+    moveMatches &&
+    editTitleMatches &&
+    duplicatesConsolidated;
 
   return pass
     ? passedEvaluator({
@@ -122,7 +281,7 @@ function evaluateForumBackendState(
         type: "backend_state",
         name: "generated target thread moderated and replied",
         errorMessage:
-          `Backend state must include an agent reply, the thread must be locked, and the lock reason must be '${expectedLockReason}'.`,
+          "Backend state must include an agent reply, the thread must be locked with the correct reason, and any required report, pin, move, title, or duplicate actions must be present.",
         evidence,
       });
 }

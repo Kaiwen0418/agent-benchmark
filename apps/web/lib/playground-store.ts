@@ -14,7 +14,19 @@ import {
   type HostedSessionBreakdown,
 } from "./hosted-scoring";
 
-export type PlaygroundBenchmark = "hosted-web-suite";
+// The selected benchmark is a catalog case id; suites are discovered at runtime
+// from the public catalog rather than hardcoded.
+export type PlaygroundBenchmark = string;
+
+export type BenchmarkOption = {
+  id: string;
+  slug: string;
+  label: string;
+  description: string;
+  difficulty: string;
+  tag: string;
+  version: string;
+};
 
 export type RunPhase = "idle" | "booting" | "running" | "completed" | "failed";
 export type PanelTab = "events" | "files" | "screenshots" | "score";
@@ -39,6 +51,8 @@ type PlaygroundStore = {
   endpoint: string;
   apiKey: string;
   benchmark: PlaygroundBenchmark;
+  benchmarks: BenchmarkOption[];
+  benchmarksLoading: boolean;
   currentRunId: string | null;
   currentExecutionMode: RunExecutionMode | null;
   liveViewUrl: string | null;
@@ -63,6 +77,8 @@ type PlaygroundStore = {
   setActiveTab: (value: PanelTab) => void;
   setLiveSlide: (index: number) => void;
   fetchQuota: () => Promise<void>;
+  fetchBenchmarks: () => Promise<void>;
+  resumeRun: (runId: string) => Promise<void>;
   startRun: (mode?: RunExecutionMode) => Promise<void>;
   stopRun: () => void;
   reset: () => void;
@@ -74,14 +90,12 @@ type RunSnapshot = {
   artifacts: Artifact[];
 };
 
-const BENCHMARK_CASE_IDS: Record<PlaygroundBenchmark, string> = {
-  "hosted-web-suite": "7e8a6df3-17c3-4ddb-9877-d0bd8a0f0005",
-};
-
 const initialState = {
   endpoint: "",
   apiKey: "",
-  benchmark: "hosted-web-suite" as PlaygroundBenchmark,
+  benchmark: "" as PlaygroundBenchmark,
+  benchmarks: [] as BenchmarkOption[],
+  benchmarksLoading: false,
   currentRunId: null,
   currentExecutionMode: null,
   liveViewUrl: null,
@@ -104,6 +118,20 @@ const initialState = {
 
 let pollInterval: number | null = null;
 let streamSource: EventSource | null = null;
+
+const LATEST_RUN_STORAGE_KEY = "agentbench:latestRunId";
+
+function setStoredLatestRunId(runId: string | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (runId) {
+    window.localStorage.setItem(LATEST_RUN_STORAGE_KEY, runId);
+  } else {
+    window.localStorage.removeItem(LATEST_RUN_STORAGE_KEY);
+  }
+}
 
 function clearRunSync() {
   if (typeof window === "undefined") {
@@ -421,6 +449,21 @@ async function requestQuota() {
   return (await response.json()) as { quota: QuotaStatus };
 }
 
+async function requestBenchmarks() {
+  const response = await fetch("/api/benchmark-cases", {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to load benchmark cases");
+  }
+
+  return (await response.json()) as {
+    cases: Array<{ id: string; slug: string; title: string; description: string; difficulty: string; tag: string; version: string }>;
+  };
+}
+
 async function fetchRunSnapshot(runId: string) {
   const [runResponse, eventsResponse, artifactsResponse] = await Promise.all([
     fetch(`/api/runs/${runId}`, { cache: "no-store" }),
@@ -543,12 +586,69 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       set({ quotaLoading: false, runError: "Failed to load quota." });
     }
   },
+  fetchBenchmarks: async () => {
+    set({ benchmarksLoading: true });
+
+    try {
+      const result = await requestBenchmarks();
+      const benchmarks: BenchmarkOption[] = result.cases.map((item) => ({
+        id: item.id,
+        slug: item.slug,
+        label: `benchmark [${item.tag}-${item.version}]`,
+        description: `Run the ${item.tag} benchmark suite.`,
+        difficulty: item.difficulty,
+        tag: item.tag,
+        version: item.version,
+      }));
+      // The backend orders suites with the default (hard) first; the frontend
+      // simply selects the first option without hardcoding any tag.
+      const defaultBenchmark = benchmarks[0]?.id ?? "";
+      set((state) => ({
+        benchmarks,
+        benchmarksLoading: false,
+        benchmark: state.benchmark || defaultBenchmark,
+      }));
+    } catch {
+      set({ benchmarksLoading: false, runError: "Failed to load benchmark catalog." });
+    }
+  },
+  resumeRun: async (runId) => {
+    if (!runId || get().phase !== "idle" || get().currentRunId) {
+      return;
+    }
+
+    clearRunSync();
+    set({ quotaLoading: true, runError: null });
+
+    try {
+      const snapshot = await fetchRunSnapshot(runId);
+      applyRunSnapshot(snapshot, set);
+      setStoredLatestRunId(runId);
+      set({ quotaLoading: false });
+
+      if (typeof window !== "undefined" && !isTerminalStatus(snapshot.run.status)) {
+        startRunStream(runId, set, get);
+      } else {
+        set({ streamMode: "idle" });
+      }
+    } catch {
+      setStoredLatestRunId(null);
+      set({
+        quotaLoading: false,
+        runError: "Failed to resume the previous run.",
+        phase: "idle",
+        statusLine: "Failed to resume the previous run.",
+        streamMode: "idle",
+      });
+    }
+  },
   stopRun: () => {
     clearRunSync();
     set({ phase: "failed", statusLine: "Stopped", streamMode: "idle" });
   },
   reset: () => {
     clearRunSync();
+    setStoredLatestRunId(null);
     set((state) => ({
       ...initialState,
       quota: state.quota,
@@ -568,6 +668,16 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
     try {
       const state = get();
       const benchmark = state.benchmark;
+      if (!benchmark) {
+        set({
+          quotaLoading: false,
+          runError: "Select a benchmark suite first.",
+          phase: "idle",
+          statusLine: "Select a benchmark suite first.",
+          streamMode: "idle",
+        });
+        return;
+      }
       const response = await fetch("/api/runs", {
         method: "POST",
         headers: {
@@ -575,7 +685,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         },
         credentials: "include",
         body: JSON.stringify({
-          caseId: BENCHMARK_CASE_IDS[benchmark],
+          caseId: benchmark,
           executionMode: mode,
           isPublic: true,
         }),
@@ -618,6 +728,8 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         quota: result.quota ?? get().quota,
         quotaLoading: false,
       });
+
+      setStoredLatestRunId(result.run.id);
 
       if (typeof window !== "undefined") {
         startRunStream(result.run.id, set, get);

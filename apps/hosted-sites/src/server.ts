@@ -26,6 +26,7 @@ import { createRedisSessionCache } from "./runtime/session-cache.js";
 import { createSessionStore } from "./runtime/session-store.js";
 import { createTelemetryRuntime } from "./runtime/telemetry.js";
 import { isHostedViewerMutation } from "./runtime/viewer-access.js";
+import { parseScorePreviewMode, sanitizeScoreResult } from "./runtime/score-preview-policy.js";
 
 const port = Number(process.env.HOSTED_SITES_PORT ?? 3003);
 const publicBaseUrl = process.env.HOSTED_SITES_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -36,6 +37,7 @@ const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret
 const instanceId = process.env.HOSTED_SITES_INSTANCE_ID ?? `${hostname()}:${process.pid}`;
 const redisUrl = process.env.HOSTED_SESSION_REDIS_URL;
 const sessionRedisTtlMs = Number(process.env.HOSTED_SESSION_REDIS_TTL_MS ?? 1000 * 60 * 60 * 6);
+const scorePreviewMode = parseScorePreviewMode(process.env.HOSTED_SCORE_PREVIEW_MODE);
 
 const sessions = new Map<string, HostedSession>();
 const sessionCache = redisUrl
@@ -79,6 +81,7 @@ const sessionStore = createSessionStore({
   now,
   makeId,
   viewerTokenSecret,
+  scorePreviewMode,
   recoverSession: orchestratorClient.recoverSession,
   persistSessionSnapshotDurably: orchestratorClient.persistSessionSnapshot,
   persistSessionAccess: orchestratorClient.recordSessionAccess,
@@ -120,11 +123,11 @@ async function resolveSessionResult(session: HostedSession) {
   if (isTerminalHostedSessionStatus(session.status)) {
     const persistedResult = await getSessionResultViaOrchestrator(session);
     if (persistedResult) {
-      return persistedResult;
+      return sanitizeScoreResult(persistedResult, session);
     }
     throw new Error("Persisted terminal session result is unavailable.");
   }
-  return evaluateSession(session);
+  return sanitizeScoreResult(evaluateSession(session), session);
 }
 
 function rejectTerminalMutation(session: HostedSession, response: ServerResponse) {

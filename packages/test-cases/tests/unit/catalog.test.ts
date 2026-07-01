@@ -1,33 +1,120 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hostedSuiteMetadataSchema, hostedWebSuiteCase, hostedWebSuiteMetadata } from "../../src/index.js";
-import { createHostedWebCatalogRelease } from "../../src/release.js";
+import {
+  hostedSuiteMetadataSchema,
+  hostedWebHardSuiteMetadata,
+  hostedWebSuites,
+} from "../../src/index.js";
+import { createCatalogRelease } from "../../src/release.js";
 
-test("hosted catalog is valid and has unique app/task definitions", () => {
-  assert.equal(hostedWebSuiteCase.slug, "hosted-web-suite");
-  assert.deepEqual(hostedWebSuiteCase.metadata, {});
-  const suite = hostedSuiteMetadataSchema.parse(hostedWebSuiteMetadata);
-  assert.ok(suite.sessions.length > 0);
-  assert.equal(new Set(suite.sessions.map((session) => session.taskSlug)).size, suite.sessions.length);
-  assert.ok(suite.sessions.every((session, index) => session.sequenceIndex === index));
-  assert.ok(suite.sessions.every((session) => session.metadata.questionVariants.length >= 2));
+test("every hosted suite catalog is valid and has unique app/task definitions", () => {
+  for (const { case: benchmarkCase, metadata } of hostedWebSuites) {
+    assert.deepEqual(benchmarkCase.metadata, {}, `${benchmarkCase.slug} case metadata`);
+    const suite = hostedSuiteMetadataSchema.parse(metadata);
+    assert.ok(suite.sessions.length > 0, `${benchmarkCase.slug} has sessions`);
+    assert.equal(
+      new Set(suite.sessions.map((session) => session.taskSlug)).size,
+      suite.sessions.length,
+      `${benchmarkCase.slug} task slugs unique`,
+    );
+    assert.ok(suite.sessions.every((session, index) => session.sequenceIndex === index));
+    assert.ok(suite.sessions.every((session) => session.metadata.questionVariants.length >= 2));
+  }
 });
 
-test("hosted catalog rejects cross-app task config", () => {
-  const invalid = structuredClone(hostedWebSuiteMetadata);
-  invalid.sessions[0]!.metadata.questionVariants[0]!.taskConfig = {
-    targetThreadId: "thr-battery",
-    expectedReplyValue: "https://example.com",
-    expectedLockReason: "wrong app",
-  } as never;
+test("every hosted suite catalog rejects cross-app task config", () => {
+  for (const { case: benchmarkCase, metadata } of hostedWebSuites) {
+    const invalid = structuredClone(metadata);
+    invalid.sessions[0]!.metadata.questionVariants[0]!.taskConfig = {
+      targetThreadId: "thr-battery",
+      expectedReplyValue: "https://example.com",
+      expectedLockReason: "wrong app",
+    } as never;
+    assert.throws(() => hostedSuiteMetadataSchema.parse(invalid), `${benchmarkCase.slug} rejects cross-app config`);
+  }
+});
+
+test("every hosted suite catalog release has a stable revision identity and content hash", () => {
+  for (const suite of hostedWebSuites) {
+    const first = createCatalogRelease(suite);
+    const second = createCatalogRelease(suite);
+
+    assert.equal(first.revision, suite.revision);
+    assert.equal(first.caseId, suite.case.id);
+    assert.match(first.contentHash, /^[0-9a-f]{64}$/);
+    assert.deepEqual(second, first);
+  }
+});
+
+test("every hosted suite declares a positive per-testcase time limit", () => {
+  for (const { case: benchmarkCase, metadata } of hostedWebSuites) {
+    assert.ok(
+      typeof metadata.timeLimitMinutesPerTestcase === "number" && metadata.timeLimitMinutesPerTestcase > 0,
+      `${benchmarkCase.slug} declares a positive timeLimitMinutesPerTestcase`,
+    );
+  }
+});
+
+test("hosted suite cases have distinct ids, slugs, and suite slugs", () => {
+  const ids = hostedWebSuites.map((suite) => suite.case.id);
+  const slugs = hostedWebSuites.map((suite) => suite.case.slug);
+  const suiteSlugs = hostedWebSuites.map((suite) => suite.metadata.suiteSlug);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.equal(new Set(slugs).size, slugs.length);
+  assert.equal(new Set(suiteSlugs).size, suiteSlugs.length);
+});
+
+test("difficulty is a tag: only hard suites declare cross-app consistency checks", () => {
+  for (const { case: benchmarkCase, metadata } of hostedWebSuites) {
+    const checks = (metadata as { consistencyChecks?: unknown[] }).consistencyChecks ?? [];
+    if (benchmarkCase.difficulty === "hard") {
+      assert.ok(checks.length > 0, `${benchmarkCase.slug} declares consistency checks`);
+    } else {
+      assert.equal(checks.length, 0, `${benchmarkCase.slug} declares no consistency checks`);
+    }
+  }
+});
+
+test("hard consistency checks reference real sessions with source before target", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const indexBySlug = new Map(suite.sessions.map((session) => [session.taskSlug, session.sequenceIndex]));
+  for (const check of suite.consistencyChecks ?? []) {
+    const source = indexBySlug.get(check.sourceTaskSlug);
+    const target = indexBySlug.get(check.targetTaskSlug);
+    assert.ok(source !== undefined, `unknown source ${check.sourceTaskSlug}`);
+    assert.ok(target !== undefined, `unknown target ${check.targetTaskSlug}`);
+    assert.ok(source! < target!, `${check.sourceTaskSlug} must precede ${check.targetTaskSlug}`);
+  }
+});
+
+test("schema rejects a consistency check with an unknown task slug", () => {
+  const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
+    consistencyChecks: Array<Record<string, unknown>>;
+  };
+  invalid.consistencyChecks = [
+    {
+      name: "bad",
+      sourceTaskSlug: "does-not-exist",
+      sourcePath: "latestAnswer.answer",
+      targetTaskSlug: "notes-followup-create-hard",
+      targetPath: "notes[].title",
+    },
+  ];
   assert.throws(() => hostedSuiteMetadataSchema.parse(invalid));
 });
 
-test("hosted catalog release has a stable revision identity and content hash", () => {
-  const first = createHostedWebCatalogRelease();
-  const second = createHostedWebCatalogRelease();
-
-  assert.equal(first.revision, "hosted-web-suite-v3.0.2");
-  assert.match(first.contentHash, /^[0-9a-f]{64}$/);
-  assert.deepEqual(second, first);
+test("schema rejects a consistency check whose source follows its target", () => {
+  const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
+    consistencyChecks: Array<Record<string, unknown>>;
+  };
+  invalid.consistencyChecks = [
+    {
+      name: "reversed",
+      sourceTaskSlug: "notes-followup-create-hard",
+      sourcePath: "notes[].title",
+      targetTaskSlug: "wiki-release-answer-hard",
+      targetPath: "latestAnswer.answer",
+    },
+  ];
+  assert.throws(() => hostedSuiteMetadataSchema.parse(invalid));
 });

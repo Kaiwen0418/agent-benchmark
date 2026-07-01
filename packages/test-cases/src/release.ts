@@ -1,13 +1,15 @@
 import { createHash } from "node:crypto";
-import { hostedWebSuiteCase, hostedWebSuiteMetadata, hostedWebSuiteRevision } from "./index.js";
+import { hostedWebSuites, type HostedSuiteDefinition } from "./suites/registry.js";
 
-export function createHostedWebCatalogRelease() {
-  const manifest = hostedWebSuiteMetadata;
+export function createCatalogRelease(suite: HostedSuiteDefinition) {
+  const manifest = suite.metadata;
   return {
-    caseId: hostedWebSuiteCase.id,
-    benchmarkCase: hostedWebSuiteCase,
-    revision: hostedWebSuiteRevision,
+    caseId: suite.case.id,
+    benchmarkCase: suite.case,
+    revision: suite.revision,
     manifest,
     contentHash: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
   };
 }
+
+export const hostedWebCatalogReleases = () => hostedWebSuites.map(createCatalogRelease);

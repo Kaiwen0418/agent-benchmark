@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export type SiteSelectOption = {
   value: string;
-  label: string;
+  label: ReactNode;
   disabled?: boolean;
 };
 
@@ -134,7 +134,7 @@ export function SiteSelect({
                   option.disabled
                     ? "cursor-default text-[#9a9388]"
                     : selected
-                      ? "bg-[#111111] text-white"
+                      ? "bg-[#ded9ce] text-[#111111]"
                       : active
                         ? "bg-[#eee9df] text-[#111111]"
                         : "text-[#4f4940] hover:bg-[#eee9df]",

@@ -2,7 +2,7 @@ import { isStateRecord, readStateArray, type HostedAppDefinition } from "../../r
 import { evaluateNotes } from "./evaluate.js";
 import { buildNotesFinalState } from "./final-state.js";
 import { createNotesRoutes } from "./routes.js";
-import { getNotesDefaultGoal, getNotesStartPath } from "./seed.js";
+import { getNotesDefaultGoal, getNotesStartPath, notesSeedNotes } from "./seed.js";
 import type { Note } from "./types.js";
 
 function isNote(value: unknown): value is Note {
@@ -22,7 +22,7 @@ export const notesLiteDefinition: HostedAppDefinition<"notes-lite"> = {
   getDefaultStartPath: getNotesStartPath,
   getDefaultGoal: () => getNotesDefaultGoal(),
   buildInitialSessionState: () => ({
-    notes: [],
+    notes: notesSeedNotes.map((note) => ({ ...note })),
   }),
   hydratePersistedState: (value) => ({
     notes: readStateArray(value, "notes", isNote),

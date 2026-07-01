@@ -571,3 +571,207 @@ test("timeout falls back to discovered sessions and omits callback without a run
   assert.deepEqual(evicted, [["session-1"]]);
   assert.equal(callbacks, 0);
 });
+
+// --- Cross-app consistency chain (#115) -----------------------------------
+
+const consistencyChain = {
+  name: "Wiki release answer carried into note title",
+  sourceTaskSlug: "wiki-release-answer-hard",
+  sourcePath: "latestAnswer.answer",
+  targetTaskSlug: "notes-followup-create-hard",
+  targetPath: "notes[].title",
+  rule: "equal-normalized" as const,
+  weight: 1,
+  required: true,
+};
+
+// Stub a two-session hard suite where the wiki source has already completed and
+// the agent is now completing the notes target session. Captures the aggregate
+// the lifecycle hands to the completion RPC.
+function createConsistencySupabase(options: {
+  wikiFinalState: unknown;
+  consistencyChecks?: unknown[];
+}) {
+  const rpcCalls: Record<string, unknown>[] = [];
+  const sessions = [
+    {
+      id: "session-wiki",
+      app: "wiki-lite",
+      task_slug: "wiki-release-answer-hard",
+      weight: 1,
+      required: true,
+      sequence_index: 0,
+    },
+    {
+      id: "session-notes",
+      app: "notes-lite",
+      task_slug: "notes-followup-create-hard",
+      weight: 1,
+      required: true,
+      sequence_index: 1,
+    },
+  ];
+  const supabase = {
+    from(table: string) {
+      if (table === "benchmark_attempts") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: {
+                  metadata: {
+                    activeSessionId: "session-notes",
+                    consistencyChecks: options.consistencyChecks ?? [consistencyChain],
+                  },
+                },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "hosted_web_results") {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: async () => ({
+                data: [
+                  {
+                    session_id: "session-wiki",
+                    app: "wiki-lite",
+                    task_slug: "wiki-release-answer-hard",
+                    score: 1,
+                    status: "passed",
+                    weight: 1,
+                    final_state: options.wikiFinalState,
+                  },
+                ],
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "hosted_web_sessions") {
+        return {
+          select: () => ({
+            eq: () => ({ order: async () => ({ data: sessions, error: null }) }),
+          }),
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    },
+    rpc: async (_name: string, args: Record<string, unknown>) => {
+      rpcCalls.push(args);
+      const update = args.p_attempt_update as Record<string, unknown>;
+      return {
+        data: {
+          transitioned: true,
+          duplicate: false,
+          conflict: null,
+          result: args.p_result,
+          complete: update.complete,
+          aggregate: update.aggregate,
+        },
+        error: null,
+      };
+    },
+  } as unknown as SupabaseClient<Database>;
+  return { supabase, rpcCalls };
+}
+
+function makeNotesTargetSession(finalState: unknown): AttemptLifecycleSession {
+  return makeSession({
+    id: "session-notes",
+    app: "notes-lite",
+    taskSlug: "notes-followup-create-hard",
+    suiteSlug: "hosted-web-hard-suite-v1",
+    sequenceIndex: 1,
+    finalState,
+  });
+}
+
+test("complete-session passes the suite when the agent carries the value across apps", async () => {
+  const { supabase } = createConsistencySupabase({
+    wikiFinalState: { app: "wiki-lite", latestAnswer: { answer: "90 days" } },
+  });
+  const lifecycle = createLifecycle({ getSupabaseAdmin: () => supabase });
+
+  const result = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeNotesTargetSession({
+      app: "notes-lite",
+      notes: [{ id: "n1", title: "90 days", tag: "release" }],
+    }),
+    result: makeScoreResult(),
+  });
+
+  const aggregate = result.attemptResult.aggregate!;
+  assert.equal(result.attemptResult.complete, true);
+  assert.equal(aggregate.status, "passed");
+  assert.equal(aggregate.score, 1);
+  assert.equal(aggregate.breakdown.consistency?.length, 1);
+  assert.equal(aggregate.breakdown.consistency?.[0]?.status, "passed");
+  assert.equal(aggregate.breakdown.consistency?.[0]?.evidence?.matchedValue, "90 days");
+});
+
+test("complete-session fails the suite on a cross-app consistency mismatch", async () => {
+  const { supabase } = createConsistencySupabase({
+    wikiFinalState: { app: "wiki-lite", latestAnswer: { answer: "90 days" } },
+  });
+  const lifecycle = createLifecycle({ getSupabaseAdmin: () => supabase });
+
+  const result = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeNotesTargetSession({
+      app: "notes-lite",
+      notes: [{ id: "n1", title: "30 days", tag: "release" }],
+    }),
+    result: makeScoreResult(),
+  });
+
+  const aggregate = result.attemptResult.aggregate!;
+  // Both sessions passed (weight 1 each) but the required consistency check
+  // (weight 1) failed: 2/3 score and a failed suite status.
+  assert.equal(aggregate.status, "failed");
+  assert.equal(aggregate.score, 0.6667);
+  assert.equal(aggregate.breakdown.consistency?.[0]?.status, "failed");
+});
+
+test("complete-session reports missing prior output when the source final state is absent", async () => {
+  const { supabase } = createConsistencySupabase({ wikiFinalState: null });
+  const lifecycle = createLifecycle({ getSupabaseAdmin: () => supabase });
+
+  const result = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeNotesTargetSession({
+      app: "notes-lite",
+      notes: [{ id: "n1", title: "90 days", tag: "release" }],
+    }),
+    result: makeScoreResult(),
+  });
+
+  const aggregate = result.attemptResult.aggregate!;
+  assert.equal(aggregate.status, "failed");
+  assert.equal(aggregate.breakdown.consistency?.[0]?.status, "failed");
+  assert.match(aggregate.breakdown.consistency?.[0]?.errorMessage ?? "", /Missing prior output/);
+});
+
+test("complete-session leaves the aggregate chain-free for suites without consistency checks", async () => {
+  const { supabase } = createConsistencySupabase({
+    wikiFinalState: { app: "wiki-lite", latestAnswer: { answer: "90 days" } },
+    consistencyChecks: [],
+  });
+  const lifecycle = createLifecycle({ getSupabaseAdmin: () => supabase });
+
+  const result = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeNotesTargetSession({ app: "notes-lite", notes: [{ id: "n1", title: "x", tag: "release" }] }),
+    result: makeScoreResult(),
+  });
+
+  const aggregate = result.attemptResult.aggregate!;
+  assert.equal(aggregate.status, "passed");
+  assert.equal(aggregate.score, 1);
+  assert.equal(aggregate.breakdown.consistency, undefined);
+});

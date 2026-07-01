@@ -40,6 +40,40 @@ export function layout(params: {
   const taskHomePath = params.session.startPath ?? params.defaultStartPathForApp(params.session.app);
   const taskHomeSeparator = taskHomePath.includes("?") ? "&" : "?";
   const appNav = `<a href="${escapeHtml(taskHomePath)}${taskHomeSeparator}session=${encodeURIComponent(params.session.token)}">Task home</a>`;
+  const timeLimitMinutes =
+    typeof params.session.metadata.timeLimitMinutesPerTestcase === "number" &&
+    Number.isFinite(params.session.metadata.timeLimitMinutesPerTestcase)
+      ? params.session.metadata.timeLimitMinutesPerTestcase
+      : null;
+  const showCountdown = !isViewer && !isTerminal && params.session.expiresAt;
+  const countdownBanner = showCountdown
+    ? `<div class="countdown-banner" data-expires-at="${escapeHtml(params.session.expiresAt ?? "")}">
+        <span class="countdown-label">Time remaining</span>
+        <span class="countdown-value">--:--</span>
+        ${timeLimitMinutes ? `<span class="countdown-limit">/ ${timeLimitMinutes} min</span>` : ""}
+       </div>
+       <script>
+         (function () {
+           var banner = document.currentScript.previousElementSibling;
+           var valueEl = banner.querySelector('.countdown-value');
+           var expiresAt = new Date(banner.getAttribute('data-expires-at')).getTime();
+           function update() {
+             var remaining = expiresAt - Date.now();
+             if (remaining <= 0) {
+               valueEl.textContent = 'Timed out';
+               banner.classList.add('urgent');
+               return;
+             }
+             var minutes = Math.floor(remaining / 60000);
+             var seconds = Math.floor((remaining % 60000) / 1000);
+             valueEl.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+             if (remaining < 60000) banner.classList.add('urgent');
+           }
+           update();
+           setInterval(update, 1000);
+         })();
+       </script>`
+    : "";
   const telemetry = isViewer || isTerminal ? "" : `
     <script>
       window.AgentBenchHostedSession = ${JSON.stringify({
@@ -169,6 +203,12 @@ export function layout(params: {
       .score { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
       .layout-badge { display: inline-block; margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
       .viewer-banner { margin: 0 24px; padding: 10px 14px; border: 1px solid var(--line); background: var(--accent-soft); color: var(--ink); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+      .countdown-banner { margin: 0 24px; padding: 8px 14px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+      .countdown-banner.urgent { background: #fff1ed; color: #8a2d1f; border-color: #e6b3a9; }
+      .countdown-label { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; color: var(--muted); }
+      .countdown-banner.urgent .countdown-label { color: #b45b4a; }
+      .countdown-value { font-variant-numeric: tabular-nums; }
+      .countdown-limit { color: var(--muted); font-size: 11px; margin-left: auto; }
       .viewer-readonly form, .viewer-readonly a { pointer-events: none; }
       .terminal-readonly form { pointer-events: none; opacity: .58; }
       .terminal-readonly button, .terminal-readonly input, .terminal-readonly textarea, .terminal-readonly select { cursor: not-allowed; }
@@ -335,6 +375,7 @@ export function layout(params: {
     <div class="shell">
     ${isViewer ? '<div class="viewer-banner">Live read-only session view</div>' : ""}
     ${isTerminal ? `<div class="viewer-banner">Case ${escapeHtml(params.session.status)} · return to the AgentBench Connection Page to continue${connectionUrl ? ` · <a href="${escapeHtml(connectionUrl)}">Return to Connection Page</a>` : ""}</div>` : ""}
+    ${countdownBanner}
     <header>
       <div class="heading">
         <span class="layout-badge">${escapeHtml(params.session.app)} · ${uiVariant} · ${uiTheme}</span>
@@ -343,7 +384,6 @@ export function layout(params: {
       </div>
       <nav class="nav">
         ${appNav}
-        <a href="/api/sessions/${encodeURIComponent(params.session.token)}/score">Score JSON</a>
       </nav>
     </header>
     <main>${params.body}</main>

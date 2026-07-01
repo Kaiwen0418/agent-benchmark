@@ -9,6 +9,29 @@ export const repoSeedFiles: RepoFile[] = [
     path: "package.json",
     content: '{\n  "name": "demo-project",\n  "version": "1.0.0"\n}\n',
   },
+  // Additional source files used by the hard repo workflow variants (#114),
+  // where a coherent change must touch several files and pass simulated CI.
+  // Easy variants ignore these files; they are inert distractors there.
+  {
+    path: "src/version.ts",
+    content: 'export const VERSION = "1.0.0";\n',
+  },
+  {
+    path: "src/config.ts",
+    content: 'export const APP_NAME = "demo-project";\n',
+  },
+  {
+    path: "src/api.ts",
+    content: 'export const API_VERSION = "v1";\n',
+  },
+  {
+    path: "CHANGELOG.md",
+    content: "# Changelog\n\n## 1.0.0\n\n- Initial release.\n",
+  },
+  {
+    path: "docs/API.md",
+    content: "# API Reference\n\nStable version: v1.\n",
+  },
 ];
 
 export const repoSeedIssues: RepoIssue[] = [

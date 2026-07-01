@@ -63,6 +63,7 @@ HOSTED_SITES_PUBLIC_URL="${HOSTED_URL}" \
 HOSTED_ORCHESTRATOR_URL="${ORCHESTRATOR_URL}" \
 RUNNER_SHARED_SECRET="${SECRET}" \
 HOSTED_SESSION_REDIS_URL="${REDIS_URL}" \
+HOSTED_SCORE_PREVIEW_MODE="dev" \
 pnpm --filter hosted-sites exec tsx src/server.ts >"${LOG_DIR}/hosted-sites.log" 2>&1 &
 HOSTED_PID=$!
 

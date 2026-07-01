@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { verifyHostedViewerToken, type HostedWebSessionMetadata } from "@agentbench/shared";
+import type { ScorePreviewMode } from "./score-preview-policy.js";
 import type { SessionCache } from "./session-cache.js";
 import type { HostedAppPersistenceState, HostedAppSessionState, HostedSession } from "./types.js";
 
@@ -35,6 +36,7 @@ type SessionStoreDeps = {
   now: () => string;
   makeId: (prefix: string) => string;
   viewerTokenSecret?: string;
+  scorePreviewMode: ScorePreviewMode;
   recoverSession: (params: { token?: string; sessionId?: string }) => Promise<PersistedHostedSession | null>;
   persistSessionSnapshotDurably?: (
     session: HostedSession,
@@ -130,6 +132,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
       suiteVersion: typeof metadata.suiteVersion === "string" ? metadata.suiteVersion : "v1",
       taskSlug: params.row.task_slug,
       taskVersion: params.row.task_version,
+      scorePreviewMode: deps.scorePreviewMode,
       sequenceIndex: params.row.sequence_index,
       weight: params.row.weight,
       required: params.row.required,
@@ -294,6 +297,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
       suiteVersion: params.suiteVersion ?? "v1",
       taskSlug,
       taskVersion: params.taskVersion ?? "v1",
+      scorePreviewMode: deps.scorePreviewMode,
       sequenceIndex:
         typeof params.sequenceIndex === "number" && Number.isFinite(params.sequenceIndex)
           ? Math.max(Math.trunc(params.sequenceIndex), 0)
@@ -348,6 +352,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
       try {
         const cached = await deps.sessionCache.get(token);
         if (cached) {
+          cached.scorePreviewMode = deps.scorePreviewMode;
           deps.sessions.set(token, cached);
           if (isExpired(cached) || cached.status === "expired") {
             await markSessionExpired(cached, request);

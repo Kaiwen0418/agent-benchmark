@@ -6,12 +6,13 @@ import type { HostedSession } from "../../src/runtime/types.js";
 type UiVariant = "workspace" | "sidebar" | "compact" | "dashboard" | "editorial";
 type UiTheme = "light" | "dark";
 
-function makeSession(uiVariant: UiVariant, uiTheme: UiTheme) {
+function makeSession(uiVariant: UiVariant, uiTheme: UiTheme, scorePreviewMode: HostedSession["scorePreviewMode"] = "dev") {
   return {
     app: "wiki-lite",
     token: "tok_layout",
     taskSlug: "wiki-generated",
     goal: "Find and submit the requested value.",
+    scorePreviewMode,
     metadata: {
       questionGeneration: {
         schemaVersion: 1,
@@ -81,4 +82,42 @@ test("terminal layout disables forms and does not emit telemetry", () => {
   assert.match(html, /return to the AgentBench Connection Page to continue/);
   assert.match(html, /href="http:\/\/localhost:3000\/runs\/run-1\/connect"/);
   assert.doesNotMatch(html, /abTelemetry/);
+});
+
+test("layout never renders Score JSON link", () => {
+  for (const scorePreviewMode of ["dev", "token", "disabled"] as const) {
+    const session = makeSession("workspace", "light", scorePreviewMode);
+    const html = layout({
+      title: "No score preview",
+      session,
+      body: '<section class="panel">Body</section>',
+      publicBaseUrl: "http://localhost:3003",
+      defaultStartPathForApp: () => "/wiki",
+    });
+
+    assert.doesNotMatch(html, /Score JSON/);
+    assert.doesNotMatch(html, /href="\/api\/sessions\/tok_layout\/score"/);
+  }
+
+  const viewerSession = makeSession("workspace", "light", "token");
+  viewerSession.accessMode = "viewer";
+  const viewerHtml = layout({
+    title: "Viewer preview",
+    session: viewerSession,
+    body: '<section class="panel">Body</section>',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+  assert.doesNotMatch(viewerHtml, /Score JSON/);
+
+  const terminalSession = makeSession("workspace", "light", "disabled");
+  terminalSession.status = "failed";
+  const terminalHtml = layout({
+    title: "Terminal disabled preview",
+    session: terminalSession,
+    body: '<section class="panel">Body</section>',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+  assert.doesNotMatch(terminalHtml, /Score JSON/);
 });

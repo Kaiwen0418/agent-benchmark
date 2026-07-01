@@ -10,6 +10,7 @@ import {
   readWikiAnswerContract,
   validateWikiAnswerSource,
 } from "./answer-contract.js";
+import { configStringOrNull, readTaskConfig } from "../../runtime/question-config.js";
 
 export type WikiEvaluationSession = {
   app: "wiki-lite" | string;
@@ -27,17 +28,23 @@ export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResu
   validateWikiAnswerSource(answerContract, session.state.wikiArticles);
   const expectedAnswer = answerContract.canonicalValue;
   const targetArticleSlug = answerContract.sourceArticleSlug;
+  const taskConfig = readTaskConfig(session.metadata);
+  const secondaryArticleSlug = configStringOrNull(taskConfig, "secondaryArticleSlug");
   const latestAnswer = session.state.wikiAnswerSubmissions.at(-1);
   const viewedArticleSlugs = Array.isArray(session.metadata.viewedArticleSlugs)
     ? session.metadata.viewedArticleSlugs.filter((value): value is string => typeof value === "string")
     : [];
-  const articleViewed =
+
+  const isArticleViewed = (slug: string) =>
     session.events.some(
       (event) =>
         event.type === "page.load" &&
         typeof event.url === "string" &&
-        String(event.url).includes(`/wiki/article/${targetArticleSlug}`),
-    ) || viewedArticleSlugs.includes(targetArticleSlug);
+        String(event.url).includes(`/wiki/article/${slug}`),
+    ) || viewedArticleSlugs.includes(slug);
+
+  const targetArticleViewed = isArticleViewed(targetArticleSlug);
+  const secondaryArticleViewed = secondaryArticleSlug == null || isArticleViewed(secondaryArticleSlug);
   const answerMatches = latestAnswer
     ? normalizeWikiAnswer(latestAnswer.answer, answerContract.normalization) ===
       normalizeWikiAnswer(expectedAnswer, answerContract.normalization)
@@ -66,21 +73,43 @@ export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResu
         name: "answer submission persisted",
         errorMessage: "No answer was submitted.",
       });
-  const uiState = articleViewed
+  const targetUiState = targetArticleViewed
     ? passedEvaluator({
         type: "ui_state",
-        name: "release history article viewed",
+        name: "target article viewed",
         evidence: { article: targetArticleSlug },
       })
     : failedEvaluator({
         type: "ui_state",
-        name: "release history article viewed",
-        errorMessage: "The required article was not opened.",
+        name: "target article viewed",
+        errorMessage: "The required target article was not opened.",
       });
+  const secondaryUiState =
+    secondaryArticleSlug == null
+      ? passedEvaluator({
+          type: "ui_state",
+          name: "secondary article not required",
+          required: false,
+          evidence: { secondaryArticleSlug: null },
+        })
+      : secondaryArticleViewed
+        ? passedEvaluator({
+            type: "ui_state",
+            name: "secondary article viewed",
+            evidence: { secondaryArticleSlug },
+          })
+        : failedEvaluator({
+            type: "ui_state",
+            name: "secondary article viewed",
+            errorMessage: `The required secondary article was not opened: ${secondaryArticleSlug}.`,
+            evidence: { secondaryArticleSlug },
+          });
 
   return aggregateStrictScore({
-    evaluators: [retrieveValue, backendState, uiState],
-    passSummary: "Submitted answer matches the generated hosted wiki task.",
-    failSummary: "Wiki task requires opening the generated target article and submitting the exact answer.",
+    evaluators: [retrieveValue, backendState, targetUiState, secondaryUiState],
+    passSummary: secondaryArticleSlug
+      ? "Submitted answer matches the generated hosted wiki task after opening both required articles."
+      : "Submitted answer matches the generated hosted wiki task.",
+    failSummary: "Wiki task requires opening the generated target article and any required secondary article, then submitting the exact answer.",
   });
 }

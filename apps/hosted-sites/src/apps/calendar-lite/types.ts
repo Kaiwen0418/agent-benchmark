@@ -5,6 +5,7 @@ export type CalendarEvent = {
   startTime: string;
   durationMinutes: number;
   attendeeEmail: string;
+  secondaryAttendeeEmail?: string;
   createdAt: string;
 };
 

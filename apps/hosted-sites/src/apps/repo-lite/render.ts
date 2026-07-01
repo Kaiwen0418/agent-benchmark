@@ -1,9 +1,42 @@
 import type { ServerResponse } from "node:http";
 import type { RepoFile, RepoMergeRequest } from "./types.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
+import { shouldRenderScorePreview } from "../../runtime/score-preview-policy.js";
+import { readTaskConfig } from "../../runtime/question-config.js";
+import { computeCiStatuses, readCiChecks } from "./workflow.js";
 
 type RepoSession = HostedSessionFor<"repo-lite">;
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
+
+// Simulated CI status panel for hard variants. Renders one row per configured
+// check with a pass/fail marker and the files still needing the consistency
+// token. The token itself (the canonical answer) is never printed.
+function renderCiPanel(session: RepoSession): string {
+  let checks;
+  try {
+    checks = readCiChecks(readTaskConfig(session.metadata));
+  } catch {
+    return "";
+  }
+  if (checks.length === 0) return "";
+  const statuses = computeCiStatuses(session.state.files, checks);
+  const rows = statuses
+    .map((status) => {
+      const marker = status.passed
+        ? '<span style="color:#1a7f37;">✓ passing</span>'
+        : '<span style="color:#cf222e;">✗ failing</span>';
+      const detail =
+        !status.passed && status.missingFiles.length
+          ? `<span class="muted"> — needs updates in ${escapeHtml(status.missingFiles.join(", "))}</span>`
+          : "";
+      return `<li>${marker} ${escapeHtml(status.name)}${detail}</li>`;
+    })
+    .join("");
+  return `<section class="panel" style="margin-top:16px;">
+        <h2>CI checks</h2>
+        <ul>${rows}</ul>
+      </section>`;
+}
 
 export function renderRepoIndex(
   session: RepoSession,
@@ -15,7 +48,7 @@ export function renderRepoIndex(
   const fileList = session.state.files
     .map(
       (file) => `<li>
-        <a href="/repo/file/${encodeURIComponent(file.path)}?session=${encodeURIComponent(session.token)}">${escapeHtml(file.path)}</a>
+        <a href="/repo/file/${encodeURIComponent(file.path)}/edit?session=${encodeURIComponent(session.token)}">${escapeHtml(file.path)}</a>
       </li>`,
     )
     .join("");
@@ -50,6 +83,7 @@ export function renderRepoIndex(
           <button style="margin-top:12px;">Edit README.md</button>
         </a>
       </section>
+      ${renderCiPanel(session)}
       <section class="panel" style="margin-top:16px;">
         <h2>Merge Requests</h2>
         ${mrList.length ? `<ul>${mrList}</ul>` : '<p class="muted">No merge requests yet.</p>'}
@@ -111,7 +145,7 @@ export function renderNewMR(
       session,
       body: `<section class="panel">
         <h2>New Merge Request</h2>
-        <p class="muted">Proposed change to README.md</p>
+        <p class="muted">Proposed changes</p>
         ${diffPreview}
         <form method="post" action="/repo/mr/new?session=${encodeURIComponent(session.token)}" style="margin-top:16px;">
           <label>
@@ -148,6 +182,11 @@ export function renderMRDetail(
     )
     .join("");
 
+  const scorePreview = shouldRenderScorePreview(session)
+    ? `<h3 style="margin-top:16px;">Evaluator preview</h3>
+        <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>`
+    : "";
+
   sendHtml(
     response,
     200,
@@ -159,8 +198,7 @@ export function renderMRDetail(
         <p class="muted">Target branch: <strong>${escapeHtml(mr.targetBranch)}</strong></p>
         <h3>Changed files</h3>
         ${changedFilesHtml}
-        <h3 style="margin-top:16px;">Evaluator preview</h3>
-        <pre class="score">${escapeHtml(JSON.stringify(score, null, 2))}</pre>
+        ${scorePreview}
       </section>`,
       publicBaseUrl,
       defaultStartPathForApp,

@@ -132,6 +132,15 @@ function tokenFromStartUrl(startUrl: string) {
   }
 }
 
+const DEFAULT_SESSION_TIME_LIMIT_MINUTES = 360;
+
+function sessionExpiresAt(baseTime: string | number | Date, timeLimitMinutes?: number) {
+  const minutes = typeof timeLimitMinutes === "number" && Number.isFinite(timeLimitMinutes) && timeLimitMinutes > 0
+    ? timeLimitMinutes
+    : DEFAULT_SESSION_TIME_LIMIT_MINUTES;
+  return new Date(new Date(baseTime).getTime() + minutes * 60 * 1000).toISOString();
+}
+
 function buildViewerStartUrl(sessionId: string, startPath: string, expiresAt: string) {
   if (!viewerTokenSecret) {
     return null;
@@ -647,6 +656,13 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     activeSessionId: null,
     activeSequenceIndex: 0,
     completedSessionIds: [],
+    // Carry the suite's per-testcase time limit onto attempt metadata so the
+    // connection prompt and frontends can show the same deadline.
+    timeLimitMinutesPerTestcase: revision.timeLimitMinutesPerTestcase,
+    // Carry the suite's cross-app consistency checks onto attempt metadata so
+    // completion-time aggregation can evaluate them without re-reading the
+    // manifest. Absent for suites without a chain.
+    consistencyChecks: revision.consistencyChecks ?? [],
   };
 
   const { data: attemptRow, error: attemptError } = await supabase
@@ -676,13 +692,16 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     throw attemptError ?? new Error("Failed to create hosted attempt");
   }
 
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString();
+  const suiteTimeLimitMinutes = revision.timeLimitMinutesPerTestcase;
   const orderedSessions = [...generatedSessions].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
   const rows = orderedSessions.map((session) => {
     const token = makeId("tok");
     const startPath = session.startPath ?? defaultStartPathForApp(session.app);
     const startUrl = `${hostedSitesPublicBaseUrl}${startPath}?session=${encodeURIComponent(token)}`;
     const status: HostedSessionStatus = session.sequenceIndex > 0 ? "created" : "active";
+    const sessionExpiresAtValue = status === "active"
+      ? sessionExpiresAt(Date.now(), suiteTimeLimitMinutes)
+      : null;
     const sessionMetadata = {
       ...session.metadata,
       schemaVersion: 1,
@@ -694,6 +713,7 @@ async function initializeAttempt(params: InitializeAttemptParams) {
       title: session.title,
       goal: session.goal,
       startPath,
+      timeLimitMinutesPerTestcase: suiteTimeLimitMinutes,
     } satisfies HostedWebSessionMetadata;
 
     return {
@@ -713,7 +733,7 @@ async function initializeAttempt(params: InitializeAttemptParams) {
       status,
       metadata: sessionMetadata,
       activated_at: now(),
-      expires_at: expiresAt,
+      expires_at: sessionExpiresAtValue,
       token,
     };
   });
@@ -753,7 +773,9 @@ async function initializeAttempt(params: InitializeAttemptParams) {
         weight: row.weight,
         required: row.required,
         startUrl: row.start_url,
-        viewerStartUrl: buildViewerStartUrl(row.id, new URL(seed.start_url).pathname, expiresAt),
+        viewerStartUrl: seed.expires_at
+          ? buildViewerStartUrl(row.id, new URL(seed.start_url).pathname, seed.expires_at)
+          : null,
         goal: metadata.goal,
         title: typeof metadata.title === "string" ? metadata.title : null,
         status: row.status,
@@ -1189,7 +1211,9 @@ async function sweepExpiredSessions() {
   const sweepStartedAt = now();
   const { data, error } = await supabase
     .from("hosted_web_sessions")
-    .select("id, attempt_id, run_id, task_slug, app")
+    .select(
+      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at",
+    )
     .lt("expires_at", sweepStartedAt)
     .in("status", ["created", "active", "scoring"])
     .limit(500);
@@ -1199,7 +1223,7 @@ async function sweepExpiredSessions() {
     return 0;
   }
 
-  const expiredRows = data ?? [];
+  const expiredRows = (data ?? []) as PersistedSessionRow[];
   if (expiredRows.length === 0) {
     return 0;
   }
@@ -1221,25 +1245,28 @@ async function sweepExpiredSessions() {
     console.error("[hosted-orchestrator] failed to persist expiry sweep logs", accessLogError);
   }
 
-  const attemptsToTimeout = new Map<string, { runId: string | null; sessionId: string; taskSlug: string }>();
   for (const row of expiredRows) {
-    if (!row.attempt_id || attemptsToTimeout.has(row.attempt_id)) {
+    const token = tokenFromStartUrl(row.start_url);
+    if (!token || !row.attempt_id) {
       continue;
     }
-    attemptsToTimeout.set(row.attempt_id, {
-      runId: row.run_id,
-      sessionId: row.id,
-      taskSlug: row.task_slug,
-    });
-  }
-
-  for (const [attemptId, timeoutSeed] of attemptsToTimeout) {
-    await attemptHandlers.handleTimeoutAttempt({
-      attemptId,
-      runId: timeoutSeed.runId,
-      expiredSessionId: timeoutSeed.sessionId,
-      expiredTaskSlug: timeoutSeed.taskSlug,
-    });
+    const session = buildLifecycleSessionFromRow(row, token);
+    try {
+      await attemptHandlers.handleCompleteSession({
+        session,
+        result: {
+          status: "failed",
+          score: 0,
+          summary: `Hosted session ${row.task_slug} timed out after ${row.metadata?.timeLimitMinutesPerTestcase ?? 360} minutes.`,
+          evaluators: [],
+        },
+      });
+    } catch (error) {
+      console.error(
+        `[hosted-orchestrator] failed to finalize timed-out session ${row.id} (${row.task_slug})`,
+        error,
+      );
+    }
   }
 
   return expiredRows.length;

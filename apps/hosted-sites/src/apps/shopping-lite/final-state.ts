@@ -9,7 +9,11 @@ export function buildShoppingFinalState(session: HostedSessionFor<"shopping-lite
       ? {
           id: order.id,
           total: order.total,
+          subtotal: order.subtotal ?? order.total,
           shippingMethod: order.shippingMethod,
+          shippingCost: order.shippingCost ?? 0,
+          couponCode: order.couponCode ?? null,
+          discountAmount: order.discountAmount ?? 0,
           submittedAt: order.submittedAt,
           items: order.items.map((item) => {
             const product = session.state.products.find((candidate) => candidate.id === item.productId);
@@ -19,6 +23,7 @@ export function buildShoppingFinalState(session: HostedSessionFor<"shopping-lite
               category: product?.category ?? null,
               price: product?.price ?? null,
               restricted: Boolean(product?.restricted),
+              compatibleWith: product?.compatibleWith ?? [],
               quantity: item.quantity,
             };
           }),
