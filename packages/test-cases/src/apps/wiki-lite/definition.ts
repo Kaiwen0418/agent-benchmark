@@ -13,6 +13,7 @@ export const wikiLiteTestcaseDefinition = defineHostedTestcaseApp({
   taskConfigSchema: z.object({
     targetArticleSlug: z.string().min(1),
     secondaryArticleSlug: z.string().min(1).optional(),
+    requiredArticleSlugs: z.array(z.string().min(1)).min(2).optional(),
     answerContract: wikiAnswerContractSchema,
   }).superRefine((config, context) => {
     if (config.targetArticleSlug !== config.answerContract.sourceArticleSlug) {
@@ -48,6 +49,7 @@ export const wikiLiteTestcaseDefinition = defineHostedTestcaseApp({
       { id: "recommended-probook-charger", goal: "The laptop charger buying guide recommends an in-stock charger for the ProBook. Verify compatibility in the charger compatibility matrix, then submit the exact recommended charger name.", taskConfig: { targetArticleSlug: "laptop-charger-guide", secondaryArticleSlug: "charger-compatibility-matrix", answerContract: { kind: "text", canonicalValue: "ProBook 30W Travel Charger", normalization: "trim-casefold", sourceArticleSlug: "laptop-charger-guide" } } },
       { id: "current-api-rate-limit", goal: "Use the API changelog to identify the current API reference version, open that version's article (not a deprecated one), and submit only its current per-token rate limit.", taskConfig: { targetArticleSlug: "api-reference-v3", secondaryArticleSlug: "api-changelog", answerContract: { kind: "text", canonicalValue: "240 requests per minute", normalization: "trim-casefold-punctuation", sourceArticleSlug: "api-reference-v3" } } },
       { id: "current-data-retention", goal: "The security overview references the current data retention policy. Open both, ignore the deprecated 2024 retention note, and submit only the current retention period.", taskConfig: { targetArticleSlug: "data-retention-policy", secondaryArticleSlug: "security-overview", answerContract: { kind: "duration", canonicalValue: "90 days", normalization: "trim-casefold", sourceArticleSlug: "data-retention-policy" } } },
+      { id: "verified-api-rate-limit", goal: "Triangulate the current API rate limit: open the API changelog, the current v3 API reference, and the security overview that defines token scope. Ignore deprecated API versions and submit only the current per-token rate limit.", taskConfig: { targetArticleSlug: "api-reference-v3", requiredArticleSlugs: ["api-changelog", "api-reference-v3", "security-overview"], answerContract: { kind: "text", canonicalValue: "240 requests per minute", normalization: "trim-casefold-punctuation", sourceArticleSlug: "api-reference-v3" } } },
     ],
   },
 });

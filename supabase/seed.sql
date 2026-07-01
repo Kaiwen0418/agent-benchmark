@@ -944,8 +944,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "wiki-release-answer-hard",
       "title": "Wiki Release Lookup (Hard)",
       "startPath": "/wiki",
-      "taskVersion": "v3",
-      "seedVersion": "wiki-lite-hard-v1",
+      "taskVersion": "v4",
+      "seedVersion": "wiki-lite-hard-v2",
       "sequenceIndex": 3,
       "weight": 1,
       "required": true,
@@ -1020,6 +1020,24 @@ select public.publish_benchmark_case_catalog(
                 "sourceArticleSlug": "data-retention-policy"
               }
             }
+          },
+          {
+            "id": "verified-api-rate-limit",
+            "goal": "Triangulate the current API rate limit: open the API changelog, the current v3 API reference, and the security overview that defines token scope. Ignore deprecated API versions and submit only the current per-token rate limit.",
+            "taskConfig": {
+              "targetArticleSlug": "api-reference-v3",
+              "requiredArticleSlugs": [
+                "api-changelog",
+                "api-reference-v3",
+                "security-overview"
+              ],
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "240 requests per minute",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "api-reference-v3"
+              }
+            }
           }
         ]
       }
@@ -1029,8 +1047,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "wiki-policy-answer-hard",
       "title": "Wiki Policy Lookup (Hard)",
       "startPath": "/wiki",
-      "taskVersion": "v2",
-      "seedVersion": "wiki-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "wiki-lite-hard-v2",
       "sequenceIndex": 4,
       "weight": 1,
       "required": true,
@@ -1103,6 +1121,24 @@ select public.publish_benchmark_case_catalog(
                 "canonicalValue": "90 days",
                 "normalization": "trim-casefold",
                 "sourceArticleSlug": "data-retention-policy"
+              }
+            }
+          },
+          {
+            "id": "verified-api-rate-limit",
+            "goal": "Triangulate the current API rate limit: open the API changelog, the current v3 API reference, and the security overview that defines token scope. Ignore deprecated API versions and submit only the current per-token rate limit.",
+            "taskConfig": {
+              "targetArticleSlug": "api-reference-v3",
+              "requiredArticleSlugs": [
+                "api-changelog",
+                "api-reference-v3",
+                "security-overview"
+              ],
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "240 requests per minute",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "api-reference-v3"
               }
             }
           }
@@ -1344,7 +1380,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '6cb35d7c7b2784a391bd59439146790a3df4988cbd961c269c97f7ff7d0cb9f0'
+  '4dccc8d73bec7bf575aa6160f8e3659d6f28215f05beeed593332be8cd9cb0a1'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

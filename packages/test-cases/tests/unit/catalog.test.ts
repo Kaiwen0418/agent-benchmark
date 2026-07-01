@@ -142,6 +142,17 @@ test("hard v1.0.2 includes conflict-aware repo workflow on the v2 seed", () => {
   assert.ok(repo.metadata.questionVariants.some((variant) => variant.id === "api-v3-conflict-rollout"));
 });
 
+test("hard v1.0.2 includes three-article wiki verification on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const wikiSessions = suite.sessions.filter((session) => session.app === "wiki-lite");
+  assert.ok(wikiSessions.every((session) => session.seedVersion === "wiki-lite-hard-v2"));
+  assert.ok(
+    wikiSessions.every((session) =>
+      session.metadata.questionVariants.some((variant) => variant.id === "verified-api-rate-limit"),
+    ),
+  );
+});
+
 test("schema rejects a consistency check with an unknown task slug", () => {
   const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
     consistencyChecks: Array<Record<string, unknown>>;

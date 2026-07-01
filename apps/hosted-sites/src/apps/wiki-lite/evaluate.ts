@@ -10,7 +10,7 @@ import {
   readWikiAnswerContract,
   validateWikiAnswerSource,
 } from "./answer-contract.js";
-import { configStringOrNull, readTaskConfig } from "../../runtime/question-config.js";
+import { configStringArray, configStringOrNull, readTaskConfig } from "../../runtime/question-config.js";
 
 export type WikiEvaluationSession = {
   app: "wiki-lite" | string;
@@ -30,6 +30,7 @@ export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResu
   const targetArticleSlug = answerContract.sourceArticleSlug;
   const taskConfig = readTaskConfig(session.metadata);
   const secondaryArticleSlug = configStringOrNull(taskConfig, "secondaryArticleSlug");
+  const requiredArticleSlugs = configStringArray(taskConfig, "requiredArticleSlugs");
   const latestAnswer = session.state.wikiAnswerSubmissions.at(-1);
   const viewedArticleSlugs = Array.isArray(session.metadata.viewedArticleSlugs)
     ? session.metadata.viewedArticleSlugs.filter((value): value is string => typeof value === "string")
@@ -45,6 +46,7 @@ export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResu
 
   const targetArticleViewed = isArticleViewed(targetArticleSlug);
   const secondaryArticleViewed = secondaryArticleSlug == null || isArticleViewed(secondaryArticleSlug);
+  const requiredArticlesViewed = requiredArticleSlugs.every(isArticleViewed);
   const answerMatches = latestAnswer
     ? normalizeWikiAnswer(latestAnswer.answer, answerContract.normalization) ===
       normalizeWikiAnswer(expectedAnswer, answerContract.normalization)
@@ -104,9 +106,23 @@ export function evaluateWiki(session: WikiEvaluationSession): HostedWebScoreResu
             errorMessage: `The required secondary article was not opened: ${secondaryArticleSlug}.`,
             evidence: { secondaryArticleSlug },
           });
+  const requiredArticlesUiState =
+    requiredArticleSlugs.length === 0 || requiredArticlesViewed
+      ? passedEvaluator({
+          type: "ui_state",
+          name: "required article set viewed",
+          required: requiredArticleSlugs.length > 0,
+          evidence: { articleCount: requiredArticleSlugs.length },
+        })
+      : failedEvaluator({
+          type: "ui_state",
+          name: "required article set viewed",
+          errorMessage: "One or more required articles were not opened.",
+          evidence: { articleCount: requiredArticleSlugs.length },
+        });
 
   return aggregateStrictScore({
-    evaluators: [retrieveValue, backendState, targetUiState, secondaryUiState],
+    evaluators: [retrieveValue, backendState, targetUiState, secondaryUiState, requiredArticlesUiState],
     passSummary: secondaryArticleSlug
       ? "Submitted answer matches the generated hosted wiki task after opening both required articles."
       : "Submitted answer matches the generated hosted wiki task.",
