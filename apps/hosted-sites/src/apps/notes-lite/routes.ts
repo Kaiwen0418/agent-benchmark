@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
 import { redirect, sendJson } from "../../runtime/http.js";
 import { isHostedSessionForApp } from "../../runtime/types.js";
+import { readTaskConfig } from "../../runtime/question-config.js";
 import { createNote, updateNote } from "./actions.js";
 import { renderNoteEdit, renderNotesIndex } from "./render.js";
 
@@ -69,6 +70,10 @@ export function createNotesRoutes(deps: HostedAppRouteDeps) {
       });
 
       const evalResult = deps.evaluateSession(session);
+      if (Array.isArray(readTaskConfig(session.metadata).expectedNotes) && evalResult.status !== "passed") {
+        redirect(response, `/notes?session=${encodeURIComponent(session.token)}`);
+        return true;
+      }
       const completed = await deps.completeSession(session, evalResult);
       if (!completed) {
         sendJson(response, 502, { error: "Hosted orchestrator unavailable" });

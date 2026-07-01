@@ -1150,8 +1150,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "notes-followup-create-hard",
       "title": "Notes Follow-up (Hard)",
       "startPath": "/notes",
-      "taskVersion": "v2",
-      "seedVersion": "notes-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "notes-lite-hard-v2",
       "sequenceIndex": 5,
       "weight": 1,
       "required": true,
@@ -1170,6 +1170,30 @@ select public.publish_benchmark_case_catalog(
             "goal": "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task, set the body to exactly the answer you submitted in the later wiki policy-lookup task (no extra words in either field), and set the tag to 'summary'.",
             "taskConfig": {
               "expectedTag": "summary"
+            }
+          },
+          {
+            "id": "release-rollout-note-set",
+            "goal": "Create and organize all three rollout notes: (1) title 'API v3 implementation', body 'Track the implementation branch and conflict resolution.', tag 'implementation'; (2) title 'API v3 verification', body 'Record CI, reviewer, and compatibility evidence.', tag 'verification'; and (3) title 'API v3 release', body 'Schedule publication after verification passes.', tag 'release'. Create exactly these required notes.",
+            "taskConfig": {
+              "expectedTag": "project",
+              "expectedNotes": [
+                {
+                  "title": "API v3 implementation",
+                  "body": "Track the implementation branch and conflict resolution.",
+                  "tag": "implementation"
+                },
+                {
+                  "title": "API v3 verification",
+                  "body": "Record CI, reviewer, and compatibility evidence.",
+                  "tag": "verification"
+                },
+                {
+                  "title": "API v3 release",
+                  "body": "Schedule publication after verification passes.",
+                  "tag": "release"
+                }
+              ]
             }
           }
         ]
@@ -1380,7 +1404,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '4dccc8d73bec7bf575aa6160f8e3659d6f28215f05beeed593332be8cd9cb0a1'
+  '99d701d4d0acd88b8462f622f5e59699e4f699f33849d31a66a721bd84639995'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

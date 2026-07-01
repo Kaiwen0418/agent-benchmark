@@ -13,6 +13,16 @@ export const notesLiteTestcaseDefinition = defineHostedTestcaseApp({
     expectedBody: z.string().min(1).optional(),
     expectedTag: z.string().min(1),
     targetNoteId: z.string().min(1).optional(),
+    expectedNotes: z
+      .array(
+        z.object({
+          title: z.string().min(1),
+          body: z.string().min(1),
+          tag: z.string().min(1),
+        }),
+      )
+      .min(2)
+      .optional(),
   }),
   variantPools: {
     default: [
@@ -92,6 +102,18 @@ export const notesLiteTestcaseDefinition = defineHostedTestcaseApp({
         goal: "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task, set the body to exactly the answer you submitted in the later wiki policy-lookup task (no extra words in either field), and set the tag to 'summary'.",
         taskConfig: {
           expectedTag: "summary",
+        },
+      },
+      {
+        id: "release-rollout-note-set",
+        goal: "Create and organize all three rollout notes: (1) title 'API v3 implementation', body 'Track the implementation branch and conflict resolution.', tag 'implementation'; (2) title 'API v3 verification', body 'Record CI, reviewer, and compatibility evidence.', tag 'verification'; and (3) title 'API v3 release', body 'Schedule publication after verification passes.', tag 'release'. Create exactly these required notes.",
+        taskConfig: {
+          expectedTag: "project",
+          expectedNotes: [
+            { title: "API v3 implementation", body: "Track the implementation branch and conflict resolution.", tag: "implementation" },
+            { title: "API v3 verification", body: "Record CI, reviewer, and compatibility evidence.", tag: "verification" },
+            { title: "API v3 release", body: "Schedule publication after verification passes.", tag: "release" },
+          ],
         },
       },
     ],

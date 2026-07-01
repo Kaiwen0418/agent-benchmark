@@ -153,6 +153,15 @@ test("hard v1.0.2 includes three-article wiki verification on the v2 seed", () =
   );
 });
 
+test("hard v1.0.2 includes a multi-record notes workflow on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const notes = suite.sessions.find((session) => session.app === "notes-lite");
+  assert.ok(notes);
+  assert.equal(notes.taskVersion, "v3");
+  assert.equal(notes.seedVersion, "notes-lite-hard-v2");
+  assert.ok(notes.metadata.questionVariants.some((variant) => variant.id === "release-rollout-note-set"));
+});
+
 test("schema rejects a consistency check with an unknown task slug", () => {
   const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
     consistencyChecks: Array<Record<string, unknown>>;

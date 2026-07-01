@@ -7,6 +7,20 @@ export const notesLiteTestSupport: HostedAppTestSupport<"notes-lite"> = {
     expectedTag: "support",
   },
   applyPassingState: (session, config) => {
+    if (Array.isArray(config.expectedNotes)) {
+      config.expectedNotes.forEach((expected, index) => {
+        if (typeof expected !== "object" || expected === null) return;
+        const note = expected as Record<string, unknown>;
+        session.state.notes.push({
+          id: `note-set-${index}`,
+          title: configString(note, "title"),
+          body: configString(note, "body"),
+          tag: configString(note, "tag"),
+          createdAt: "2026-06-23T00:00:00.000Z",
+        });
+      });
+      return;
+    }
     const targetNoteId = configStringOrNull(config, "targetNoteId");
     if (targetNoteId) {
       const note = session.state.notes.find((candidate) => candidate.id === targetNoteId);

@@ -23,11 +23,17 @@ export function evaluateNotes(session: NotesEvaluationSession): HostedWebScoreRe
   const expectedBody = configStringOrNull(config, "expectedBody");
   const expectedTag = configString(config, "expectedTag");
   const targetNoteId = configStringOrNull(config, "targetNoteId");
-  const backend = evaluateNotesBackendState(session.state.notes, expectedTitle, expectedBody, expectedTag, targetNoteId);
+  const expectedNotes = readExpectedNotes(config);
+  const backend =
+    expectedNotes.length > 0
+      ? evaluateExpectedNoteSet(session.state.notes, expectedNotes)
+      : evaluateNotesBackendState(session.state.notes, expectedTitle, expectedBody, expectedTag, targetNoteId);
 
   return aggregateStrictScore({
     evaluators: [backend],
-    passSummary: targetNoteId
+    passSummary: expectedNotes.length > 0
+      ? "Agent created the complete generated note set with exact titles, bodies, and tags."
+      : targetNoteId
       ? expectedTitle && expectedBody
         ? "Agent updated the requested seeded note to the exact generated title, body, and tag."
         : "Agent updated the requested seeded note with the expected tag and non-empty carried fields."
@@ -38,6 +44,41 @@ export function evaluateNotes(session: NotesEvaluationSession): HostedWebScoreRe
           : "Agent created a tagged note with non-empty carried title and body values.",
     failSummary: "The requested note was not found in backend state.",
   });
+}
+
+type ExpectedNote = Pick<Note, "title" | "body" | "tag">;
+
+function readExpectedNotes(config: Record<string, unknown>): ExpectedNote[] {
+  if (!Array.isArray(config.expectedNotes)) return [];
+  return config.expectedNotes.filter(
+    (value): value is ExpectedNote =>
+      typeof value === "object" &&
+      value !== null &&
+      typeof (value as ExpectedNote).title === "string" &&
+      typeof (value as ExpectedNote).body === "string" &&
+      typeof (value as ExpectedNote).tag === "string",
+  );
+}
+
+function evaluateExpectedNoteSet(notes: Note[], expectedNotes: ExpectedNote[]): HostedWebEvaluatorResult {
+  const matched = expectedNotes.map((expected) =>
+    notes.some(
+      (note) =>
+        note.title.trim() === expected.title &&
+        note.body.trim() === expected.body &&
+        note.tag.trim() === expected.tag,
+    ),
+  );
+  const passed = matched.every(Boolean);
+  const evidence = { requiredNoteCount: expectedNotes.length, matchedNoteCount: matched.filter(Boolean).length };
+  return passed
+    ? passedEvaluator({ type: "backend_state", name: "generated note set exists", evidence })
+    : failedEvaluator({
+        type: "backend_state",
+        name: "generated note set exists",
+        errorMessage: "One or more required notes are missing or do not exactly match.",
+        evidence,
+      });
 }
 
 function evaluateNotesBackendState(

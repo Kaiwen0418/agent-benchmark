@@ -191,6 +191,8 @@ The Repo increment adds feature-branch, exact commit-message, reviewer, and
 simulated conflict-resolution requirements to coherent multi-file changes.
 The Wiki increment adds required article sets so a hard retrieval can require
 triangulation across three or more pages before the typed answer is submitted.
+The Notes increment supports multi-record tasks whose intermediate saves remain
+non-terminal until the complete exact note set exists in backend state.
 
 Exit criteria: the hard suite is published as its own immutable revision, every hard variant and the cross-app carry checks pass unit and E2E checks, public surfaces rank the hard suite separately without exposing oracle data, and `pnpm verify:ci` remains green.
 
