@@ -18,6 +18,10 @@ export const forumLiteTestcaseDefinition = defineHostedTestcaseApp({
       requiresMarkDuplicate: z.boolean().optional(),
       canonicalThreadId: z.string().min(1).optional(),
       duplicateThreadIds: z.array(z.string().min(1)).min(1).optional(),
+      requiredActionOrder: z
+        .array(z.enum(["report", "move", "edit_title", "mark_duplicate", "lock", "pin"]))
+        .min(2)
+        .optional(),
     })
     .superRefine((config, context) => {
       if (config.requiresMove && !config.expectedCategory) {
@@ -59,6 +63,7 @@ export const forumLiteTestcaseDefinition = defineHostedTestcaseApp({
       { id: "misfiled-safety-escalation", goal: "A safety report about a smoking wall adapter was filed under the wrong category. Move the thread to the 'safety' category, reply with the official advisory link, then lock it with reason 'safety escalation'.", taskConfig: { targetThreadId: "thr-misfiled-safety", expectedReplyValue: "https://support.example.com/safety/adapter-smoke", expectedLockReason: "safety escalation", requiresMove: true, expectedCategory: "safety" } },
       { id: "vague-title-cleanup", goal: "A networking thread has an unhelpful title. Rename it to 'DNS resolution failures on wired connection', reply with the official DNS reset guide link, then lock it with reason 'resolved with guide'.", taskConfig: { targetThreadId: "thr-vague-title", expectedReplyValue: "https://support.example.com/network/dns-reset", expectedLockReason: "resolved with guide", requiresEditTitle: true, expectedTitle: "DNS resolution failures on wired connection" } },
       { id: "hot-charge-consolidate", goal: "A fast-charge overheating report was miscategorized and has a near-duplicate. Move the main thread to the 'safety' category, mark 'thr-hot-dup' as a duplicate of it, reply with the official advisory link, then lock it with reason 'safety escalation'.", taskConfig: { targetThreadId: "thr-hot-main", expectedReplyValue: "https://support.example.com/safety/fast-charge-heat", expectedLockReason: "safety escalation", requiresMove: true, expectedCategory: "safety", requiresMarkDuplicate: true, canonicalThreadId: "thr-hot-main", duplicateThreadIds: ["thr-hot-dup"] } },
+      { id: "hot-charge-full-escalation", goal: "Fully triage the fast-charge overheating incident in this exact moderation order: report the main thread with reason 'thermal incident', move it to 'safety', rename it to 'Fast-charge overheating safety incident', mark 'thr-hot-dup' as its duplicate, reply with the official advisory link, lock it with reason 'safety escalation', then pin it. Do not lock early.", taskConfig: { targetThreadId: "thr-hot-main", expectedReplyValue: "https://support.example.com/safety/fast-charge-heat", expectedLockReason: "safety escalation", requiresReport: true, expectedReportReason: "thermal incident", requiresMove: true, expectedCategory: "safety", requiresEditTitle: true, expectedTitle: "Fast-charge overheating safety incident", requiresMarkDuplicate: true, canonicalThreadId: "thr-hot-main", duplicateThreadIds: ["thr-hot-dup"], requiresPin: true, requiredActionOrder: ["report", "move", "edit_title", "mark_duplicate", "lock", "pin"] } },
     ],
   },
 });

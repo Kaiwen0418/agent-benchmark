@@ -1277,6 +1277,40 @@ for (const variant of forumHardVariants) {
   });
 }
 
+test("forum ordered hard workflow fails when moderation actions are applied out of order", () => {
+  const config = {
+    targetThreadId: "thr-hot-main",
+    expectedReplyValue: "https://support.example.com/safety/fast-charge-heat",
+    expectedLockReason: "safety escalation",
+    requiresReport: true,
+    expectedReportReason: "thermal incident",
+    requiresMove: true,
+    expectedCategory: "safety",
+    requiresEditTitle: true,
+    expectedTitle: "Fast-charge overheating safety incident",
+    requiresMarkDuplicate: true,
+    canonicalThreadId: "thr-hot-main",
+    duplicateThreadIds: ["thr-hot-dup"],
+    requiresPin: true,
+    requiredActionOrder: ["report", "move", "edit_title", "mark_duplicate", "lock", "pin"],
+  };
+  const session = makeForumHardSession(generatedTaskConfig(config));
+  forumLiteTestSupport.applyPassingState(
+    session as unknown as Parameters<typeof forumLiteTestSupport.applyPassingState>[0],
+    config,
+  );
+  const moveIndex = session.state.moderationActions.findIndex((action) => action.action === "move");
+  const reportIndex = session.state.moderationActions.findIndex((action) => action.action === "report");
+  [session.state.moderationActions[moveIndex], session.state.moderationActions[reportIndex]] = [
+    session.state.moderationActions[reportIndex]!,
+    session.state.moderationActions[moveIndex]!,
+  ];
+
+  const result = evaluateForum(session);
+  assert.equal(result.status, "failed");
+  assert.equal(result.evaluators[1]?.evidence?.actionOrderMatches, false);
+});
+
 function makeRepoSession(
   overrides?: Partial<RepoEvaluationSession["state"]>,
   metadata?: Record<string, unknown>,

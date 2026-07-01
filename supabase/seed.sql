@@ -704,8 +704,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "forum-battery-moderation-hard",
       "title": "Forum Moderation (Hard)",
       "startPath": "/forum",
-      "taskVersion": "v2",
-      "seedVersion": "forum-lite-hard-v1",
+      "taskVersion": "v3",
+      "seedVersion": "forum-lite-hard-v2",
       "sequenceIndex": 1,
       "weight": 1,
       "required": true,
@@ -761,6 +761,35 @@ select public.publish_benchmark_case_catalog(
               "canonicalThreadId": "thr-hot-main",
               "duplicateThreadIds": [
                 "thr-hot-dup"
+              ]
+            }
+          },
+          {
+            "id": "hot-charge-full-escalation",
+            "goal": "Fully triage the fast-charge overheating incident in this exact moderation order: report the main thread with reason 'thermal incident', move it to 'safety', rename it to 'Fast-charge overheating safety incident', mark 'thr-hot-dup' as its duplicate, reply with the official advisory link, lock it with reason 'safety escalation', then pin it. Do not lock early.",
+            "taskConfig": {
+              "targetThreadId": "thr-hot-main",
+              "expectedReplyValue": "https://support.example.com/safety/fast-charge-heat",
+              "expectedLockReason": "safety escalation",
+              "requiresPin": true,
+              "requiresReport": true,
+              "expectedReportReason": "thermal incident",
+              "requiresMove": true,
+              "expectedCategory": "safety",
+              "requiresEditTitle": true,
+              "expectedTitle": "Fast-charge overheating safety incident",
+              "requiresMarkDuplicate": true,
+              "canonicalThreadId": "thr-hot-main",
+              "duplicateThreadIds": [
+                "thr-hot-dup"
+              ],
+              "requiredActionOrder": [
+                "report",
+                "move",
+                "edit_title",
+                "mark_duplicate",
+                "lock",
+                "pin"
               ]
             }
           }
@@ -1280,7 +1309,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  'd5ce6bf8f69ac2d0f6e83b41c1e9193419f663d86e328a34f2d49a74eb61d350'
+  'b0db8a7ae8815b7ae47a7bf01020dd7bab870065219d36dc92e06786c4b8c384'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

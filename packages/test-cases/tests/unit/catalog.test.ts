@@ -122,6 +122,17 @@ test("hard v1.0.2 includes combined-constraint shopping variants on the v2 seed"
   assert.ok(variantIds.includes("airlite-field-kit"));
 });
 
+test("hard v1.0.2 includes ordered forum escalation on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const forum = suite.sessions.find((session) => session.app === "forum-lite");
+  assert.ok(forum);
+  assert.equal(forum.taskVersion, "v3");
+  assert.equal(forum.seedVersion, "forum-lite-hard-v2");
+  assert.ok(
+    forum.metadata.questionVariants.some((variant) => variant.id === "hot-charge-full-escalation"),
+  );
+});
+
 test("schema rejects a consistency check with an unknown task slug", () => {
   const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
     consistencyChecks: Array<Record<string, unknown>>;

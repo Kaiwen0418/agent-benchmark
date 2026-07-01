@@ -51,6 +51,11 @@ recomputes the product subtotal, configured discount, pre-discount
 shipping-threshold result, and final total from persisted backend state; a
 matching coupon code or under-budget forged total is insufficient.
 
+Ordered hard forum workflows compare the relevant persisted moderation-action
+sequence with the declared order. Having the correct final category, title,
+duplicate links, lock, and pin is insufficient when the agent locked early or
+performed prerequisite actions out of order.
+
 ## Independent Suite Versioning
 
 The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.9` and `hosted-web-hard-suite-v1.0.2`). A change to a hard variant, the hard pool composition, or a hard cross-app chain bumps only the hard suite's version and content hash; the easy suite's revision identity must stay byte-identical.
