@@ -13,7 +13,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  dispatch-scheduled:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch sweep from develop
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run hosted-variant-sweep.yml --ref develop
+
   sweep-development:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'
     runs-on:
       - self-hosted
       - linux
