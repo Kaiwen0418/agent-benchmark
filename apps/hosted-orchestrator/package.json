@@ -14,12 +14,12 @@
     "@agentbench/scoring": "workspace:*",
     "@agentbench/shared": "workspace:*",
     "@agentbench/test-cases": "workspace:*",
-    "@supabase/supabase-js": "^2.108.2",
-    "redis": "^6.0.0"
+    "@supabase/supabase-js": "^2.110.0",
+    "redis": "^6.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.19.21",
-    "tsx": "^4.22.4",
+    "@types/node": "^22.20.0",
+    "tsx": "^4.23.0",
     "typescript": "^5.7.3"
   }
 }
