@@ -1,9 +1,14 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
 import { redirect, sendJson } from "../../runtime/http.js";
+import { configBooleanOrFalse, readTaskConfig } from "../../runtime/question-config.js";
 import { isHostedSessionForApp } from "../../runtime/types.js";
 import { addReplyToThread, editThreadTitle, lockThread, markThreadDuplicate, moveThread, pinThread, reportThread } from "./actions.js";
 import { renderForumIndex, renderThread } from "./render.js";
+
+export function forumCompletionAction(metadata: Record<string, unknown>) {
+  return configBooleanOrFalse(readTaskConfig(metadata), "requiresPin") ? "pin" : "lock";
+}
 
 export function createForumRoutes(deps: HostedAppRouteDeps) {
   async function getForumSession(url: URL, request: IncomingMessage) {
@@ -132,11 +137,13 @@ export function createForumRoutes(deps: HostedAppRouteDeps) {
         actionId: result.action.id,
       });
 
-      const evalResult = deps.evaluateSession(session);
-      const completed = await deps.completeSession(session, evalResult);
-      if (!completed) {
-        sendJson(response, 502, { error: "Hosted orchestrator unavailable" });
-        return true;
+      if (forumCompletionAction(session.metadata) === "lock") {
+        const evalResult = deps.evaluateSession(session);
+        const completed = await deps.completeSession(session, evalResult);
+        if (!completed) {
+          sendJson(response, 502, { error: "Hosted orchestrator unavailable" });
+          return true;
+        }
       }
 
       redirect(response, `/forum/thread/${encodeURIComponent(threadId)}?session=${encodeURIComponent(session.token)}`);
@@ -181,6 +188,15 @@ export function createForumRoutes(deps: HostedAppRouteDeps) {
         threadId,
         actionId: result.action.id,
       });
+
+      if (forumCompletionAction(session.metadata) === "pin") {
+        const evalResult = deps.evaluateSession(session);
+        const completed = await deps.completeSession(session, evalResult);
+        if (!completed) {
+          sendJson(response, 502, { error: "Hosted orchestrator unavailable" });
+          return true;
+        }
+      }
 
       redirect(response, `/forum/thread/${encodeURIComponent(threadId)}?session=${encodeURIComponent(session.token)}`);
       return true;
