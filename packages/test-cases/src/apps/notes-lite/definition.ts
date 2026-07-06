@@ -8,9 +8,21 @@ export const notesLiteTestcaseDefinition = defineHostedTestcaseApp({
     // title is whatever the agent retrieved in an earlier session, verified by a
     // suite-level consistency check rather than this per-session evaluator.
     expectedTitle: z.string().min(1).optional(),
-    expectedBody: z.string().min(1),
+    // Hard cross-app carry variants leave both title and body unpinned. Their
+    // values are verified against prior session final states at suite level.
+    expectedBody: z.string().min(1).optional(),
     expectedTag: z.string().min(1),
     targetNoteId: z.string().min(1).optional(),
+    expectedNotes: z
+      .array(
+        z.object({
+          title: z.string().min(1),
+          body: z.string().min(1),
+          tag: z.string().min(1),
+        }),
+      )
+      .min(2)
+      .optional(),
   }),
   variantPools: {
     default: [
@@ -72,26 +84,36 @@ export const notesLiteTestcaseDefinition = defineHostedTestcaseApp({
         },
       },
     ],
-    // Hard cross-app carry variants (#115). The note title is intentionally not
-    // pinned here: the agent must reuse the exact answer it submitted in the
-    // earlier wiki release-lookup session. Per-session scoring stays
-    // deterministic (correct tag + body, non-empty title); the suite-level
-    // consistency check enforces that the carried title matches the wiki answer.
+    // Hard cross-app carry variants (#115). Title and body are intentionally
+    // unpinned: the agent must carry the two earlier wiki answers into distinct
+    // fields. Per-session scoring requires non-empty fields and the exact tag;
+    // suite-level checks verify both carried values.
     hard: [
       {
         id: "carry-release-answer",
-        goal: "Open the note you need to file as a follow-up. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'File the release-lookup result for the upgrade plan.', and the tag to 'release'.",
+        goal: "Open the note you need to file as a follow-up. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task, set the body to exactly the answer you submitted in the later wiki policy-lookup task (no extra words in either field), and set the tag to 'release'.",
         taskConfig: {
-          expectedBody: "File the release-lookup result for the upgrade plan.",
           expectedTag: "release",
+          targetNoteId: "note-seed-release",
         },
       },
       {
         id: "carry-release-summary",
-        goal: "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task (no extra words), the body to 'Summarize the release-lookup outcome for the team.', and the tag to 'summary'.",
+        goal: "Create a summary note. Set the title to exactly the answer you submitted in the earlier wiki release-lookup task, set the body to exactly the answer you submitted in the later wiki policy-lookup task (no extra words in either field), and set the tag to 'summary'.",
         taskConfig: {
-          expectedBody: "Summarize the release-lookup outcome for the team.",
           expectedTag: "summary",
+        },
+      },
+      {
+        id: "release-rollout-note-set",
+        goal: "Create and organize all three rollout notes: (1) title 'API v3 implementation', body 'Track the implementation branch and conflict resolution.', tag 'implementation'; (2) title 'API v3 verification', body 'Record CI, reviewer, and compatibility evidence.', tag 'verification'; and (3) title 'API v3 release', body 'Schedule publication after verification passes.', tag 'release'. Create exactly these required notes.",
+        taskConfig: {
+          expectedTag: "project",
+          expectedNotes: [
+            { title: "API v3 implementation", body: "Track the implementation branch and conflict resolution.", tag: "implementation" },
+            { title: "API v3 verification", body: "Record CI, reviewer, and compatibility evidence.", tag: "verification" },
+            { title: "API v3 release", body: "Schedule publication after verification passes.", tag: "release" },
+          ],
         },
       },
     ],

@@ -57,6 +57,10 @@ export const repoLiteTestSupport: HostedAppTestSupport<"repo-lite"> = {
       title: configString(config, "expectedMrTitle"),
       targetBranch: configString(config, "expectedTargetBranch"),
       changedFiles: session.state.files.map((f) => ({ ...f })),
+      sourceBranch: configStringOrNull(config, "expectedSourceBranch") ?? undefined,
+      commitMessage: configStringOrNull(config, "expectedCommitMessage") ?? undefined,
+      reviewer: configStringOrNull(config, "expectedReviewer") ?? undefined,
+      conflictResolved: config.requiresConflictResolution === true,
     });
   },
   breakPassingState(session) {

@@ -41,6 +41,7 @@ export function evaluateForum(session: ForumEvaluationSession): HostedWebScoreRe
     ? configStringOrNull(config, "canonicalThreadId") ?? targetThreadId
     : null;
   const duplicateThreadIds = requiresMarkDuplicate ? configStringArray(config, "duplicateThreadIds") : [];
+  const requiredActionOrder = configStringArray(config, "requiredActionOrder");
   const targetThread = session.state.threads.find((candidate) => candidate.id === targetThreadId);
   const retrieve = evaluateRetrieveValue(targetThread, targetThreadId, expectedReplyValue);
   const backend = evaluateForumBackendState(session, targetThread, targetThreadId, {
@@ -55,6 +56,7 @@ export function evaluateForum(session: ForumEvaluationSession): HostedWebScoreRe
     requiresMarkDuplicate,
     canonicalThreadId,
     duplicateThreadIds,
+    requiredActionOrder,
   });
   const ui = targetThread?.locked
     ? passedEvaluator({
@@ -149,6 +151,7 @@ function evaluateForumBackendState(
     requiresMarkDuplicate: boolean;
     canonicalThreadId: string | null;
     duplicateThreadIds: string[];
+    requiredActionOrder: string[];
   },
 ): HostedWebEvaluatorResult {
   const {
@@ -163,6 +166,7 @@ function evaluateForumBackendState(
     requiresMarkDuplicate,
     canonicalThreadId,
     duplicateThreadIds,
+    requiredActionOrder,
   } = options;
 
   if (!targetThread) {
@@ -232,6 +236,20 @@ function evaluateForumBackendState(
             action.duplicateOfThreadId === canonicalThreadId,
         ),
       ));
+  const relevantThreadIds = new Set([targetThreadId, ...duplicateThreadIds]);
+  const actualActionOrder = session.state.moderationActions
+    .filter((action) => relevantThreadIds.has(action.threadId))
+    .map((action) => action.action)
+    .filter((action) => requiredActionOrder.includes(action))
+    .filter((action, index, actions) => index === 0 || action !== actions[index - 1]);
+  let actionCursor = 0;
+  for (const action of actualActionOrder) {
+    if (action === requiredActionOrder[actionCursor]) {
+      actionCursor += 1;
+    }
+  }
+  const actionOrderMatches =
+    requiredActionOrder.length === 0 || actionCursor === requiredActionOrder.length;
 
   const evidence = {
     threadId: targetThreadId,
@@ -258,6 +276,9 @@ function evaluateForumBackendState(
     canonicalThreadId,
     duplicateThreadIds,
     duplicatesConsolidated,
+    requiredActionOrder,
+    actualActionOrder,
+    actionOrderMatches,
   };
 
   const pass =
@@ -269,7 +290,8 @@ function evaluateForumBackendState(
     reportReasonMatches &&
     moveMatches &&
     editTitleMatches &&
-    duplicatesConsolidated;
+    duplicatesConsolidated &&
+    actionOrderMatches;
 
   return pass
     ? passedEvaluator({

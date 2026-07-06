@@ -99,6 +99,9 @@ export function createRepoRoutes(deps: HostedAppRouteDeps) {
       const form = await deps.readForm(request);
       const title = form.get("title");
       const targetBranch = form.get("targetBranch");
+      const sourceBranch = form.get("sourceBranch");
+      const commitMessage = form.get("commitMessage");
+      const reviewer = form.get("reviewer");
       if (typeof title !== "string" || title.trim().length === 0) {
         deps.badRequest(response, "Title is required");
         return true;
@@ -111,6 +114,10 @@ export function createRepoRoutes(deps: HostedAppRouteDeps) {
       const result = createMergeRequest(session, {
         title: title.trim(),
         targetBranch: targetBranch.trim(),
+        sourceBranch: typeof sourceBranch === "string" ? sourceBranch.trim() : undefined,
+        commitMessage: typeof commitMessage === "string" ? commitMessage.trim() : undefined,
+        reviewer: typeof reviewer === "string" ? reviewer.trim() : undefined,
+        conflictResolved: form.get("conflictResolved") === "yes",
         makeId: deps.makeId,
       });
 

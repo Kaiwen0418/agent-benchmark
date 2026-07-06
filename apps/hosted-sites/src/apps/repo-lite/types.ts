@@ -15,6 +15,10 @@ export type RepoMergeRequest = {
   title: string;
   changedFiles: Array<{ path: string; content: string }>;
   targetBranch: string;
+  sourceBranch?: string;
+  commitMessage?: string;
+  reviewer?: string;
+  conflictResolved?: boolean;
 };
 
 export type AppSessionState = {

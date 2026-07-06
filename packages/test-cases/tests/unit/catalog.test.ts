@@ -87,6 +87,97 @@ test("hard consistency checks reference real sessions with source before target"
   }
 });
 
+test("hard v1.0.2 requires both wiki answers to be carried into distinct note fields", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  assert.equal(suite.suiteVersion, "v1.0.2");
+  assert.deepEqual(
+    suite.consistencyChecks?.map((check) => ({
+      sourceTaskSlug: check.sourceTaskSlug,
+      targetPath: check.targetPath,
+      required: check.required,
+    })),
+    [
+      {
+        sourceTaskSlug: "wiki-release-answer-hard",
+        targetPath: "notes[].title",
+        required: true,
+      },
+      {
+        sourceTaskSlug: "wiki-policy-answer-hard",
+        targetPath: "notes[].body",
+        required: true,
+      },
+      {
+        sourceTaskSlug: "notes-followup-create-hard",
+        targetPath: "calendarEvents[].title",
+        required: true,
+      },
+    ],
+  );
+});
+
+test("hard v1.0.2 includes combined-constraint shopping variants on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const shopping = suite.sessions.find((session) => session.app === "shopping-lite");
+  assert.ok(shopping);
+  assert.equal(shopping.taskVersion, "v3");
+  assert.equal(shopping.seedVersion, "shopping-lite-hard-v2");
+  const variantIds = shopping.metadata.questionVariants.map((variant) => variant.id);
+  assert.ok(variantIds.includes("probook-team-travel-kit"));
+  assert.ok(variantIds.includes("airlite-field-kit"));
+});
+
+test("hard v1.0.2 includes ordered forum escalation on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const forum = suite.sessions.find((session) => session.app === "forum-lite");
+  assert.ok(forum);
+  assert.equal(forum.taskVersion, "v3");
+  assert.equal(forum.seedVersion, "forum-lite-hard-v2");
+  assert.ok(
+    forum.metadata.questionVariants.some((variant) => variant.id === "hot-charge-full-escalation"),
+  );
+});
+
+test("hard v1.0.2 includes conflict-aware repo workflow on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const repo = suite.sessions.find((session) => session.app === "repo-lite");
+  assert.ok(repo);
+  assert.equal(repo.taskVersion, "v3");
+  assert.equal(repo.seedVersion, "repo-lite-hard-v2");
+  assert.ok(repo.metadata.questionVariants.some((variant) => variant.id === "api-v3-conflict-rollout"));
+});
+
+test("hard v1.0.2 includes three-article wiki verification on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const wikiSessions = suite.sessions.filter((session) => session.app === "wiki-lite");
+  assert.ok(wikiSessions.every((session) => session.seedVersion === "wiki-lite-hard-v2"));
+  assert.ok(
+    wikiSessions.every((session) =>
+      session.metadata.questionVariants.some((variant) => variant.id === "verified-api-rate-limit"),
+    ),
+  );
+});
+
+test("hard v1.0.2 includes a multi-record notes workflow on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const notes = suite.sessions.find((session) => session.app === "notes-lite");
+  assert.ok(notes);
+  assert.equal(notes.taskVersion, "v3");
+  assert.equal(notes.seedVersion, "notes-lite-hard-v2");
+  assert.ok(notes.metadata.questionVariants.some((variant) => variant.id === "release-rollout-note-set"));
+});
+
+test("hard v1.0.2 includes recurring resource calendar workflow on the v2 seed", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const calendar = suite.sessions.find((session) => session.app === "calendar-lite");
+  assert.ok(calendar);
+  assert.equal(calendar.taskVersion, "v3");
+  assert.equal(calendar.seedVersion, "calendar-lite-hard-v2");
+  assert.ok(
+    calendar.metadata.questionVariants.some((variant) => variant.id === "recurring-resource-review"),
+  );
+});
+
 test("schema rejects a consistency check with an unknown task slug", () => {
   const invalid = structuredClone(hostedWebHardSuiteMetadata) as typeof hostedWebHardSuiteMetadata & {
     consistencyChecks: Array<Record<string, unknown>>;

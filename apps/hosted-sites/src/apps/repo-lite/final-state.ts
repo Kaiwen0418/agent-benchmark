@@ -57,6 +57,10 @@ export function buildRepoFinalState(session: HostedSessionFor<"repo-lite">) {
           id: latestMR.id,
           title: latestMR.title,
           targetBranch: latestMR.targetBranch,
+          sourceBranch: latestMR.sourceBranch ?? null,
+          commitMessage: latestMR.commitMessage ?? null,
+          reviewer: latestMR.reviewer ?? null,
+          conflictResolved: latestMR.conflictResolved ?? false,
         }
       : null,
   };

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { HostedSessionBreakdown } from "@/lib/hosted-scoring";
 import { usePlaygroundStore } from "@/lib/playground-store";
 import { ServiceUnavailableDialog } from "./ServiceUnavailableDialog";
-import type { HostedSessionDeadline } from "@/lib/db";
+import type { HostedSessionDeadline } from "@/lib/hosted-web";
 
 type RunConnectPayload = {
   runId: string;

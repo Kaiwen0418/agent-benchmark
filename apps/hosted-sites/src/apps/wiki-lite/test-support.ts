@@ -14,8 +14,14 @@ export const wikiLiteTestSupport: HostedAppTestSupport<"wiki-lite"> = {
     const contract = config.answerContract as Record<string, unknown>;
     const slug = configString(config, "targetArticleSlug");
     const secondarySlug = configStringOrNull(config, "secondaryArticleSlug");
+    const requiredSlugs = Array.isArray(config.requiredArticleSlugs)
+      ? config.requiredArticleSlugs.filter((value): value is string => typeof value === "string")
+      : [];
     if (secondarySlug) {
       session.events.push({ type: "page.load", url: `/wiki/article/${secondarySlug}` });
+    }
+    for (const requiredSlug of requiredSlugs) {
+      session.events.push({ type: "page.load", url: `/wiki/article/${requiredSlug}` });
     }
     session.events.push({ type: "page.load", url: `/wiki/article/${slug}` });
     session.state.wikiAnswerSubmissions.push({
