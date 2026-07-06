@@ -15,11 +15,11 @@
     "@agentbench/shared": "workspace:*",
     "@agentbench/test-cases": "workspace:*",
     "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.108.2",
-    "@tanstack/react-query": "^5.101.0",
+    "@supabase/supabase-js": "^2.110.0",
+    "@tanstack/react-query": "^5.101.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.474.0",
-    "next": "^15.5.19",
+    "next": "^15.5.20",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwind-merge": "^2.6.0",
@@ -27,13 +27,13 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@types/node": "^22.19.21",
+    "@types/node": "^22.20.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.5.15",
+    "autoprefixer": "^10.5.2",
+    "postcss": "^8.5.16",
     "tailwindcss": "^3.4.17",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.0",
     "typescript": "^5.7.3"
   }
 }
