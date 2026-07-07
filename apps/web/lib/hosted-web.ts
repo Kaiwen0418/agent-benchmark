@@ -4,6 +4,7 @@ import type {
   HostedWebSuiteSession,
 } from "@agentbench/protocol";
 import { buildHostedAttemptReadModel } from "@agentbench/shared";
+import { createSupabaseAdminClient } from "./supabase/admin";
 
 type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
 
@@ -47,6 +48,30 @@ type HostedWebAttempt = {
   sessionDefinitions: HostedWebSuiteSession[];
   metadata: Record<string, unknown>;
 };
+
+function extractMetadata(metadata: unknown) {
+  return metadata && typeof metadata === "object" && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : {};
+}
+
+function tokenFromStartUrl(startUrl: string) {
+  try {
+    return new URL(startUrl).searchParams.get("session");
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHostedSessionStatus(status: string): HostedSessionStatus {
+  if (status === "completed" || status === "failed" || status === "expired") {
+    return status;
+  }
+  if (status === "active" || status === "scoring") {
+    return "active";
+  }
+  return "created";
+}
 
 export class HostedWebSessionError extends Error {
   code = "hosted_session_create_failed" as const;
@@ -297,6 +322,79 @@ async function getOrCreateHostedWebAttempt(params: {
   } satisfies HostedWebAttempt;
 }
 
+async function recoverExistingHostedWebAttemptConnection(params: {
+  run: BenchmarkRun;
+  benchmarkCase: BenchmarkCase;
+}) {
+  const supabase = createSupabaseAdminClient();
+  const { data: attemptRow, error: attemptError } = await supabase
+    .from("benchmark_attempts")
+    .select("id, case_revision_id, suite_slug, suite_version, metadata")
+    .eq("run_id", params.run.id)
+    .eq("case_id", params.benchmarkCase.id)
+    .eq("provider", "hosted-web")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (attemptError) {
+    throw attemptError;
+  }
+  if (!attemptRow) {
+    return null;
+  }
+  if (attemptRow.case_revision_id !== params.benchmarkCase.currentRevisionId) {
+    throw new HostedWebSessionError({
+      message: "Existing hosted attempt is bound to a different benchmark revision.",
+      hostedSitesUrl: getHostedOrchestratorBaseUrl(),
+      retryable: false,
+      status: 409,
+    });
+  }
+
+  const { data: sessionRows, error: sessionError } = await supabase
+    .from("hosted_web_sessions")
+    .select("id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, start_url, status, metadata")
+    .eq("attempt_id", attemptRow.id)
+    .order("sequence_index", { ascending: true });
+
+  if (sessionError) {
+    throw sessionError;
+  }
+  if (!sessionRows?.length) {
+    return null;
+  }
+
+  return toAttemptConnection({
+    attempt: {
+      id: attemptRow.id,
+      caseRevisionId: attemptRow.case_revision_id,
+      suiteSlug: attemptRow.suite_slug,
+      suiteVersion: attemptRow.suite_version,
+      sessionDefinitions: [],
+      metadata: extractMetadata(attemptRow.metadata),
+    },
+    sessions: sessionRows.map((row) => {
+      const metadata = extractMetadata(row.metadata);
+      return {
+        sessionId: row.id,
+        attemptId: row.attempt_id,
+        token: tokenFromStartUrl(row.start_url),
+        app: row.app,
+        taskSlug: row.task_slug,
+        taskVersion: row.task_version,
+        sequenceIndex: row.sequence_index,
+        weight: row.weight,
+        required: row.required,
+        startUrl: row.start_url,
+        goal: typeof metadata.goal === "string" ? metadata.goal : "",
+        title: typeof metadata.title === "string" ? metadata.title : null,
+        status: normalizeHostedSessionStatus(row.status),
+      };
+    }),
+  });
+}
+
 type HostedAttemptInitResponse = {
   attemptId: string;
   suiteSlug: string;
@@ -391,6 +489,10 @@ export async function getOrCreateHostedWebAttemptConnection(params: {
       retryable: false,
       status: 409,
     });
+  }
+  const existing = await recoverExistingHostedWebAttemptConnection(params);
+  if (existing) {
+    return existing;
   }
   const initialized = await initializeHostedWebAttempt({
     ...params,
