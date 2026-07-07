@@ -1,8 +1,8 @@
-import { getBenchmarkRun, listArtifacts, listRunEvents } from "@/lib/db";
+import { getBenchmarkRun, getRunStreamFingerprint, listArtifacts, listRunEvents } from "@/lib/db";
 
 const encoder = new TextEncoder();
 const STREAM_MAX_DURATION_MS = 25_000;
-const STREAM_POLL_MS = 750;
+const STREAM_POLL_MS = 5_000;
 const STREAM_HEARTBEAT_MS = 10_000;
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,8 @@ type RunStreamPayload = {
   events: Awaited<ReturnType<typeof listRunEvents>>;
   artifacts: Awaited<ReturnType<typeof listArtifacts>>;
 };
+
+type RunStreamFingerprint = Awaited<ReturnType<typeof getRunStreamFingerprint>>;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -23,22 +25,24 @@ function toSseChunk(event: string, data: unknown) {
 
 function makeFingerprint(payload: RunStreamPayload) {
   return JSON.stringify({
-        run: payload.run
-          ? {
-              id: payload.run.id,
-              status: payload.run.status,
-              score: payload.run.score,
-              errorMessage: payload.run.errorMessage,
-              completedAt: payload.run.completedAt,
-              startedAt: payload.run.startedAt,
-              runnerId: payload.run.runnerId,
+    run: payload.run
+      ? {
+          id: payload.run.id,
+          status: payload.run.status,
+          score: payload.run.score,
+          errorMessage: payload.run.errorMessage,
+          completedAt: payload.run.completedAt,
+          startedAt: payload.run.startedAt,
+          runnerId: payload.run.runnerId,
         }
       : null,
     lastEventId: payload.events[payload.events.length - 1]?.id ?? null,
-    eventCount: payload.events.length,
     lastArtifactId: payload.artifacts[payload.artifacts.length - 1]?.id ?? null,
-    artifactCount: payload.artifacts.length,
   });
+}
+
+function stringifyFingerprint(fingerprint: RunStreamFingerprint) {
+  return JSON.stringify(fingerprint);
 }
 
 function isTerminal(status: string | null | undefined) {
@@ -70,6 +74,7 @@ export async function GET(
       },
     });
   }
+  const initialRun = initialSnapshot.run;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -90,32 +95,47 @@ export async function GET(
       request.signal.addEventListener("abort", close);
 
       controller.enqueue(encoder.encode("retry: 2000\n\n"));
+      lastFingerprint = makeFingerprint(initialSnapshot);
+      controller.enqueue(toSseChunk("snapshot", initialSnapshot));
+
+      if (isTerminal(initialRun.status)) {
+        controller.enqueue(toSseChunk("terminal", { status: initialRun.status }));
+        close();
+        return;
+      }
 
       while (!closed) {
-        const snapshot = await loadSnapshot(runId);
+        await sleep(STREAM_POLL_MS);
 
-        if (!snapshot.run) {
+        const fingerprintSnapshot = await getRunStreamFingerprint(runId);
+        if (!fingerprintSnapshot.run) {
           controller.enqueue(toSseChunk("error", { message: "Run not found" }));
           close();
           break;
         }
 
-        const fingerprint = makeFingerprint(snapshot);
+        const fingerprint = stringifyFingerprint(fingerprintSnapshot);
         if (fingerprint !== lastFingerprint) {
+          const snapshot = await loadSnapshot(runId);
+          if (!snapshot.run) {
+            controller.enqueue(toSseChunk("error", { message: "Run not found" }));
+            close();
+            break;
+          }
           lastFingerprint = fingerprint;
           controller.enqueue(toSseChunk("snapshot", snapshot));
+
+          if (isTerminal(snapshot.run.status)) {
+            controller.enqueue(toSseChunk("terminal", { status: snapshot.run.status }));
+            close();
+            break;
+          }
         }
 
         const now = Date.now();
         if (now - lastHeartbeatAt >= STREAM_HEARTBEAT_MS) {
           controller.enqueue(toSseChunk("heartbeat", { ts: new Date(now).toISOString() }));
           lastHeartbeatAt = now;
-        }
-
-        if (isTerminal(snapshot.run.status)) {
-          controller.enqueue(toSseChunk("terminal", { status: snapshot.run.status }));
-          close();
-          break;
         }
 
         if (now - startedAt >= STREAM_MAX_DURATION_MS) {
