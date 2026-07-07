@@ -2,6 +2,11 @@
 
 import type { AgentIdentity } from "@agentbench/protocol";
 import { useCallback, useEffect, useState } from "react";
+import {
+  applyHostedSessionProgress,
+  hasTerminalHostedSessionProgress,
+  type HostedSessionProgressSnapshot,
+} from "@/lib/hosted-progress";
 import { RunMetadataForm } from "./RunMetadataForm";
 
 type RunConnectPayload = {
@@ -80,6 +85,7 @@ export function RunConnectClient({
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [progressPollingComplete, setProgressPollingComplete] = useState(false);
 
   const loadConnection = useCallback(async (quiet = false) => {
     if (!quiet) {
@@ -96,6 +102,7 @@ export function RunConnectClient({
       const nextPayload = result as RunConnectPayload;
       setPayload(nextPayload);
       setRegistered(!nextPayload.metadataRequired);
+      setProgressPollingComplete(false);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load the active benchmark.");
@@ -114,17 +121,47 @@ export function RunConnectClient({
     void loadConnection();
   }, [loadConnection, registered]);
 
+  const loadHostedProgress = useCallback(async () => {
+    if (typeof document !== "undefined" && document.hidden) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/runs/${runId}/hosted-sessions`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Unable to refresh hosted suite progress.");
+      }
+
+      const result = await response.json() as { sessions: HostedSessionProgressSnapshot[] };
+      setPayload((current) => current ? applyHostedSessionProgress(current, result.sessions) : current);
+      setProgressPollingComplete(hasTerminalHostedSessionProgress(result.sessions));
+      setError(null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Unable to refresh hosted suite progress.");
+    }
+  }, [runId]);
+
   useEffect(() => {
-    if (!registered || !payload) {
+    if (!registered || !payload || progressPollingComplete) {
       return;
     }
 
     const interval = window.setInterval(() => {
-      void loadConnection(true);
-    }, 2000);
+      void loadHostedProgress();
+    }, 5000);
 
-    return () => window.clearInterval(interval);
-  }, [loadConnection, payload, registered]);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void loadHostedProgress();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadHostedProgress, payload, progressPollingComplete, registered]);
 
   const activeSession = payload?.hostedWeb.sessions.find(
     (session) => session.sessionId === payload.hostedWeb.activeSessionId,
@@ -156,6 +193,7 @@ export function RunConnectClient({
             onSaved={() => {
               setRegistered(true);
               setPayload(null);
+              setProgressPollingComplete(false);
             }}
           />
 
