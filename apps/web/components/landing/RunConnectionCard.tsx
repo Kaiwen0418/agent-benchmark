@@ -313,12 +313,6 @@ export function RunConnectionCard() {
   const streamMode = usePlaygroundStore((state) => state.streamMode);
   const activeDeadline = useActiveSessionDeadline(runId);
   const now = useNow();
-  const connectionRefreshKey = usePlaygroundStore(
-    (state) =>
-      state.timeline.filter(
-        (entry) => entry.label === "hosted.page.load" || entry.label === "hosted.score",
-      ).length,
-  );
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
   const [connectError, setConnectError] = useState<RunConnectError | null>(null);
   const [copyState, setCopyState] = useState<string | null>(null);
@@ -372,7 +366,7 @@ export function RunConnectionCard() {
     return () => {
       cancelled = true;
     };
-  }, [connectionRefreshKey, runId, retryNonce]);
+  }, [runId, retryNonce]);
 
   useEffect(() => {
     const currentIndex = payload?.hostedWeb.progress.currentIndex;
