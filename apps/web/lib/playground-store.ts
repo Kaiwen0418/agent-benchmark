@@ -498,6 +498,10 @@ function startFallbackPolling(
   set({ streamMode: "polling" });
 
   const tick = async () => {
+    if (typeof document !== "undefined" && document.hidden) {
+      return;
+    }
+
     const state = getState();
     if (state.currentRunId !== runId) {
       clearRunSync();
@@ -522,7 +526,7 @@ function startFallbackPolling(
     void tick().catch((error) => {
       console.error("[playground] polling refresh failed", error);
     });
-  }, 2000);
+  }, 5000);
 }
 
 function startRunStream(

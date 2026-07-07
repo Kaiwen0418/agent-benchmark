@@ -408,6 +408,58 @@ export async function listArtifacts(runId: string): Promise<Artifact[]> {
   }));
 }
 
+export async function getRunStreamFingerprint(runId: string) {
+  const supabase = getSupabase();
+
+  const [runResult, eventResult, artifactResult] = await Promise.all([
+    supabase
+      .from("benchmark_runs")
+      .select("id, status, score, error_message, started_at, completed_at, runner_id")
+      .eq("id", runId)
+      .maybeSingle(),
+    supabase
+      .from("run_events")
+      .select("id")
+      .eq("run_id", runId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("artifacts")
+      .select("id")
+      .eq("run_id", runId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (runResult.error) {
+    throw runResult.error;
+  }
+  if (eventResult.error) {
+    throw eventResult.error;
+  }
+  if (artifactResult.error) {
+    throw artifactResult.error;
+  }
+
+  return {
+    run: runResult.data
+      ? {
+          id: runResult.data.id,
+          status: runResult.data.status,
+          score: runResult.data.score,
+          errorMessage: runResult.data.error_message,
+          completedAt: runResult.data.completed_at,
+          startedAt: runResult.data.started_at,
+          runnerId: runResult.data.runner_id,
+        }
+      : null,
+    lastEventId: eventResult.data?.id ?? null,
+    lastArtifactId: artifactResult.data?.id ?? null,
+  };
+}
+
 export async function appendRunEvent(runId: string, input: AppendRunEventInput) {
   const supabase = getSupabase();
 
