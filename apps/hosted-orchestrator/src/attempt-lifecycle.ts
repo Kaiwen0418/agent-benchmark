@@ -98,6 +98,7 @@ type AttemptLifecycleDeps = {
   loadLatestSessionResult: (sessionId: string) => Promise<HostedWebScoreResult | null>;
   forwardTimeoutCompletion: (params: { runId: string; summary: string; score?: number }) => Promise<void>;
   evictInMemorySessions: (sessionIds: string[]) => void;
+  invalidateRunSessionProjection?: (runId: string) => Promise<void>;
 };
 
 const terminalAttemptStatuses = new Set<AttemptStatus>(["completed", "failed", "cancelled", "timeout"]);
@@ -297,6 +298,9 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     const persistedAggregate = payload.aggregate === null || payload.aggregate === undefined
       ? null
       : hostedWebSuiteScoreResultSchema.parse(payload.aggregate);
+    if (session.runId) {
+      await deps.invalidateRunSessionProjection?.(session.runId);
+    }
     return {
       result: persistedResult,
       duplicate: payload.duplicate === true,
@@ -465,6 +469,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
 
     const runId = timeoutTransition.attempt_run_id ?? params.runId;
     if (runId) {
+      await deps.invalidateRunSessionProjection?.(runId);
       await deps.forwardTimeoutCompletion({
         runId,
         summary,

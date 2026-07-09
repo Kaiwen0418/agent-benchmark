@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyHostedSessionProgress,
   hasTerminalHostedSessionProgress,
-  type HostedSessionProgressSnapshot,
 } from "@/lib/hosted-progress";
 import {
   buildRunConnectFailure,
@@ -13,6 +12,8 @@ import {
   type RunConnectFailure,
 } from "@/lib/run-connect-error";
 import { RunMetadataForm } from "./RunMetadataForm";
+import { useHostedSessionPolling } from "@/hooks/use-hosted-session-polling";
+import { isTerminalRunStatus } from "@/lib/hosted-session-polling";
 
 type RunConnectPayload = {
   runId: string;
@@ -140,47 +141,21 @@ export function RunConnectClient({
     void loadConnection();
   }, [loadConnection, registered]);
 
-  const loadHostedProgress = useCallback(async () => {
-    if (typeof document !== "undefined" && document.hidden) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/runs/${runId}/hosted-sessions`, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error("Unable to refresh hosted suite progress.");
-      }
-
-      const result = await response.json() as { sessions: HostedSessionProgressSnapshot[] };
-      setPayload((current) => current ? applyHostedSessionProgress(current, result.sessions) : current);
-      setProgressPollingComplete(hasTerminalHostedSessionProgress(result.sessions));
-      setProgressError(null);
-    } catch (loadError) {
-      setProgressError(loadError instanceof Error ? loadError.message : "Unable to refresh hosted suite progress.");
-    }
-  }, [runId]);
+  const { sessions: progressSessions, error: hostedProgressError } = useHostedSessionPolling({
+    runId,
+    enabled: registered && Boolean(payload) && !progressPollingComplete,
+    terminal: isTerminalRunStatus(payload?.status),
+  });
 
   useEffect(() => {
-    if (!registered || !payload || progressPollingComplete) {
-      return;
-    }
+    if (progressSessions.length === 0) return;
+    setPayload((current) => current ? applyHostedSessionProgress(current, progressSessions) : current);
+    setProgressPollingComplete(hasTerminalHostedSessionProgress(progressSessions));
+  }, [progressSessions]);
 
-    const interval = window.setInterval(() => {
-      void loadHostedProgress();
-    }, 5000);
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        void loadHostedProgress();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [loadHostedProgress, payload, progressPollingComplete, registered]);
+  useEffect(() => {
+    setProgressError(hostedProgressError);
+  }, [hostedProgressError]);
 
   const activeSession = payload?.hostedWeb.sessions.find(
     (session) => session.sessionId === payload.hostedWeb.activeSessionId,

@@ -35,6 +35,13 @@ import {
   redactCommandPayload,
   scrubCommandDeadLetters,
 } from "./command-dead-letter.js";
+import {
+  invalidateRunSessionProjectionCache,
+  readRunSessionProjectionCache,
+  writeRunSessionProjectionCache,
+  type ProjectionCacheRedis,
+  type RunSessionProjection,
+} from "./run-session-projection-cache.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -117,6 +124,9 @@ function envNumber(name: string, fallback: number) {
 }
 
 const cleanupSweepIntervalMs = envNumber("HOSTED_SESSION_SWEEP_INTERVAL_MS", 60_000);
+const runSessionProjectionCacheTtlSeconds = Math.trunc(
+  envNumber("HOSTED_SESSION_PROJECTION_CACHE_TTL_SECONDS", 10),
+);
 const accessLogRetentionMs = envNumber("HOSTED_ACCESS_LOG_RETENTION_MS", 14 * 24 * 60 * 60 * 1000);
 const commandDeadRetentionMs = envNumber("ORCHESTRATOR_DLQ_DEAD_RETENTION_MS", 90 * 24 * 60 * 60 * 1000);
 const commandResolvedRetentionMs = envNumber("ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS", 30 * 24 * 60 * 60 * 1000);
@@ -559,6 +569,50 @@ async function getInitializationRedis() {
   return initializationRedisConnection;
 }
 
+async function getProjectionCacheRedis() {
+  return (await getInitializationRedis()) as ProjectionCacheRedis | null;
+}
+
+async function readCachedRunSessionProjection(runId: string) {
+  try {
+    const redis = await getProjectionCacheRedis();
+    return redis ? await readRunSessionProjectionCache(redis, runId) : null;
+  } catch (error) {
+    console.error("[hosted-orchestrator] run session projection cache read failed", error);
+    return null;
+  }
+}
+
+async function cacheRunSessionProjection(runId: string, sessions: RunSessionProjection[]) {
+  try {
+    const redis = await getProjectionCacheRedis();
+    if (redis) {
+      await writeRunSessionProjectionCache(
+        redis,
+        runId,
+        sessions,
+        runSessionProjectionCacheTtlSeconds,
+      );
+    }
+  } catch (error) {
+    console.error("[hosted-orchestrator] run session projection cache write failed", error);
+  }
+}
+
+async function invalidateRunSessionProjection(runId: string | null | undefined) {
+  if (!runId) {
+    return;
+  }
+  try {
+    const redis = await getProjectionCacheRedis();
+    if (redis) {
+      await invalidateRunSessionProjectionCache(redis, runId);
+    }
+  } catch (error) {
+    console.error("[hosted-orchestrator] run session projection cache invalidation failed", error);
+  }
+}
+
 async function findExistingInitializedAttempt(
   params: Parameters<typeof initializeAttempt>[0],
 ) {
@@ -760,6 +814,7 @@ async function initializeAttempt(params: InitializeAttemptParams) {
   if (sessionError || !createdRows) {
     throw sessionError ?? new Error("Failed to create hosted sessions");
   }
+  await invalidateRunSessionProjection(runId);
 
   const rowsByStartUrl = new Map(createdRows.map((row) => [row.start_url, row]));
   const sessions = rows
@@ -1025,6 +1080,7 @@ const attemptLifecycle = createAttemptLifecycle({
   loadLatestSessionResult,
   forwardTimeoutCompletion,
   evictInMemorySessions: () => undefined,
+  invalidateRunSessionProjection,
 });
 
 const initializeAttemptIdempotently = createIdempotentInitializer({
@@ -1143,22 +1199,24 @@ async function dispatchWriteCommand(type: string, input: Record<string, unknown>
       summary: typeof resultInput.summary === "string" ? resultInput.summary : "Hosted session completed.",
       evaluators: Array.isArray(resultInput.evaluators) ? resultInput.evaluators : [],
     };
-    return attemptHandlers.handleCompleteSession({
+    const completed = await attemptHandlers.handleCompleteSession({
       session: {
         ...buildLifecycleSessionFromRow(sessionRow, sessionToken),
         finalState: input.finalState ?? null,
       },
       result,
     });
+    return completed;
   }
 
   if (type === "attempt.timeout") {
-    return attemptHandlers.handleTimeoutAttempt({
+    const timedOut = await attemptHandlers.handleTimeoutAttempt({
       attemptId: typeof input.attemptId === "string" ? input.attemptId : "",
       runId: typeof input.runId === "string" ? input.runId : null,
       expiredSessionId: typeof input.expiredSessionId === "string" ? input.expiredSessionId : "",
       expiredTaskSlug: typeof input.expiredTaskSlug === "string" ? input.expiredTaskSlug : "",
     });
+    return timedOut;
   }
 
   if (type === "maintenance.cleanup") {
@@ -1458,23 +1516,24 @@ const server = createServer(async (request, response) => {
 
     const runSessionsMatch = url.pathname.match(/^\/api\/runs\/([^/]+)\/sessions$/);
     if (request.method === "GET" && runSessionsMatch) {
-      const supabase = getSupabaseAdmin();
-      if (!supabase) {
-        sendJson(response, 503, { error: "database_unavailable" });
-        return;
-      }
       const runId = decodeURIComponent(runSessionsMatch[1]!);
-      const { data, error } = await supabase
-        .from("hosted_web_sessions")
-        .select("id, task_slug, status, sequence_index, expires_at, metadata")
-        .eq("run_id", runId)
-        .order("sequence_index", { ascending: true });
-      if (error) {
-        sendJson(response, 500, { error: "session_read_failed" });
-        return;
-      }
-      sendJson(response, 200, {
-        sessions: (data ?? []).map((item) => {
+      let sessions = await readCachedRunSessionProjection(runId);
+      if (!sessions) {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) {
+          sendJson(response, 503, { error: "database_unavailable" });
+          return;
+        }
+        const { data, error } = await supabase
+          .from("hosted_web_sessions")
+          .select("id, task_slug, status, sequence_index, expires_at, metadata")
+          .eq("run_id", runId)
+          .order("sequence_index", { ascending: true });
+        if (error) {
+          sendJson(response, 500, { error: "session_read_failed" });
+          return;
+        }
+        sessions = (data ?? []).map((item) => {
           const metadata = extractMetadata(item.metadata as Record<string, unknown> | null);
           return {
             sessionId: item.id,
@@ -1487,8 +1546,10 @@ const server = createServer(async (request, response) => {
                 ? metadata.timeLimitMinutesPerTestcase
                 : null,
           };
-        }),
-      });
+        });
+        await cacheRunSessionProjection(runId, sessions);
+      }
+      sendJson(response, 200, { sessions });
       return;
     }
 
