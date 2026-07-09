@@ -106,3 +106,37 @@ export function deriveHostedViewerRevision(events: HostedViewerEvent[]) {
       event.type === "hosted.score",
   ).length;
 }
+
+export function deriveActiveHostedSessionId(events: HostedViewerEvent[]) {
+  const sessions = new Map<string, { sequenceIndex: number }>();
+
+  for (const event of events) {
+    if (event.type !== "hosted.session.created") continue;
+
+    const sessionId = sessionIdFromEvent(event);
+    if (!sessionId) continue;
+
+    const sequenceIndex =
+      typeof event.payload.sequenceIndex === "number" && Number.isFinite(event.payload.sequenceIndex)
+        ? event.payload.sequenceIndex
+        : sessions.size;
+
+    sessions.set(sessionId, { sequenceIndex });
+  }
+
+  const scoredSessionIds = new Set<string>();
+  for (const event of events) {
+    if (event.type !== "hosted.score") continue;
+
+    const sessionId = sessionIdFromEvent(event);
+    if (sessionId) {
+      scoredSessionIds.add(sessionId);
+    }
+  }
+
+  const activeEntry = [...sessions.entries()]
+    .filter(([sessionId]) => !scoredSessionIds.has(sessionId))
+    .sort((left, right) => left[1].sequenceIndex - right[1].sequenceIndex)[0];
+
+  return activeEntry?.[0] ?? null;
+}
