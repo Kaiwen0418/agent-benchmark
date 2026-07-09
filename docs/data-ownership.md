@@ -19,7 +19,7 @@ This document defines who may read, mutate, and recover each state family. Owner
 | `hosted_web_results` | hosted orchestrator | transactional completion RPC | orchestrator and result/read-model code | One terminal result per session |
 | `benchmark_attempt_scores` | hosted orchestrator | transactional completion RPC | Web leaderboard/result reads | One aggregate score per attempt |
 | `hosted_callback_outbox` | hosted orchestrator | database trigger and orchestrator processor | orchestrator workers/maintenance | Durable handoff from hosted terminal state to Web |
-| `orchestrator_command_dead_letters` | hosted orchestrator | orchestrator workers | authenticated operator APIs | Durable diagnostics after command retry exhaustion |
+| `orchestrator_command_dead_letters` | hosted orchestrator | orchestrator workers | authenticated operator APIs | Redacted diagnostics after retry exhaustion; dead 90 days, replayed/resolved 30 days by default |
 
 `apps/hosted-sites` has no Supabase SDK or credential. Token and viewer recovery use an authenticated orchestrator contract. Web owns its control-plane tables and consumes hosted result data through filtered public read-model views.
 

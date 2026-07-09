@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getBenchmarkCase, getBenchmarkRun } from "@/lib/db";
 import { HostedWebSessionError } from "@/lib/hosted-web";
 import { buildRunConnectPayload } from "@/lib/run-connect";
+import { negativeRunConnectCacheHeaders } from "@/lib/run-connect-cache";
 import { checkRunConnectRateLimit } from "@/lib/connect-rate-limit";
 import { terminalRunStatuses } from "@/lib/run-lifecycle";
 import { SupabaseServiceUnavailableError } from "@/lib/supabase/admin";
@@ -41,7 +42,7 @@ export async function GET(
     if (!run) {
       return NextResponse.json(
         { error: "run_not_found", message: "Run not found", retryable: false },
-        { status: 404, headers: rateLimitHeaders },
+        { status: 404, headers: negativeRunConnectCacheHeaders(404) },
       );
     }
     if (terminalRunStatuses.has(run.status)) {
@@ -51,7 +52,7 @@ export async function GET(
           message: `This benchmark run has already ${run.status === "completed" ? "completed" : "ended"}.`,
           retryable: false,
         },
-        { status: 410, headers: rateLimitHeaders },
+        { status: 410, headers: negativeRunConnectCacheHeaders(410) },
       );
     }
     const benchmarkCase = await getBenchmarkCase(run.caseId);

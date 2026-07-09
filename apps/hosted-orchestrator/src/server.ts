@@ -10,6 +10,7 @@ import {
   type HostedWebSessionMetadata,
 } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
+import { hostedAttemptConnectionSnapshotSchema } from "@agentbench/protocol";
 import { createAttemptHandlers } from "./attempt-handlers.js";
 import { resolveHostedSitesUrls } from "./service-urls.js";
 import {
@@ -28,6 +29,12 @@ import { createIdempotentInitializer } from "./idempotent-initializer.js";
 import { createSingleFlight } from "./single-flight.js";
 import { createCallbackOutboxProcessor } from "./callback-outbox.js";
 import { resolveBenchmarkCaseRevision } from "./case-revisions.js";
+import {
+  pruneCommandDeadLetters,
+  redactCommandErrorMessage,
+  redactCommandPayload,
+  scrubCommandDeadLetters,
+} from "./command-dead-letter.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -111,6 +118,9 @@ function envNumber(name: string, fallback: number) {
 
 const cleanupSweepIntervalMs = envNumber("HOSTED_SESSION_SWEEP_INTERVAL_MS", 60_000);
 const accessLogRetentionMs = envNumber("HOSTED_ACCESS_LOG_RETENTION_MS", 14 * 24 * 60 * 60 * 1000);
+const commandDeadRetentionMs = envNumber("ORCHESTRATOR_DLQ_DEAD_RETENTION_MS", 90 * 24 * 60 * 60 * 1000);
+const commandResolvedRetentionMs = envNumber("ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS", 30 * 24 * 60 * 60 * 1000);
+const commandDeadLetterPruneBatchSize = Math.trunc(envNumber("ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE", 500));
 
 function now() {
   return new Date().toISOString();
@@ -1154,8 +1164,19 @@ async function dispatchWriteCommand(type: string, input: Record<string, unknown>
   if (type === "maintenance.cleanup") {
     const expiredSessions = await sweepExpiredSessions();
     const prunedAccessLogs = await pruneExpiredAccessLogs();
-    const callbacks = await callbackOutbox.process(20, true);
-    return { statusCode: 200, body: { expiredSessions, prunedAccessLogs, callbacks } };
+    const scrubbedCommandDeadLetters = await scrubHistoricalCommandDeadLetters();
+    const prunedCommandDeadLetters = await pruneExpiredCommandDeadLetters();
+    const callbacks = await processCallbackCleanup();
+    return {
+      statusCode: 200,
+      body: {
+        expiredSessions,
+        prunedAccessLogs,
+        scrubbedCommandDeadLetters,
+        prunedCommandDeadLetters,
+        callbacks,
+      },
+    };
   }
 
   return { statusCode: 400, body: { error: "Unknown command type" } };
@@ -1175,11 +1196,12 @@ async function persistCommandDeadLetter(deadLetter: CommandDeadLetter) {
       partition: deadLetter.partition,
       partition_key: deadLetter.partitionKey,
       payload_type: deadLetter.payloadType,
-      payload: deadLetter.payload,
+      payload: redactCommandPayload(deadLetter.payload),
       error_code: deadLetter.errorCode,
-      error_message: deadLetter.errorMessage,
+      error_message: redactCommandErrorMessage(deadLetter.errorMessage),
       attempts: deadLetter.attempts,
       status: "dead",
+      scrubbed_at: timestamp,
       updated_at: timestamp,
     },
     { onConflict: "command_id" },
@@ -1272,6 +1294,47 @@ async function sweepExpiredSessions() {
   return expiredRows.length;
 }
 
+async function pruneExpiredCommandDeadLetters() {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return 0;
+  }
+
+  try {
+    return await pruneCommandDeadLetters(supabase, {
+      deadRetentionMs: commandDeadRetentionMs,
+      resolvedRetentionMs: commandResolvedRetentionMs,
+      batchSize: commandDeadLetterPruneBatchSize,
+    });
+  } catch (error) {
+    console.error("[hosted-orchestrator] failed to prune command dead letters", error);
+    return 0;
+  }
+}
+
+async function scrubHistoricalCommandDeadLetters() {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return 0;
+  }
+
+  try {
+    return await scrubCommandDeadLetters(supabase, commandDeadLetterPruneBatchSize);
+  } catch (error) {
+    console.error("[hosted-orchestrator] failed to scrub command dead letters", error);
+    return 0;
+  }
+}
+
+async function processCallbackCleanup() {
+  try {
+    return await callbackOutbox.process(20, true);
+  } catch (error) {
+    console.error("[hosted-orchestrator] failed to process callback cleanup", error);
+    return { reconciled: 0, claimed: 0, delivered: 0, retried: 0, dead: 0 };
+  }
+}
+
 async function runCleanupSweep(trigger: "startup" | "interval") {
   if (cleanupSweepInFlight) {
     return;
@@ -1289,15 +1352,25 @@ async function runCleanupSweep(trigger: "startup" | "interval") {
     const body = result.body as {
       expiredSessions?: number;
       prunedAccessLogs?: number;
+      scrubbedCommandDeadLetters?: number;
+      prunedCommandDeadLetters?: number;
       callbacks?: { reconciled?: number; delivered?: number; retried?: number; dead?: number };
     };
     const expiredSessions = body.expiredSessions ?? 0;
     const prunedAccessLogs = body.prunedAccessLogs ?? 0;
+    const scrubbedCommandDeadLetters = body.scrubbedCommandDeadLetters ?? 0;
+    const prunedCommandDeadLetters = body.prunedCommandDeadLetters ?? 0;
     const callbackChanges = (body.callbacks?.reconciled ?? 0) + (body.callbacks?.delivered ?? 0) +
       (body.callbacks?.retried ?? 0) + (body.callbacks?.dead ?? 0);
-    if (expiredSessions > 0 || prunedAccessLogs > 0 || callbackChanges > 0) {
+    if (
+      expiredSessions > 0 ||
+      prunedAccessLogs > 0 ||
+      scrubbedCommandDeadLetters > 0 ||
+      prunedCommandDeadLetters > 0 ||
+      callbackChanges > 0
+    ) {
       console.log(
-        `[hosted-orchestrator] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs} callbacks=${JSON.stringify(body.callbacks ?? {})}`,
+        `[hosted-orchestrator] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs} command_dlq_scrubbed=${scrubbedCommandDeadLetters} command_dlq_pruned=${prunedCommandDeadLetters} callbacks=${JSON.stringify(body.callbacks ?? {})}`,
       );
     }
   } finally {
@@ -1347,6 +1420,39 @@ const server = createServer(async (request, response) => {
         throw error;
       }
       sendJson(response, 200, { deadLetters: data ?? [] });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/attempts/connection") {
+      const runId = url.searchParams.get("runId");
+      const caseId = url.searchParams.get("caseId");
+      const caseRevisionId = url.searchParams.get("caseRevisionId");
+      if (!runId || !caseId || !caseRevisionId) {
+        badRequest(response, "Missing runId, caseId, or caseRevisionId");
+        return;
+      }
+
+      let connection;
+      try {
+        connection = await findExistingInitializedAttempt({
+          runId,
+          caseId,
+          caseRevisionId,
+          callbackSecret: null,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("different benchmark revision")) {
+          sendJson(response, 409, { error: "attempt_revision_conflict" });
+          return;
+        }
+        throw error;
+      }
+      if (!connection) {
+        sendJson(response, 404, { error: "attempt_not_found" });
+        return;
+      }
+
+      sendJson(response, 200, hostedAttemptConnectionSnapshotSchema.parse(connection));
       return;
     }
 

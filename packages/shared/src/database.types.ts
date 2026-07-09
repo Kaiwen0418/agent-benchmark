@@ -206,6 +206,7 @@ export type Database = {
           payload_type: string;
           replay_command_id: string | null;
           replayed_at: string | null;
+          scrubbed_at: string | null;
           status: "dead" | "replayed" | "resolved";
           stream: string;
           updated_at: string;
@@ -224,6 +225,7 @@ export type Database = {
           payload_type: string;
           replay_command_id?: string | null;
           replayed_at?: string | null;
+          scrubbed_at?: string | null;
           status?: "dead" | "replayed" | "resolved";
           stream: string;
           updated_at?: string;
@@ -234,6 +236,7 @@ export type Database = {
           error_message?: string;
           replay_command_id?: string | null;
           replayed_at?: string | null;
+          scrubbed_at?: string | null;
           status?: "dead" | "replayed" | "resolved";
           updated_at?: string;
         };
@@ -731,6 +734,18 @@ export type Database = {
       };
       reconcile_hosted_callback_outbox: {
         Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
+      prune_orchestrator_command_dead_letters: {
+        Args: {
+          p_dead_before: string;
+          p_limit?: number;
+          p_resolved_before: string;
+        };
+        Returns: number;
+      };
+      scrub_orchestrator_command_dead_letters: {
+        Args: { p_limit?: number };
         Returns: number;
       };
       timeout_hosted_attempt: {

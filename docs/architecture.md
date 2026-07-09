@@ -62,7 +62,7 @@ Attempt timeout and session completion cross the database boundary through trans
 
 Terminal attempt transitions enqueue Web completion in `hosted_callback_outbox` within the same database transaction. Orchestrator workers deliver claimed rows, while maintenance retries failures and reconciles missing rows. The Web receiver applies terminal completion once.
 
-Redis command failures retain their retry count and final error outside the worker process. After three failed handler executions, workers persist a Supabase dead-letter record before acknowledging the Stream message. Authenticated internal routes expose inspection and replay; replay always receives a new command ID.
+Redis command failures retain their retry count and final error outside the worker process. After three failed handler executions, workers persist a redacted Supabase dead-letter record before acknowledging the Stream message. Authenticated internal routes expose inspection and replay; replay always receives a new command ID. Commands whose credentials were removed during redaction must be reissued by their source instead.
 
 The deployment profile matters:
 
