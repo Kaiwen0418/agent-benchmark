@@ -88,6 +88,33 @@ export const hostedWebSuiteMetadataSchema = z.object({
 
 export type HostedWebSuiteMetadata = z.infer<typeof hostedWebSuiteMetadataSchema>;
 
+export const hostedAttemptSessionConnectionSchema = z.object({
+  sessionId: z.string().min(1),
+  attemptId: z.string().min(1),
+  token: z.string().min(1),
+  app: z.string().min(1),
+  taskSlug: z.string().min(1),
+  taskVersion: z.string().min(1),
+  sequenceIndex: z.number().int().nonnegative(),
+  weight: z.number().nonnegative(),
+  required: z.boolean(),
+  startUrl: z.string().url(),
+  viewerStartUrl: z.string().url().optional(),
+  goal: z.string(),
+  title: z.string().nullable(),
+  status: z.enum(["created", "active", "scoring", "completed", "failed", "expired"]),
+});
+
+export const hostedAttemptConnectionSnapshotSchema = z.object({
+  attemptId: z.string().min(1),
+  suiteSlug: z.string().min(1),
+  suiteVersion: z.string().min(1),
+  metadata: z.record(z.unknown()),
+  sessions: z.array(hostedAttemptSessionConnectionSchema),
+});
+
+export type HostedAttemptConnectionSnapshot = z.infer<typeof hostedAttemptConnectionSnapshotSchema>;
+
 export const runnerSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),

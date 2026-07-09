@@ -139,6 +139,14 @@ The self-hosted GitHub Actions runners must have `self-hosted` and `linux`, plus
 
 The development project must never operate on production containers. `COMPOSE_PROJECT_NAME`, image channel, runner label, gateway port, public URLs, and database URL are treated as one validated environment mapping by the deployment script.
 
+Command DLQ retention defaults to 90 days for unresolved `dead` records and 30
+days for `replayed` or `resolved` records. Configure
+`ORCHESTRATOR_DLQ_DEAD_RETENTION_MS`,
+`ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS`, and
+`ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE` when an environment requires different
+limits. Cleanup runs with the orchestrator maintenance sweep and failures are
+logged without dead-lettering the maintenance command itself.
+
 ## Cloudflare Tunnel
 
 Cloudflare publishes separate hostnames for development and production. Each public hostname must use an HTTP origin matching the local Nginx listener:

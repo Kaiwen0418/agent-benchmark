@@ -86,6 +86,44 @@ SQL
 "${PSQL[@]}" -v ON_ERROR_STOP=1 \
   < "${ROOT_DIR}/supabase/migrations/20260619000017_orchestrator_command_dlq.sql" >/dev/null
 
+"${PSQL[@]}" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
+insert into public.orchestrator_command_dead_letters (
+  command_id, stream, message_id, partition, payload_type, payload,
+  error_code, error_message, attempts, status, created_at, updated_at
+) values
+(
+  'legacy-secret', 'commands:p0', '1-0', 0, 'attempt.init',
+  '{"runId":"run-1","callbackSecret":"secret-value","nested":{"url":"https://hosted.example/task?session=url-token"}}',
+  'Error', 'Authorization: Bearer bearer-value callbackSecret=message-secret', 3, 'dead',
+  now(), now()
+),
+(
+  'expired-dead', 'commands:p0', '2-0', 0, 'attempt.init', '{}',
+  'Error', 'expired dead', 3, 'dead',
+  now() - interval '100 days', now() - interval '100 days'
+),
+(
+  'expired-resolved', 'commands:p0', '3-0', 0, 'attempt.init', '{}',
+  'Error', 'expired resolved', 3, 'resolved',
+  now() - interval '100 days', now() - interval '40 days'
+);
+SQL
+
+"${PSQL[@]}" -v ON_ERROR_STOP=1 \
+  < "${ROOT_DIR}/supabase/migrations/20260709000028_bound_command_dead_letters.sql" >/dev/null
+
+[[ "$("${PSQL[@]}" -Atqc "select public.scrub_orchestrator_command_dead_letters(1)")" == "1" ]]
+[[ "$("${PSQL[@]}" -Atqc "select public.scrub_orchestrator_command_dead_letters(500)")" == "2" ]]
+[[ "$("${PSQL[@]}" -Atqc "select public.scrub_orchestrator_command_dead_letters(500)")" == "0" ]]
+[[ "$("${PSQL[@]}" -Atqc "select scrubbed_at is not null from public.orchestrator_command_dead_letters where command_id = 'legacy-secret'")" == "t" ]]
+[[ "$("${PSQL[@]}" -Atqc "select payload ? 'callbackSecret' from public.orchestrator_command_dead_letters where command_id = 'legacy-secret'")" == "f" ]]
+[[ "$("${PSQL[@]}" -Atqc "select payload #>> '{nested,url}' from public.orchestrator_command_dead_letters where command_id = 'legacy-secret'")" == *"[REDACTED]"* ]]
+[[ "$("${PSQL[@]}" -Atqc "select error_message from public.orchestrator_command_dead_letters where command_id = 'legacy-secret'")" != *"bearer-value"* ]]
+[[ "$("${PSQL[@]}" -Atqc "select error_message from public.orchestrator_command_dead_letters where command_id = 'legacy-secret'")" != *"message-secret"* ]]
+[[ "$("${PSQL[@]}" -Atqc "select public.prune_orchestrator_command_dead_letters(now() - interval '90 days', now() - interval '30 days', 1)")" == "1" ]]
+[[ "$("${PSQL[@]}" -Atqc "select count(*) from public.orchestrator_command_dead_letters where command_id in ('expired-dead', 'expired-resolved')")" == "1" ]]
+[[ "$("${PSQL[@]}" -Atqc "select public.prune_orchestrator_command_dead_letters(now() - interval '90 days', now() - interval '30 days', 10)")" == "1" ]]
+
 seed_attempt() {
   local attempt_id="$1"
   local session_id="$2"

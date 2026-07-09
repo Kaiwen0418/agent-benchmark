@@ -18,6 +18,10 @@ const commandDlqMigration = readFileSync(
   new URL("../../../../supabase/migrations/20260619000017_orchestrator_command_dlq.sql", import.meta.url),
   "utf8",
 );
+const boundedCommandDlqMigration = readFileSync(
+  new URL("../../../../supabase/migrations/20260709000028_bound_command_dead_letters.sql", import.meta.url),
+  "utf8",
+);
 
 test("attempt timeout migration keeps lifecycle writes under one row lock", () => {
   assert.match(migration, /for update;/i);
@@ -58,4 +62,16 @@ test("command DLQ preserves replay and failure diagnostics", () => {
   assert.match(commandDlqMigration, /payload_type text not null/i);
   assert.match(commandDlqMigration, /error_code text not null/i);
   assert.match(commandDlqMigration, /status in \('dead', 'replayed', 'resolved'\)/i);
+});
+
+test("command DLQ migration redacts history and prunes in bounded batches", () => {
+  assert.match(boundedCommandDlqMigration, /redact_orchestrator_command_payload/i);
+  assert.match(boundedCommandDlqMigration, /scrub_orchestrator_command_dead_letters/i);
+  assert.match(boundedCommandDlqMigration, /where scrubbed_at is null/i);
+  assert.match(boundedCommandDlqMigration, /Bearer.*REDACTED/is);
+  assert.match(boundedCommandDlqMigration, /for update skip locked/i);
+  assert.match(boundedCommandDlqMigration, /least\(coalesce\(p_limit, 500\), 5000\)/i);
+  assert.match(boundedCommandDlqMigration, /status = 'dead' and created_at < p_dead_before/i);
+  assert.match(boundedCommandDlqMigration, /status in \('replayed', 'resolved'\)/i);
+  assert.match(boundedCommandDlqMigration, /grant execute .* to service_role/is);
 });

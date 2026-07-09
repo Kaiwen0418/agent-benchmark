@@ -98,7 +98,16 @@ One durable Web-completion handoff per terminal attempt. The database transition
 
 ### `orchestrator_command_dead_letters`
 
-Durable diagnostics for Redis commands that exhausted handler retries. It records the original command identity, Stream/message location, partition, payload type and payload, final error, attempt count, and replay state. It has no foreign key to a single domain entity because commands can be partitioned by attempt, session, or maintenance key.
+Durable diagnostics for Redis commands that exhausted handler retries. It
+records the original command identity, Stream/message location, partition,
+payload type, redacted payload, final error, attempt count, and replay state.
+Sensitive payload keys and token-bearing strings are removed before
+persistence. Existing rows are scrubbed online in batches of at most 500 per
+maintenance sweep, avoiding a migration-time table rewrite. Dead records are
+retained for 90 days by default; replayed and resolved records are retained for
+30 days. Maintenance deletes at most 500 expired rows per sweep. Commands that
+require a removed credential must be reissued by their source rather than
+replayed from the diagnostic record.
 
 ## Redis Runtime Schema
 
