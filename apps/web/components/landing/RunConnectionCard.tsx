@@ -258,7 +258,7 @@ function SessionDetailPanel({
           </span>
         ) : null}
       </div>
-      <p className="max-h-40 overflow-y-auto py-1 text-sm leading-7 text-[#585248] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#c4bbb0] [&::-webkit-scrollbar-track]:bg-transparent">
+      <p className="max-h-40 overflow-y-auto py-1 text-[13px] leading-6 text-[#585248] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4] [&::-webkit-scrollbar-track]:bg-transparent">
         {session.goal}
       </p>
       {score && score.evaluators.length > 0 ? (
@@ -463,7 +463,7 @@ export function RunConnectionCard() {
     : [...timeline].slice(-1).reverse();
 
   return (
-    <div className="mt-4 flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
+    <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
       <button
         type="button"
         onClick={() => setCollapsed((current) => !current)}
@@ -495,7 +495,7 @@ export function RunConnectionCard() {
       </button>
 
       {!collapsed && (
-        <div className="mt-5 flex min-h-0 flex-1 flex-col space-y-5 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4]">
+        <div className="mt-5 space-y-5">
           {phase === "booting" ? (
             <section>
               <SectionTitle icon={<DocumentIcon />} title="Agent Connection" />
@@ -585,7 +585,7 @@ export function RunConnectionCard() {
                     ) : undefined
                   }
                 />
-                <div className={`space-y-1 ${showAllEvents ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
+                <div className={`space-y-1 ${showAllEvents ? "max-h-72 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4] [&::-webkit-scrollbar-track]:bg-transparent" : ""}`}>
                   {timeline.length > 0 ? (
                     displayedEvents.map((entry) => (
                       <EventRow
