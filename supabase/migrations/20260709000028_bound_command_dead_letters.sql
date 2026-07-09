@@ -110,8 +110,7 @@ begin
   set
     payload = public.redact_orchestrator_command_payload(dead_letter.payload),
     error_message = public.redact_orchestrator_command_text(dead_letter.error_message),
-    scrubbed_at = now(),
-    updated_at = now()
+    scrubbed_at = now()
   from candidates
   where dead_letter.id = candidates.id;
 
