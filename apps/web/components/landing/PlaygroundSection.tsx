@@ -39,7 +39,7 @@ export function PlaygroundSection({
         </div>
 
         <div className={cn("grid gap-6 items-start", showLivePreview && "lg:grid-cols-[0.42fr_0.58fr]")}>
-          <div className="scroll-panel lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:max-w-[560px]">
+          <div className="lg:sticky lg:top-6 lg:max-w-[560px]">
             <ConnectAgentCard />
           </div>
           {showLivePreview ? (

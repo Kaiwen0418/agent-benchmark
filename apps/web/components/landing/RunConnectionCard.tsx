@@ -258,7 +258,7 @@ function SessionDetailPanel({
           </span>
         ) : null}
       </div>
-      <p className="max-h-40 overflow-y-auto py-1 text-[13px] leading-6 text-[#585248] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4] [&::-webkit-scrollbar-track]:bg-transparent">
+      <p className="scroll-panel max-h-40 overflow-y-auto py-1 text-xs leading-5 text-[#585248]">
         {session.goal}
       </p>
       {score && score.evaluators.length > 0 ? (
@@ -311,7 +311,7 @@ export function RunConnectionCard() {
   const [copyState, setCopyState] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [selectedSessionIndex, setSelectedSessionIndex] = useState(0);
-  const [showAllEvents, setShowAllEvents] = useState(false);
+  const [eventPage, setEventPage] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
@@ -458,9 +458,18 @@ export function RunConnectionCard() {
     isSelectedActive && activeDeadline?.expiresAt && new Date(activeDeadline.expiresAt).getTime() - now < 60_000,
   );
 
-  const displayedEvents = showAllEvents
-    ? [...timeline].reverse()
-    : [...timeline].slice(-1).reverse();
+  const eventsPerPage = 6;
+  const reversedEvents = [...timeline].reverse();
+  const eventPageCount = Math.max(1, Math.ceil(reversedEvents.length / eventsPerPage));
+  const safeEventPage = Math.min(eventPage, eventPageCount - 1);
+  const pagedEvents = reversedEvents.slice(
+    safeEventPage * eventsPerPage,
+    (safeEventPage + 1) * eventsPerPage,
+  );
+
+  useEffect(() => {
+    setEventPage(0);
+  }, [timeline.length]);
 
   return (
     <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
@@ -574,20 +583,34 @@ export function RunConnectionCard() {
                   icon={<BoltIcon />}
                   title="Latest Events"
                   action={
-                    timeline.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllEvents((current) => !current)}
-                        className="text-xs font-medium text-[#245a8a] hover:underline"
-                      >
-                        {showAllEvents ? "Show less" : `Show all (${timeline.length})`}
-                      </button>
+                    eventPageCount > 1 ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={safeEventPage === 0}
+                          onClick={() => setEventPage((page) => Math.max(0, page - 1))}
+                          className="flex h-5 w-5 items-center justify-center rounded-full border border-[#d8d1c4] bg-white text-[10px] text-[#111111] disabled:opacity-40"
+                        >
+                          ←
+                        </button>
+                        <span className="text-[10px] tabular-nums text-[#6a655c]">
+                          {safeEventPage + 1} / {eventPageCount}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={safeEventPage === eventPageCount - 1}
+                          onClick={() => setEventPage((page) => Math.min(eventPageCount - 1, page + 1))}
+                          className="flex h-5 w-5 items-center justify-center rounded-full border border-[#d8d1c4] bg-white text-[10px] text-[#111111] disabled:opacity-40"
+                        >
+                          →
+                        </button>
+                      </div>
                     ) : undefined
                   }
                 />
-                <div className={`space-y-1 ${showAllEvents ? "max-h-72 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4] [&::-webkit-scrollbar-track]:bg-transparent" : ""}`}>
+                <div className="space-y-1">
                   {timeline.length > 0 ? (
-                    displayedEvents.map((entry) => (
+                    pagedEvents.map((entry) => (
                       <EventRow
                         key={entry.id}
                         label={entry.label}
