@@ -6,13 +6,17 @@ import { createPortal } from "react-dom";
 type ServiceUnavailableDialogProps = {
   message: string;
   onClose: () => void;
-  onRetry: () => void;
+  onRetry?: () => void;
+  retryLabel?: string;
+  retryDisabled?: boolean;
 };
 
 export function ServiceUnavailableDialog({
   message,
   onClose,
   onRetry,
+  retryLabel = "Retry attempt",
+  retryDisabled = false,
 }: ServiceUnavailableDialogProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -38,17 +42,20 @@ export function ServiceUnavailableDialog({
         </h2>
         <p className="mt-3 text-sm leading-7 text-[#5d574d]">{message}</p>
         <div className="mt-6 flex gap-3">
-          <button
-            type="button"
-            onClick={onRetry}
-            className="flex-1 rounded-full bg-[#111111] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#d7ff00] hover:text-[#111111]"
-          >
-            Retry attempt
-          </button>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={retryDisabled}
+              className="flex-1 rounded-full bg-[#111111] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#d7ff00] hover:text-[#111111] disabled:cursor-not-allowed disabled:bg-[#aaa59c] disabled:hover:text-white"
+            >
+              {retryLabel}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-[#cfc7ba] px-4 py-3 text-sm font-medium text-[#4d483f] transition hover:border-[#111111]"
+            className={`${onRetry ? "" : "flex-1 "}rounded-full border border-[#cfc7ba] px-4 py-3 text-sm font-medium text-[#4d483f] transition hover:border-[#111111]`}
           >
             Close
           </button>

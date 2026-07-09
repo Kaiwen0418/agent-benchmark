@@ -43,7 +43,11 @@ Response: `201 { run, quota }`. The service persists the self-reported identity 
 
 ### Connect Run
 
-`GET /api/runs/:runId/connect` resolves benchmark metadata, initializes or reuses a hosted attempt, and returns the attempt URL and session URLs. Hosted allocation failures use a structured response:
+`GET /api/runs/:runId/connect` is a one-time initialization read. It resolves
+benchmark metadata, initializes or reuses an active hosted attempt, and returns
+the attempt URL and session URLs. Clients must use `/hosted-sessions` or the run
+event stream for subsequent progress updates rather than polling `/connect`.
+Hosted allocation failures use a structured response:
 
 ```json
 {
@@ -53,6 +57,12 @@ Response: `201 { run, quota }`. The service persists the self-reported identity 
   "hostedSitesUrl": "https://hosted.example.com"
 }
 ```
+
+The endpoint returns `404` for an unknown run, `410` for a terminal run, and
+`429` when the per-client initialization limit is exceeded. Clients must stop
+retrying `404` and `410` responses. A `429` response includes `Retry-After`,
+`RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset`; clients must
+not retry before that delay expires.
 
 ### Event Stream
 

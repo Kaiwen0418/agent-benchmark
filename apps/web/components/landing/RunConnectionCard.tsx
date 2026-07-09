@@ -5,6 +5,11 @@ import type { HostedSessionBreakdown } from "@/lib/hosted-scoring";
 import { usePlaygroundStore } from "@/lib/playground-store";
 import { ServiceUnavailableDialog } from "./ServiceUnavailableDialog";
 import type { HostedSessionDeadline } from "@/lib/hosted-web";
+import {
+  buildRunConnectFailure,
+  connectRetryDelaySeconds,
+  type RunConnectFailure,
+} from "@/lib/run-connect-error";
 
 type RunConnectPayload = {
   runId: string;
@@ -49,13 +54,6 @@ type RunConnectPayload = {
       status: string;
     }>;
   };
-};
-
-type RunConnectError = {
-  error: string;
-  message: string;
-  retryable?: boolean;
-  hostedSitesUrl?: string;
 };
 
 function useNow(intervalMs = 1000) {
@@ -314,7 +312,7 @@ export function RunConnectionCard() {
   const activeDeadline = useActiveSessionDeadline(runId);
   const now = useNow();
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
-  const [connectError, setConnectError] = useState<RunConnectError | null>(null);
+  const [connectError, setConnectError] = useState<RunConnectFailure | null>(null);
   const [copyState, setCopyState] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [selectedSessionIndex, setSelectedSessionIndex] = useState(0);
@@ -337,12 +335,11 @@ export function RunConnectionCard() {
       });
 
       if (!response.ok) {
-        const errorPayload = (await response.json().catch(() => null)) as RunConnectError | null;
-        throw errorPayload ?? {
-          error: "run_connect_failed",
-          message: "Failed to load run connection info.",
-          retryable: true,
-        };
+        const errorPayload = await response.json().catch(() => null);
+        if (!cancelled) {
+          setConnectError(buildRunConnectFailure(response.status, response.headers, errorPayload));
+        }
+        return;
       }
 
       const nextPayload = (await response.json()) as RunConnectPayload;
@@ -352,14 +349,13 @@ export function RunConnectionCard() {
       }
     };
 
-    void load().catch((error: RunConnectError | Error) => {
+    void load().catch((error: Error) => {
       if (!cancelled) {
-        setConnectError({
-          error: "error" in error ? error.error : "run_connect_failed",
+        setConnectError(buildRunConnectFailure(503, new Headers(), {
+          error: "run_connect_failed",
           message: error.message || "Failed to load run connection info.",
-          retryable: "retryable" in error ? error.retryable : true,
-          hostedSitesUrl: "hostedSitesUrl" in error ? error.hostedSitesUrl : undefined,
-        });
+          retryable: true,
+        }));
       }
     });
 
@@ -380,13 +376,20 @@ export function RunConnectionCard() {
   }
 
   if (!payload) {
+    const retryDelay = connectError ? connectRetryDelaySeconds(connectError, now) : null;
+    const canRetry = retryDelay !== null;
+    const retryDisabled = typeof retryDelay === "number" && retryDelay > 0;
+    const retryLabel = retryDisabled ? `Retry in ${retryDelay}s` : "Retry connection";
+
     return (
       <>
         {connectError ? (
           <ServiceUnavailableDialog
             message={connectError.message}
             onClose={() => setConnectError(null)}
-            onRetry={() => setRetryNonce((value) => value + 1)}
+            onRetry={canRetry ? () => setRetryNonce((value) => value + 1) : undefined}
+            retryDisabled={retryDisabled}
+            retryLabel={retryLabel}
           />
         ) : null}
         <div
@@ -404,13 +407,16 @@ export function RunConnectionCard() {
                   Hosted URL: <span className="font-medium">{connectError.hostedSitesUrl}</span>
                 </p>
               ) : null}
-              <button
-                type="button"
-                onClick={() => setRetryNonce((value) => value + 1)}
-                className="mt-4 rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
-              >
-                Retry connection
-              </button>
+              {canRetry ? (
+                <button
+                  type="button"
+                  onClick={() => setRetryNonce((value) => value + 1)}
+                  disabled={retryDisabled}
+                  className="mt-4 rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-[#aaa59c]"
+                >
+                  {retryLabel}
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="mt-3 space-y-2">
