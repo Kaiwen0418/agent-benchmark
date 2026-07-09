@@ -76,9 +76,6 @@ importers:
       '@agentbench/test-cases':
         specifier: workspace:*
         version: link:../../packages/test-cases
-      '@supabase/ssr':
-        specifier: ^0.5.2
-        version: 0.5.2(@supabase/supabase-js@2.110.0)
       '@supabase/supabase-js':
         specifier: ^2.110.0
         version: 2.110.0
@@ -608,11 +605,6 @@ packages:
     resolution: {integrity: sha512-Wn2AWpneZuDFTkp/65tqctvoh+3JvyTjMam8sTMqVWy5BgkU8zAvFwilPYPPPhkINeKF8NAJKP7FclJ2iGCUMw==}
     engines: {node: '>=22.0.0'}
 
-  '@supabase/ssr@0.5.2':
-    resolution: {integrity: sha512-n3plRhr2Bs8Xun1o4S3k1CDv17iH5QY9YcoEvXX3bxV1/5XSasA0mNXYycFmADIdtdE6BG9MRjP5CGIs8qxC8A==}
-    peerDependencies:
-      '@supabase/supabase-js': ^2.43.4
-
   '@supabase/storage-js@2.110.0':
     resolution: {integrity: sha512-71+gU3HrhiylAhftY6FmO5PPdcsScnVcS766CVD+vTYK9qTDLbrx8FhgBYbqGm3iV/wkTfzrNJfjGsMeFRkJRQ==}
     engines: {node: '>=22.0.0'}
@@ -661,9 +653,6 @@ packages:
     resolution: {integrity: sha512-AqjqV5cHbFa0YRaQ+Dyw6lSm6as4h/Uf8LcZ7VN8i+Odr23ShFD5SUvVAR1d3rZqibFVs9c0VdtXdfQfkdcs3A==}
     cpu: [arm64]
     os: [win32]
-
-  '@types/cookie@0.6.0':
-    resolution: {integrity: sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA==}
 
   '@types/node@22.20.0':
     resolution: {integrity: sha512-QWlFW2wf3nTjC13/DqRnBpR4ZO36VJH/JVBkA/vcnmbTBNQIlnObqyqZE1tUR7+Ni23Lda8R1BxMfbXRpCUx5g==}
@@ -736,10 +725,6 @@ packages:
   commander@4.1.1:
     resolution: {integrity: sha512-NOKm8xhkzAjzFx8B2v5OAHT+u5pRQc2UCa2Vq9jYL/31o2wi9mxBA7LIFs3sV5VSC49z6pEhfbMULvShKj26WA==}
     engines: {node: '>= 6'}
-
-  cookie@0.7.2:
-    resolution: {integrity: sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==}
-    engines: {node: '>= 0.6'}
 
   cssesc@3.0.0:
     resolution: {integrity: sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==}
@@ -1408,12 +1393,6 @@ snapshots:
       '@supabase/phoenix': 0.4.4
       tslib: 2.8.1
 
-  '@supabase/ssr@0.5.2(@supabase/supabase-js@2.110.0)':
-    dependencies:
-      '@supabase/supabase-js': 2.110.0
-      '@types/cookie': 0.6.0
-      cookie: 0.7.2
-
   '@supabase/storage-js@2.110.0':
     dependencies:
       iceberg-js: 0.8.1
@@ -1455,8 +1434,6 @@ snapshots:
 
   '@turbo/windows-arm64@2.10.3':
     optional: true
-
-  '@types/cookie@0.6.0': {}
 
   '@types/node@22.20.0':
     dependencies:
@@ -1527,8 +1504,6 @@ snapshots:
   cluster-key-slot@1.1.2: {}
 
   commander@4.1.1: {}
-
-  cookie@0.7.2: {}
 
   cssesc@3.0.0: {}
 

@@ -16,7 +16,6 @@ cp apps/web/.env.example apps/web/.env.local
 Configure these values in `apps/web/.env.local`:
 
 - `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`

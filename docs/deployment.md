@@ -123,7 +123,6 @@ Optional web deployment secret:
 Each Vercel Web project must independently configure:
 
 - `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
