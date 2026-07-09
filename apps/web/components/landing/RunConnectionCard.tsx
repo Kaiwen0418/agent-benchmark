@@ -315,6 +315,10 @@ export function RunConnectionCard() {
   const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
+    setEventPage(0);
+  }, [timeline.length]);
+
+  useEffect(() => {
     if (!runId) {
       setPayload(null);
       setConnectError(null);
@@ -466,10 +470,6 @@ export function RunConnectionCard() {
     safeEventPage * eventsPerPage,
     (safeEventPage + 1) * eventsPerPage,
   );
-
-  useEffect(() => {
-    setEventPage(0);
-  }, [timeline.length]);
 
   return (
     <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
