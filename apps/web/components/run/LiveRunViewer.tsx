@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  deriveActiveHostedSessionId,
   deriveActiveHostedViewerUrl,
   deriveHostedViewerRevision,
 } from "@/lib/hosted-viewer";
@@ -168,7 +169,6 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   const [hostedEvents, setHostedEvents] = useState<StreamEvent[]>([]);
   const [suiteSessions, setSuiteSessions] = useState<HostedSuiteSession[]>([]);
   const [sessionDeadlines, setSessionDeadlines] = useState<Map<string, HostedSessionDeadline>>(new Map());
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const now = useNow();
 
   useEffect(() => {
@@ -212,7 +212,6 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
         if (!response.ok) return;
         const result = (await response.json()) as { sessions: HostedSessionDeadline[] };
         setSessionDeadlines(new Map(result.sessions.map((session) => [session.sessionId, session])));
-        setActiveSessionId(result.sessions.find((session) => session.status === "active")?.sessionId ?? null);
       } catch (error) {
         console.error("[live-viewer] failed to refresh session deadlines", error);
       }
@@ -224,9 +223,10 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   }, [runId]);
 
   useEffect(() => {
+    const activeSessionId = deriveActiveHostedSessionId(hostedEvents);
     setViewerUrl(deriveActiveHostedViewerUrl(hostedEvents, activeSessionId));
     setViewerRevision(deriveHostedViewerRevision(hostedEvents));
-  }, [hostedEvents, activeSessionId]);
+  }, [hostedEvents]);
 
   const terminalSummary =
     status === "timeout"
