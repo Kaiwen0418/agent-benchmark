@@ -129,6 +129,8 @@ Each Vercel Web project must independently configure:
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
 - optional `GUEST_RUN_LIMIT`
+- optional `RUN_CONNECT_RATE_LIMIT` (defaults to 5 requests per run and client
+  address per minute on each Web instance)
 
 Development values must point to the test hosted hostname and development Supabase target; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
 

@@ -1,12 +1,17 @@
 "use client";
 
 import type { AgentIdentity } from "@agentbench/protocol";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyHostedSessionProgress,
   hasTerminalHostedSessionProgress,
   type HostedSessionProgressSnapshot,
 } from "@/lib/hosted-progress";
+import {
+  buildRunConnectFailure,
+  connectRetryDelaySeconds,
+  type RunConnectFailure,
+} from "@/lib/run-connect-error";
 import { RunMetadataForm } from "./RunMetadataForm";
 
 type RunConnectPayload = {
@@ -47,10 +52,6 @@ type RunConnectPayload = {
   };
 };
 
-type ConnectionError = {
-  message: string;
-};
-
 function sessionTone(status: string) {
   if (status === "completed") {
     return "bg-[#e8f7ec] text-[#1f6b35]";
@@ -83,30 +84,48 @@ export function RunConnectClient({
 }) {
   const [registered, setRegistered] = useState(initiallyRegistered);
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<RunConnectFailure | null>(null);
+  const [progressError, setProgressError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [progressPollingComplete, setProgressPollingComplete] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const connectionInFlight = useRef(false);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const loadConnection = useCallback(async (quiet = false) => {
+    if (connectionInFlight.current) {
+      return;
+    }
+    connectionInFlight.current = true;
+
     if (!quiet) {
       setRefreshing(true);
     }
 
     try {
       const response = await fetch(`/api/runs/${runId}/connect`, { cache: "no-store" });
-      const result = await response.json().catch(() => null) as RunConnectPayload | ConnectionError | null;
+      const result = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(result && "message" in result ? result.message : "Unable to load the active benchmark.");
+        setConnectError(buildRunConnectFailure(response.status, response.headers, result));
+        return;
       }
 
       const nextPayload = result as RunConnectPayload;
       setPayload(nextPayload);
       setRegistered(!nextPayload.metadataRequired);
       setProgressPollingComplete(false);
-      setError(null);
+      setConnectError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load the active benchmark.");
+      setConnectError(buildRunConnectFailure(503, new Headers(), {
+        message: loadError instanceof Error ? loadError.message : "Unable to load the active benchmark.",
+        retryable: true,
+      }));
     } finally {
+      connectionInFlight.current = false;
       if (!quiet) {
         setRefreshing(false);
       }
@@ -135,9 +154,9 @@ export function RunConnectClient({
       const result = await response.json() as { sessions: HostedSessionProgressSnapshot[] };
       setPayload((current) => current ? applyHostedSessionProgress(current, result.sessions) : current);
       setProgressPollingComplete(hasTerminalHostedSessionProgress(result.sessions));
-      setError(null);
+      setProgressError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to refresh hosted suite progress.");
+      setProgressError(loadError instanceof Error ? loadError.message : "Unable to refresh hosted suite progress.");
     }
   }, [runId]);
 
@@ -174,6 +193,9 @@ export function RunConnectClient({
   const actionLabel = payload && payload.hostedWeb.progress.completed > 0
     ? "Proceed to next case"
     : "Open first case";
+  const retryDelay = connectError ? connectRetryDelaySeconds(connectError, now) : null;
+  const canRetryConnect = retryDelay !== null;
+  const retryDisabled = typeof retryDelay === "number" && retryDelay > 0;
 
   return (
     <main className="min-h-screen bg-[#f5f0e6] px-6 py-10 text-[#111111] md:px-10">
@@ -210,15 +232,16 @@ export function RunConnectClient({
             <section className="mt-8 rounded-[1.4rem] border border-[#d8d1c4] bg-white p-5">
               <div className="text-xs uppercase tracking-[0.18em] text-[#756e62]">Loading suite</div>
               <p className="mt-3 text-sm leading-7 text-[#4f4a43]">
-                {error ?? "Allocating the hosted suite and resolving the active case."}
+                {connectError?.message ?? "Allocating the hosted suite and resolving the active case."}
               </p>
-              {error ? (
+              {connectError && canRetryConnect ? (
                 <button
                   type="button"
                   onClick={() => void loadConnection()}
-                  className="mt-4 rounded-full bg-[#111111] px-5 py-2.5 text-sm font-medium text-white"
+                  disabled={retryDisabled || refreshing}
+                  className="mt-4 rounded-full bg-[#111111] px-5 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-[#aaa59c]"
                 >
-                  Retry
+                  {refreshing ? "Retrying..." : retryDisabled ? `Retry in ${retryDelay}s` : "Retry"}
                 </button>
               ) : null}
             </section>
@@ -226,9 +249,9 @@ export function RunConnectClient({
 
           {payload ? (
             <>
-              {error ? (
+              {progressError ? (
                 <div className="mt-6 rounded-[1rem] border border-[#ead2ca] bg-[#fff0eb] p-3 text-sm text-[#8a4334]">
-                  Refresh failed: {error}. Retrying automatically.
+                  Progress refresh failed: {progressError}. Retrying automatically.
                 </div>
               ) : null}
 
