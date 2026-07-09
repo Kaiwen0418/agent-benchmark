@@ -10,6 +10,8 @@ import {
   connectRetryDelaySeconds,
   type RunConnectFailure,
 } from "@/lib/run-connect-error";
+import { useHostedSessionPolling } from "@/hooks/use-hosted-session-polling";
+import { isTerminalRunStatus } from "@/lib/hosted-session-polling";
 
 type RunConnectPayload = {
   runId: string;
@@ -70,43 +72,6 @@ function formatCountdown(durationMs: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function useActiveSessionDeadline(runId: string | null) {
-  const [deadline, setDeadline] = useState<HostedSessionDeadline | null>(null);
-
-  useEffect(() => {
-    if (!runId) {
-      setDeadline(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const response = await fetch(`/api/runs/${runId}/hosted-sessions`, {
-          cache: "no-store",
-        });
-        if (!response.ok) return;
-        const result = (await response.json()) as { sessions: HostedSessionDeadline[] };
-        if (cancelled) return;
-        const active = result.sessions.find((session) => session.status === "active") ?? null;
-        setDeadline(active);
-      } catch (error) {
-        console.error("[run-connection-card] failed to refresh deadlines", error);
-      }
-    }
-
-    void load();
-    const interval = window.setInterval(load, 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [runId]);
-
-  return deadline;
 }
 
 function statusBadgeTone(status: string) {
@@ -304,7 +269,6 @@ export function RunConnectionCard() {
   const scoringSessions = usePlaygroundStore((state) => state.scoringSessions);
   const timeline = usePlaygroundStore((state) => state.timeline);
   const streamMode = usePlaygroundStore((state) => state.streamMode);
-  const activeDeadline = useActiveSessionDeadline(runId);
   const now = useNow();
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
   const [connectError, setConnectError] = useState<RunConnectFailure | null>(null);
@@ -313,6 +277,19 @@ export function RunConnectionCard() {
   const [selectedSessionIndex, setSelectedSessionIndex] = useState(0);
   const [eventPage, setEventPage] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
+  const hostedRefreshKey = timeline.filter(
+    (entry) => entry.label === "hosted.session.created" || entry.label === "hosted.score",
+  ).length;
+  const { sessions: deadlineSessions } = useHostedSessionPolling({
+    runId,
+    enabled:
+      executionMode === "external-agent" &&
+      (phase === "booting" || phase === "running"),
+    terminal: isTerminalRunStatus(phase),
+    refreshKey: hostedRefreshKey,
+  });
+  const activeDeadline: HostedSessionDeadline | null =
+    deadlineSessions.find((session) => session.status === "active") ?? null;
 
   useEffect(() => {
     setEventPage(0);

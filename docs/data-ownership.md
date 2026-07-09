@@ -34,6 +34,7 @@ This document defines who may read, mutate, and recover each state family. Owner
 | retry/failure keys | workers | workers | Retry diagnostics before DB DLQ | 24 hours |
 | partition lease keys | workers | workers/API readiness | Current partition ownership | 10 seconds, renewed every 3 seconds |
 | attempt initialization lease | orchestrator worker | orchestrator workers | Duplicate-work reduction only | 30 seconds |
+| `agentbench:orchestrator:run-session-projection:v1:<run-id>` | orchestrator API | orchestrator API replicas | Non-authoritative browser recovery projection | 10 seconds by default; invalidated by lifecycle writes |
 | hosted-sites process Map | one hosted-sites process | same process | Non-authoritative hot copy | Process lifetime |
 
 Session keys and command keys currently share one Redis instance but are separate namespaces. They do not yet have independent persistence, memory, ACL, or failover policy.

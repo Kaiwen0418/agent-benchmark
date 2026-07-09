@@ -25,7 +25,7 @@ Run multiple hosted-sites and orchestrator API replicas locally:
 docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=2
 ```
 
-Redis workloads are configured independently. Hosted-sites uses `HOSTED_SESSION_REDIS_URL=redis://session-redis:6379` for the session cache. Orchestrator API/workers use `ORCHESTRATOR_REDIS_URL=redis://orchestrator-redis:6379` for command Streams, locks, and response envelopes. Supabase remains the durable persistence store; orchestrator workers are its hosted-data writers.
+Redis workloads are configured independently. Hosted-sites uses `HOSTED_SESSION_REDIS_URL=redis://session-redis:6379` for the session cache. Orchestrator API/workers use `ORCHESTRATOR_REDIS_URL=redis://orchestrator-redis:6379` for command Streams, locks, response envelopes, and short-lived run-session read projections. `HOSTED_SESSION_PROJECTION_CACHE_TTL_SECONDS` defaults to 10 seconds. Supabase remains the durable persistence store; orchestrator workers are its hosted-data writers.
 
 The local Compose topology runs two workers: partitions `0-7` and `8-15`. Do not use `--scale` on a worker service because replicas would claim the same partitions. To add workers, define additional worker services and redistribute all partitions into disjoint sets. Readiness returns `503` while any partition has no active lease.
 

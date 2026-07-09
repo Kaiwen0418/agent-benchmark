@@ -156,6 +156,15 @@ The browser-facing URL never needs an attempt ID. The client does not calculate 
 
 When hosted-sites observes an expired write session, it evicts its runtime cache entry and sends an `attempt.timeout` command. A periodic orchestrator maintenance command also discovers expired durable sessions, atomically times out attempts, prunes old access logs, reconciles callback outbox rows, and retries delivery.
 
+Web clients treat `/api/runs/:runId/hosted-sessions` as a recovery projection,
+not a real-time event channel. Visible active-run pages refresh it when relevant
+run events arrive and use a 15-second fallback poll. Hidden pages and terminal
+runs do not poll, failed requests back off, and concurrent components share one
+in-flight request per run. The orchestrator serves this projection through a
+short Redis read-through cache and invalidates the run key after attempt
+initialization, session completion, or attempt timeout. PostgreSQL remains the
+source of truth and is used directly when Redis is unavailable.
+
 Recovery boundaries:
 
 - process-local Map loss is expected and recoverable from Redis

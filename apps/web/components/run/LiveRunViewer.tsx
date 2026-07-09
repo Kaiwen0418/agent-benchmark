@@ -8,6 +8,8 @@ import {
 } from "@/lib/hosted-viewer";
 import { deriveHostedScoring } from "@/lib/hosted-scoring";
 import type { HostedSessionDeadline } from "@/lib/hosted-web";
+import { useHostedSessionPolling } from "@/hooks/use-hosted-session-polling";
+import { isTerminalRunStatus } from "@/lib/hosted-session-polling";
 
 type LiveRunViewerProps = {
   runId: string;
@@ -168,8 +170,19 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   const [viewerRevision, setViewerRevision] = useState(0);
   const [hostedEvents, setHostedEvents] = useState<StreamEvent[]>([]);
   const [suiteSessions, setSuiteSessions] = useState<HostedSuiteSession[]>([]);
-  const [sessionDeadlines, setSessionDeadlines] = useState<Map<string, HostedSessionDeadline>>(new Map());
   const now = useNow();
+  const hostedRefreshKey = hostedEvents.filter(
+    (event) => event.type === "hosted.session.created" || event.type === "hosted.score",
+  ).length;
+  const { sessions: deadlineSessions } = useHostedSessionPolling({
+    runId,
+    enabled: !embedded,
+    terminal: isTerminalRunStatus(status),
+    refreshKey: hostedRefreshKey,
+  });
+  const sessionDeadlines = new Map(
+    deadlineSessions.map((session) => [session.sessionId, session]),
+  );
 
   useEffect(() => {
     const source = new EventSource(`/api/runs/${runId}/stream`);
@@ -200,27 +213,6 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       source.close();
     };
   }, [initialScore, initialStatus, initialErrorMessage, runId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    async function fetchDeadlines() {
-      try {
-        const response = await fetch(`/api/runs/${runId}/hosted-sessions`, {
-          cache: "no-store",
-        });
-        if (!response.ok) return;
-        const result = (await response.json()) as { sessions: HostedSessionDeadline[] };
-        setSessionDeadlines(new Map(result.sessions.map((session) => [session.sessionId, session])));
-      } catch (error) {
-        console.error("[live-viewer] failed to refresh session deadlines", error);
-      }
-    }
-
-    void fetchDeadlines();
-    const interval = window.setInterval(fetchDeadlines, 5000);
-    return () => window.clearInterval(interval);
-  }, [runId]);
 
   useEffect(() => {
     const activeSessionId = deriveActiveHostedSessionId(hostedEvents);
