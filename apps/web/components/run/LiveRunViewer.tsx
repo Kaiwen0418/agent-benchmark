@@ -181,7 +181,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       setErrorMessage(payload.run?.errorMessage ?? initialErrorMessage);
       setFrameUrl(deriveLiveFrameUrl(payload));
       const nextHostedEvents = payload.events.filter((item) => item.type.startsWith("hosted."));
-      setHostedEvents(nextHostedEvents.slice(-8));
+      setHostedEvents(nextHostedEvents);
       setSuiteSessions(deriveHostedSuiteSessions(nextHostedEvents));
     });
 
@@ -383,9 +383,10 @@ function HostedEventFallback({ events, compact = false }: { events: StreamEvent[
     );
   }
 
+  const displayEvents = events.slice(-8);
   return (
     <div className="flex h-full flex-col justify-end gap-2 p-4">
-      {events.map((event, index) => (
+      {displayEvents.map((event, index) => (
         <div
           key={`${event.type}-${index}`}
           className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-left"
