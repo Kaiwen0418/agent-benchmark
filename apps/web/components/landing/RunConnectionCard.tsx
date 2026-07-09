@@ -240,16 +240,17 @@ function SessionDetailPanel({
   return (
     <div className="rounded-[1rem] border border-[#e8e4da] bg-[#fbf8f3] px-4 py-3">
       <div className="text-sm font-semibold text-[#111111]">{session.title ?? session.taskSlug}</div>
-      <p className="max-h-28 overflow-y-auto pr-1 text-sm leading-7 text-[#585248] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4]">
-        {session.goal}
-      </p>
-      <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#8f897e]">
-        <span>{session.app}</span>
-        <span>·</span>
-        <span>Session {session.sequenceIndex + 1}</span>
+      <div className="mt-1 flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider">
+        {isActive && countdownText ? (
+          <span className={`font-semibold ${countdownUrgent ? "text-[#d45b45]" : "text-[#6a655c]"}`}>
+            {countdownText}
+          </span>
+        ) : (
+          <span className="text-[#8f897e]">{session.app}</span>
+        )}
         {score ? (
           <span
-            className={`ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${
+            className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${
               score.status === "passed" ? "bg-[#e8f7ec] text-[#1f6b35]" : "bg-[#fff1ed] text-[#8a2d1f]"
             }`}
           >
@@ -257,15 +258,9 @@ function SessionDetailPanel({
           </span>
         ) : null}
       </div>
-      {isActive && countdownText ? (
-        <div
-          className={`mt-2 text-[10px] font-semibold uppercase tracking-wider ${
-            countdownUrgent ? "text-[#d45b45]" : "text-[#6a655c]"
-          }`}
-        >
-          {countdownText}
-        </div>
-      ) : null}
+      <p className="max-h-40 overflow-y-auto py-1 text-sm leading-7 text-[#585248] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#c4bbb0] [&::-webkit-scrollbar-track]:bg-transparent">
+        {session.goal}
+      </p>
       {score && score.evaluators.length > 0 ? (
         <div className="mt-3 space-y-1.5 border-t border-[#e2ddd3] pt-3">
           {score.evaluators.map((evaluator) => (
@@ -465,10 +460,10 @@ export function RunConnectionCard() {
 
   const displayedEvents = showAllEvents
     ? [...timeline].reverse()
-    : [...timeline].slice(-5).reverse();
+    : [...timeline].slice(-1).reverse();
 
   return (
-    <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
+    <div className="mt-4 flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
       <button
         type="button"
         onClick={() => setCollapsed((current) => !current)}
@@ -500,7 +495,7 @@ export function RunConnectionCard() {
       </button>
 
       {!collapsed && (
-        <div className="mt-5 space-y-5">
+        <div className="mt-5 flex min-h-0 flex-1 flex-col space-y-5 overflow-y-auto pr-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4]">
           {phase === "booting" ? (
             <section>
               <SectionTitle icon={<DocumentIcon />} title="Agent Connection" />
@@ -579,13 +574,13 @@ export function RunConnectionCard() {
                   icon={<BoltIcon />}
                   title="Latest Events"
                   action={
-                    timeline.length > 5 ? (
+                    timeline.length > 1 ? (
                       <button
                         type="button"
                         onClick={() => setShowAllEvents((current) => !current)}
                         className="text-xs font-medium text-[#245a8a] hover:underline"
                       >
-                        {showAllEvents ? "Show less" : "View all"}
+                        {showAllEvents ? "Show less" : `Show all (${timeline.length})`}
                       </button>
                     ) : undefined
                   }

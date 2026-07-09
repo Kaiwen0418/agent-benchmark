@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { deriveHostedViewerRevision, deriveHostedViewerUrl } from "@/lib/hosted-viewer";
+import {
+  deriveActiveHostedViewerUrl,
+  deriveHostedViewerRevision,
+} from "@/lib/hosted-viewer";
 import { deriveHostedScoring } from "@/lib/hosted-scoring";
 import type { HostedSessionDeadline } from "@/lib/hosted-web";
 
@@ -165,6 +168,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   const [hostedEvents, setHostedEvents] = useState<StreamEvent[]>([]);
   const [suiteSessions, setSuiteSessions] = useState<HostedSuiteSession[]>([]);
   const [sessionDeadlines, setSessionDeadlines] = useState<Map<string, HostedSessionDeadline>>(new Map());
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const now = useNow();
 
   useEffect(() => {
@@ -177,8 +181,6 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       setErrorMessage(payload.run?.errorMessage ?? initialErrorMessage);
       setFrameUrl(deriveLiveFrameUrl(payload));
       const nextHostedEvents = payload.events.filter((item) => item.type.startsWith("hosted."));
-      setViewerUrl(deriveHostedViewerUrl(nextHostedEvents));
-      setViewerRevision(deriveHostedViewerRevision(nextHostedEvents));
       setHostedEvents(nextHostedEvents.slice(-8));
       setSuiteSessions(deriveHostedSuiteSessions(nextHostedEvents));
     });
@@ -210,6 +212,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
         if (!response.ok) return;
         const result = (await response.json()) as { sessions: HostedSessionDeadline[] };
         setSessionDeadlines(new Map(result.sessions.map((session) => [session.sessionId, session])));
+        setActiveSessionId(result.sessions.find((session) => session.status === "active")?.sessionId ?? null);
       } catch (error) {
         console.error("[live-viewer] failed to refresh session deadlines", error);
       }
@@ -219,6 +222,11 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
     const interval = window.setInterval(fetchDeadlines, 5000);
     return () => window.clearInterval(interval);
   }, [runId]);
+
+  useEffect(() => {
+    setViewerUrl(deriveActiveHostedViewerUrl(hostedEvents, activeSessionId));
+    setViewerRevision(deriveHostedViewerRevision(hostedEvents));
+  }, [hostedEvents, activeSessionId]);
 
   const terminalSummary =
     status === "timeout"

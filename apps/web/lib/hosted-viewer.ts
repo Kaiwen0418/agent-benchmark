@@ -66,6 +66,38 @@ export function deriveHostedViewerUrl(events: HostedViewerEvent[]) {
   return activeUrl;
 }
 
+export function deriveActiveHostedViewerUrl(events: HostedViewerEvent[], activeSessionId: string | null) {
+  if (!activeSessionId) {
+    return deriveHostedViewerUrl(events);
+  }
+
+  const sessions = new Map<string, { url: string; sequenceIndex: number }>();
+
+  for (const event of events) {
+    const sessionId = sessionIdFromEvent(event);
+    if (sessionId !== activeSessionId) continue;
+
+    if (event.type === "hosted.session.created" && typeof event.payload.viewerStartUrl === "string") {
+      sessions.set(sessionId, {
+        url: event.payload.viewerStartUrl,
+        sequenceIndex:
+          typeof event.payload.sequenceIndex === "number" && Number.isFinite(event.payload.sequenceIndex)
+            ? event.payload.sequenceIndex
+            : sessions.size,
+      });
+      continue;
+    }
+
+    if (event.type === "hosted.page.load" && typeof event.payload.url === "string") {
+      const viewerSession = sessions.get(sessionId);
+      if (!viewerSession) continue;
+      return applyNavigation(viewerSession.url, event.payload.url);
+    }
+  }
+
+  return sessions.get(activeSessionId)?.url ?? deriveHostedViewerUrl(events);
+}
+
 export function deriveHostedViewerRevision(events: HostedViewerEvent[]) {
   return events.filter(
     (event) =>
