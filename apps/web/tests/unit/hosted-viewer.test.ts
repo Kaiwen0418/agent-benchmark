@@ -91,6 +91,32 @@ test("hosted viewer follows the first unscored session instead of stale page loa
   assert.equal(viewerUrl, "https://hosted.example/notes?session=view-token-2");
 });
 
+test("hosted viewer follows the latest page load for the active session", () => {
+  const viewerUrl = deriveActiveHostedViewerUrl(
+    [
+      {
+        type: "hosted.session.created",
+        payload: {
+          sessionId: "session-2",
+          sequenceIndex: 1,
+          viewerStartUrl: "https://hosted.example/repository?session=view-token-2",
+        },
+      },
+      {
+        type: "hosted.page.load",
+        payload: { sessionId: "session-2", url: "/repository/cart" },
+      },
+      {
+        type: "hosted.page.load",
+        payload: { sessionId: "session-2", url: "/repository/merge-request/42" },
+      },
+    ],
+    "session-2",
+  );
+
+  assert.equal(viewerUrl, "https://hosted.example/repository/merge-request/42?session=view-token-2");
+});
+
 test("derive active hosted session id picks the first created session without a score", () => {
   const activeSessionId = deriveActiveHostedSessionId([
     {
@@ -108,6 +134,25 @@ test("derive active hosted session id picks the first created session without a 
     {
       type: "hosted.score",
       payload: { sessionId: "session-1", score: 1 },
+    },
+  ]);
+
+  assert.equal(activeSessionId, "session-2");
+});
+
+test("derive active hosted session id prefers persisted session progress", () => {
+  const activeSessionId = deriveActiveHostedSessionId([
+    {
+      type: "hosted.session.created",
+      payload: { sessionId: "session-1", sequenceIndex: 0 },
+    },
+    {
+      type: "hosted.session.created",
+      payload: { sessionId: "session-2", sequenceIndex: 1 },
+    },
+    {
+      type: "hosted.session.progress",
+      payload: { activeSessionId: "session-2", sessions: [] },
     },
   ]);
 
@@ -134,9 +179,10 @@ test("hosted viewer revision advances only for state-bearing events", () => {
     deriveHostedViewerRevision([
       { type: "hosted.action", payload: { type: "click" } },
       { type: "hosted.page.load", payload: {} },
+      { type: "hosted.session.progress", payload: {} },
       { type: "hosted.task_signal", payload: {} },
       { type: "hosted.score", payload: {} },
     ]),
-    3,
+    4,
   );
 });
