@@ -14,6 +14,9 @@ importers:
 
   apps/hosted-orchestrator:
     dependencies:
+      '@agentbench/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@agentbench/scoring':
         specifier: workspace:*
         version: link:../../packages/scoring
