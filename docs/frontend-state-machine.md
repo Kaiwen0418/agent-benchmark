@@ -41,8 +41,9 @@ stateDiagram-v2
 ## Data Priority
 
 1. Terminal status and final score from the run API.
-2. `hosted.score` events for the current attempt and their session weights.
-3. Generic `score.updated` events.
-4. Show `--` when no valid score exists; never present one evaluator score as the suite score.
+2. `hosted.session.progress.activeSessionId` selects the iframe's current hosted session; use its matching `hosted.page.load` events for the latest route.
+3. `hosted.score` events for the current attempt and their session weights.
+4. Generic `score.updated` events.
+5. Show `--` when no valid score exists; never present one evaluator score as the suite score.
 
 All hosted scores are isolated by `attemptId`. Events from old or superseded attempts must not affect the current aggregate.

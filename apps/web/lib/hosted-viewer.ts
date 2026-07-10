@@ -72,6 +72,7 @@ export function deriveActiveHostedViewerUrl(events: HostedViewerEvent[], activeS
   }
 
   const sessions = new Map<string, { url: string; sequenceIndex: number }>();
+  let activeUrl: string | null = null;
 
   for (const event of events) {
     const sessionId = sessionIdFromEvent(event);
@@ -91,23 +92,33 @@ export function deriveActiveHostedViewerUrl(events: HostedViewerEvent[], activeS
     if (event.type === "hosted.page.load" && typeof event.payload.url === "string") {
       const viewerSession = sessions.get(sessionId);
       if (!viewerSession) continue;
-      return applyNavigation(viewerSession.url, event.payload.url);
+      activeUrl = applyNavigation(viewerSession.url, event.payload.url);
     }
   }
 
-  return sessions.get(activeSessionId)?.url ?? deriveHostedViewerUrl(events);
+  return activeUrl ?? sessions.get(activeSessionId)?.url ?? deriveHostedViewerUrl(events);
 }
 
 export function deriveHostedViewerRevision(events: HostedViewerEvent[]) {
   return events.filter(
     (event) =>
       event.type === "hosted.page.load" ||
+      event.type === "hosted.session.progress" ||
       event.type === "hosted.task_signal" ||
       event.type === "hosted.score",
   ).length;
 }
 
 export function deriveActiveHostedSessionId(events: HostedViewerEvent[]) {
+  // The persisted progress projection is emitted before the score event and
+  // remains correct when a scorer event is delayed or absent from a replay.
+  const latestProgress = [...events]
+    .reverse()
+    .find((event) => event.type === "hosted.session.progress");
+  if (typeof latestProgress?.payload.activeSessionId === "string") {
+    return latestProgress.payload.activeSessionId;
+  }
+
   const sessions = new Map<string, { sequenceIndex: number }>();
 
   for (const event of events) {
