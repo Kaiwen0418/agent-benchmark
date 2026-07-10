@@ -486,6 +486,7 @@ function hostedSessionProgressPayload(params: {
   attemptId: string;
   activeSessionId: string | null;
   activeSequenceIndex: number | null;
+  viewerStartUrl: string | null;
   sessions: Array<{
     sessionId: string;
     app: string;
@@ -502,6 +503,7 @@ function hostedSessionProgressPayload(params: {
     attemptId: params.attemptId,
     activeSessionId: params.activeSessionId,
     activeSequenceIndex: params.activeSequenceIndex,
+    viewerStartUrl: params.viewerStartUrl,
     progress: {
       total: sessions.length,
       completed: sessions.filter((session) => session.status === "completed").length,
@@ -515,6 +517,7 @@ async function forwardSessionProgressForAttempt(runId: string | null, attemptId:
     return;
   }
   const readModel = await loadAttemptReadModel(attemptId);
+  const activeSession = readModel.sessions.find((session) => session.id === readModel.activeSessionId) ?? null;
   await forwardRunEventForRun(
     runId,
     "hosted.session.progress",
@@ -522,6 +525,10 @@ async function forwardSessionProgressForAttempt(runId: string | null, attemptId:
       attemptId,
       activeSessionId: readModel.activeSessionId,
       activeSequenceIndex: readModel.activeSequenceIndex,
+      viewerStartUrl:
+        activeSession?.startPath && activeSession.expiresAt
+          ? buildViewerStartUrl(activeSession.id, activeSession.startPath, activeSession.expiresAt)
+          : null,
       sessions: readModel.sessions.map((session) => ({
         sessionId: session.id,
         app: session.app,
@@ -974,6 +981,7 @@ async function initializeAttempt(params: InitializeAttemptParams) {
       attemptId: attemptRow.id,
       activeSessionId: firstSession?.sessionId ?? null,
       activeSequenceIndex: firstSession?.sequenceIndex ?? null,
+      viewerStartUrl: firstSession?.viewerStartUrl ?? null,
       sessions: sessions.map((session) => ({
         sessionId: session.sessionId,
         app: session.app,
