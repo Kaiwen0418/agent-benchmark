@@ -75,6 +75,22 @@ export function deriveActiveHostedViewerUrl(events: HostedViewerEvent[], activeS
   let activeUrl: string | null = null;
 
   for (const event of events) {
+    if (
+      event.type === "hosted.session.progress" &&
+      event.payload.activeSessionId === activeSessionId &&
+      typeof event.payload.viewerStartUrl === "string"
+    ) {
+      sessions.set(activeSessionId, {
+        url: event.payload.viewerStartUrl,
+        sequenceIndex:
+          typeof event.payload.activeSequenceIndex === "number" && Number.isFinite(event.payload.activeSequenceIndex)
+            ? event.payload.activeSequenceIndex
+            : sessions.size,
+      });
+      activeUrl = event.payload.viewerStartUrl;
+      continue;
+    }
+
     const sessionId = sessionIdFromEvent(event);
     if (sessionId !== activeSessionId) continue;
 

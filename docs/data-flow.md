@@ -51,7 +51,7 @@ flowchart TD
   Cache --> Handle
 ```
 
-Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy. Hosted-sites has no database credential. Its authenticated recovery request is resolved by the orchestrator from the latest successfully persisted `metadata.appState` snapshot, which may lag state that had existed only in Redis.
+Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy. Hosted-sites has no database credential. Its authenticated recovery request is resolved by the orchestrator from the latest successfully persisted `metadata.appState` snapshot, which may lag state that had existed only in Redis. Each durable `hosted.session.progress` event includes a short-lived viewer URL for its active session only, allowing the Web iframe to advance without exposing future write-session tokens.
 
 The current local-Map fallback can serve stale state after a Redis miss, and Redis session writes are not revision-checked. These are known horizontal-scaling gaps, not guarantees supplied by the diagram.
 

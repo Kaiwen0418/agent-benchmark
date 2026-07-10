@@ -117,6 +117,36 @@ test("hosted viewer follows the latest page load for the active session", () => 
   assert.equal(viewerUrl, "https://hosted.example/repository/merge-request/42?session=view-token-2");
 });
 
+test("hosted viewer switches to the active session URL from progress", () => {
+  const viewerUrl = deriveActiveHostedViewerUrl(
+    [
+      {
+        type: "hosted.session.created",
+        payload: {
+          sessionId: "session-1",
+          sequenceIndex: 0,
+          viewerStartUrl: "https://hosted.example/shopping?session=view-token-1",
+        },
+      },
+      {
+        type: "hosted.session.created",
+        payload: { sessionId: "session-2", sequenceIndex: 1 },
+      },
+      {
+        type: "hosted.session.progress",
+        payload: {
+          activeSessionId: "session-2",
+          activeSequenceIndex: 1,
+          viewerStartUrl: "https://hosted.example/forum?session=view-token-2",
+        },
+      },
+    ],
+    "session-2",
+  );
+
+  assert.equal(viewerUrl, "https://hosted.example/forum?session=view-token-2");
+});
+
 test("derive active hosted session id picks the first created session without a score", () => {
   const activeSessionId = deriveActiveHostedSessionId([
     {
