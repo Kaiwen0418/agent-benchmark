@@ -106,6 +106,8 @@ type AttemptOverviewSession = HostedAttemptReadModel["sessions"][number] & {
   title: string | null;
   goal: string;
   startPath: string | null;
+  expiresAt: string | null;
+  timeLimitMinutes: number | null;
 };
 
 let supabaseAdmin: SupabaseClient<Database> | null | undefined;
@@ -358,7 +360,7 @@ async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptRea
     loadAttemptMetadata(attemptId),
     supabase
       .from("hosted_web_sessions")
-      .select("id, app, task_slug, sequence_index, status, start_url, metadata")
+      .select("id, app, task_slug, sequence_index, status, start_url, expires_at, metadata")
       .eq("attempt_id", attemptId)
       .order("sequence_index", { ascending: true }),
   ]);
@@ -369,6 +371,7 @@ async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptRea
     metadata,
     sessions: rows.map((row) => {
       const rowMetadata = extractMetadata(row.metadata as Record<string, unknown> | null);
+      const timeLimitMinutes = timeLimitMinutesFromMetadata(rowMetadata);
       const token = tokenFromStartUrl(row.start_url) ?? makeId("missing");
       const startPath = (() => {
         try {
@@ -398,6 +401,8 @@ async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptRea
             ? row.status
             : "created",
         startPath,
+        expiresAt: row.expires_at,
+        timeLimitMinutes,
       };
     }),
   });
@@ -428,11 +433,19 @@ async function loadLatestSessionResult(sessionId: string) {
 }
 
 async function forwardRunEvent(session: AttemptLifecycleSession, type: string, payload: Record<string, unknown>) {
-  if (!agentbenchWebUrl || !session.runId) {
+  if (!session.runId) {
     return;
   }
 
-  await fetch(`${agentbenchWebUrl}/api/runs/${encodeURIComponent(session.runId)}/events`, {
+  await forwardRunEventForRun(session.runId, type, payload);
+}
+
+async function forwardRunEventForRun(runId: string, type: string, payload: Record<string, unknown>) {
+  if (!agentbenchWebUrl) {
+    return;
+  }
+
+  await fetch(`${agentbenchWebUrl}/api/runs/${encodeURIComponent(runId)}/events`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -453,12 +466,73 @@ async function forwardCompletion(
 }
 
 async function forwardTimeoutCompletion(params: {
+  attemptId: string;
   runId: string;
   summary: string;
   score?: number;
 }) {
-  void params;
+  await forwardSessionProgressForAttempt(params.runId, params.attemptId);
   await flushCallbackOutbox();
+}
+
+function timeLimitMinutesFromMetadata(metadata: Record<string, unknown>) {
+  return typeof metadata.timeLimitMinutesPerTestcase === "number" &&
+    Number.isFinite(metadata.timeLimitMinutesPerTestcase)
+    ? metadata.timeLimitMinutesPerTestcase
+    : null;
+}
+
+function hostedSessionProgressPayload(params: {
+  attemptId: string;
+  activeSessionId: string | null;
+  activeSequenceIndex: number | null;
+  sessions: Array<{
+    sessionId: string;
+    app: string;
+    taskSlug: string;
+    status: string;
+    sequenceIndex: number;
+    expiresAt: string | null;
+    timeLimitMinutes: number | null;
+  }>;
+}) {
+  const sessions = [...params.sessions].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+  return {
+    source: "hosted-orchestrator",
+    attemptId: params.attemptId,
+    activeSessionId: params.activeSessionId,
+    activeSequenceIndex: params.activeSequenceIndex,
+    progress: {
+      total: sessions.length,
+      completed: sessions.filter((session) => session.status === "completed").length,
+    },
+    sessions,
+  };
+}
+
+async function forwardSessionProgressForAttempt(runId: string | null, attemptId: string | null) {
+  if (!runId || !attemptId) {
+    return;
+  }
+  const readModel = await loadAttemptReadModel(attemptId);
+  await forwardRunEventForRun(
+    runId,
+    "hosted.session.progress",
+    hostedSessionProgressPayload({
+      attemptId,
+      activeSessionId: readModel.activeSessionId,
+      activeSequenceIndex: readModel.activeSequenceIndex,
+      sessions: readModel.sessions.map((session) => ({
+        sessionId: session.id,
+        app: session.app,
+        taskSlug: session.taskSlug,
+        status: session.status,
+        sequenceIndex: session.sequenceIndex,
+        expiresAt: session.expiresAt,
+        timeLimitMinutes: session.timeLimitMinutes ?? null,
+      })),
+    }),
+  );
 }
 
 async function recoverInitializedAttempt(params: {
@@ -844,6 +918,8 @@ async function initializeAttempt(params: InitializeAttemptParams) {
         goal: metadata.goal,
         title: typeof metadata.title === "string" ? metadata.title : null,
         status: row.status,
+        expiresAt: seed.expires_at,
+        timeLimitMinutes: suiteTimeLimitMinutes,
       };
     })
     .filter((row): row is NonNullable<typeof row> => Boolean(row))
@@ -890,6 +966,24 @@ async function initializeAttempt(params: InitializeAttemptParams) {
         },
       ),
     ),
+  );
+  await forwardRunEventForRun(
+    runId,
+    "hosted.session.progress",
+    hostedSessionProgressPayload({
+      attemptId: attemptRow.id,
+      activeSessionId: firstSession?.sessionId ?? null,
+      activeSequenceIndex: firstSession?.sequenceIndex ?? null,
+      sessions: sessions.map((session) => ({
+        sessionId: session.sessionId,
+        app: session.app,
+        taskSlug: session.taskSlug,
+        status: session.status,
+        sequenceIndex: session.sequenceIndex,
+        expiresAt: session.expiresAt,
+        timeLimitMinutes: session.timeLimitMinutes ?? null,
+      })),
+    }),
   );
 
   return {
@@ -1129,6 +1223,7 @@ const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOver
     }),
   loadAttemptReadModel,
   forwardRunEvent,
+  forwardSessionProgress: forwardSessionProgressForAttempt,
   forwardCompletion,
   publicBaseUrl: hostedSitesPublicBaseUrl,
   defaultStartPathForApp,

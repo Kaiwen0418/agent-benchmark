@@ -96,7 +96,12 @@ type AttemptLifecycleDeps = {
   loadAttemptSessions: (attemptId: string) => Promise<AttemptLifecycleAdvanceSession[]>;
   loadAttemptReadModel: (attemptId: string) => Promise<HostedAttemptReadModel<AttemptLifecycleAdvanceSession>>;
   loadLatestSessionResult: (sessionId: string) => Promise<HostedWebScoreResult | null>;
-  forwardTimeoutCompletion: (params: { runId: string; summary: string; score?: number }) => Promise<void>;
+  forwardTimeoutCompletion: (params: {
+    attemptId: string;
+    runId: string;
+    summary: string;
+    score?: number;
+  }) => Promise<void>;
   evictInMemorySessions: (sessionIds: string[]) => void;
   invalidateRunSessionProjection?: (runId: string) => Promise<void>;
 };
@@ -471,6 +476,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     if (runId) {
       await deps.invalidateRunSessionProjection?.(runId);
       await deps.forwardTimeoutCompletion({
+        attemptId: params.attemptId,
         runId,
         summary,
         score: 0,

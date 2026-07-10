@@ -1,9 +1,10 @@
 "use client";
 
 import type { AgentIdentity } from "@agentbench/protocol";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyHostedSessionProgress,
+  deriveHostedSessionProgressFromEvents,
   hasTerminalHostedSessionProgress,
 } from "@/lib/hosted-progress";
 import {
@@ -53,6 +54,17 @@ type RunConnectPayload = {
   };
 };
 
+type StreamPayload = {
+  run: {
+    status: string;
+    errorMessage?: string | null;
+  } | null;
+  events: Array<{
+    type: string;
+    payload: Record<string, unknown>;
+  }>;
+};
+
 function sessionTone(status: string) {
   if (status === "completed") {
     return "bg-[#e8f7ec] text-[#1f6b35]";
@@ -87,6 +99,7 @@ export function RunConnectClient({
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
   const [connectError, setConnectError] = useState<RunConnectFailure | null>(null);
   const [progressError, setProgressError] = useState<string | null>(null);
+  const [hostedEvents, setHostedEvents] = useState<StreamPayload["events"]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [progressPollingComplete, setProgressPollingComplete] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -146,12 +159,47 @@ export function RunConnectClient({
     enabled: registered && Boolean(payload) && !progressPollingComplete,
     terminal: isTerminalRunStatus(payload?.status),
   });
+  const eventProgressSessions = useMemo(() => deriveHostedSessionProgressFromEvents(hostedEvents), [hostedEvents]);
+  const effectiveProgressSessions = eventProgressSessions.length > 0 ? eventProgressSessions : progressSessions;
+  const hasConnectionPayload = Boolean(payload);
 
   useEffect(() => {
-    if (progressSessions.length === 0) return;
-    setPayload((current) => current ? applyHostedSessionProgress(current, progressSessions) : current);
-    setProgressPollingComplete(hasTerminalHostedSessionProgress(progressSessions));
-  }, [progressSessions]);
+    if (!registered || !hasConnectionPayload) {
+      return;
+    }
+
+    const source = new EventSource(`/api/runs/${runId}/stream`);
+
+    source.addEventListener("snapshot", (event) => {
+      const snapshot = JSON.parse((event as MessageEvent<string>).data) as StreamPayload;
+      setHostedEvents(snapshot.events.filter((item) => item.type.startsWith("hosted.")));
+      setPayload((current) => current ? {
+        ...current,
+        status: snapshot.run?.status ?? current.status,
+        errorMessage: snapshot.run?.errorMessage ?? current.errorMessage,
+      } : current);
+    });
+
+    source.addEventListener("terminal", () => {
+      source.close();
+    });
+
+    source.addEventListener("error", (event) => {
+      if (event instanceof MessageEvent) {
+        source.close();
+      }
+    });
+
+    return () => {
+      source.close();
+    };
+  }, [hasConnectionPayload, registered, runId]);
+
+  useEffect(() => {
+    if (effectiveProgressSessions.length === 0) return;
+    setPayload((current) => current ? applyHostedSessionProgress(current, effectiveProgressSessions) : current);
+    setProgressPollingComplete(hasTerminalHostedSessionProgress(effectiveProgressSessions));
+  }, [effectiveProgressSessions]);
 
   useEffect(() => {
     setProgressError(hostedProgressError);

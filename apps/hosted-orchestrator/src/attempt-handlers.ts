@@ -50,6 +50,7 @@ type AttemptHandlersDeps<TReadModel extends HostedAttemptReadModel> = {
   }) => Promise<TimeoutAttemptCommandResult>;
   loadAttemptReadModel: (attemptId: string) => Promise<TReadModel>;
   forwardRunEvent: (session: AttemptLifecycleSession, type: string, payload: Record<string, unknown>) => Promise<void>;
+  forwardSessionProgress: (runId: string | null, attemptId: string | null) => Promise<void>;
   forwardCompletion: (
     session: AttemptLifecycleSession,
     result: Pick<HostedWebSuiteScoreResult, "status" | "score" | "summary">,
@@ -151,6 +152,7 @@ export function createAttemptHandlers<TReadModel extends HostedAttemptReadModel>
   }): Promise<CompleteSessionHandlerResponse> {
     const completion = await deps.completeSessionCommand(params.session, params.result);
     if (!completion.duplicate) {
+      await deps.forwardSessionProgress(params.session.runId, params.session.attemptId);
       await deps.forwardRunEvent(params.session, "hosted.score", {
         ...completion.result,
         attemptId: params.session.attemptId,

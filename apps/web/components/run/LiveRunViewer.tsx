@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   deriveActiveHostedSessionId,
   deriveActiveHostedViewerUrl,
   deriveHostedViewerRevision,
 } from "@/lib/hosted-viewer";
 import { deriveHostedScoring } from "@/lib/hosted-scoring";
-import type { HostedSessionDeadline } from "@/lib/hosted-web";
 import { useHostedSessionPolling } from "@/hooks/use-hosted-session-polling";
 import { isTerminalRunStatus } from "@/lib/hosted-session-polling";
+import { deriveHostedSessionProgressFromEvents } from "@/lib/hosted-progress";
 
 type LiveRunViewerProps = {
   runId: string;
@@ -135,7 +135,7 @@ function deriveHostedSuiteSessions(events: StreamEvent[]) {
   return [...sessions.values()].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
 }
 
-function deriveSessionStatusLabel(deadline: HostedSessionDeadline | undefined, now: number) {
+function deriveSessionStatusLabel(deadline: { status: string; expiresAt?: string | null } | undefined, now: number) {
   if (!deadline) return null;
 
   if (deadline.status === "active" && deadline.expiresAt) {
@@ -171,17 +171,15 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   const [hostedEvents, setHostedEvents] = useState<StreamEvent[]>([]);
   const [suiteSessions, setSuiteSessions] = useState<HostedSuiteSession[]>([]);
   const now = useNow();
-  const hostedRefreshKey = hostedEvents.filter(
-    (event) => event.type === "hosted.session.created" || event.type === "hosted.score",
-  ).length;
   const { sessions: deadlineSessions } = useHostedSessionPolling({
     runId,
     enabled: !embedded,
     terminal: isTerminalRunStatus(status),
-    refreshKey: hostedRefreshKey,
   });
+  const eventProgressSessions = useMemo(() => deriveHostedSessionProgressFromEvents(hostedEvents), [hostedEvents]);
+  const effectiveDeadlineSessions = eventProgressSessions.length > 0 ? eventProgressSessions : deadlineSessions;
   const sessionDeadlines = new Map(
-    deadlineSessions.map((session) => [session.sessionId, session]),
+    effectiveDeadlineSessions.map((session) => [session.sessionId, session]),
   );
 
   useEffect(() => {

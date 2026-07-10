@@ -63,6 +63,7 @@ type PlaygroundStore = {
   activeTab: PanelTab;
   liveSlide: number;
   timeline: TimelineEntry[];
+  runEvents: RunEvent[];
   reasoning: string[];
   artifacts: ArtifactEntry[];
   liveFrameUrl: string | null;
@@ -106,6 +107,7 @@ const initialState = {
   activeTab: "events" as PanelTab,
   liveSlide: 0,
   timeline: [] as TimelineEntry[],
+  runEvents: [] as RunEvent[],
   reasoning: [] as string[],
   artifacts: [] as ArtifactEntry[],
   liveFrameUrl: null as string | null,
@@ -187,6 +189,8 @@ function eventSummary(event: RunEvent) {
       return `${String(event.payload.tool ?? "mcp.error")} failed`;
     case "hosted.session.created":
       return "Hosted session created";
+    case "hosted.session.progress":
+      return "Hosted session progress updated";
     case "hosted.page.load":
       return `Hosted page loaded${typeof event.payload.title === "string" ? `: ${event.payload.title}` : ""}`;
     case "hosted.action":
@@ -213,6 +217,10 @@ function hostedTimelineLabel(event: RunEvent) {
     return "hosted.session";
   }
 
+  if (event.type === "hosted.session.progress") {
+    return "hosted.session.progress";
+  }
+
   if (event.type === "hosted.page.load") {
     return "hosted.page.load";
   }
@@ -231,6 +239,13 @@ function hostedTimelineLabel(event: RunEvent) {
 function hostedTimelineDetail(event: RunEvent) {
   if (event.type === "hosted.session.created") {
     return `${String(event.payload.app ?? "hosted-app")} · ${String(event.payload.taskSlug ?? "hosted-task")}`;
+  }
+
+  if (event.type === "hosted.session.progress") {
+    const progress = event.payload.progress && typeof event.payload.progress === "object"
+      ? event.payload.progress as Record<string, unknown>
+      : {};
+    return `${String(progress.completed ?? "--")} / ${String(progress.total ?? "--")} sessions`;
   }
 
   if (event.type === "hosted.page.load") {
@@ -279,6 +294,7 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
         event.type === "mcp.response" ||
         event.type === "mcp.error" ||
         event.type === "hosted.session.created" ||
+        event.type === "hosted.session.progress" ||
         event.type === "hosted.page.load" ||
         event.type === "hosted.action" ||
         event.type === "hosted.task_signal" ||
@@ -315,6 +331,7 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
         event.type === "score.updated" ||
         event.type === "hosted.score" ||
         event.type === "hosted.session.created" ||
+        event.type === "hosted.session.progress" ||
         event.type === "hosted.page.load" ||
         event.type === "hosted.task_signal" ||
         event.type === "artifact.created" ||
@@ -427,6 +444,7 @@ function applyRunSnapshot(
     scoringSessions: hostedScoring.sessions,
     liveSlide: Math.min(Math.max(timeline.length, phase === "idle" ? 0 : 1), 4),
     timeline,
+    runEvents: events,
     reasoning: events.slice(-6).map(eventSummary),
     artifacts: mapArtifacts(artifacts),
     liveFrameUrl,
@@ -718,6 +736,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         score: null,
         scoringSessions: [],
         timeline: [],
+        runEvents: [],
         reasoning:
           mode === "external-agent"
             ? ["Run created", "Waiting for local agent connection"]

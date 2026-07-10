@@ -42,19 +42,20 @@ function makeHandlers(duplicate: boolean, forwardedEvents: string[]) {
     timeoutAttemptCommand: async () => { throw new Error("not used"); },
     loadAttemptReadModel: async () => ({}) as HostedAttemptReadModel,
     forwardRunEvent: async (_session, type) => { forwardedEvents.push(type); },
+    forwardSessionProgress: async () => { forwardedEvents.push("hosted.session.progress"); },
     forwardCompletion: async () => undefined,
     publicBaseUrl: "http://localhost:3003",
     defaultStartPathForApp: () => "/wiki",
   });
 }
 
-test("first completion forwards one hosted score event", async () => {
+test("first completion forwards hosted progress before hosted score", async () => {
   const forwardedEvents: string[] = [];
   const response = await makeHandlers(false, forwardedEvents).handleCompleteSession({ session, result: score });
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.body, score);
-  assert.deepEqual(forwardedEvents, ["hosted.score"]);
+  assert.deepEqual(forwardedEvents, ["hosted.session.progress", "hosted.score"]);
 });
 
 test("duplicate completion returns the first result without forwarding another score event", async () => {

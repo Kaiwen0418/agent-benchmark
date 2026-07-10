@@ -8,9 +8,10 @@ import {
   isTerminalRunStatus,
 } from "../../lib/hosted-session-polling";
 
-test("hosted session fallback polling starts at 15 seconds and backs off", () => {
+test("hosted session fallback polling starts at 60 seconds and backs off", () => {
   assert.equal(hostedSessionPollDelay(0), HOSTED_SESSION_POLL_INTERVAL_MS);
-  assert.equal(hostedSessionPollDelay(1), 30_000);
+  assert.equal(HOSTED_SESSION_POLL_INTERVAL_MS, 60_000);
+  assert.equal(hostedSessionPollDelay(1), HOSTED_SESSION_MAX_BACKOFF_MS);
   assert.equal(hostedSessionPollDelay(2), HOSTED_SESSION_MAX_BACKOFF_MS);
   assert.equal(hostedSessionPollDelay(20), HOSTED_SESSION_MAX_BACKOFF_MS);
 });

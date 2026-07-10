@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { HostedSessionBreakdown } from "@/lib/hosted-scoring";
 import { usePlaygroundStore } from "@/lib/playground-store";
 import { ServiceUnavailableDialog } from "./ServiceUnavailableDialog";
-import type { HostedSessionDeadline } from "@/lib/hosted-web";
 import {
   buildRunConnectFailure,
   connectRetryDelaySeconds,
@@ -12,6 +11,10 @@ import {
 } from "@/lib/run-connect-error";
 import { useHostedSessionPolling } from "@/hooks/use-hosted-session-polling";
 import { isTerminalRunStatus } from "@/lib/hosted-session-polling";
+import {
+  applyHostedSessionProgress,
+  deriveHostedSessionProgressFromEvents,
+} from "@/lib/hosted-progress";
 
 type RunConnectPayload = {
   runId: string;
@@ -268,6 +271,7 @@ export function RunConnectionCard() {
   const score = usePlaygroundStore((state) => state.score);
   const scoringSessions = usePlaygroundStore((state) => state.scoringSessions);
   const timeline = usePlaygroundStore((state) => state.timeline);
+  const runEvents = usePlaygroundStore((state) => state.runEvents);
   const streamMode = usePlaygroundStore((state) => state.streamMode);
   const now = useNow();
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
@@ -277,19 +281,16 @@ export function RunConnectionCard() {
   const [selectedSessionIndex, setSelectedSessionIndex] = useState(0);
   const [eventPage, setEventPage] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
-  const hostedRefreshKey = timeline.filter(
-    (entry) => entry.label === "hosted.session.created" || entry.label === "hosted.score",
-  ).length;
   const { sessions: deadlineSessions } = useHostedSessionPolling({
     runId,
     enabled:
       executionMode === "external-agent" &&
       (phase === "booting" || phase === "running"),
     terminal: isTerminalRunStatus(phase),
-    refreshKey: hostedRefreshKey,
   });
-  const activeDeadline: HostedSessionDeadline | null =
-    deadlineSessions.find((session) => session.status === "active") ?? null;
+  const eventProgressSessions = useMemo(() => deriveHostedSessionProgressFromEvents(runEvents), [runEvents]);
+  const progressSessions = eventProgressSessions.length > 0 ? eventProgressSessions : deadlineSessions;
+  const activeDeadline = progressSessions.find((session) => session.status === "active") ?? null;
 
   useEffect(() => {
     setEventPage(0);
@@ -346,6 +347,11 @@ export function RunConnectionCard() {
       setSelectedSessionIndex(currentIndex);
     }
   }, [payload?.hostedWeb.progress.currentIndex]);
+
+  useEffect(() => {
+    if (progressSessions.length === 0) return;
+    setPayload((current) => current ? applyHostedSessionProgress(current, progressSessions) : current);
+  }, [progressSessions]);
 
   if (!runId || executionMode !== "external-agent") {
     return null;
