@@ -28,6 +28,7 @@ export const runEventTypeSchema = z.enum([
   "mcp.response",
   "mcp.error",
   "hosted.session.created",
+  "hosted.session.progress",
   "hosted.page.load",
   "hosted.action",
   "hosted.task_signal",
