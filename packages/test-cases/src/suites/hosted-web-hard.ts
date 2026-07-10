@@ -13,8 +13,8 @@ const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPool
 
 export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-hard-suite-v1",
-  suiteVersion: "v1.0.2",
-  timeLimitMinutesPerTestcase: 60,
+  suiteVersion: "v1.0.3",
+  timeLimitMinutesPerTestcase: 10,
   sessions: [
     {
       app: "shopping-lite",
@@ -38,7 +38,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 1,
       weight: 1,
       required: true,
-      timeLimitMinutes: 60,
+      timeLimitMinutes: 10,
       metadata: { questionVariants: forumQuestionVariants },
     },
     {
@@ -51,7 +51,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 2,
       weight: 1,
       required: true,
-      timeLimitMinutes: 60,
+      timeLimitMinutes: 10,
       metadata: { questionVariants: repoQuestionVariants },
     },
     {
@@ -64,7 +64,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 3,
       weight: 1,
       required: true,
-      timeLimitMinutes: 60,
+      timeLimitMinutes: 10,
       metadata: { questionVariants: wikiHardQuestionVariants },
     },
     {
@@ -77,7 +77,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 4,
       weight: 1,
       required: true,
-      timeLimitMinutes: 60,
+      timeLimitMinutes: 10,
       metadata: { questionVariants: wikiHardQuestionVariants },
     },
     {
@@ -90,7 +90,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 5,
       weight: 1,
       required: true,
-      timeLimitMinutes: 60,
+      timeLimitMinutes: 10,
       metadata: { questionVariants: notesQuestionVariants },
     },
     {
@@ -103,7 +103,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sequenceIndex: 6,
       weight: 1,
       required: true,
-      timeLimitMinutes: 60,
+      timeLimitMinutes: 10,
       metadata: { questionVariants: calendarQuestionVariants },
     },
   ],
@@ -144,7 +144,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   ],
 });
 
-export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.2";
+export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.3";
 
 export const hostedWebHardSuiteCase = {
   id: "bb7e5cd4-f3ed-4aa0-9fcc-46fec39997eb",

@@ -28,7 +28,7 @@ test("recovers an existing hosted attempt through the orchestrator API", async (
       attemptId: "attempt-1",
       suiteSlug: "hosted-web-suite",
       suiteVersion: "v1",
-      metadata: { activeSessionId: "session-1", timeLimitMinutesPerTestcase: 30 },
+      metadata: { activeSessionId: "session-1", timeLimitMinutesPerTestcase: 10 },
       sessions: [{
         sessionId: "session-1",
         attemptId: "attempt-1",

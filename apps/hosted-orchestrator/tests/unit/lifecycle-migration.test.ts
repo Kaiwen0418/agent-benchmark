@@ -22,6 +22,18 @@ const boundedCommandDlqMigration = readFileSync(
   new URL("../../../../supabase/migrations/20260709000028_bound_command_dead_letters.sql", import.meta.url),
   "utf8",
 );
+const pendingSessionTimeLimitMigration = readFileSync(
+  new URL("../../../../supabase/migrations/20260710000029_set_pending_session_time_limit.sql", import.meta.url),
+  "utf8",
+);
+const tenMinuteFallbackMigration = readFileSync(
+  new URL("../../../../supabase/migrations/20260710000030_default_session_time_limit_ten_minutes.sql", import.meta.url),
+  "utf8",
+);
+const partialRunNormalizationMigration = readFileSync(
+  new URL("../../../../supabase/migrations/20260710000031_finish_scored_partial_runs.sql", import.meta.url),
+  "utf8",
+);
 
 test("attempt timeout migration keeps lifecycle writes under one row lock", () => {
   assert.match(migration, /for update;/i);
@@ -74,4 +86,26 @@ test("command DLQ migration redacts history and prunes in bounded batches", () =
   assert.match(boundedCommandDlqMigration, /status = 'dead' and created_at < p_dead_before/i);
   assert.match(boundedCommandDlqMigration, /status in \('replayed', 'resolved'\)/i);
   assert.match(boundedCommandDlqMigration, /grant execute .* to service_role/is);
+});
+
+test("pending sessions adopt the ten-minute limit without changing active deadlines", () => {
+  assert.match(pendingSessionTimeLimitMigration, /status = 'created'/i);
+  assert.match(pendingSessionTimeLimitMigration, /timeLimitMinutesPerTestcase/i);
+  assert.match(pendingSessionTimeLimitMigration, /'10'::jsonb/i);
+  assert.doesNotMatch(pendingSessionTimeLimitMigration, /status = 'active'/i);
+});
+
+test("session promotion falls back to ten minutes when legacy metadata has no limit", () => {
+  assert.match(tenMinuteFallbackMigration, /next_time_limit_minutes := coalesce\(/i);
+  assert.match(tenMinuteFallbackMigration, /\), 10\);/i);
+  assert.doesNotMatch(tenMinuteFallbackMigration, /\), 360\);/i);
+});
+
+test("historical partial scores normalize to completed runs without rewriting aggregate errors", () => {
+  assert.match(partialRunNormalizationMigration, /status = 'failed'/i);
+  assert.match(partialRunNormalizationMigration, /status = 'completed'/i);
+  assert.match(partialRunNormalizationMigration, /aggregate_score is not null/i);
+  assert.match(partialRunNormalizationMigration, /scoring_summary ->> 'status' = 'failed'/i);
+  assert.match(partialRunNormalizationMigration, /hosted_callback_outbox/i);
+  assert.doesNotMatch(partialRunNormalizationMigration, /scoring_summary ->> 'status' = 'error'/i);
 });

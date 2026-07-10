@@ -47,6 +47,8 @@ Current hosted-web runs use `external-agent`. Some legacy enum values and column
 One execution of a hosted suite under a run.
 
 - status: `created | running | scoring | completed | failed | cancelled | timeout`
+- `completed` means the suite finished and has a durable aggregate score; it does not imply a perfect score. Aggregate evaluator status remains in `benchmark_attempt_scores` and `scoring_summary`.
+- `failed` is reserved for lifecycle or evaluator-engine errors. A non-passing evaluator result with a valid aggregate remains a completed attempt.
 - suite identity: `suite_slug`, `suite_version`
 - immutable definition: `case_revision_id`
 - `aggregate_score` and `scoring_summary`

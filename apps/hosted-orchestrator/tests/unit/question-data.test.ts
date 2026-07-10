@@ -32,7 +32,7 @@ test("fresh database seed contains generated question pools without fixed sessio
 
 test("wiki question variants declare typed answer contracts", () => {
   const suite = readHostedSuiteSeed();
-  assert.equal(suite.suiteVersion, "v3.0.9");
+  assert.equal(suite.suiteVersion, "v3.0.10");
   const sessions = suite.sessions as Array<Record<string, unknown>>;
   const wiki = sessions.find((session) => session.app === "wiki-lite");
   assert.ok(wiki);

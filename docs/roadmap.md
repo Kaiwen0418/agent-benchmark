@@ -156,14 +156,14 @@ Confidentiality is the gating constraint for the epic: scorer oracle surfaces (v
 | #113 Calendar hard pool | Complete | Conflict-avoidance, shared-window, timezone-overlap, and reschedule variants. |
 | #114 Repo hard pool | Complete | Coherent multi-edit / rename / rollout variants with required messages. |
 | #110 Shopping hard pool | Complete | Stock-aware, compatibility, and coupon constrained-checkout variants. |
-| #115 Cross-app chain | In Progress | Hard v1.0.2 requires the agent to carry two exact wiki answers into a later note's title and body; enforced only by suite-level consistency checks against the agent's own final states. |
+| #115 Cross-app chain | In Progress | Hard v1.0.3 requires the agent to carry two exact wiki answers into a later note's title and body; enforced only by suite-level consistency checks against the agent's own final states. |
 | #116 Verification matrix and docs | In Progress | Both suites swept independently by the generic matrix; independent semantic versioning, cross-app consistency, and scorer oracle policy documented. |
-| #140 Hard v1.0.2 scale expansion | In Progress | Expand all six hard pools, add a required workflow spanning at least three sessions, and complete deterministic, confidentiality, browser, and lifecycle verification before publishing v1.0.2. |
+| #140 Hard v1.0.3 scale expansion | In Progress | Expand all six hard pools, add a required workflow spanning at least three sessions, and complete deterministic, confidentiality, browser, and lifecycle verification before publishing v1.0.3. |
 
 Each hard variant receives positive, negative, and presentation-invariant matrix coverage in `apps/hosted-sites/tests/unit/variant-matrix.test.ts`, which iterates every published suite. Per-session scoring stays deterministic; suite-level checks live solely in the scoring module (`evaluateSuiteConsistency`) and orchestrator aggregation. The easy and hard suites version and publish independently; a hard-suite change must not alter the easy manifest's content hash.
 
-Issue #140 is the umbrella work item for the unpublished `v1.0.2` revision. The
-revision remains `v1.0.2` while this scope is assembled; affected task and seed
+Issue #140 is the umbrella work item for the unpublished `v1.0.3` revision. The
+revision remains `v1.0.3` while this scope is assembled; affected task and seed
 versions still advance whenever their semantics or fixtures change. Delivery is
 split into four increments:
 
