@@ -9,7 +9,7 @@ The landing-page playground is the only user-facing hosted-web run interface. Th
 | `idle` | Initial state or reset | Benchmark selector | Create run |
 | `booting` | `queued`, `waiting_for_agent`, `agent_connected`, `starting` | Connection guide, waiting events, viewer boot state | Stop run, open connection page |
 | `running` | Run is `running/scoring`, or hosted activity appears during boot | Active suite session, aggregate score, events, viewer | Stop run, complete active session |
-| `completed` | Run status is `completed` | Final score breakdown | Start again |
+| `completed` | Run status is `completed` | Finished score breakdown, including partial scores and evaluator deductions | Start again |
 | `failed` | `failed`, `cancelled`, `timeout` | Error summary and available score breakdown | Start again |
 
 State mapping belongs in `apps/web/lib/playground-store.ts` through `mapRunStatus` and `applyRunSnapshot`. Components must not invent run states from local UI events.
@@ -23,7 +23,7 @@ stateDiagram-v2
   booting --> running: run.running / scoring
   booting --> running: first hosted page/action/score event
   booting --> failed: failed / cancelled / timeout
-  running --> completed: run.completed
+  running --> completed: run.completed (Finished, any durable aggregate score)
   running --> failed: failed / cancelled / timeout
   completed --> idle: reset
   failed --> idle: reset

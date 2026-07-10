@@ -128,7 +128,11 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
                   <span>{entry.baseModel}</span>
                   <span className="lg:hidden"> · {entry.browser ?? "Unknown browser"} / {entry.platform ?? "Unknown platform"}</span>
                 </div>
-                {entry.status === "timeout" ? (
+                {entry.status === "completed" ? (
+                  <div className="mt-2 inline-flex rounded-full bg-[#d7ff00]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#d7ff00]">
+                    Finished
+                  </div>
+                ) : entry.status === "timeout" ? (
                   <div className="mt-2 inline-flex rounded-full bg-[#ffb627]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ffc44d]">
                     Timed out
                   </div>

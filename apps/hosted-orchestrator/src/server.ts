@@ -154,7 +154,7 @@ function tokenFromStartUrl(startUrl: string) {
   }
 }
 
-const DEFAULT_SESSION_TIME_LIMIT_MINUTES = 360;
+const DEFAULT_SESSION_TIME_LIMIT_MINUTES = 10;
 
 function sessionExpiresAt(baseTime: string | number | Date, timeLimitMinutes?: number) {
   const minutes = typeof timeLimitMinutes === "number" && Number.isFinite(timeLimitMinutes) && timeLimitMinutes > 0
@@ -1432,7 +1432,7 @@ async function sweepExpiredSessions() {
         result: {
           status: "failed",
           score: 0,
-          summary: `Hosted session ${row.task_slug} timed out after ${row.metadata?.timeLimitMinutesPerTestcase ?? 360} minutes.`,
+          summary: `Hosted session ${row.task_slug} timed out after ${row.metadata?.timeLimitMinutesPerTestcase ?? DEFAULT_SESSION_TIME_LIMIT_MINUTES} minutes.`,
           evaluators: [],
         },
       });

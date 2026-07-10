@@ -756,7 +756,7 @@ test("complete-session passes the suite when the agent carries the value across 
   assert.equal(aggregate.breakdown.consistency?.[0]?.evidence?.matchedValue, "90 days");
 });
 
-test("complete-session requires both hard v1.0.2 wiki answers in distinct note fields", async () => {
+test("complete-session requires both hard v1.0.3 wiki answers in distinct note fields", async () => {
   const bodyChain = {
     ...consistencyChain,
     name: "Wiki policy answer carried into note body",
@@ -789,7 +789,7 @@ test("complete-session requires both hard v1.0.2 wiki answers in distinct note f
 });
 
 test("complete-session fails the suite on a cross-app consistency mismatch", async () => {
-  const { supabase } = createConsistencySupabase({
+  const { supabase, rpcCalls } = createConsistencySupabase({
     wikiFinalState: { app: "wiki-lite", latestAnswer: { answer: "90 days" } },
   });
   const lifecycle = createLifecycle({ getSupabaseAdmin: () => supabase });
@@ -809,6 +809,23 @@ test("complete-session fails the suite on a cross-app consistency mismatch", asy
   assert.equal(aggregate.status, "failed");
   assert.equal(aggregate.score, 0.6667);
   assert.equal(aggregate.breakdown.consistency?.[0]?.status, "failed");
+  assert.equal((rpcCalls[0]?.p_attempt_update as Record<string, unknown>).status, "completed");
+});
+
+test("complete-session reserves the failed lifecycle state for scoring errors", async () => {
+  const { supabase, rpcCalls } = createConsistencySupabase({
+    wikiFinalState: { app: "wiki-lite", latestAnswer: { answer: "90 days" } },
+  });
+  const lifecycle = createLifecycle({ getSupabaseAdmin: () => supabase });
+
+  const result = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeNotesTargetSession({ app: "notes-lite", notes: [{ id: "n1", title: "90 days", tag: "release" }] }),
+    result: makeScoreResult({ status: "error", score: 0, summary: "Evaluator unavailable" }),
+  });
+
+  assert.equal(result.attemptResult.aggregate?.status, "error");
+  assert.equal((rpcCalls[0]?.p_attempt_update as Record<string, unknown>).status, "failed");
 });
 
 test("complete-session reports missing prior output when the source final state is absent", async () => {

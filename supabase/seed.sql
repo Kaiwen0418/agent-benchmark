@@ -11,11 +11,11 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-suite-v3.0.9',
+  'hosted-web-suite-v3.0.10',
   $catalog${
   "suiteSlug": "hosted-web-suite-v1",
-  "suiteVersion": "v3.0.9",
-  "timeLimitMinutesPerTestcase": 30,
+  "suiteVersion": "v3.0.10",
+  "timeLimitMinutesPerTestcase": 10,
   "sessions": [
     {
       "app": "shopping-lite",
@@ -593,7 +593,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '080899876b1c3b548a38bf4b94215ffc8c201c4fc28fcf3860e9f797c5a67b32'
+  'ba0f288878e756fd7f19fdfa589b3043a8ea66db734e947ec41bc9804f45b7fb'
 );
 
 select public.publish_benchmark_case_catalog(
@@ -608,11 +608,11 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-hard-suite-v1.0.2',
+  'hosted-web-hard-suite-v1.0.3',
   $catalog${
   "suiteSlug": "hosted-web-hard-suite-v1",
-  "suiteVersion": "v1.0.2",
-  "timeLimitMinutesPerTestcase": 60,
+  "suiteVersion": "v1.0.3",
+  "timeLimitMinutesPerTestcase": 10,
   "sessions": [
     {
       "app": "shopping-lite",
@@ -1423,7 +1423,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '2bdd486a2d9421ae0b1980d99cdd8ea768dd7127ebc3aaf3a2a9bd70cd37cdaa'
+  '423b56db70db3489bdbadc11d27094486f2293b400b79acaab1e55d988305ba0'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

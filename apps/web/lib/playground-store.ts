@@ -204,7 +204,7 @@ function eventSummary(event: RunEvent) {
     case "score.updated":
       return `Score updated to ${String(event.payload.score ?? "--")}`;
     case "run.completed":
-      return "Run completed";
+      return "Run finished";
     case "run.failed":
       return "Run failed";
     default:

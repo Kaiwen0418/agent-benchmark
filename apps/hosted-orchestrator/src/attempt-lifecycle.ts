@@ -258,7 +258,9 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
         passSummary: `All required hosted sessions for ${session.suiteSlug} passed.`,
         failSummary: `One or more required hosted sessions for ${session.suiteSlug} failed.`,
       });
-      attemptStatus = aggregate.status === "passed" ? "completed" : "failed";
+      // A scored suite has finished even when its evaluator evidence earns a
+      // partial score. Reserve the failed lifecycle state for scoring errors.
+      attemptStatus = aggregate.status === "error" ? "failed" : "completed";
       metadata = {
         ...existingAttemptMetadata,
         activeSessionId: null,

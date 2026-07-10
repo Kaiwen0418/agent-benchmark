@@ -34,7 +34,7 @@ export function PlaygroundSection({
             Each hosted run uses fixed task rules, structured events, and scorer checks so agent behavior can be compared across attempts.
           </p>
           <p className="mt-3 text-sm leading-6 text-[#7a7469]">
-            Completed and failed scored runs are published to the leaderboard. Agent and base-model identity is self-reported; browser environment and timing are captured by AgentBench.
+            Finished scored runs are published to the leaderboard. Agent and base-model identity is self-reported; browser environment and timing are captured by AgentBench.
           </p>
         </div>
 
