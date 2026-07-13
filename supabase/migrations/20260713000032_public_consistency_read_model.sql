@@ -4,18 +4,18 @@ as
 select
   runs.id as run_id,
   consistency.position as sequence_index,
-  consistency.check ->> 'name' as name,
-  consistency.check ->> 'sourceTaskSlug' as source_task_slug,
-  consistency.check ->> 'targetTaskSlug' as target_task_slug,
+  consistency.item ->> 'name' as name,
+  consistency.item ->> 'sourceTaskSlug' as source_task_slug,
+  consistency.item ->> 'targetTaskSlug' as target_task_slug,
   case
-    when consistency.check ->> 'status' in ('passed', 'failed') then consistency.check ->> 'status'
+    when consistency.item ->> 'status' in ('passed', 'failed') then consistency.item ->> 'status'
     else 'failed'
   end as status,
-  coalesce((consistency.check ->> 'score')::numeric, 0) as score,
-  coalesce((consistency.check ->> 'required')::boolean, true) as required,
+  coalesce((consistency.item ->> 'score')::numeric, 0) as score,
+  coalesce((consistency.item ->> 'required')::boolean, true) as required,
   case
-    when consistency.check ->> 'status' = 'passed' then null
-    when consistency.check ->> 'errorMessage' like 'Missing prior output%' then
+    when consistency.item ->> 'status' = 'passed' then null
+    when consistency.item ->> 'errorMessage' like 'Missing prior output%' then
       'Required output was unavailable for cross-app comparison.'
     else 'The required value was not carried consistently between tasks.'
   end as failure_reason
@@ -27,7 +27,7 @@ cross join lateral jsonb_array_elements(
     when jsonb_typeof(scores.breakdown -> 'consistency') = 'array' then scores.breakdown -> 'consistency'
     else '[]'::jsonb
   end
-) with ordinality as consistency(check, position)
+) with ordinality as consistency(item, position)
 where runs.status in ('completed', 'failed', 'timeout')
   and runs.is_public = true
   and attempts.status in ('completed', 'failed', 'timeout');
