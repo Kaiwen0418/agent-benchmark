@@ -96,8 +96,14 @@ type AttemptLifecycleDeps = {
   loadAttemptSessions: (attemptId: string) => Promise<AttemptLifecycleAdvanceSession[]>;
   loadAttemptReadModel: (attemptId: string) => Promise<HostedAttemptReadModel<AttemptLifecycleAdvanceSession>>;
   loadLatestSessionResult: (sessionId: string) => Promise<HostedWebScoreResult | null>;
-  forwardTimeoutCompletion: (params: { runId: string; summary: string; score?: number }) => Promise<void>;
+  forwardTimeoutCompletion: (params: {
+    attemptId: string;
+    runId: string;
+    summary: string;
+    score?: number;
+  }) => Promise<void>;
   evictInMemorySessions: (sessionIds: string[]) => void;
+  invalidateRunSessionProjection?: (runId: string) => Promise<void>;
 };
 
 const terminalAttemptStatuses = new Set<AttemptStatus>(["completed", "failed", "cancelled", "timeout"]);
@@ -252,7 +258,9 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
         passSummary: `All required hosted sessions for ${session.suiteSlug} passed.`,
         failSummary: `One or more required hosted sessions for ${session.suiteSlug} failed.`,
       });
-      attemptStatus = aggregate.status === "passed" ? "completed" : "failed";
+      // A scored suite has finished even when its evaluator evidence earns a
+      // partial score. Reserve the failed lifecycle state for scoring errors.
+      attemptStatus = aggregate.status === "error" ? "failed" : "completed";
       metadata = {
         ...existingAttemptMetadata,
         activeSessionId: null,
@@ -297,6 +305,9 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     const persistedAggregate = payload.aggregate === null || payload.aggregate === undefined
       ? null
       : hostedWebSuiteScoreResultSchema.parse(payload.aggregate);
+    if (session.runId) {
+      await deps.invalidateRunSessionProjection?.(session.runId);
+    }
     return {
       result: persistedResult,
       duplicate: payload.duplicate === true,
@@ -465,7 +476,9 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
 
     const runId = timeoutTransition.attempt_run_id ?? params.runId;
     if (runId) {
+      await deps.invalidateRunSessionProjection?.(runId);
       await deps.forwardTimeoutCompletion({
+        attemptId: params.attemptId,
         runId,
         summary,
         score: 0,

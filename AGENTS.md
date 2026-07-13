@@ -80,6 +80,10 @@ For user-visible frontend changes:
 4. Record tested pages, viewports, and interactions in pull request
    verification notes. Do not publish when required visual verification is
    incomplete.
+5. After verification, close every page and browser context opened for the
+   test, then terminate the associated Agent Browser, Playwright, and Chrome
+   for Testing process tree. Never leave production pages, event streams, or
+   polling connections running in background automation sessions.
 
 ## Security And Operations
 

@@ -46,12 +46,10 @@ test("every hosted suite catalog release has a stable revision identity and cont
   }
 });
 
-test("every hosted suite declares a positive per-testcase time limit", () => {
+test("every hosted suite gives each testcase a ten-minute time limit", () => {
   for (const { case: benchmarkCase, metadata } of hostedWebSuites) {
-    assert.ok(
-      typeof metadata.timeLimitMinutesPerTestcase === "number" && metadata.timeLimitMinutesPerTestcase > 0,
-      `${benchmarkCase.slug} declares a positive timeLimitMinutesPerTestcase`,
-    );
+    assert.equal(metadata.timeLimitMinutesPerTestcase, 10, `${benchmarkCase.slug} default time limit`);
+    assert.ok(metadata.sessions.every((session) => session.timeLimitMinutes === undefined || session.timeLimitMinutes === 10));
   }
 });
 
@@ -87,9 +85,9 @@ test("hard consistency checks reference real sessions with source before target"
   }
 });
 
-test("hard v1.0.2 requires both wiki answers to be carried into distinct note fields", () => {
+test("hard v1.0.3 requires both wiki answers to be carried into distinct note fields", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
-  assert.equal(suite.suiteVersion, "v1.0.2");
+  assert.equal(suite.suiteVersion, "v1.0.3");
   assert.deepEqual(
     suite.consistencyChecks?.map((check) => ({
       sourceTaskSlug: check.sourceTaskSlug,
@@ -116,7 +114,7 @@ test("hard v1.0.2 requires both wiki answers to be carried into distinct note fi
   );
 });
 
-test("hard v1.0.2 includes combined-constraint shopping variants on the v2 seed", () => {
+test("hard v1.0.3 includes combined-constraint shopping variants on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const shopping = suite.sessions.find((session) => session.app === "shopping-lite");
   assert.ok(shopping);
@@ -127,7 +125,7 @@ test("hard v1.0.2 includes combined-constraint shopping variants on the v2 seed"
   assert.ok(variantIds.includes("airlite-field-kit"));
 });
 
-test("hard v1.0.2 includes ordered forum escalation on the v2 seed", () => {
+test("hard v1.0.3 includes ordered forum escalation on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const forum = suite.sessions.find((session) => session.app === "forum-lite");
   assert.ok(forum);
@@ -138,7 +136,7 @@ test("hard v1.0.2 includes ordered forum escalation on the v2 seed", () => {
   );
 });
 
-test("hard v1.0.2 includes conflict-aware repo workflow on the v2 seed", () => {
+test("hard v1.0.3 includes conflict-aware repo workflow on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const repo = suite.sessions.find((session) => session.app === "repo-lite");
   assert.ok(repo);
@@ -147,7 +145,7 @@ test("hard v1.0.2 includes conflict-aware repo workflow on the v2 seed", () => {
   assert.ok(repo.metadata.questionVariants.some((variant) => variant.id === "api-v3-conflict-rollout"));
 });
 
-test("hard v1.0.2 includes three-article wiki verification on the v2 seed", () => {
+test("hard v1.0.3 includes three-article wiki verification on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const wikiSessions = suite.sessions.filter((session) => session.app === "wiki-lite");
   assert.ok(wikiSessions.every((session) => session.seedVersion === "wiki-lite-hard-v2"));
@@ -158,7 +156,7 @@ test("hard v1.0.2 includes three-article wiki verification on the v2 seed", () =
   );
 });
 
-test("hard v1.0.2 includes a multi-record notes workflow on the v2 seed", () => {
+test("hard v1.0.3 includes a multi-record notes workflow on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const notes = suite.sessions.find((session) => session.app === "notes-lite");
   assert.ok(notes);
@@ -167,7 +165,7 @@ test("hard v1.0.2 includes a multi-record notes workflow on the v2 seed", () => 
   assert.ok(notes.metadata.questionVariants.some((variant) => variant.id === "release-rollout-note-set"));
 });
 
-test("hard v1.0.2 includes recurring resource calendar workflow on the v2 seed", () => {
+test("hard v1.0.3 includes recurring resource calendar workflow on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const calendar = suite.sessions.find((session) => session.app === "calendar-lite");
   assert.ok(calendar);

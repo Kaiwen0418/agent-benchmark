@@ -25,7 +25,7 @@ Run multiple hosted-sites and orchestrator API replicas locally:
 docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=2
 ```
 
-Redis workloads are configured independently. Hosted-sites uses `HOSTED_SESSION_REDIS_URL=redis://session-redis:6379` for the session cache. Orchestrator API/workers use `ORCHESTRATOR_REDIS_URL=redis://orchestrator-redis:6379` for command Streams, locks, and response envelopes. Supabase remains the durable persistence store; orchestrator workers are its hosted-data writers.
+Redis workloads are configured independently. Hosted-sites uses `HOSTED_SESSION_REDIS_URL=redis://session-redis:6379` for the session cache. Orchestrator API/workers use `ORCHESTRATOR_REDIS_URL=redis://orchestrator-redis:6379` for command Streams, locks, response envelopes, and short-lived run-session read projections. `HOSTED_SESSION_PROJECTION_CACHE_TTL_SECONDS` defaults to 10 seconds. Supabase remains the durable persistence store; orchestrator workers are its hosted-data writers.
 
 The local Compose topology runs two workers: partitions `0-7` and `8-15`. Do not use `--scale` on a worker service because replicas would claim the same partitions. To add workers, define additional worker services and redistribute all partitions into disjoint sets. Readiness returns `503` while any partition has no active lease.
 
@@ -123,12 +123,13 @@ Optional web deployment secret:
 Each Vercel Web project must independently configure:
 
 - `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
 - optional `GUEST_RUN_LIMIT`
+- optional `RUN_CONNECT_RATE_LIMIT` (defaults to 5 requests per run and client
+  address per minute on each Web instance)
 
 Development values must point to the test hosted hostname and development Supabase target; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
 
@@ -137,6 +138,14 @@ All Supabase variables are server-only. Web browser bundles communicate through 
 The self-hosted GitHub Actions runners must have `self-hosted` and `linux`, plus `agentbench-dev` for development or `agentbench-prod` for production. They need Docker access, Docker Compose, enough disk space for images, and network access to GHCR and Supabase.
 
 The development project must never operate on production containers. `COMPOSE_PROJECT_NAME`, image channel, runner label, gateway port, public URLs, and database URL are treated as one validated environment mapping by the deployment script.
+
+Command DLQ retention defaults to 90 days for unresolved `dead` records and 30
+days for `replayed` or `resolved` records. Configure
+`ORCHESTRATOR_DLQ_DEAD_RETENTION_MS`,
+`ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS`, and
+`ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE` when an environment requires different
+limits. Cleanup runs with the orchestrator maintenance sweep and failures are
+logged without dead-lettering the maintenance command itself.
 
 ## Cloudflare Tunnel
 

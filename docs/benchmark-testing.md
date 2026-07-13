@@ -58,7 +58,7 @@ performed prerequisite actions out of order.
 
 ## Independent Suite Versioning
 
-The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.9` and `hosted-web-hard-suite-v1.0.2`). A change to a hard variant, the hard pool composition, or a hard cross-app chain bumps only the hard suite's version and content hash; the easy suite's revision identity must stay byte-identical.
+The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.10` and `hosted-web-hard-suite-v1.0.3`). A change to a hard variant, the hard pool composition, a hard cross-app chain, or a testcase time limit bumps the affected suite's version and content hash.
 
 This is enforced mechanically: new task-config fields used by hard variants are optional and only inspected when present, and `consistencyChecks` is an optional manifest key that is absent from the easy manifest. The easy catalog's "stable revision identity and content hash" test fails if a hard-suite change leaks into the easy manifest.
 

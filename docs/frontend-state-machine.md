@@ -9,7 +9,7 @@ The landing-page playground is the only user-facing hosted-web run interface. Th
 | `idle` | Initial state or reset | Benchmark selector | Create run |
 | `booting` | `queued`, `waiting_for_agent`, `agent_connected`, `starting` | Connection guide, waiting events, viewer boot state | Stop run, open connection page |
 | `running` | Run is `running/scoring`, or hosted activity appears during boot | Active suite session, aggregate score, events, viewer | Stop run, complete active session |
-| `completed` | Run status is `completed` | Final score breakdown | Start again |
+| `completed` | Run status is `completed` | Finished score breakdown, including partial scores and evaluator deductions | Start again |
 | `failed` | `failed`, `cancelled`, `timeout` | Error summary and available score breakdown | Start again |
 
 State mapping belongs in `apps/web/lib/playground-store.ts` through `mapRunStatus` and `applyRunSnapshot`. Components must not invent run states from local UI events.
@@ -23,7 +23,7 @@ stateDiagram-v2
   booting --> running: run.running / scoring
   booting --> running: first hosted page/action/score event
   booting --> failed: failed / cancelled / timeout
-  running --> completed: run.completed
+  running --> completed: run.completed (Finished, any durable aggregate score)
   running --> failed: failed / cancelled / timeout
   completed --> idle: reset
   failed --> idle: reset
@@ -41,8 +41,9 @@ stateDiagram-v2
 ## Data Priority
 
 1. Terminal status and final score from the run API.
-2. `hosted.score` events for the current attempt and their session weights.
-3. Generic `score.updated` events.
-4. Show `--` when no valid score exists; never present one evaluator score as the suite score.
+2. `hosted.session.progress.activeSessionId` selects the iframe's current hosted session; use its matching `hosted.page.load` events for the latest route.
+3. `hosted.score` events for the current attempt and their session weights.
+4. Generic `score.updated` events.
+5. Show `--` when no valid score exists; never present one evaluator score as the suite score.
 
 All hosted scores are isolated by `attemptId`. Events from old or superseded attempts must not affect the current aggregate.

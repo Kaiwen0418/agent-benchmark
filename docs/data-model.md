@@ -47,6 +47,8 @@ Current hosted-web runs use `external-agent`. Some legacy enum values and column
 One execution of a hosted suite under a run.
 
 - status: `created | running | scoring | completed | failed | cancelled | timeout`
+- `completed` means the suite finished and has a durable aggregate score; it does not imply a perfect score. Aggregate evaluator status remains in `benchmark_attempt_scores` and `scoring_summary`.
+- `failed` is reserved for lifecycle or evaluator-engine errors. A non-passing evaluator result with a valid aggregate remains a completed attempt.
 - suite identity: `suite_slug`, `suite_version`
 - immutable definition: `case_revision_id`
 - `aggregate_score` and `scoring_summary`
@@ -98,7 +100,16 @@ One durable Web-completion handoff per terminal attempt. The database transition
 
 ### `orchestrator_command_dead_letters`
 
-Durable diagnostics for Redis commands that exhausted handler retries. It records the original command identity, Stream/message location, partition, payload type and payload, final error, attempt count, and replay state. It has no foreign key to a single domain entity because commands can be partitioned by attempt, session, or maintenance key.
+Durable diagnostics for Redis commands that exhausted handler retries. It
+records the original command identity, Stream/message location, partition,
+payload type, redacted payload, final error, attempt count, and replay state.
+Sensitive payload keys and token-bearing strings are removed before
+persistence. Existing rows are scrubbed online in batches of at most 500 per
+maintenance sweep, avoiding a migration-time table rewrite. Dead records are
+retained for 90 days by default; replayed and resolved records are retained for
+30 days. Maintenance deletes at most 500 expired rows per sweep. Commands that
+require a removed credential must be reissued by their source rather than
+replayed from the diagnostic record.
 
 ## Redis Runtime Schema
 

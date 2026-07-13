@@ -1,10 +1,11 @@
 import type {
   BenchmarkCase,
   BenchmarkRun,
+  HostedAttemptConnectionSnapshot,
   HostedWebSuiteSession,
 } from "@agentbench/protocol";
+import { hostedAttemptConnectionSnapshotSchema } from "@agentbench/protocol";
 import { buildHostedAttemptReadModel } from "@agentbench/shared";
-import { createSupabaseAdminClient } from "./supabase/admin";
 
 type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
 
@@ -49,21 +50,7 @@ type HostedWebAttempt = {
   metadata: Record<string, unknown>;
 };
 
-function extractMetadata(metadata: unknown) {
-  return metadata && typeof metadata === "object" && !Array.isArray(metadata)
-    ? metadata as Record<string, unknown>
-    : {};
-}
-
-function tokenFromStartUrl(startUrl: string) {
-  try {
-    return new URL(startUrl).searchParams.get("session");
-  } catch {
-    return null;
-  }
-}
-
-function normalizeHostedSessionStatus(status: string): HostedSessionStatus {
+function normalizeHostedSessionStatus(status: HostedAttemptConnectionSnapshot["sessions"][number]["status"]): HostedSessionStatus {
   if (status === "completed" || status === "failed" || status === "expired") {
     return status;
   }
@@ -322,76 +309,58 @@ async function getOrCreateHostedWebAttempt(params: {
   } satisfies HostedWebAttempt;
 }
 
-async function recoverExistingHostedWebAttemptConnection(params: {
+export async function recoverExistingHostedWebAttemptConnection(params: {
   run: BenchmarkRun;
   benchmarkCase: BenchmarkCase;
 }) {
-  const supabase = createSupabaseAdminClient();
-  const { data: attemptRow, error: attemptError } = await supabase
-    .from("benchmark_attempts")
-    .select("id, case_revision_id, suite_slug, suite_version, metadata")
-    .eq("run_id", params.run.id)
-    .eq("case_id", params.benchmarkCase.id)
-    .eq("provider", "hosted-web")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const baseUrl = getHostedOrchestratorBaseUrl();
+  const requestUrl = new URL(resolveHostedUrl(baseUrl, "/api/attempts/connection"));
+  requestUrl.searchParams.set("runId", params.run.id);
+  requestUrl.searchParams.set("caseId", params.benchmarkCase.id);
+  requestUrl.searchParams.set("caseRevisionId", params.benchmarkCase.currentRevisionId ?? "");
 
-  if (attemptError) {
-    throw attemptError;
-  }
-  if (!attemptRow) {
-    return null;
-  }
-  if (attemptRow.case_revision_id !== params.benchmarkCase.currentRevisionId) {
+  let response: Response;
+  try {
+    response = await fetch(requestUrl, {
+      headers: {
+        "x-runner-secret": runnerSecretOrThrow(),
+      },
+      cache: "no-store",
+    });
+  } catch (error) {
     throw new HostedWebSessionError({
-      message: "Existing hosted attempt is bound to a different benchmark revision.",
-      hostedSitesUrl: getHostedOrchestratorBaseUrl(),
-      retryable: false,
-      status: 409,
+      message: "Hosted orchestrator is not reachable while recovering an existing attempt.",
+      hostedSitesUrl: requestUrl.toString(),
+      cause: error,
     });
   }
 
-  const { data: sessionRows, error: sessionError } = await supabase
-    .from("hosted_web_sessions")
-    .select("id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, start_url, status, metadata")
-    .eq("attempt_id", attemptRow.id)
-    .order("sequence_index", { ascending: true });
-
-  if (sessionError) {
-    throw sessionError;
-  }
-  if (!sessionRows?.length) {
+  if (response.status === 404) {
     return null;
   }
+  if (!response.ok) {
+    throw new HostedWebSessionError({
+      message: `Hosted orchestrator rejected attempt recovery with HTTP ${response.status}.`,
+      status: response.status >= 500 ? 502 : response.status,
+      hostedSitesUrl: requestUrl.toString(),
+      retryable: response.status >= 500,
+    });
+  }
 
+  const snapshot = hostedAttemptConnectionSnapshotSchema.parse(await response.json());
   return toAttemptConnection({
     attempt: {
-      id: attemptRow.id,
-      caseRevisionId: attemptRow.case_revision_id,
-      suiteSlug: attemptRow.suite_slug,
-      suiteVersion: attemptRow.suite_version,
+      id: snapshot.attemptId,
+      caseRevisionId: params.benchmarkCase.currentRevisionId,
+      suiteSlug: snapshot.suiteSlug,
+      suiteVersion: snapshot.suiteVersion,
       sessionDefinitions: [],
-      metadata: extractMetadata(attemptRow.metadata),
+      metadata: snapshot.metadata,
     },
-    sessions: sessionRows.map((row) => {
-      const metadata = extractMetadata(row.metadata);
-      return {
-        sessionId: row.id,
-        attemptId: row.attempt_id,
-        token: tokenFromStartUrl(row.start_url),
-        app: row.app,
-        taskSlug: row.task_slug,
-        taskVersion: row.task_version,
-        sequenceIndex: row.sequence_index,
-        weight: row.weight,
-        required: row.required,
-        startUrl: row.start_url,
-        goal: typeof metadata.goal === "string" ? metadata.goal : "",
-        title: typeof metadata.title === "string" ? metadata.title : null,
-        status: normalizeHostedSessionStatus(row.status),
-      };
-    }),
+    sessions: snapshot.sessions.map((session) => ({
+      ...session,
+      status: normalizeHostedSessionStatus(session.status),
+    })),
   });
 }
 

@@ -51,7 +51,7 @@ flowchart TD
   Cache --> Handle
 ```
 
-Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy. Hosted-sites has no database credential. Its authenticated recovery request is resolved by the orchestrator from the latest successfully persisted `metadata.appState` snapshot, which may lag state that had existed only in Redis.
+Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy. Hosted-sites has no database credential. Its authenticated recovery request is resolved by the orchestrator from the latest successfully persisted `metadata.appState` snapshot, which may lag state that had existed only in Redis. Each durable `hosted.session.progress` event includes a short-lived viewer URL for its active session only, allowing the Web iframe to advance without exposing future write-session tokens.
 
 The current local-Map fallback can serve stale state after a Redis miss, and Redis session writes are not revision-checked. These are known horizontal-scaling gaps, not guarantees supplied by the diagram.
 
@@ -155,6 +155,20 @@ The browser-facing URL never needs an attempt ID. The client does not calculate 
 ## 7. Expiry, Cleanup, and Recovery
 
 When hosted-sites observes an expired write session, it evicts its runtime cache entry and sends an `attempt.timeout` command. A periodic orchestrator maintenance command also discovers expired durable sessions, atomically times out attempts, prunes old access logs, reconciles callback outbox rows, and retries delivery.
+
+Web clients treat `hosted.session.progress` run events as the primary session
+progress channel. The event payload contains only public projection fields:
+session id, app, task slug, status, sequence index, expiry, and time limit.
+Browsers apply the latest event directly for active-case advancement and
+countdown state. `/api/runs/:runId/hosted-sessions` remains a low-frequency
+recovery projection for initial hydration, reconnects, visibility restoration,
+and event-stream gaps. Visible active-run pages use a 60-second fallback poll;
+hidden pages and terminal runs do not poll, failed requests back off, and
+concurrent components share one in-flight request per run. The orchestrator
+serves this recovery projection through a short Redis read-through cache and
+invalidates the run key after attempt initialization, session completion, or
+attempt timeout. PostgreSQL remains the source of truth and is used directly
+when Redis is unavailable.
 
 Recovery boundaries:
 

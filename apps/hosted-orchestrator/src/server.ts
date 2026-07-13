@@ -10,6 +10,7 @@ import {
   type HostedWebSessionMetadata,
 } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
+import { hostedAttemptConnectionSnapshotSchema } from "@agentbench/protocol";
 import { createAttemptHandlers } from "./attempt-handlers.js";
 import { resolveHostedSitesUrls } from "./service-urls.js";
 import {
@@ -28,6 +29,19 @@ import { createIdempotentInitializer } from "./idempotent-initializer.js";
 import { createSingleFlight } from "./single-flight.js";
 import { createCallbackOutboxProcessor } from "./callback-outbox.js";
 import { resolveBenchmarkCaseRevision } from "./case-revisions.js";
+import {
+  pruneCommandDeadLetters,
+  redactCommandErrorMessage,
+  redactCommandPayload,
+  scrubCommandDeadLetters,
+} from "./command-dead-letter.js";
+import {
+  invalidateRunSessionProjectionCache,
+  readRunSessionProjectionCache,
+  writeRunSessionProjectionCache,
+  type ProjectionCacheRedis,
+  type RunSessionProjection,
+} from "./run-session-projection-cache.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -92,6 +106,8 @@ type AttemptOverviewSession = HostedAttemptReadModel["sessions"][number] & {
   title: string | null;
   goal: string;
   startPath: string | null;
+  expiresAt: string | null;
+  timeLimitMinutes: number | null;
 };
 
 let supabaseAdmin: SupabaseClient<Database> | null | undefined;
@@ -110,7 +126,13 @@ function envNumber(name: string, fallback: number) {
 }
 
 const cleanupSweepIntervalMs = envNumber("HOSTED_SESSION_SWEEP_INTERVAL_MS", 60_000);
+const runSessionProjectionCacheTtlSeconds = Math.trunc(
+  envNumber("HOSTED_SESSION_PROJECTION_CACHE_TTL_SECONDS", 10),
+);
 const accessLogRetentionMs = envNumber("HOSTED_ACCESS_LOG_RETENTION_MS", 14 * 24 * 60 * 60 * 1000);
+const commandDeadRetentionMs = envNumber("ORCHESTRATOR_DLQ_DEAD_RETENTION_MS", 90 * 24 * 60 * 60 * 1000);
+const commandResolvedRetentionMs = envNumber("ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS", 30 * 24 * 60 * 60 * 1000);
+const commandDeadLetterPruneBatchSize = Math.trunc(envNumber("ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE", 500));
 
 function now() {
   return new Date().toISOString();
@@ -132,7 +154,7 @@ function tokenFromStartUrl(startUrl: string) {
   }
 }
 
-const DEFAULT_SESSION_TIME_LIMIT_MINUTES = 360;
+const DEFAULT_SESSION_TIME_LIMIT_MINUTES = 10;
 
 function sessionExpiresAt(baseTime: string | number | Date, timeLimitMinutes?: number) {
   const minutes = typeof timeLimitMinutes === "number" && Number.isFinite(timeLimitMinutes) && timeLimitMinutes > 0
@@ -338,7 +360,7 @@ async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptRea
     loadAttemptMetadata(attemptId),
     supabase
       .from("hosted_web_sessions")
-      .select("id, app, task_slug, sequence_index, status, start_url, metadata")
+      .select("id, app, task_slug, sequence_index, status, start_url, expires_at, metadata")
       .eq("attempt_id", attemptId)
       .order("sequence_index", { ascending: true }),
   ]);
@@ -349,6 +371,7 @@ async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptRea
     metadata,
     sessions: rows.map((row) => {
       const rowMetadata = extractMetadata(row.metadata as Record<string, unknown> | null);
+      const timeLimitMinutes = timeLimitMinutesFromMetadata(rowMetadata);
       const token = tokenFromStartUrl(row.start_url) ?? makeId("missing");
       const startPath = (() => {
         try {
@@ -378,6 +401,8 @@ async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptRea
             ? row.status
             : "created",
         startPath,
+        expiresAt: row.expires_at,
+        timeLimitMinutes,
       };
     }),
   });
@@ -408,11 +433,19 @@ async function loadLatestSessionResult(sessionId: string) {
 }
 
 async function forwardRunEvent(session: AttemptLifecycleSession, type: string, payload: Record<string, unknown>) {
-  if (!agentbenchWebUrl || !session.runId) {
+  if (!session.runId) {
     return;
   }
 
-  await fetch(`${agentbenchWebUrl}/api/runs/${encodeURIComponent(session.runId)}/events`, {
+  await forwardRunEventForRun(session.runId, type, payload);
+}
+
+async function forwardRunEventForRun(runId: string, type: string, payload: Record<string, unknown>) {
+  if (!agentbenchWebUrl) {
+    return;
+  }
+
+  await fetch(`${agentbenchWebUrl}/api/runs/${encodeURIComponent(runId)}/events`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -433,12 +466,80 @@ async function forwardCompletion(
 }
 
 async function forwardTimeoutCompletion(params: {
+  attemptId: string;
   runId: string;
   summary: string;
   score?: number;
 }) {
-  void params;
+  await forwardSessionProgressForAttempt(params.runId, params.attemptId);
   await flushCallbackOutbox();
+}
+
+function timeLimitMinutesFromMetadata(metadata: Record<string, unknown>) {
+  return typeof metadata.timeLimitMinutesPerTestcase === "number" &&
+    Number.isFinite(metadata.timeLimitMinutesPerTestcase)
+    ? metadata.timeLimitMinutesPerTestcase
+    : null;
+}
+
+function hostedSessionProgressPayload(params: {
+  attemptId: string;
+  activeSessionId: string | null;
+  activeSequenceIndex: number | null;
+  viewerStartUrl: string | null;
+  sessions: Array<{
+    sessionId: string;
+    app: string;
+    taskSlug: string;
+    status: string;
+    sequenceIndex: number;
+    expiresAt: string | null;
+    timeLimitMinutes: number | null;
+  }>;
+}) {
+  const sessions = [...params.sessions].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+  return {
+    source: "hosted-orchestrator",
+    attemptId: params.attemptId,
+    activeSessionId: params.activeSessionId,
+    activeSequenceIndex: params.activeSequenceIndex,
+    viewerStartUrl: params.viewerStartUrl,
+    progress: {
+      total: sessions.length,
+      completed: sessions.filter((session) => session.status === "completed").length,
+    },
+    sessions,
+  };
+}
+
+async function forwardSessionProgressForAttempt(runId: string | null, attemptId: string | null) {
+  if (!runId || !attemptId) {
+    return;
+  }
+  const readModel = await loadAttemptReadModel(attemptId);
+  const activeSession = readModel.sessions.find((session) => session.id === readModel.activeSessionId) ?? null;
+  await forwardRunEventForRun(
+    runId,
+    "hosted.session.progress",
+    hostedSessionProgressPayload({
+      attemptId,
+      activeSessionId: readModel.activeSessionId,
+      activeSequenceIndex: readModel.activeSequenceIndex,
+      viewerStartUrl:
+        activeSession?.startPath && activeSession.expiresAt
+          ? buildViewerStartUrl(activeSession.id, activeSession.startPath, activeSession.expiresAt)
+          : null,
+      sessions: readModel.sessions.map((session) => ({
+        sessionId: session.id,
+        app: session.app,
+        taskSlug: session.taskSlug,
+        status: session.status,
+        sequenceIndex: session.sequenceIndex,
+        expiresAt: session.expiresAt,
+        timeLimitMinutes: session.timeLimitMinutes ?? null,
+      })),
+    }),
+  );
 }
 
 async function recoverInitializedAttempt(params: {
@@ -547,6 +648,50 @@ async function getInitializationRedis() {
     });
   }
   return initializationRedisConnection;
+}
+
+async function getProjectionCacheRedis() {
+  return (await getInitializationRedis()) as ProjectionCacheRedis | null;
+}
+
+async function readCachedRunSessionProjection(runId: string) {
+  try {
+    const redis = await getProjectionCacheRedis();
+    return redis ? await readRunSessionProjectionCache(redis, runId) : null;
+  } catch (error) {
+    console.error("[hosted-orchestrator] run session projection cache read failed", error);
+    return null;
+  }
+}
+
+async function cacheRunSessionProjection(runId: string, sessions: RunSessionProjection[]) {
+  try {
+    const redis = await getProjectionCacheRedis();
+    if (redis) {
+      await writeRunSessionProjectionCache(
+        redis,
+        runId,
+        sessions,
+        runSessionProjectionCacheTtlSeconds,
+      );
+    }
+  } catch (error) {
+    console.error("[hosted-orchestrator] run session projection cache write failed", error);
+  }
+}
+
+async function invalidateRunSessionProjection(runId: string | null | undefined) {
+  if (!runId) {
+    return;
+  }
+  try {
+    const redis = await getProjectionCacheRedis();
+    if (redis) {
+      await invalidateRunSessionProjectionCache(redis, runId);
+    }
+  } catch (error) {
+    console.error("[hosted-orchestrator] run session projection cache invalidation failed", error);
+  }
 }
 
 async function findExistingInitializedAttempt(
@@ -750,6 +895,7 @@ async function initializeAttempt(params: InitializeAttemptParams) {
   if (sessionError || !createdRows) {
     throw sessionError ?? new Error("Failed to create hosted sessions");
   }
+  await invalidateRunSessionProjection(runId);
 
   const rowsByStartUrl = new Map(createdRows.map((row) => [row.start_url, row]));
   const sessions = rows
@@ -779,6 +925,8 @@ async function initializeAttempt(params: InitializeAttemptParams) {
         goal: metadata.goal,
         title: typeof metadata.title === "string" ? metadata.title : null,
         status: row.status,
+        expiresAt: seed.expires_at,
+        timeLimitMinutes: suiteTimeLimitMinutes,
       };
     })
     .filter((row): row is NonNullable<typeof row> => Boolean(row))
@@ -825,6 +973,25 @@ async function initializeAttempt(params: InitializeAttemptParams) {
         },
       ),
     ),
+  );
+  await forwardRunEventForRun(
+    runId,
+    "hosted.session.progress",
+    hostedSessionProgressPayload({
+      attemptId: attemptRow.id,
+      activeSessionId: firstSession?.sessionId ?? null,
+      activeSequenceIndex: firstSession?.sequenceIndex ?? null,
+      viewerStartUrl: firstSession?.viewerStartUrl ?? null,
+      sessions: sessions.map((session) => ({
+        sessionId: session.sessionId,
+        app: session.app,
+        taskSlug: session.taskSlug,
+        status: session.status,
+        sequenceIndex: session.sequenceIndex,
+        expiresAt: session.expiresAt,
+        timeLimitMinutes: session.timeLimitMinutes ?? null,
+      })),
+    }),
   );
 
   return {
@@ -1015,6 +1182,7 @@ const attemptLifecycle = createAttemptLifecycle({
   loadLatestSessionResult,
   forwardTimeoutCompletion,
   evictInMemorySessions: () => undefined,
+  invalidateRunSessionProjection,
 });
 
 const initializeAttemptIdempotently = createIdempotentInitializer({
@@ -1063,6 +1231,7 @@ const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOver
     }),
   loadAttemptReadModel,
   forwardRunEvent,
+  forwardSessionProgress: forwardSessionProgressForAttempt,
   forwardCompletion,
   publicBaseUrl: hostedSitesPublicBaseUrl,
   defaultStartPathForApp,
@@ -1133,29 +1302,42 @@ async function dispatchWriteCommand(type: string, input: Record<string, unknown>
       summary: typeof resultInput.summary === "string" ? resultInput.summary : "Hosted session completed.",
       evaluators: Array.isArray(resultInput.evaluators) ? resultInput.evaluators : [],
     };
-    return attemptHandlers.handleCompleteSession({
+    const completed = await attemptHandlers.handleCompleteSession({
       session: {
         ...buildLifecycleSessionFromRow(sessionRow, sessionToken),
         finalState: input.finalState ?? null,
       },
       result,
     });
+    return completed;
   }
 
   if (type === "attempt.timeout") {
-    return attemptHandlers.handleTimeoutAttempt({
+    const timedOut = await attemptHandlers.handleTimeoutAttempt({
       attemptId: typeof input.attemptId === "string" ? input.attemptId : "",
       runId: typeof input.runId === "string" ? input.runId : null,
       expiredSessionId: typeof input.expiredSessionId === "string" ? input.expiredSessionId : "",
       expiredTaskSlug: typeof input.expiredTaskSlug === "string" ? input.expiredTaskSlug : "",
     });
+    return timedOut;
   }
 
   if (type === "maintenance.cleanup") {
     const expiredSessions = await sweepExpiredSessions();
     const prunedAccessLogs = await pruneExpiredAccessLogs();
-    const callbacks = await callbackOutbox.process(20, true);
-    return { statusCode: 200, body: { expiredSessions, prunedAccessLogs, callbacks } };
+    const scrubbedCommandDeadLetters = await scrubHistoricalCommandDeadLetters();
+    const prunedCommandDeadLetters = await pruneExpiredCommandDeadLetters();
+    const callbacks = await processCallbackCleanup();
+    return {
+      statusCode: 200,
+      body: {
+        expiredSessions,
+        prunedAccessLogs,
+        scrubbedCommandDeadLetters,
+        prunedCommandDeadLetters,
+        callbacks,
+      },
+    };
   }
 
   return { statusCode: 400, body: { error: "Unknown command type" } };
@@ -1175,11 +1357,12 @@ async function persistCommandDeadLetter(deadLetter: CommandDeadLetter) {
       partition: deadLetter.partition,
       partition_key: deadLetter.partitionKey,
       payload_type: deadLetter.payloadType,
-      payload: deadLetter.payload,
+      payload: redactCommandPayload(deadLetter.payload),
       error_code: deadLetter.errorCode,
-      error_message: deadLetter.errorMessage,
+      error_message: redactCommandErrorMessage(deadLetter.errorMessage),
       attempts: deadLetter.attempts,
       status: "dead",
+      scrubbed_at: timestamp,
       updated_at: timestamp,
     },
     { onConflict: "command_id" },
@@ -1257,7 +1440,7 @@ async function sweepExpiredSessions() {
         result: {
           status: "failed",
           score: 0,
-          summary: `Hosted session ${row.task_slug} timed out after ${row.metadata?.timeLimitMinutesPerTestcase ?? 360} minutes.`,
+          summary: `Hosted session ${row.task_slug} timed out after ${row.metadata?.timeLimitMinutesPerTestcase ?? DEFAULT_SESSION_TIME_LIMIT_MINUTES} minutes.`,
           evaluators: [],
         },
       });
@@ -1270,6 +1453,47 @@ async function sweepExpiredSessions() {
   }
 
   return expiredRows.length;
+}
+
+async function pruneExpiredCommandDeadLetters() {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return 0;
+  }
+
+  try {
+    return await pruneCommandDeadLetters(supabase, {
+      deadRetentionMs: commandDeadRetentionMs,
+      resolvedRetentionMs: commandResolvedRetentionMs,
+      batchSize: commandDeadLetterPruneBatchSize,
+    });
+  } catch (error) {
+    console.error("[hosted-orchestrator] failed to prune command dead letters", error);
+    return 0;
+  }
+}
+
+async function scrubHistoricalCommandDeadLetters() {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return 0;
+  }
+
+  try {
+    return await scrubCommandDeadLetters(supabase, commandDeadLetterPruneBatchSize);
+  } catch (error) {
+    console.error("[hosted-orchestrator] failed to scrub command dead letters", error);
+    return 0;
+  }
+}
+
+async function processCallbackCleanup() {
+  try {
+    return await callbackOutbox.process(20, true);
+  } catch (error) {
+    console.error("[hosted-orchestrator] failed to process callback cleanup", error);
+    return { reconciled: 0, claimed: 0, delivered: 0, retried: 0, dead: 0 };
+  }
 }
 
 async function runCleanupSweep(trigger: "startup" | "interval") {
@@ -1289,15 +1513,25 @@ async function runCleanupSweep(trigger: "startup" | "interval") {
     const body = result.body as {
       expiredSessions?: number;
       prunedAccessLogs?: number;
+      scrubbedCommandDeadLetters?: number;
+      prunedCommandDeadLetters?: number;
       callbacks?: { reconciled?: number; delivered?: number; retried?: number; dead?: number };
     };
     const expiredSessions = body.expiredSessions ?? 0;
     const prunedAccessLogs = body.prunedAccessLogs ?? 0;
+    const scrubbedCommandDeadLetters = body.scrubbedCommandDeadLetters ?? 0;
+    const prunedCommandDeadLetters = body.prunedCommandDeadLetters ?? 0;
     const callbackChanges = (body.callbacks?.reconciled ?? 0) + (body.callbacks?.delivered ?? 0) +
       (body.callbacks?.retried ?? 0) + (body.callbacks?.dead ?? 0);
-    if (expiredSessions > 0 || prunedAccessLogs > 0 || callbackChanges > 0) {
+    if (
+      expiredSessions > 0 ||
+      prunedAccessLogs > 0 ||
+      scrubbedCommandDeadLetters > 0 ||
+      prunedCommandDeadLetters > 0 ||
+      callbackChanges > 0
+    ) {
       console.log(
-        `[hosted-orchestrator] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs} callbacks=${JSON.stringify(body.callbacks ?? {})}`,
+        `[hosted-orchestrator] cleanup(${trigger}) expired=${expiredSessions} access_logs=${prunedAccessLogs} command_dlq_scrubbed=${scrubbedCommandDeadLetters} command_dlq_pruned=${prunedCommandDeadLetters} callbacks=${JSON.stringify(body.callbacks ?? {})}`,
       );
     }
   } finally {
@@ -1350,25 +1584,59 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/attempts/connection") {
+      const runId = url.searchParams.get("runId");
+      const caseId = url.searchParams.get("caseId");
+      const caseRevisionId = url.searchParams.get("caseRevisionId");
+      if (!runId || !caseId || !caseRevisionId) {
+        badRequest(response, "Missing runId, caseId, or caseRevisionId");
+        return;
+      }
+
+      let connection;
+      try {
+        connection = await findExistingInitializedAttempt({
+          runId,
+          caseId,
+          caseRevisionId,
+          callbackSecret: null,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("different benchmark revision")) {
+          sendJson(response, 409, { error: "attempt_revision_conflict" });
+          return;
+        }
+        throw error;
+      }
+      if (!connection) {
+        sendJson(response, 404, { error: "attempt_not_found" });
+        return;
+      }
+
+      sendJson(response, 200, hostedAttemptConnectionSnapshotSchema.parse(connection));
+      return;
+    }
+
     const runSessionsMatch = url.pathname.match(/^\/api\/runs\/([^/]+)\/sessions$/);
     if (request.method === "GET" && runSessionsMatch) {
-      const supabase = getSupabaseAdmin();
-      if (!supabase) {
-        sendJson(response, 503, { error: "database_unavailable" });
-        return;
-      }
       const runId = decodeURIComponent(runSessionsMatch[1]!);
-      const { data, error } = await supabase
-        .from("hosted_web_sessions")
-        .select("id, task_slug, status, sequence_index, expires_at, metadata")
-        .eq("run_id", runId)
-        .order("sequence_index", { ascending: true });
-      if (error) {
-        sendJson(response, 500, { error: "session_read_failed" });
-        return;
-      }
-      sendJson(response, 200, {
-        sessions: (data ?? []).map((item) => {
+      let sessions = await readCachedRunSessionProjection(runId);
+      if (!sessions) {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) {
+          sendJson(response, 503, { error: "database_unavailable" });
+          return;
+        }
+        const { data, error } = await supabase
+          .from("hosted_web_sessions")
+          .select("id, task_slug, status, sequence_index, expires_at, metadata")
+          .eq("run_id", runId)
+          .order("sequence_index", { ascending: true });
+        if (error) {
+          sendJson(response, 500, { error: "session_read_failed" });
+          return;
+        }
+        sessions = (data ?? []).map((item) => {
           const metadata = extractMetadata(item.metadata as Record<string, unknown> | null);
           return {
             sessionId: item.id,
@@ -1381,8 +1649,10 @@ const server = createServer(async (request, response) => {
                 ? metadata.timeLimitMinutesPerTestcase
                 : null,
           };
-        }),
-      });
+        });
+        await cacheRunSessionProjection(runId, sessions);
+      }
+      sendJson(response, 200, { sessions });
       return;
     }
 

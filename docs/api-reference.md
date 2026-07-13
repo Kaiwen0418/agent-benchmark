@@ -2,7 +2,12 @@
 
 ## Authentication
 
-Public web reads use the current Supabase user or an HTTP-only guest cookie. Service-to-service writes require `x-runner-secret: <RUNNER_SHARED_SECRET>`. The header and environment variable retain a legacy name; they now authenticate hosted services, not a runner component.
+Public Web requests currently use an HTTP-only guest cookie. The
+`getCurrentUser()` seam remains guest-only until Auth.js is integrated.
+Service-to-service writes require
+`x-runner-secret: <RUNNER_SHARED_SECRET>`. The header and environment variable
+retain a legacy name; they now authenticate hosted services, not a runner
+component.
 
 Hosted task requests use an opaque session token in `?session=<token>` or in the telemetry body. Only the SHA-256 token hash is stored in Supabase.
 
@@ -43,7 +48,11 @@ Response: `201 { run, quota }`. The service persists the self-reported identity 
 
 ### Connect Run
 
-`GET /api/runs/:runId/connect` resolves benchmark metadata, initializes or reuses a hosted attempt, and returns the attempt URL and session URLs. Hosted allocation failures use a structured response:
+`GET /api/runs/:runId/connect` is a one-time initialization read. It resolves
+benchmark metadata, initializes or reuses an active hosted attempt, and returns
+the attempt URL and session URLs. Clients must use `/hosted-sessions` or the run
+event stream for subsequent progress updates rather than polling `/connect`.
+Hosted allocation failures use a structured response:
 
 ```json
 {
@@ -53,6 +62,14 @@ Response: `201 { run, quota }`. The service persists the self-reported identity 
   "hostedSitesUrl": "https://hosted.example.com"
 }
 ```
+
+The endpoint returns `404` for an unknown run, `410` for a terminal run, and
+`429` when the per-client initialization limit is exceeded. Clients must stop
+retrying `404` and `410` responses. A `429` response includes `Retry-After`,
+`RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset`; clients must
+not retry before that delay expires. Shared edge caches retain `404` responses
+for 60 seconds and terminal `410` responses for one hour. Successful,
+rate-limited, and transient-error responses are never shared-cacheable.
 
 ### Event Stream
 
@@ -112,12 +129,22 @@ All task routes require `?session=<token>` and reject a token belonging to a dif
 
 ## Orchestrator API
 
+### Attempt Connection Recovery
+
+`GET /api/attempts/connection?runId=...&caseId=...&caseRevisionId=...`
+returns an existing initialized attempt connection snapshot or `404` without
+creating a command. Web uses this before attempt initialization and never
+reads hosted lifecycle tables directly.
+
 ### Command Dead Letters
 
 Internal service authentication is required.
 
 - `GET /api/commands/dead-letters?status=dead&limit=50` lists command diagnostics.
-- `POST /api/commands/dead-letters/:id/replay` republishes the stored payload with a new command ID and marks the original record replayed only after success.
+- `POST /api/commands/dead-letters/:id/replay` republishes the stored redacted
+  payload with a new command ID and marks the original record replayed only
+  after success. Commands that require a removed credential must be reissued
+  by their source instead.
 
 Except for `/health`, every endpoint requires the shared-secret header.
 
@@ -126,6 +153,7 @@ Write endpoints append a command to Redis Streams and wait for the worker result
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Health check |
+| `GET` | `/api/attempts/connection` | Recover an existing initialized attempt without mutation |
 | `POST` | `/api/attempts/init` | Create attempt and ordered sessions |
 | `GET` | `/api/attempts/:id/state` | Read normalized attempt progress |
 | `POST` | `/api/attempts/:id/commands/resolve-advance` | Validate current session and return next URL |

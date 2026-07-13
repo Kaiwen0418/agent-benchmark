@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyHostedSessionProgress,
+  deriveHostedSessionProgressFromEvents,
   hasTerminalHostedSessionProgress,
   selectVisibleHostedSessions,
 } from "../../lib/hosted-progress";
@@ -66,4 +67,51 @@ test("hosted connection progress detects terminal suites", () => {
     { sessionId: "session-1", sequenceIndex: 0, status: "completed" },
     { sessionId: "session-2", sequenceIndex: 1, status: "active" },
   ]), false);
+});
+
+test("hosted progress events expose the latest public session projection", () => {
+  const projected = deriveHostedSessionProgressFromEvents([
+    {
+      type: "hosted.session.progress",
+      payload: {
+        sessions: [
+          {
+            sessionId: "session-1",
+            taskSlug: "cart",
+            status: "completed",
+            sequenceIndex: 0,
+            expiresAt: null,
+            timeLimitMinutes: 10,
+          },
+        ],
+      },
+    },
+    {
+      type: "hosted.session.progress",
+      payload: {
+        sessions: [
+          {
+            sessionId: "session-2",
+            taskSlug: "wiki",
+            status: "active",
+            sequenceIndex: 1,
+            expiresAt: "2026-07-09T12:00:00.000Z",
+            timeLimitMinutes: 10,
+          },
+          { sessionId: "invalid" },
+        ],
+      },
+    },
+  ]);
+
+  assert.deepEqual(projected, [
+    {
+      sessionId: "session-2",
+      taskSlug: "wiki",
+      status: "active",
+      sequenceIndex: 1,
+      expiresAt: "2026-07-09T12:00:00.000Z",
+      timeLimitMinutes: 10,
+    },
+  ]);
 });

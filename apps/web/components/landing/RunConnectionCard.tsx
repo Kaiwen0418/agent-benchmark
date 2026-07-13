@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { HostedSessionBreakdown } from "@/lib/hosted-scoring";
 import { usePlaygroundStore } from "@/lib/playground-store";
 import { ServiceUnavailableDialog } from "./ServiceUnavailableDialog";
-import type { HostedSessionDeadline } from "@/lib/hosted-web";
+import {
+  buildRunConnectFailure,
+  connectRetryDelaySeconds,
+  type RunConnectFailure,
+} from "@/lib/run-connect-error";
+import { useHostedSessionPolling } from "@/hooks/use-hosted-session-polling";
+import { isTerminalRunStatus } from "@/lib/hosted-session-polling";
+import {
+  applyHostedSessionProgress,
+  deriveHostedSessionProgressFromEvents,
+} from "@/lib/hosted-progress";
 
 type RunConnectPayload = {
   runId: string;
@@ -51,13 +61,6 @@ type RunConnectPayload = {
   };
 };
 
-type RunConnectError = {
-  error: string;
-  message: string;
-  retryable?: boolean;
-  hostedSitesUrl?: string;
-};
-
 function useNow(intervalMs = 1000) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -72,43 +75,6 @@ function formatCountdown(durationMs: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function useActiveSessionDeadline(runId: string | null) {
-  const [deadline, setDeadline] = useState<HostedSessionDeadline | null>(null);
-
-  useEffect(() => {
-    if (!runId) {
-      setDeadline(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const response = await fetch(`/api/runs/${runId}/hosted-sessions`, {
-          cache: "no-store",
-        });
-        if (!response.ok) return;
-        const result = (await response.json()) as { sessions: HostedSessionDeadline[] };
-        if (cancelled) return;
-        const active = result.sessions.find((session) => session.status === "active") ?? null;
-        setDeadline(active);
-      } catch (error) {
-        console.error("[run-connection-card] failed to refresh deadlines", error);
-      }
-    }
-
-    void load();
-    const interval = window.setInterval(load, 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [runId]);
-
-  return deadline;
 }
 
 function statusBadgeTone(status: string) {
@@ -242,16 +208,17 @@ function SessionDetailPanel({
   return (
     <div className="rounded-[1rem] border border-[#e8e4da] bg-[#fbf8f3] px-4 py-3">
       <div className="text-sm font-semibold text-[#111111]">{session.title ?? session.taskSlug}</div>
-      <p className="max-h-28 overflow-y-auto pr-1 text-sm leading-7 text-[#585248] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d8d1c4]">
-        {session.goal}
-      </p>
-      <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#8f897e]">
-        <span>{session.app}</span>
-        <span>·</span>
-        <span>Session {session.sequenceIndex + 1}</span>
+      <div className="mt-1 flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider">
+        {isActive && countdownText ? (
+          <span className={`font-semibold ${countdownUrgent ? "text-[#d45b45]" : "text-[#6a655c]"}`}>
+            {countdownText}
+          </span>
+        ) : (
+          <span className="text-[#8f897e]">{session.app}</span>
+        )}
         {score ? (
           <span
-            className={`ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${
+            className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${
               score.status === "passed" ? "bg-[#e8f7ec] text-[#1f6b35]" : "bg-[#fff1ed] text-[#8a2d1f]"
             }`}
           >
@@ -259,15 +226,9 @@ function SessionDetailPanel({
           </span>
         ) : null}
       </div>
-      {isActive && countdownText ? (
-        <div
-          className={`mt-2 text-[10px] font-semibold uppercase tracking-wider ${
-            countdownUrgent ? "text-[#d45b45]" : "text-[#6a655c]"
-          }`}
-        >
-          {countdownText}
-        </div>
-      ) : null}
+      <p className="scroll-panel max-h-40 overflow-y-auto py-1 text-xs leading-5 text-[#585248]">
+        {session.goal}
+      </p>
       {score && score.evaluators.length > 0 ? (
         <div className="mt-3 space-y-1.5 border-t border-[#e2ddd3] pt-3">
           {score.evaluators.map((evaluator) => (
@@ -310,16 +271,30 @@ export function RunConnectionCard() {
   const score = usePlaygroundStore((state) => state.score);
   const scoringSessions = usePlaygroundStore((state) => state.scoringSessions);
   const timeline = usePlaygroundStore((state) => state.timeline);
+  const runEvents = usePlaygroundStore((state) => state.runEvents);
   const streamMode = usePlaygroundStore((state) => state.streamMode);
-  const activeDeadline = useActiveSessionDeadline(runId);
   const now = useNow();
   const [payload, setPayload] = useState<RunConnectPayload | null>(null);
-  const [connectError, setConnectError] = useState<RunConnectError | null>(null);
+  const [connectError, setConnectError] = useState<RunConnectFailure | null>(null);
   const [copyState, setCopyState] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [selectedSessionIndex, setSelectedSessionIndex] = useState(0);
-  const [showAllEvents, setShowAllEvents] = useState(false);
+  const [eventPage, setEventPage] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
+  const { sessions: deadlineSessions } = useHostedSessionPolling({
+    runId,
+    enabled:
+      executionMode === "external-agent" &&
+      (phase === "booting" || phase === "running"),
+    terminal: isTerminalRunStatus(phase),
+  });
+  const eventProgressSessions = useMemo(() => deriveHostedSessionProgressFromEvents(runEvents), [runEvents]);
+  const progressSessions = eventProgressSessions.length > 0 ? eventProgressSessions : deadlineSessions;
+  const activeDeadline = progressSessions.find((session) => session.status === "active") ?? null;
+
+  useEffect(() => {
+    setEventPage(0);
+  }, [timeline.length]);
 
   useEffect(() => {
     if (!runId) {
@@ -337,12 +312,11 @@ export function RunConnectionCard() {
       });
 
       if (!response.ok) {
-        const errorPayload = (await response.json().catch(() => null)) as RunConnectError | null;
-        throw errorPayload ?? {
-          error: "run_connect_failed",
-          message: "Failed to load run connection info.",
-          retryable: true,
-        };
+        const errorPayload = await response.json().catch(() => null);
+        if (!cancelled) {
+          setConnectError(buildRunConnectFailure(response.status, response.headers, errorPayload));
+        }
+        return;
       }
 
       const nextPayload = (await response.json()) as RunConnectPayload;
@@ -352,14 +326,13 @@ export function RunConnectionCard() {
       }
     };
 
-    void load().catch((error: RunConnectError | Error) => {
+    void load().catch((error: Error) => {
       if (!cancelled) {
-        setConnectError({
-          error: "error" in error ? error.error : "run_connect_failed",
+        setConnectError(buildRunConnectFailure(503, new Headers(), {
+          error: "run_connect_failed",
           message: error.message || "Failed to load run connection info.",
-          retryable: "retryable" in error ? error.retryable : true,
-          hostedSitesUrl: "hostedSitesUrl" in error ? error.hostedSitesUrl : undefined,
-        });
+          retryable: true,
+        }));
       }
     });
 
@@ -375,18 +348,30 @@ export function RunConnectionCard() {
     }
   }, [payload?.hostedWeb.progress.currentIndex]);
 
+  useEffect(() => {
+    if (progressSessions.length === 0) return;
+    setPayload((current) => current ? applyHostedSessionProgress(current, progressSessions) : current);
+  }, [progressSessions]);
+
   if (!runId || executionMode !== "external-agent") {
     return null;
   }
 
   if (!payload) {
+    const retryDelay = connectError ? connectRetryDelaySeconds(connectError, now) : null;
+    const canRetry = retryDelay !== null;
+    const retryDisabled = typeof retryDelay === "number" && retryDelay > 0;
+    const retryLabel = retryDisabled ? `Retry in ${retryDelay}s` : "Retry connection";
+
     return (
       <>
         {connectError ? (
           <ServiceUnavailableDialog
             message={connectError.message}
             onClose={() => setConnectError(null)}
-            onRetry={() => setRetryNonce((value) => value + 1)}
+            onRetry={canRetry ? () => setRetryNonce((value) => value + 1) : undefined}
+            retryDisabled={retryDisabled}
+            retryLabel={retryLabel}
           />
         ) : null}
         <div
@@ -404,13 +389,16 @@ export function RunConnectionCard() {
                   Hosted URL: <span className="font-medium">{connectError.hostedSitesUrl}</span>
                 </p>
               ) : null}
-              <button
-                type="button"
-                onClick={() => setRetryNonce((value) => value + 1)}
-                className="mt-4 rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white"
-              >
-                Retry connection
-              </button>
+              {canRetry ? (
+                <button
+                  type="button"
+                  onClick={() => setRetryNonce((value) => value + 1)}
+                  disabled={retryDisabled}
+                  className="mt-4 rounded-full bg-[#111111] px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-[#aaa59c]"
+                >
+                  {retryLabel}
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="mt-3 space-y-2">
@@ -457,9 +445,14 @@ export function RunConnectionCard() {
     isSelectedActive && activeDeadline?.expiresAt && new Date(activeDeadline.expiresAt).getTime() - now < 60_000,
   );
 
-  const displayedEvents = showAllEvents
-    ? [...timeline].reverse()
-    : [...timeline].slice(-5).reverse();
+  const eventsPerPage = 6;
+  const reversedEvents = [...timeline].reverse();
+  const eventPageCount = Math.max(1, Math.ceil(reversedEvents.length / eventsPerPage));
+  const safeEventPage = Math.min(eventPage, eventPageCount - 1);
+  const pagedEvents = reversedEvents.slice(
+    safeEventPage * eventsPerPage,
+    (safeEventPage + 1) * eventsPerPage,
+  );
 
   return (
     <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
@@ -573,20 +566,34 @@ export function RunConnectionCard() {
                   icon={<BoltIcon />}
                   title="Latest Events"
                   action={
-                    timeline.length > 5 ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllEvents((current) => !current)}
-                        className="text-xs font-medium text-[#245a8a] hover:underline"
-                      >
-                        {showAllEvents ? "Show less" : "View all"}
-                      </button>
+                    eventPageCount > 1 ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={safeEventPage === 0}
+                          onClick={() => setEventPage((page) => Math.max(0, page - 1))}
+                          className="flex h-5 w-5 items-center justify-center rounded-full border border-[#d8d1c4] bg-white text-[10px] text-[#111111] disabled:opacity-40"
+                        >
+                          ←
+                        </button>
+                        <span className="text-[10px] tabular-nums text-[#6a655c]">
+                          {safeEventPage + 1} / {eventPageCount}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={safeEventPage === eventPageCount - 1}
+                          onClick={() => setEventPage((page) => Math.min(eventPageCount - 1, page + 1))}
+                          className="flex h-5 w-5 items-center justify-center rounded-full border border-[#d8d1c4] bg-white text-[10px] text-[#111111] disabled:opacity-40"
+                        >
+                          →
+                        </button>
+                      </div>
                     ) : undefined
                   }
                 />
-                <div className={`space-y-1 ${showAllEvents ? "max-h-72 overflow-y-auto pr-1" : ""}`}>
+                <div className="space-y-1">
                   {timeline.length > 0 ? (
-                    displayedEvents.map((entry) => (
+                    pagedEvents.map((entry) => (
                       <EventRow
                         key={entry.id}
                         label={entry.label}

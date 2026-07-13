@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { listPublicLeaderboard, listPublicLeaderboardVersions } from "@/lib/db";
 import { LeaderboardRanking, type LeaderboardBoard } from "./LeaderboardRanking";
 
@@ -15,8 +16,13 @@ async function loadBoards(): Promise<LeaderboardBoard[]> {
   })));
 }
 
+const loadCachedBoards = unstable_cache(loadBoards, ["public-leaderboard-boards"], {
+  revalidate: 300,
+  tags: ["public-leaderboard"],
+});
+
 export async function Leaderboard() {
-  const boards = await loadBoards().catch((error) => {
+  const boards = await loadCachedBoards().catch((error) => {
     console.error("[web] failed to load public leaderboard", error);
     return [{ version: "all", tag: "", slug: "", entries: [] }];
   });
@@ -32,7 +38,7 @@ export async function Leaderboard() {
             </h2>
           </div>
           <p className="max-w-xl text-base leading-7 text-[#66625a] lg:justify-self-end">
-            Completed and failed scored runs are ranked within the same benchmark version. Agent and model identities are self-reported; browser environment and completion time are captured by AgentBench.
+            Finished scored runs are ranked within the same benchmark version. Agent and model identities are self-reported; browser environment and completion time are captured by AgentBench.
           </p>
         </div>
 

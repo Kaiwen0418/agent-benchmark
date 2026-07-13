@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { deriveHostedViewerRevision, deriveHostedViewerUrl } from "@/lib/hosted-viewer";
+import { useEffect, useMemo, useState } from "react";
+import {
+  deriveActiveHostedSessionId,
+  deriveActiveHostedViewerUrl,
+  deriveHostedViewerRevision,
+} from "@/lib/hosted-viewer";
 import { deriveHostedScoring } from "@/lib/hosted-scoring";
-import type { HostedSessionDeadline } from "@/lib/hosted-web";
+import { useHostedSessionPolling } from "@/hooks/use-hosted-session-polling";
+import { isTerminalRunStatus } from "@/lib/hosted-session-polling";
+import { deriveHostedSessionProgressFromEvents } from "@/lib/hosted-progress";
 
 type LiveRunViewerProps = {
   runId: string;
@@ -129,7 +135,7 @@ function deriveHostedSuiteSessions(events: StreamEvent[]) {
   return [...sessions.values()].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
 }
 
-function deriveSessionStatusLabel(deadline: HostedSessionDeadline | undefined, now: number) {
+function deriveSessionStatusLabel(deadline: { status: string; expiresAt?: string | null } | undefined, now: number) {
   if (!deadline) return null;
 
   if (deadline.status === "active" && deadline.expiresAt) {
@@ -164,8 +170,17 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   const [viewerRevision, setViewerRevision] = useState(0);
   const [hostedEvents, setHostedEvents] = useState<StreamEvent[]>([]);
   const [suiteSessions, setSuiteSessions] = useState<HostedSuiteSession[]>([]);
-  const [sessionDeadlines, setSessionDeadlines] = useState<Map<string, HostedSessionDeadline>>(new Map());
   const now = useNow();
+  const { sessions: deadlineSessions } = useHostedSessionPolling({
+    runId,
+    enabled: !embedded,
+    terminal: isTerminalRunStatus(status),
+  });
+  const eventProgressSessions = useMemo(() => deriveHostedSessionProgressFromEvents(hostedEvents), [hostedEvents]);
+  const effectiveDeadlineSessions = eventProgressSessions.length > 0 ? eventProgressSessions : deadlineSessions;
+  const sessionDeadlines = new Map(
+    effectiveDeadlineSessions.map((session) => [session.sessionId, session]),
+  );
 
   useEffect(() => {
     const source = new EventSource(`/api/runs/${runId}/stream`);
@@ -177,9 +192,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       setErrorMessage(payload.run?.errorMessage ?? initialErrorMessage);
       setFrameUrl(deriveLiveFrameUrl(payload));
       const nextHostedEvents = payload.events.filter((item) => item.type.startsWith("hosted."));
-      setViewerUrl(deriveHostedViewerUrl(nextHostedEvents));
-      setViewerRevision(deriveHostedViewerRevision(nextHostedEvents));
-      setHostedEvents(nextHostedEvents.slice(-8));
+      setHostedEvents(nextHostedEvents);
       setSuiteSessions(deriveHostedSuiteSessions(nextHostedEvents));
     });
 
@@ -200,25 +213,10 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
   }, [initialScore, initialStatus, initialErrorMessage, runId]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    async function fetchDeadlines() {
-      try {
-        const response = await fetch(`/api/runs/${runId}/hosted-sessions`, {
-          cache: "no-store",
-        });
-        if (!response.ok) return;
-        const result = (await response.json()) as { sessions: HostedSessionDeadline[] };
-        setSessionDeadlines(new Map(result.sessions.map((session) => [session.sessionId, session])));
-      } catch (error) {
-        console.error("[live-viewer] failed to refresh session deadlines", error);
-      }
-    }
-
-    void fetchDeadlines();
-    const interval = window.setInterval(fetchDeadlines, 5000);
-    return () => window.clearInterval(interval);
-  }, [runId]);
+    const activeSessionId = deriveActiveHostedSessionId(hostedEvents);
+    setViewerUrl(deriveActiveHostedViewerUrl(hostedEvents, activeSessionId));
+    setViewerRevision(deriveHostedViewerRevision(hostedEvents));
+  }, [hostedEvents]);
 
   const terminalSummary =
     status === "timeout"
@@ -375,9 +373,10 @@ function HostedEventFallback({ events, compact = false }: { events: StreamEvent[
     );
   }
 
+  const displayEvents = events.slice(-8);
   return (
     <div className="flex h-full flex-col justify-end gap-2 p-4">
-      {events.map((event, index) => (
+      {displayEvents.map((event, index) => (
         <div
           key={`${event.type}-${index}`}
           className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-left"
