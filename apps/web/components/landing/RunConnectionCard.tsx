@@ -15,6 +15,7 @@ import {
   applyHostedSessionProgress,
   deriveHostedSessionProgressFromEvents,
 } from "@/lib/hosted-progress";
+import { shouldRefreshHostedConnection } from "@/lib/run-connection-refresh";
 
 type RunConnectPayload = {
   runId: string;
@@ -352,6 +353,14 @@ export function RunConnectionCard() {
     if (progressSessions.length === 0) return;
     setPayload((current) => current ? applyHostedSessionProgress(current, progressSessions) : current);
   }, [progressSessions]);
+
+  useEffect(() => {
+    if (!payload || !shouldRefreshHostedConnection(payload.metadataRequired, runEvents)) {
+      return;
+    }
+
+    setRetryNonce((current) => current + 1);
+  }, [payload, runEvents]);
 
   if (!runId || executionMode !== "external-agent") {
     return null;
