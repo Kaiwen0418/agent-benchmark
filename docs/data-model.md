@@ -90,6 +90,13 @@ Per-session evaluation result:
 Aggregate suite result with score, status, summary, and a JSON breakdown of all required and optional sessions.
 Each attempt has at most one aggregate score. A concurrent writer recovers and uses the existing row.
 
+Public result pages read terminal hosted score details through filtered views, not
+the lifecycle tables. `public_hosted_run_consistency_checks` exposes only the
+safe display projection of cross-app checks: name, source/target task slugs,
+status, score, required flag, and a generalized failure reason. It deliberately
+excludes final state, generated configuration, evaluator evidence, and matched
+values.
+
 ### `hosted_web_access_logs`
 
 Operational audit records for session access and expiry. These records have a retention sweep and should not be treated as permanent benchmark evidence.

@@ -707,6 +707,20 @@ export type Database = {
         };
         Relationships: [];
       };
+      public_hosted_run_consistency_checks: {
+        Row: {
+          failure_reason: string | null;
+          name: string | null;
+          required: boolean | null;
+          run_id: string | null;
+          score: number | null;
+          sequence_index: number | null;
+          source_task_slug: string | null;
+          status: "passed" | "failed" | null;
+          target_task_slug: string | null;
+        };
+        Relationships: [];
+      };
       public_hosted_run_tasks: {
         Row: {
           app: string | null;
