@@ -82,6 +82,14 @@ rate-limited, and transient-error responses are never shared-cacheable.
 
 The connection lasts at most 25 seconds and clients reconnect using `retry: 2000`.
 
+### Public Result Pages
+
+`/results/:runId` renders terminal public hosted runs from filtered read-model
+views. In addition to per-task results, hard suites may expose a display-safe
+cross-app consistency breakdown. It contains check labels, task slugs, status,
+score, required flag, and generalized failure reasons only; evaluator evidence,
+generated task configuration, final state, and matched values remain private.
+
 ## Hosted-Sites API
 
 | Method | Path | Purpose |

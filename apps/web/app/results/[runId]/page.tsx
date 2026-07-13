@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getPublicBenchmarkResult } from "@/lib/db";
+import { summarizePublicConsistencyChecks } from "@/lib/public-result-consistency";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ export default async function PublicResultPage({ params }: { params: Promise<{ r
   const result = await getPublicBenchmarkResult(runId);
   if (!result) notFound();
 
-  const { run, benchmark, suite, tasks } = result;
+  const { run, benchmark, suite, tasks, consistencyChecks } = result;
+  const consistencySummary = summarizePublicConsistencyChecks(consistencyChecks);
   return (
     <main className="min-h-screen bg-[#111111] px-6 py-12 text-[#f7f2e7] md:px-10 md:py-20">
       <div className="mx-auto max-w-5xl">
@@ -79,6 +81,41 @@ export default async function PublicResultPage({ params }: { params: Promise<{ r
             ))}
           </div>
         </section>
+
+        {consistencySummary.total > 0 ? (
+          <section className="mt-12">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-white/40">Suite consistency</div>
+                <h2 className="mt-2 text-2xl font-medium text-white">Cross-app checks</h2>
+              </div>
+              <div className="text-sm text-white/45">
+                {consistencySummary.requiredPassed}/{consistencySummary.requiredTotal} required checks passed
+              </div>
+            </div>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">
+              These checks verify that values the agent submitted in one task were carried into the required later task.
+            </p>
+            <div className="mt-6 divide-y divide-white/10 border-y border-white/10">
+              {consistencyChecks.map((check) => (
+                <article key={`${check.sourceTaskSlug}:${check.targetTaskSlug}:${check.name}`} className="grid gap-3 py-6 md:grid-cols-[48px_1fr_auto] md:items-center">
+                  <div className="text-xl text-white/30">C{String(check.sequenceIndex).padStart(2, "0")}</div>
+                  <div>
+                    <div className="text-lg font-medium text-white">{check.name}</div>
+                    <div className="mt-1 text-sm text-white/45">
+                      {check.status === "passed"
+                        ? "Required value was carried across tasks."
+                        : check.failureReason ?? "The required cross-app value did not match."}
+                    </div>
+                  </div>
+                  <div className={check.status === "passed" ? "text-2xl text-[#d7ff00]" : "text-2xl text-[#ff8d7a]"}>
+                    {Math.round(check.score * 100)}%
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </main>
   );

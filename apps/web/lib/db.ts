@@ -14,6 +14,7 @@ import { createSupabaseAdminClient } from "./supabase/admin";
 import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 import { hostedWebCatalogReleases } from "@agentbench/test-cases/release";
+import type { PublicConsistencyCheck } from "./public-result-consistency";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
@@ -675,6 +676,7 @@ export type PublicBenchmarkResult = {
     score: number;
     summary: string;
   }>;
+  consistencyChecks: PublicConsistencyCheck[];
 };
 
 export async function getPublicBenchmarkResult(runId: string): Promise<PublicBenchmarkResult | null> {
@@ -691,13 +693,23 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
   if (!row) return null;
 
   const run = mapRunRow(row);
-  const [{ data: benchmark, error: benchmarkError }, { data: summary, error: summaryError }, { data: results, error: resultsError }] = await Promise.all([
+  const [
+    { data: benchmark, error: benchmarkError },
+    { data: summary, error: summaryError },
+    { data: results, error: resultsError },
+    { data: consistencyChecks, error: consistencyError },
+  ] = await Promise.all([
     supabase.from("benchmark_cases").select("title, description").eq("id", run.caseId).maybeSingle(),
     supabase.from("public_hosted_run_summaries").select("suite_slug, suite_version").eq("run_id", runId).maybeSingle(),
     supabase.from("public_hosted_run_tasks").select("app, task_slug, status, score, summary, created_at").eq("run_id", runId).order("created_at", { ascending: true }),
+    supabase
+      .from("public_hosted_run_consistency_checks")
+      .select("sequence_index, name, source_task_slug, target_task_slug, status, score, required, failure_reason")
+      .eq("run_id", runId)
+      .order("sequence_index", { ascending: true }),
   ]);
-  if (benchmarkError || summaryError || resultsError) {
-    throw benchmarkError ?? summaryError ?? resultsError;
+  if (benchmarkError || summaryError || resultsError || consistencyError) {
+    throw benchmarkError ?? summaryError ?? resultsError ?? consistencyError;
   }
   if (!benchmark) return null;
 
@@ -713,6 +725,16 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
       status: result.status!,
       score: result.score!,
       summary: result.summary!,
+    })),
+    consistencyChecks: (consistencyChecks ?? []).map((check) => ({
+      sequenceIndex: check.sequence_index ?? 0,
+      name: check.name ?? "Cross-app consistency check",
+      sourceTaskSlug: check.source_task_slug ?? "source task",
+      targetTaskSlug: check.target_task_slug ?? "target task",
+      status: check.status === "passed" ? "passed" : "failed",
+      score: check.score ?? 0,
+      required: check.required !== false,
+      failureReason: check.failure_reason,
     })),
   };
 }
