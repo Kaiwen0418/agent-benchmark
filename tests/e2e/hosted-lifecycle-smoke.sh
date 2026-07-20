@@ -234,6 +234,23 @@ function normalizedSessions(benchmarkCase) {
   };
 }
 
+function minimumFullPassScore(manifest) {
+  if (!("capabilityMatrix" in manifest)) return 1;
+  const matrix = requireObject(manifest.capabilityMatrix, "capability matrix");
+  if (!Array.isArray(matrix.dimensions)) {
+    throw new Error("Capability matrix dimensions must be an array.");
+  }
+  const optionalWeight = matrix.dimensions.reduce((sum, value, index) => {
+    const dimension = requireObject(value, `capability dimension ${index}`);
+    if (dimension.required !== false) return sum;
+    if (typeof dimension.weight !== "number" || !Number.isFinite(dimension.weight)) {
+      throw new Error(`Capability dimension ${index} weight must be finite.`);
+    }
+    return sum + dimension.weight;
+  }, 0);
+  return Number((1 - optionalWeight).toFixed(4));
+}
+
 function generatedConfig(sessionRows, sequenceIndex) {
   const session = sessionRows.find((candidate) => candidate.sequence_index === sequenceIndex);
   const generation = requireObject(
@@ -467,8 +484,20 @@ async function main() {
   if (scoreRows.length !== 1) {
     throw new Error(`Expected one aggregate attempt score, got ${scoreRows.length}.`);
   }
-  if (smokeMode === "full-pass" && (scoreRows[0].status !== "passed" || Number(scoreRows[0].score) !== 1)) {
-    throw new Error(`Expected a passing aggregate score, got ${JSON.stringify(scoreRows[0])}.`);
+  const aggregateScore = Number(scoreRows[0].score);
+  const minimumScore = minimumFullPassScore(revisionManifest);
+  if (
+    smokeMode === "full-pass"
+    && (
+      scoreRows[0].status !== "passed"
+      || !Number.isFinite(aggregateScore)
+      || aggregateScore < minimumScore
+      || aggregateScore > 1
+    )
+  ) {
+    throw new Error(
+      `Expected a passing aggregate score in [${minimumScore}, 1], got ${JSON.stringify(scoreRows[0])}.`,
+    );
   }
 
   const selectedVariants = sessionRows
