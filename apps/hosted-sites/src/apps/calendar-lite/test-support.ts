@@ -17,6 +17,8 @@ export const calendarLiteTestSupport: HostedAppTestSupport<"calendar-lite"> = {
           id: `availability-check-test-${index}`,
           checkNumber: index,
           status: index === actorUpdate.requiredRechecks ? "updated" : "pending",
+          eventId: "event-test",
+          baselineRevisionCount: 0,
           createdAt: "2026-06-24T00:00:00.000Z",
         });
       }
@@ -32,6 +34,8 @@ export const calendarLiteTestSupport: HostedAppTestSupport<"calendar-lite"> = {
       resource: configStringOrNull(config, "expectedResource") ?? undefined,
       occurrences: typeof config.expectedOccurrences === "number" ? config.expectedOccurrences : undefined,
       createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:01:00.000Z",
+      revisionCount: actorUpdate ? 1 : 0,
     });
   },
   breakPassingState(session) {

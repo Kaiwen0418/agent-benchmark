@@ -2,6 +2,8 @@ export type InboxPolicyAmendment = {
   requiredRechecks: number;
   pendingMessage: string;
   appliedMessage: string;
+  provisionalRecipients: string[];
+  provisionalSubject: string;
 };
 
 export function readInboxPolicyAmendment(
@@ -18,6 +20,11 @@ export function readInboxPolicyAmendment(
     || record.pendingMessage.length === 0
     || typeof record.appliedMessage !== "string"
     || record.appliedMessage.length === 0
+    || !Array.isArray(record.provisionalRecipients)
+    || record.provisionalRecipients.length === 0
+    || record.provisionalRecipients.some((recipient) => typeof recipient !== "string")
+    || typeof record.provisionalSubject !== "string"
+    || record.provisionalSubject.length === 0
   ) {
     return null;
   }
@@ -25,5 +32,7 @@ export function readInboxPolicyAmendment(
     requiredRechecks: record.requiredRechecks,
     pendingMessage: record.pendingMessage,
     appliedMessage: record.appliedMessage,
+    provisionalRecipients: record.provisionalRecipients.map((recipient) => recipient.toLowerCase()).sort(),
+    provisionalSubject: record.provisionalSubject,
   };
 }

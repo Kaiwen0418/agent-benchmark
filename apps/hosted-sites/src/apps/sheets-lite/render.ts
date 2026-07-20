@@ -20,11 +20,18 @@ export function renderSheetsLite(
     ? session.state.sheetAnalysisRows.map((row) => `<tr>
         <td>${escapeHtml(row.orderId)}</td><td>${escapeHtml(row.vendorName)}</td><td>${row.subtotal.toFixed(2)}</td>
         <td>${row.tax.toFixed(2)}</td><td>${row.landedTotal.toFixed(2)}</td><td>${row.decision}</td>
+        <td><form method="post" action="/sheets/rows/${encodeURIComponent(row.orderId)}/delete?session=${encodeURIComponent(session.token)}"><button type="submit">Remove row</button></form></td>
       </tr>`).join("")
-    : `<tr><td colspan="6" class="muted">No analysis rows yet.</td></tr>`;
+    : `<tr><td colspan="7" class="muted">No analysis rows yet.</td></tr>`;
   const orderOptions = session.state.sheetOrders.map(
     (order) => `<option value="${escapeHtml(order.id)}">${escapeHtml(order.id)}</option>`,
   ).join("");
+  const latestValidation = session.state.sheetValidationRuns.at(-1);
+  const validationHtml = latestValidation
+    ? `<p class="${latestValidation.status === "passed" ? "" : "muted"}">${latestValidation.status === "passed"
+        ? "Validation passed."
+        : "Validation found discrepancies. Inspect and repair the analysis, then validate again."}</p>`
+    : `<p class="muted">Analysis has not been validated.</p>`;
 
   sendHtml(response, 200, layout({
     title: "SheetsLite",
@@ -47,7 +54,7 @@ export function renderSheetsLite(
     </section>
     <section class="panel" style="margin-top:16px;overflow-x:auto;">
       <h2>Analysis</h2>
-      <table><thead><tr><th>Order</th><th>Vendor</th><th>Subtotal</th><th>Tax</th><th>Landed total</th><th>Decision</th></tr></thead><tbody>${analysisRows}</tbody></table>
+      <table><thead><tr><th>Order</th><th>Vendor</th><th>Subtotal</th><th>Tax</th><th>Landed total</th><th>Decision</th><th>Actions</th></tr></thead><tbody>${analysisRows}</tbody></table>
       <form method="post" action="/sheets/rows?session=${encodeURIComponent(session.token)}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:16px;align-items:end;">
         <label>Order<select name="orderId" style="display:block;width:100%;margin-top:6px;">${orderOptions}</select></label>
         <label>Vendor name<input name="vendorName" style="display:block;width:100%;margin-top:6px;" /></label>
@@ -61,6 +68,7 @@ export function renderSheetsLite(
         <button type="submit">Validate analysis</button>
         <span class="muted">${session.state.sheetValidationRuns.length} validation runs</span>
       </form>
+      ${validationHtml}
     </section>`,
   }));
 }

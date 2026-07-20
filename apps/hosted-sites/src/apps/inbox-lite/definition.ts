@@ -22,7 +22,11 @@ function isInboxMessage(value: unknown): value is InboxMessage {
     && typeof value.id === "string"
     && typeof value.author === "string"
     && typeof value.body === "string"
-    && typeof value.createdAt === "string";
+    && typeof value.createdAt === "string"
+    && typeof value.updatedAt === "string"
+    && typeof value.revisionCount === "number"
+    && Number.isInteger(value.revisionCount)
+    && value.revisionCount >= 0;
 }
 
 function isInboxAttachment(value: unknown): value is InboxAttachment {
@@ -70,6 +74,10 @@ function isPolicyCheck(value: unknown): value is InboxPolicyCheck {
     && typeof value.checkNumber === "number"
     && Number.isInteger(value.checkNumber)
     && (value.status === "pending" || value.status === "updated")
+    && typeof value.draftId === "string"
+    && typeof value.baselineRevisionCount === "number"
+    && Number.isInteger(value.baselineRevisionCount)
+    && value.baselineRevisionCount >= 0
     && typeof value.createdAt === "string";
 }
 

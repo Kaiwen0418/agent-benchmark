@@ -40,13 +40,13 @@ jobs:
           - hosted-web-suite
           - hosted-web-hard-suite
         generation_seed:
-          - full-pool-164
-          - full-pool-268
-          - full-pool-327
-          - full-pool-548
-          - full-pool-819
-          - full-pool-843
-          - full-pool-853
+          - full-pool-919
+          - full-pool-611
+          - full-pool-264
+          - full-pool-962
+          - full-pool-744
+          - full-pool-412
+          - full-pool-953
     steps:
       - name: Checkout develop
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5

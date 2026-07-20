@@ -33,6 +33,15 @@ export function evaluateCalendarLite(session: HostedSessionFor<"calendar-lite">)
       (expectedResource === null || calendarEvent.resource === expectedResource) &&
       (expectedOccurrences === null || calendarEvent.occurrences === expectedOccurrences),
   );
+  const updatedAvailabilityCheck = session.state.calendarAvailabilityChecks.find((check) => check.status === "updated");
+  const trackedEventId = updatedAvailabilityCheck?.eventId;
+  const actorRevisionApplied = actorUpdate === null || (
+    actorUpdateApplied
+    && match !== undefined
+    && match.id === trackedEventId
+    && match.revisionCount > (updatedAvailabilityCheck?.baselineRevisionCount ?? Number.POSITIVE_INFINITY)
+    && session.state.calendarEvents.length === 1
+  );
   return aggregateStrictScore({
     evaluators: [
       match
@@ -56,6 +65,22 @@ export function evaluateCalendarLite(session: HostedSessionFor<"calendar-lite">)
                 name: "actor availability was rechecked",
                 errorMessage: "The required deterministic actor update was not observed before scheduling.",
                 evidence: { recheckCount: session.state.calendarAvailabilityChecks.length },
+              }),
+          actorRevisionApplied
+            ? passedEvaluator({
+                type: "backend_state",
+                name: "tentative event revised in place",
+                evidence: { revisedInPlace: true, revisionCount: match?.revisionCount ?? 0, eventCount: 1 },
+              })
+            : failedEvaluator({
+                type: "backend_state",
+                name: "tentative event revised in place",
+                errorMessage: "The original tentative event was not rescheduled in place after the actor update.",
+                evidence: {
+                  revisedInPlace: false,
+                  revisionCount: match?.revisionCount ?? 0,
+                  eventCount: session.state.calendarEvents.length,
+                },
               })]),
     ],
     passSummary: "The requested calendar event was created.",

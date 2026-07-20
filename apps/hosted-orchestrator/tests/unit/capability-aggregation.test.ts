@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hostedWebCapabilityDraftMetadata } from "@agentbench/test-cases";
+import { hostedWebCapabilitySuiteMetadata } from "@agentbench/test-cases";
 import { buildCapabilityAttemptEvaluation } from "../../src/capability-aggregation.js";
 
 const capabilityMatrix = {
@@ -241,13 +241,13 @@ test("rejects forged scenario metadata that omits its capability contract", () =
   );
 });
 
-test("evaluates the complete unpublished capability campaign from persisted evidence", () => {
+test("evaluates the complete hard v1.1.0 campaign from persisted evidence", () => {
   const recoveredByTask: Record<string, string> = {
     "capability-procurement-analysis": "stale-procurement-view",
     "capability-policy-revision-message": "rejected-policy-message",
     "capability-coordinated-schedule": "interrupted-calendar-navigation",
   };
-  const sessions = hostedWebCapabilityDraftMetadata.sessions.map((definition, index) => {
+  const sessions = hostedWebCapabilitySuiteMetadata.sessions.map((definition, index) => {
     const variant = definition.metadata.questionVariants[0]!;
     const evaluators = definition.app === "wiki-lite"
       ? [{ type: "retrieve_value", name: "verified source", status: "passed", score: 1, required: true }]
@@ -263,7 +263,7 @@ test("evaluates the complete unpublished capability campaign from persisted evid
     }
     const recoveredFaultId = recoveredByTask[definition.taskSlug];
     return {
-      id: `draft-session-${index}`,
+      id: `capability-session-${index}`,
       taskSlug: definition.taskSlug,
       status: "passed" as const,
       score: 1,
@@ -279,8 +279,8 @@ test("evaluates the complete unpublished capability campaign from persisted evid
   });
   const result = buildCapabilityAttemptEvaluation({
     attemptMetadata: {
-      capabilityMatrix: hostedWebCapabilityDraftMetadata.capabilityMatrix,
-      scenarioGraph: hostedWebCapabilityDraftMetadata.scenarioGraph,
+      capabilityMatrix: hostedWebCapabilitySuiteMetadata.capabilityMatrix,
+      scenarioGraph: hostedWebCapabilitySuiteMetadata.scenarioGraph,
     },
     sessions,
   });

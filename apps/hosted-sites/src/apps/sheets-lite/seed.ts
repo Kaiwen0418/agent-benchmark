@@ -1,4 +1,4 @@
-import type { SheetOrder, SheetVendor } from "./types.js";
+import type { SheetAnalysisRow, SheetOrder, SheetVendor } from "./types.js";
 
 export const sheetSeedVendors: SheetVendor[] = [
   { id: "V-01", name: "Northstar Components", status: "active", region: "UK" },
@@ -15,6 +15,18 @@ export const sheetSeedOrders: SheetOrder[] = [
   { id: "PO-105", vendorId: "V-04", category: "equipment", units: 2, unitPrice: 300, taxRate: 0.2, shipping: 15 },
   { id: "PO-106", vendorId: "V-01", category: "equipment", units: 10, unitPrice: 110, taxRate: 0.2, shipping: 40 },
   { id: "PO-107", vendorId: "V-02", category: "supplies", units: 20, unitPrice: 15, taxRate: 0.2, shipping: 10 },
+];
+
+export const sheetSeedAnalysisRows: SheetAnalysisRow[] = [
+  {
+    orderId: "PO-101",
+    vendorName: "Northstar Components",
+    subtotal: 600,
+    tax: 100,
+    landedTotal: 725,
+    decision: "APPROVE",
+    updatedAt: "2026-07-01T08:30:00.000Z",
+  },
 ];
 
 export function getSheetsLiteStartPath() {

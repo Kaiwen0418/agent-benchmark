@@ -15,6 +15,7 @@ export type ActorUpdate = {
   requiredRechecks: number;
   pendingMessage: string;
   appliedMessage: string;
+  provisionalStartTime: string;
   busyEvent: BusyEvent;
 };
 
@@ -65,6 +66,8 @@ export function readActorUpdate(config: Record<string, unknown>): ActorUpdate | 
     || record.pendingMessage.length === 0
     || typeof record.appliedMessage !== "string"
     || record.appliedMessage.length === 0
+    || typeof record.provisionalStartTime !== "string"
+    || !/^\d{2}:\d{2}$/.test(record.provisionalStartTime)
     || !isBusyEvent(record.busyEvent)
   ) {
     return null;
@@ -73,6 +76,7 @@ export function readActorUpdate(config: Record<string, unknown>): ActorUpdate | 
     requiredRechecks: record.requiredRechecks,
     pendingMessage: record.pendingMessage,
     appliedMessage: record.appliedMessage,
+    provisionalStartTime: record.provisionalStartTime,
     busyEvent: {
       ...record.busyEvent,
       attendeeEmail: record.busyEvent.attendeeEmail.toLowerCase(),

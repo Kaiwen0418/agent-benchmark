@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  hostedWebCapabilityDraftMetadata,
   hostedWebHardSuiteMetadata,
   hostedWebSuiteMetadata,
 } from "@agentbench/test-cases";
@@ -31,13 +30,10 @@ type DeclaredSuite = {
 const uiVariants = ["workspace", "sidebar", "compact", "dashboard", "editorial"] as const;
 const uiThemes = ["light", "dark"] as const;
 
-// Every published suite and the unpublished capability draft are swept
-// independently. The draft stays outside the catalog until its campaign and
-// calibration gates are complete, but receives the same scoring guarantees.
+// Every published suite is swept independently across all presentations.
 const suites: DeclaredSuite[] = [
   hostedWebSuiteMetadata as unknown as DeclaredSuite,
   hostedWebHardSuiteMetadata as unknown as DeclaredSuite,
-  hostedWebCapabilityDraftMetadata as unknown as DeclaredSuite,
 ];
 
 function makeSession(suite: DeclaredSuite, definition: DeclaredSession, variant: DeclaredVariant): HostedSession {

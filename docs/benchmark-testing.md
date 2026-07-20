@@ -58,13 +58,13 @@ performed prerequisite actions out of order.
 
 ## Independent Suite Versioning
 
-The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.10` and `hosted-web-hard-suite-v1.0.5`). A change to a hard variant, the hard pool composition, a hard cross-app chain, or a testcase time limit bumps the affected suite's version and content hash.
+The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.10` and `hosted-web-hard-suite-v1.1.0`). A change to a hard variant, the hard pool composition, a hard cross-app chain, or a testcase time limit bumps the affected suite's version and content hash. The v1.0.5 hard revision remains immutable and available to historical attempts and calibration runs after v1.1.0 becomes current.
 
 This is enforced mechanically: new task-config fields used by hard variants are optional and only inspected when present, and `consistencyChecks` is an optional manifest key that is absent from the easy manifest. The easy catalog's "stable revision identity and content hash" test fails if a hard-suite change leaks into the easy manifest.
 
 ## Cross-App Consistency
 
-The hard suite declares a two-value cross-app chain: the release-lookup answer must become the later note title, and the policy-lookup answer must become its body. Suite-level consistency checks link each earlier session's published final state to the later session's final state and are evaluated only by the scoring module (`evaluateSuiteConsistency`), then folded into `aggregateSuiteScore` by the orchestrator at suite completion as first-class weighted-required components. Required behavior:
+Hard v1.1.0 declares a branch-and-merge campaign: release evidence becomes the handoff title, policy evidence becomes both the revised Inbox body and handoff body, and the handoff title becomes the coordinated Calendar title. Suite-level consistency checks link each earlier session's published final state to the later session's final state and are evaluated only by the scoring module (`evaluateSuiteConsistency`), then folded into `aggregateSuiteScore` by the orchestrator at suite completion as first-class weighted-required components. Required behavior:
 
 - Suite-level checks live solely in the scoring module and orchestrator aggregation. Apps never compute them and never see other sessions' state.
 - A check reads only the agents' own final states, never private `taskConfig`. The matching per-session evaluator stays lenient on the carried field so the carry is enforced only at suite level.
@@ -146,7 +146,7 @@ inflate the sample.
 Generate the machine-readable report with:
 
 ```bash
-pnpm calibration:report observations.json hard-v1.0.5 capability-candidate
+pnpm calibration:report observations.json hosted-web-hard-suite-v1.0.5 hosted-web-hard-suite-v1.1.0
 ```
 
 The report includes overall and per-agent-family pass rates, per-track scores,
@@ -159,19 +159,27 @@ candidate pass-rate interval's upper bound is below the baseline interval's
 lower bound. This report is evidence tooling, not a substitute for actually
 running the representative agents.
 
-The staged `inbox-lite` surface scores exact server-owned outbound message
+The published v1.1.0 `inbox-lite` surface scores exact server-owned outbound message
 state and a separate required safety evaluator. Confidential canaries and
 prohibited recipients are rejected before a draft is persisted; only the
 violation class is retained. Public final state contains message identifiers,
 counts, and content digests, never recipient addresses or message bodies. Its
-campaign variants reveal an amended routing policy only after two deterministic
-rechecks and require the resulting message to use that revision; a named
-persisted evaluator supplies graph revision proof.
-The staged `sheets-lite` surface scores an exact filtered result set after a
+campaign variants require the agent to save a provisional safe draft before
+polling, keep that tracked draft unchanged while the amendment is pending, then
+revise and send the same draft ID after the amended routing appears. Revision
+counts are compared with the server-recorded pre-amendment baseline; replacement
+drafts, leftover drafts, unsafe routing, and pre-amendment sends fail closed. A
+named persisted evaluator supplies graph revision proof.
+The published v1.1.0 `sheets-lite` surface scores an exact filtered result set after a
 join, normalized two-decimal formulas, decisions, and a required explicit
-validation run. Extra rows, incorrect formulas, or validation performed before
-the final row set fail closed. Both staged pools receive positive, negative,
-and all-presentation scoring sweeps even before they enter an immutable suite.
+validation run. Sessions begin with a plausible near-miss analysis row. A failed
+validation remains non-terminal and exposes only a coarse discrepancy notice,
+so the agent must repair or remove the bad row and validate again. Extra rows,
+incorrect formulas, or stale validation fail closed. Calendar campaign variants
+similarly require a tentative event before polling and verify that the same event
+ID is rescheduled after the actor update without duplicate events. Both pools
+receive positive, negative, and all-presentation scoring sweeps as part of the
+immutable v1.1.0 hard suite.
 
 Only a redacted graph projection may be stored in or exposed through the suite
 aggregate: score, status, and passed/failed/error counts. Node IDs, edge IDs,
@@ -206,7 +214,7 @@ Publishing converts the validated catalog into an immutable `benchmark_case_revi
 - `pnpm --filter hosted-sites test` imports the canonical catalog, executes positive and negative scoring for every declared variant across both published suites, and repeats each passing state across all layouts and themes.
 - `pnpm catalog:publish` validates and publishes the current catalog release with service-role credentials.
 - `pnpm verify:ci` runs the complete repository gate, including Redis command tests, PostgreSQL lifecycle races, local hosted smoke, and production builds.
-- `Hosted Variant Sweep` runs seven deterministic full-pass attempts per suite against the development environment every Monday and on demand. The default-branch schedule dispatches the workflow from `develop` before it requests the protected `development` Environment. The workflow matrix passes `BENCHMARK_CASE_SLUG` explicitly for both `hosted-web-suite` and `hosted-web-hard-suite`. Seeds `full-pool-164`, `full-pool-268`, `full-pool-327`, `full-pool-548`, `full-pool-819`, `full-pool-843`, and `full-pool-853` cover every current variant without using Web guest quota; an orchestrator test reads this list directly from the workflow and fails if either suite loses coverage. The hard suite is swept independently from the easy suite and ranked separately on public result and leaderboard surfaces.
+- `Hosted Variant Sweep` runs seven deterministic full-pass attempts per suite against the development environment every Monday and on demand. The default-branch schedule dispatches the workflow from `develop` before it requests the protected `development` Environment. The workflow matrix passes `BENCHMARK_CASE_SLUG` explicitly for both `hosted-web-suite` and `hosted-web-hard-suite`. Seeds `full-pool-919`, `full-pool-611`, `full-pool-264`, `full-pool-962`, `full-pool-744`, `full-pool-412`, and `full-pool-953` cover every current variant without using Web guest quota; an orchestrator test reads this list directly from the workflow and fails if either suite loses coverage. The hard suite is swept independently from the easy suite and ranked separately on public result and leaderboard surfaces.
 - Each lifecycle smoke logs selected variant IDs and requires one unique `hosted_web_results` row per suite session plus one `benchmark_attempt_scores` row.
 
 The seed list is versioned with the suite. Recompute it whenever variant IDs, session order, app slug, or task slug changes; CI remains the immediate guard against an uncovered variant.

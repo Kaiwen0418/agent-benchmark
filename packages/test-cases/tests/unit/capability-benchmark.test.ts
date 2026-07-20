@@ -3,13 +3,19 @@ import test from "node:test";
 import {
   capabilityMatrixSchema,
   hostedSuiteMetadataSchema,
-  hostedWebCapabilityDraftMetadata,
+  hostedWebCapabilitySuiteMetadata,
   hostedWebHardSuiteMetadata,
   hostedWebSuites,
   privateScenarioGraphSchema,
 } from "../../src/index.js";
 
 function capabilityMatrix() {
+  const releaseResearch = hostedWebHardSuiteMetadata.sessions.find(
+    (session) => session.taskSlug === "capability-wiki-release-research",
+  )!;
+  const policyResearch = hostedWebHardSuiteMetadata.sessions.find(
+    (session) => session.taskSlug === "capability-wiki-policy-research",
+  )!;
   return {
     schemaVersion: 1 as const,
     capabilities: [
@@ -20,14 +26,14 @@ function capabilityMatrix() {
     ],
     coverage: [
       {
-        taskSlug: "wiki-release-answer-hard",
-        variantId: hostedWebHardSuiteMetadata.sessions[3]!.metadata.questionVariants[0]!.id,
+        taskSlug: releaseResearch.taskSlug,
+        variantId: releaseResearch.metadata.questionVariants[0]!.id,
         capabilityIds: ["research-reconciliation"],
         dimensionIds: ["final-state-correctness" as const],
       },
       {
-        taskSlug: "wiki-policy-answer-hard",
-        variantId: hostedWebHardSuiteMetadata.sessions[4]!.metadata.questionVariants[1]!.id,
+        taskSlug: policyResearch.taskSlug,
+        variantId: policyResearch.metadata.questionVariants[1]!.id,
         capabilityIds: ["research-reconciliation"],
         dimensionIds: ["final-state-correctness" as const],
       },
@@ -41,17 +47,17 @@ function scenarioGraph() {
     nodes: [
       {
         id: "release-research",
-        taskSlug: "wiki-release-answer-hard",
+        taskSlug: "capability-wiki-release-research",
         capabilityIds: ["research-reconciliation"],
       },
       {
         id: "policy-research",
-        taskSlug: "wiki-policy-answer-hard",
+        taskSlug: "capability-wiki-policy-research",
         capabilityIds: ["research-reconciliation"],
       },
       {
         id: "optional-old-policy",
-        taskSlug: "forum-battery-moderation-hard",
+        taskSlug: "capability-wiki-policy-research",
         kind: "distractor" as const,
         capabilityIds: ["research-reconciliation"],
         avoidanceEvaluatorName: "optional old policy untouched",
@@ -196,6 +202,7 @@ test("private scenario graph rejects ambiguous request-level fault triggers", ()
 test("a scenario graph cannot exist without its private capability matrix", () => {
   const parsed = hostedSuiteMetadataSchema.safeParse({
     ...hostedWebHardSuiteMetadata,
+    capabilityMatrix: undefined,
     scenarioGraph: scenarioGraph(),
   });
 
@@ -205,8 +212,8 @@ test("a scenario graph cannot exist without its private capability matrix", () =
   }
 });
 
-test("capability draft defines a covered branching campaign without publishing it", () => {
-  const suite = hostedSuiteMetadataSchema.parse(hostedWebCapabilityDraftMetadata);
+test("hard v1.1.0 publishes the covered branching capability campaign", () => {
+  const suite = hostedSuiteMetadataSchema.parse(hostedWebCapabilitySuiteMetadata);
   assert.ok(suite.sessions.length >= 7);
   assert.ok(new Set(suite.sessions.map((session) => session.app)).size >= 4);
   assert.ok((suite.capabilityMatrix?.capabilities.length ?? 0) >= 4);
@@ -238,6 +245,6 @@ test("capability draft defines a covered branching campaign without publishing i
   );
   assert.equal(
     hostedWebSuites.some((published) => published.metadata.suiteSlug === suite.suiteSlug),
-    false,
+    true,
   );
 });

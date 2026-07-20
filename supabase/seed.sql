@@ -601,27 +601,304 @@ select public.publish_benchmark_case_catalog(
   "id": "bb7e5cd4-f3ed-4aa0-9fcc-46fec39997eb",
   "slug": "hosted-web-hard-suite",
   "title": "Hosted Web Hard Suite",
-  "description": "Run the published deterministic hosted-web hard benchmark suite.",
+  "description": "Run the capability-complete deterministic hosted-web hard benchmark suite.",
   "category": "browser",
   "difficulty": "hard",
   "provider": "hosted-web",
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-hard-suite-v1.0.5',
+  'hosted-web-hard-suite-v1.1.0',
   $catalog${
   "suiteSlug": "hosted-web-hard-suite-v1",
-  "suiteVersion": "v1.0.5",
+  "suiteVersion": "v1.1.0",
   "timeLimitMinutesPerTestcase": 10,
   "sessions": [
     {
-      "app": "shopping-lite",
-      "taskSlug": "shopping-constrained-checkout-hard",
-      "title": "Shopping Checkout (Hard)",
-      "startPath": "/shopping",
-      "taskVersion": "v3",
-      "seedVersion": "shopping-lite-hard-v2",
+      "app": "wiki-lite",
+      "taskSlug": "capability-wiki-release-research",
+      "title": "Release Evidence Reconciliation",
+      "startPath": "/wiki",
+      "taskVersion": "v1",
+      "seedVersion": "wiki-lite-hard-v2",
       "sequenceIndex": 0,
+      "weight": 1,
+      "required": true,
+      "metadata": {
+        "questionVariants": [
+          {
+            "id": "current-return-window",
+            "goal": "A Q2 2026 changelog announces an updated return window. Follow the changelog to the current returns policy, ignore the deprecated 2025 policy, and submit only the current return window duration.",
+            "taskConfig": {
+              "targetArticleSlug": "returns-policy",
+              "secondaryArticleSlug": "changelog-2026-q2",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "30 days",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "returns-policy"
+              }
+            }
+          },
+          {
+            "id": "current-warranty-coverage",
+            "goal": "Compare the legacy and current warranty policies. Open the legacy page for context, then submit only the current warranty coverage duration from the current Warranty Policy article.",
+            "taskConfig": {
+              "targetArticleSlug": "warranty-policy",
+              "secondaryArticleSlug": "warranty-policy-legacy",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "24 months",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "warranty-policy"
+              }
+            }
+          },
+          {
+            "id": "recommended-probook-charger",
+            "goal": "The laptop charger buying guide recommends an in-stock charger for the ProBook. Verify compatibility in the charger compatibility matrix, then submit the exact recommended charger name.",
+            "taskConfig": {
+              "targetArticleSlug": "laptop-charger-guide",
+              "secondaryArticleSlug": "charger-compatibility-matrix",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "ProBook 30W Travel Charger",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "laptop-charger-guide"
+              }
+            }
+          },
+          {
+            "id": "current-api-rate-limit",
+            "goal": "Use the API changelog to identify the current API reference version, open that version's article (not a deprecated one), and submit only its current per-token rate limit.",
+            "taskConfig": {
+              "targetArticleSlug": "api-reference-v3",
+              "secondaryArticleSlug": "api-changelog",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "240 requests per minute",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "api-reference-v3"
+              }
+            }
+          },
+          {
+            "id": "current-data-retention",
+            "goal": "The security overview references the current data retention policy. Open both, ignore the deprecated 2024 retention note, and submit only the current retention period.",
+            "taskConfig": {
+              "targetArticleSlug": "data-retention-policy",
+              "secondaryArticleSlug": "security-overview",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "90 days",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "data-retention-policy"
+              }
+            }
+          },
+          {
+            "id": "verified-api-rate-limit",
+            "goal": "Triangulate the current API rate limit: open the API changelog, the current v3 API reference, and the security overview that defines token scope. Ignore deprecated API versions and submit only the current per-token rate limit.",
+            "taskConfig": {
+              "targetArticleSlug": "api-reference-v3",
+              "requiredArticleSlugs": [
+                "api-changelog",
+                "api-reference-v3",
+                "security-overview"
+              ],
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "240 requests per minute",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "api-reference-v3"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "app": "wiki-lite",
+      "taskSlug": "capability-wiki-policy-research",
+      "title": "Policy Evidence Reconciliation",
+      "startPath": "/wiki",
+      "taskVersion": "v1",
+      "seedVersion": "wiki-lite-hard-v2",
+      "sequenceIndex": 1,
+      "weight": 1,
+      "required": true,
+      "metadata": {
+        "questionVariants": [
+          {
+            "id": "current-return-window",
+            "goal": "A Q2 2026 changelog announces an updated return window. Follow the changelog to the current returns policy, ignore the deprecated 2025 policy, and submit only the current return window duration.",
+            "taskConfig": {
+              "targetArticleSlug": "returns-policy",
+              "secondaryArticleSlug": "changelog-2026-q2",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "30 days",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "returns-policy"
+              }
+            }
+          },
+          {
+            "id": "current-warranty-coverage",
+            "goal": "Compare the legacy and current warranty policies. Open the legacy page for context, then submit only the current warranty coverage duration from the current Warranty Policy article.",
+            "taskConfig": {
+              "targetArticleSlug": "warranty-policy",
+              "secondaryArticleSlug": "warranty-policy-legacy",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "24 months",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "warranty-policy"
+              }
+            }
+          },
+          {
+            "id": "recommended-probook-charger",
+            "goal": "The laptop charger buying guide recommends an in-stock charger for the ProBook. Verify compatibility in the charger compatibility matrix, then submit the exact recommended charger name.",
+            "taskConfig": {
+              "targetArticleSlug": "laptop-charger-guide",
+              "secondaryArticleSlug": "charger-compatibility-matrix",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "ProBook 30W Travel Charger",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "laptop-charger-guide"
+              }
+            }
+          },
+          {
+            "id": "current-api-rate-limit",
+            "goal": "Use the API changelog to identify the current API reference version, open that version's article (not a deprecated one), and submit only its current per-token rate limit.",
+            "taskConfig": {
+              "targetArticleSlug": "api-reference-v3",
+              "secondaryArticleSlug": "api-changelog",
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "240 requests per minute",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "api-reference-v3"
+              }
+            }
+          },
+          {
+            "id": "current-data-retention",
+            "goal": "The security overview references the current data retention policy. Open both, ignore the deprecated 2024 retention note, and submit only the current retention period.",
+            "taskConfig": {
+              "targetArticleSlug": "data-retention-policy",
+              "secondaryArticleSlug": "security-overview",
+              "answerContract": {
+                "kind": "duration",
+                "canonicalValue": "90 days",
+                "normalization": "trim-casefold",
+                "sourceArticleSlug": "data-retention-policy"
+              }
+            }
+          },
+          {
+            "id": "verified-api-rate-limit",
+            "goal": "Triangulate the current API rate limit: open the API changelog, the current v3 API reference, and the security overview that defines token scope. Ignore deprecated API versions and submit only the current per-token rate limit.",
+            "taskConfig": {
+              "targetArticleSlug": "api-reference-v3",
+              "requiredArticleSlugs": [
+                "api-changelog",
+                "api-reference-v3",
+                "security-overview"
+              ],
+              "answerContract": {
+                "kind": "text",
+                "canonicalValue": "240 requests per minute",
+                "normalization": "trim-casefold-punctuation",
+                "sourceArticleSlug": "api-reference-v3"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "app": "sheets-lite",
+      "taskSlug": "capability-procurement-analysis",
+      "title": "Procurement Analysis",
+      "startPath": "/sheets",
+      "taskVersion": "v2",
+      "seedVersion": "sheets-lite-v2",
+      "sequenceIndex": 2,
+      "weight": 1,
+      "required": true,
+      "metadata": {
+        "questionVariants": [
+          {
+            "id": "active-equipment-under-cap",
+            "goal": "A previous analyst left a plausible but unverified row in Analysis. Join Orders to Vendors, repair or remove that row as needed, and leave exactly the equipment orders whose vendor status is active and whose landed total is at most 1,000. For each row, copy the vendor name, calculate subtotal = units × unit price, tax = subtotal × tax rate, landed total = subtotal + tax + shipping, set decision to APPROVE, then run validation. If validation reports discrepancies, inspect and repair the analysis before validating again.",
+            "taskConfig": {
+              "expectedRows": [
+                {
+                  "orderId": "PO-101",
+                  "vendorName": "Northstar Components",
+                  "subtotal": 600,
+                  "tax": 120,
+                  "landedTotal": 745,
+                  "decision": "APPROVE"
+                },
+                {
+                  "orderId": "PO-104",
+                  "vendorName": "Cedar Supply",
+                  "subtotal": 720,
+                  "tax": 144,
+                  "landedTotal": 894,
+                  "decision": "APPROVE"
+                }
+              ]
+            }
+          },
+          {
+            "id": "equipment-exception-audit",
+            "goal": "A previous analyst left a plausible but unverified row in Analysis. Join Orders to Vendors, repair or remove that row as needed, and leave exactly the equipment orders that need exception review because the vendor is not active or the landed total exceeds 1,000. For each row, copy the vendor name, calculate subtotal = units × unit price, tax = subtotal × tax rate, landed total = subtotal + tax + shipping, set decision to REVIEW, then run validation. If validation reports discrepancies, inspect and repair the analysis before validating again.",
+            "taskConfig": {
+              "expectedRows": [
+                {
+                  "orderId": "PO-102",
+                  "vendorName": "Bluebird Industrial",
+                  "subtotal": 600,
+                  "tax": 120,
+                  "landedTotal": 740,
+                  "decision": "REVIEW"
+                },
+                {
+                  "orderId": "PO-105",
+                  "vendorName": "Delta Systems",
+                  "subtotal": 600,
+                  "tax": 120,
+                  "landedTotal": 735,
+                  "decision": "REVIEW"
+                },
+                {
+                  "orderId": "PO-106",
+                  "vendorName": "Northstar Components",
+                  "subtotal": 1100,
+                  "tax": 220,
+                  "landedTotal": 1360,
+                  "decision": "REVIEW"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "app": "shopping-lite",
+      "taskSlug": "capability-constrained-purchase",
+      "title": "Constrained Purchase",
+      "startPath": "/shopping",
+      "taskVersion": "v1",
+      "seedVersion": "shopping-lite-hard-v2",
+      "sequenceIndex": 3,
       "weight": 1,
       "required": true,
       "metadata": {
@@ -700,445 +977,66 @@ select public.publish_benchmark_case_catalog(
       }
     },
     {
-      "app": "forum-lite",
-      "taskSlug": "forum-battery-moderation-hard",
-      "title": "Forum Moderation (Hard)",
-      "startPath": "/forum",
-      "taskVersion": "v3",
-      "seedVersion": "forum-lite-hard-v2",
-      "sequenceIndex": 1,
-      "weight": 1,
-      "required": true,
-      "metadata": {
-        "questionVariants": [
-          {
-            "id": "charge-duplicate-triage",
-            "goal": "Three threads report the same USB-C charging regression. Identify the canonical thread that carries the official fix link, reply there with that link, mark the two duplicate threads ('thr-charge-dup1' and 'thr-charge-dup2') as duplicates of the canonical thread, then lock the canonical thread with reason 'resolved with guide'.",
-            "taskConfig": {
-              "targetThreadId": "thr-charge-main",
-              "expectedReplyValue": "https://support.example.com/hardware/usb-c-charging-fix",
-              "expectedLockReason": "resolved with guide",
-              "requiresMarkDuplicate": true,
-              "canonicalThreadId": "thr-charge-main",
-              "duplicateThreadIds": [
-                "thr-charge-dup1",
-                "thr-charge-dup2"
-              ]
-            }
-          },
-          {
-            "id": "misfiled-safety-escalation",
-            "goal": "A safety report about a smoking wall adapter was filed under the wrong category. Move the thread to the 'safety' category, reply with the official advisory link, then lock it with reason 'safety escalation'.",
-            "taskConfig": {
-              "targetThreadId": "thr-misfiled-safety",
-              "expectedReplyValue": "https://support.example.com/safety/adapter-smoke",
-              "expectedLockReason": "safety escalation",
-              "requiresMove": true,
-              "expectedCategory": "safety"
-            }
-          },
-          {
-            "id": "vague-title-cleanup",
-            "goal": "A networking thread has an unhelpful title. Rename it to 'DNS resolution failures on wired connection', reply with the official DNS reset guide link, then lock it with reason 'resolved with guide'.",
-            "taskConfig": {
-              "targetThreadId": "thr-vague-title",
-              "expectedReplyValue": "https://support.example.com/network/dns-reset",
-              "expectedLockReason": "resolved with guide",
-              "requiresEditTitle": true,
-              "expectedTitle": "DNS resolution failures on wired connection"
-            }
-          },
-          {
-            "id": "hot-charge-consolidate",
-            "goal": "A fast-charge overheating report was miscategorized and has a near-duplicate. Move the main thread to the 'safety' category, mark 'thr-hot-dup' as a duplicate of it, reply with the official advisory link, then lock it with reason 'safety escalation'.",
-            "taskConfig": {
-              "targetThreadId": "thr-hot-main",
-              "expectedReplyValue": "https://support.example.com/safety/fast-charge-heat",
-              "expectedLockReason": "safety escalation",
-              "requiresMove": true,
-              "expectedCategory": "safety",
-              "requiresMarkDuplicate": true,
-              "canonicalThreadId": "thr-hot-main",
-              "duplicateThreadIds": [
-                "thr-hot-dup"
-              ]
-            }
-          },
-          {
-            "id": "hot-charge-full-escalation",
-            "goal": "Fully triage the fast-charge overheating incident in this exact moderation order: report the main thread with reason 'thermal incident', move it to 'safety', rename it to 'Fast-charge overheating safety incident', mark 'thr-hot-dup' as its duplicate, reply with the official advisory link, lock it with reason 'safety escalation', then pin it. Do not lock early.",
-            "taskConfig": {
-              "targetThreadId": "thr-hot-main",
-              "expectedReplyValue": "https://support.example.com/safety/fast-charge-heat",
-              "expectedLockReason": "safety escalation",
-              "requiresPin": true,
-              "requiresReport": true,
-              "expectedReportReason": "thermal incident",
-              "requiresMove": true,
-              "expectedCategory": "safety",
-              "requiresEditTitle": true,
-              "expectedTitle": "Fast-charge overheating safety incident",
-              "requiresMarkDuplicate": true,
-              "canonicalThreadId": "thr-hot-main",
-              "duplicateThreadIds": [
-                "thr-hot-dup"
-              ],
-              "requiredActionOrder": [
-                "report",
-                "move",
-                "edit_title",
-                "mark_duplicate",
-                "lock",
-                "pin"
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "app": "repo-lite",
-      "taskSlug": "repo-coherent-edit-hard",
-      "title": "Repository Coherent Edit (Hard)",
-      "startPath": "/repo",
-      "taskVersion": "v3",
-      "seedVersion": "repo-lite-hard-v2",
-      "sequenceIndex": 2,
-      "weight": 1,
-      "required": true,
-      "metadata": {
-        "questionVariants": [
-          {
-            "id": "release-2-0-0",
-            "goal": "Cut release 2.0.0: bump the version to `2.0.0` in both `package.json` and `src/version.ts`, add a `## 2.0.0` section to `CHANGELOG.md` so the version-consistency CI check passes, then open a merge request titled `Release 2.0.0` targeting `release`.",
-            "taskConfig": {
-              "filePath": "package.json",
-              "expectedText": "\"version\": \"2.0.0\"",
-              "forbiddenText": "\"version\": \"1.0.0\"",
-              "expectedMrTitle": "Release 2.0.0",
-              "expectedTargetBranch": "release",
-              "secondaryFilePath": "src/version.ts",
-              "secondaryExpectedText": "VERSION = \"2.0.0\"",
-              "secondaryForbiddenText": "VERSION = \"1.0.0\"",
-              "additionalFileEdits": [
-                {
-                  "filePath": "CHANGELOG.md",
-                  "expectedText": "## 2.0.0"
-                }
-              ],
-              "ciChecks": [
-                {
-                  "name": "Version consistency",
-                  "token": "2.0.0",
-                  "files": [
-                    "package.json",
-                    "src/version.ts",
-                    "CHANGELOG.md"
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "id": "rename-to-acme-cli",
-            "goal": "Rename the project to `acme-cli`: update `name` in `package.json`, `APP_NAME` in `src/config.ts`, and reference `acme-cli` in `README.md` so the project-name CI check passes, then open a merge request titled `Rename project to acme-cli` targeting `main`.",
-            "taskConfig": {
-              "filePath": "package.json",
-              "expectedText": "\"name\": \"acme-cli\"",
-              "forbiddenText": "\"name\": \"demo-project\"",
-              "expectedMrTitle": "Rename project to acme-cli",
-              "expectedTargetBranch": "main",
-              "secondaryFilePath": "src/config.ts",
-              "secondaryExpectedText": "APP_NAME = \"acme-cli\"",
-              "secondaryForbiddenText": "APP_NAME = \"demo-project\"",
-              "additionalFileEdits": [
-                {
-                  "filePath": "README.md",
-                  "expectedText": "acme-cli"
-                }
-              ],
-              "ciChecks": [
-                {
-                  "name": "Project name consistency",
-                  "token": "acme-cli",
-                  "files": [
-                    "package.json",
-                    "src/config.ts",
-                    "README.md"
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "id": "api-v2-rollout",
-            "goal": "Roll out API v2: set `API_VERSION` to `v2` in `src/api.ts`, update the stable version to `v2` in `docs/API.md`, note `API v2` in `README.md` so the API-version CI check passes, then open a merge request titled `Roll out API v2` targeting `develop`.",
-            "taskConfig": {
-              "filePath": "src/api.ts",
-              "expectedText": "API_VERSION = \"v2\"",
-              "forbiddenText": "API_VERSION = \"v1\"",
-              "expectedMrTitle": "Roll out API v2",
-              "expectedTargetBranch": "develop",
-              "secondaryFilePath": "docs/API.md",
-              "secondaryExpectedText": "Stable version: v2",
-              "secondaryForbiddenText": "Stable version: v1",
-              "additionalFileEdits": [
-                {
-                  "filePath": "README.md",
-                  "expectedText": "API v2"
-                }
-              ],
-              "ciChecks": [
-                {
-                  "name": "API version consistency",
-                  "token": "v2",
-                  "files": [
-                    "src/api.ts",
-                    "docs/API.md",
-                    "README.md"
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "id": "api-v3-conflict-rollout",
-            "goal": "Roll out API v3 from feature branch `feature/api-v3`: update `API_VERSION` to `v3` in `src/api.ts`, set `Stable version: v3` in `docs/API.md`, and add `API v3` to `README.md`. Resolve the simulated target-branch conflict, commit with message `feat: roll out api v3`, request review from `mira`, then open merge request `Roll out API v3` targeting `develop`.",
-            "taskConfig": {
-              "filePath": "src/api.ts",
-              "expectedText": "API_VERSION = \"v3\"",
-              "forbiddenText": "API_VERSION = \"v1\"",
-              "expectedMrTitle": "Roll out API v3",
-              "expectedTargetBranch": "develop",
-              "expectedSourceBranch": "feature/api-v3",
-              "expectedCommitMessage": "feat: roll out api v3",
-              "expectedReviewer": "mira",
-              "requiresConflictResolution": true,
-              "secondaryFilePath": "docs/API.md",
-              "secondaryExpectedText": "Stable version: v3",
-              "secondaryForbiddenText": "Stable version: v1",
-              "additionalFileEdits": [
-                {
-                  "filePath": "README.md",
-                  "expectedText": "API v3"
-                }
-              ],
-              "ciChecks": [
-                {
-                  "name": "API version consistency",
-                  "token": "v3",
-                  "files": [
-                    "src/api.ts",
-                    "docs/API.md",
-                    "README.md"
-                  ]
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "app": "wiki-lite",
-      "taskSlug": "wiki-release-answer-hard",
-      "title": "Wiki Release Lookup (Hard)",
-      "startPath": "/wiki",
-      "taskVersion": "v4",
-      "seedVersion": "wiki-lite-hard-v2",
-      "sequenceIndex": 3,
-      "weight": 1,
-      "required": true,
-      "metadata": {
-        "questionVariants": [
-          {
-            "id": "current-return-window",
-            "goal": "A Q2 2026 changelog announces an updated return window. Follow the changelog to the current returns policy, ignore the deprecated 2025 policy, and submit only the current return window duration.",
-            "taskConfig": {
-              "targetArticleSlug": "returns-policy",
-              "secondaryArticleSlug": "changelog-2026-q2",
-              "answerContract": {
-                "kind": "duration",
-                "canonicalValue": "30 days",
-                "normalization": "trim-casefold",
-                "sourceArticleSlug": "returns-policy"
-              }
-            }
-          },
-          {
-            "id": "current-warranty-coverage",
-            "goal": "Compare the legacy and current warranty policies. Open the legacy page for context, then submit only the current warranty coverage duration from the current Warranty Policy article.",
-            "taskConfig": {
-              "targetArticleSlug": "warranty-policy",
-              "secondaryArticleSlug": "warranty-policy-legacy",
-              "answerContract": {
-                "kind": "duration",
-                "canonicalValue": "24 months",
-                "normalization": "trim-casefold",
-                "sourceArticleSlug": "warranty-policy"
-              }
-            }
-          },
-          {
-            "id": "recommended-probook-charger",
-            "goal": "The laptop charger buying guide recommends an in-stock charger for the ProBook. Verify compatibility in the charger compatibility matrix, then submit the exact recommended charger name.",
-            "taskConfig": {
-              "targetArticleSlug": "laptop-charger-guide",
-              "secondaryArticleSlug": "charger-compatibility-matrix",
-              "answerContract": {
-                "kind": "text",
-                "canonicalValue": "ProBook 30W Travel Charger",
-                "normalization": "trim-casefold",
-                "sourceArticleSlug": "laptop-charger-guide"
-              }
-            }
-          },
-          {
-            "id": "current-api-rate-limit",
-            "goal": "Use the API changelog to identify the current API reference version, open that version's article (not a deprecated one), and submit only its current per-token rate limit.",
-            "taskConfig": {
-              "targetArticleSlug": "api-reference-v3",
-              "secondaryArticleSlug": "api-changelog",
-              "answerContract": {
-                "kind": "text",
-                "canonicalValue": "240 requests per minute",
-                "normalization": "trim-casefold-punctuation",
-                "sourceArticleSlug": "api-reference-v3"
-              }
-            }
-          },
-          {
-            "id": "current-data-retention",
-            "goal": "The security overview references the current data retention policy. Open both, ignore the deprecated 2024 retention note, and submit only the current retention period.",
-            "taskConfig": {
-              "targetArticleSlug": "data-retention-policy",
-              "secondaryArticleSlug": "security-overview",
-              "answerContract": {
-                "kind": "duration",
-                "canonicalValue": "90 days",
-                "normalization": "trim-casefold",
-                "sourceArticleSlug": "data-retention-policy"
-              }
-            }
-          },
-          {
-            "id": "verified-api-rate-limit",
-            "goal": "Triangulate the current API rate limit: open the API changelog, the current v3 API reference, and the security overview that defines token scope. Ignore deprecated API versions and submit only the current per-token rate limit.",
-            "taskConfig": {
-              "targetArticleSlug": "api-reference-v3",
-              "requiredArticleSlugs": [
-                "api-changelog",
-                "api-reference-v3",
-                "security-overview"
-              ],
-              "answerContract": {
-                "kind": "text",
-                "canonicalValue": "240 requests per minute",
-                "normalization": "trim-casefold-punctuation",
-                "sourceArticleSlug": "api-reference-v3"
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "app": "wiki-lite",
-      "taskSlug": "wiki-policy-answer-hard",
-      "title": "Wiki Policy Lookup (Hard)",
-      "startPath": "/wiki",
-      "taskVersion": "v3",
-      "seedVersion": "wiki-lite-hard-v2",
+      "app": "inbox-lite",
+      "taskSlug": "capability-policy-revision-message",
+      "title": "Policy Revision Message",
+      "startPath": "/inbox",
+      "taskVersion": "v2",
+      "seedVersion": "inbox-lite-v2",
       "sequenceIndex": 4,
       "weight": 1,
       "required": true,
       "metadata": {
         "questionVariants": [
           {
-            "id": "current-return-window",
-            "goal": "A Q2 2026 changelog announces an updated return window. Follow the changelog to the current returns policy, ignore the deprecated 2025 policy, and submit only the current return window duration.",
+            "id": "vendor-policy-revision-carry",
+            "goal": "Review the Northwind payment-term exception thread and its attached routing policy. First save one provisional draft using the attached recipient and subject and exactly the answer you submitted in the earlier wiki policy-lookup task as its body. Then recheck the pending amendment until revised routing appears, update that same draft in place, and send it exactly once. Do not include the confidential marker, copy the vendor, create a replacement draft, or modify the unrelated catering thread.",
             "taskConfig": {
-              "targetArticleSlug": "returns-policy",
-              "secondaryArticleSlug": "changelog-2026-q2",
-              "answerContract": {
-                "kind": "duration",
-                "canonicalValue": "30 days",
-                "normalization": "trim-casefold",
-                "sourceArticleSlug": "returns-policy"
-              }
-            }
-          },
-          {
-            "id": "current-warranty-coverage",
-            "goal": "Compare the legacy and current warranty policies. Open the legacy page for context, then submit only the current warranty coverage duration from the current Warranty Policy article.",
-            "taskConfig": {
-              "targetArticleSlug": "warranty-policy",
-              "secondaryArticleSlug": "warranty-policy-legacy",
-              "answerContract": {
-                "kind": "duration",
-                "canonicalValue": "24 months",
-                "normalization": "trim-casefold",
-                "sourceArticleSlug": "warranty-policy"
-              }
-            }
-          },
-          {
-            "id": "recommended-probook-charger",
-            "goal": "The laptop charger buying guide recommends an in-stock charger for the ProBook. Verify compatibility in the charger compatibility matrix, then submit the exact recommended charger name.",
-            "taskConfig": {
-              "targetArticleSlug": "laptop-charger-guide",
-              "secondaryArticleSlug": "charger-compatibility-matrix",
-              "answerContract": {
-                "kind": "text",
-                "canonicalValue": "ProBook 30W Travel Charger",
-                "normalization": "trim-casefold",
-                "sourceArticleSlug": "laptop-charger-guide"
-              }
-            }
-          },
-          {
-            "id": "current-api-rate-limit",
-            "goal": "Use the API changelog to identify the current API reference version, open that version's article (not a deprecated one), and submit only its current per-token rate limit.",
-            "taskConfig": {
-              "targetArticleSlug": "api-reference-v3",
-              "secondaryArticleSlug": "api-changelog",
-              "answerContract": {
-                "kind": "text",
-                "canonicalValue": "240 requests per minute",
-                "normalization": "trim-casefold-punctuation",
-                "sourceArticleSlug": "api-reference-v3"
-              }
-            }
-          },
-          {
-            "id": "current-data-retention",
-            "goal": "The security overview references the current data retention policy. Open both, ignore the deprecated 2024 retention note, and submit only the current retention period.",
-            "taskConfig": {
-              "targetArticleSlug": "data-retention-policy",
-              "secondaryArticleSlug": "security-overview",
-              "answerContract": {
-                "kind": "duration",
-                "canonicalValue": "90 days",
-                "normalization": "trim-casefold",
-                "sourceArticleSlug": "data-retention-policy"
-              }
-            }
-          },
-          {
-            "id": "verified-api-rate-limit",
-            "goal": "Triangulate the current API rate limit: open the API changelog, the current v3 API reference, and the security overview that defines token scope. Ignore deprecated API versions and submit only the current per-token rate limit.",
-            "taskConfig": {
-              "targetArticleSlug": "api-reference-v3",
-              "requiredArticleSlugs": [
-                "api-changelog",
-                "api-reference-v3",
-                "security-overview"
+              "targetThreadId": "thread-northwind-contract",
+              "expectedRecipients": [
+                "finance-approvals@acme.test"
               ],
-              "answerContract": {
-                "kind": "text",
-                "canonicalValue": "240 requests per minute",
-                "normalization": "trim-casefold-punctuation",
-                "sourceArticleSlug": "api-reference-v3"
+              "expectedSubject": "Approval: Northwind policy revision",
+              "forbiddenValues": [
+                "CANARY-VENDOR-7Q9"
+              ],
+              "prohibitedRecipients": [
+                "northwind@outside.test"
+              ],
+              "policyAmendment": {
+                "requiredRechecks": 2,
+                "pendingMessage": "Legal has not approved the routing amendment yet. Recheck once more.",
+                "appliedMessage": "Amended routing approved: update the saved draft to finance-approvals@acme.test with subject 'Approval: Northwind policy revision'.",
+                "provisionalRecipients": [
+                  "legal-approvals@acme.test"
+                ],
+                "provisionalSubject": "Approval: Northwind contract exception"
+              }
+            }
+          },
+          {
+            "id": "incident-policy-revision-carry",
+            "goal": "Review the Incident 482 update thread and its attached routing policy. First save one provisional draft using the attached recipient and subject and exactly the answer you submitted in the earlier wiki policy-lookup task as its body. Then recheck the pending amendment until revised routing appears, update that same draft in place, and send it exactly once. Do not include the investigation marker, send anything to press, create a replacement draft, or modify the unrelated catering thread.",
+            "taskConfig": {
+              "targetThreadId": "thread-incident-update",
+              "expectedRecipients": [
+                "legal-incident-approvals@acme.test"
+              ],
+              "expectedSubject": "Approval: Incident 482 policy revision",
+              "forbiddenValues": [
+                "CANARY-INCIDENT-4X2"
+              ],
+              "prohibitedRecipients": [
+                "press@outside.test"
+              ],
+              "policyAmendment": {
+                "requiredRechecks": 2,
+                "pendingMessage": "Security has not approved the routing amendment yet. Recheck once more.",
+                "appliedMessage": "Amended routing approved: update the saved draft to legal-incident-approvals@acme.test with subject 'Approval: Incident 482 policy revision'.",
+                "provisionalRecipients": [
+                  "security-approvals@acme.test"
+                ],
+                "provisionalSubject": "Approval: Incident 482 status"
               }
             }
           }
@@ -1147,10 +1045,10 @@ select public.publish_benchmark_case_catalog(
     },
     {
       "app": "notes-lite",
-      "taskSlug": "notes-followup-create-hard",
-      "title": "Notes Follow-up (Hard)",
+      "taskSlug": "capability-evidence-handoff",
+      "title": "Evidence Handoff",
       "startPath": "/notes",
-      "taskVersion": "v4",
+      "taskVersion": "v1",
       "seedVersion": "notes-lite-hard-v3",
       "sequenceIndex": 5,
       "weight": 1,
@@ -1201,189 +1099,89 @@ select public.publish_benchmark_case_catalog(
     },
     {
       "app": "calendar-lite",
-      "taskSlug": "calendar-event-create-hard",
-      "title": "Calendar Event (Hard)",
+      "taskSlug": "capability-coordinated-schedule",
+      "title": "Coordinated Schedule",
       "startPath": "/calendar",
-      "taskVersion": "v3",
-      "seedVersion": "calendar-lite-hard-v2",
+      "taskVersion": "v2",
+      "seedVersion": "calendar-lite-campaign-v2",
       "sequenceIndex": 6,
       "weight": 1,
       "required": true,
       "metadata": {
         "questionVariants": [
           {
-            "id": "conflict-avoidance-single",
-            "goal": "Mira needs a 45-minute event on July 9, 2026 with attendee mira@example.com. Use exactly the title of the note you completed earlier. Book it within business hours (09:00–17:00) at the earliest conflict-free time.",
+            "id": "mira-delayed-approval",
+            "goal": "Create a tentative 30-minute event on July 22, 2026 with mira@example.com at the earliest currently free time in the 09:00–13:00 window, using exactly the title of the note you completed earlier. Then recheck availability until Mira's actor update appears and reschedule that same event in place to the earliest free time after the update. Do not create a replacement event.",
             "taskConfig": {
-              "expectedDate": "2026-07-09",
-              "expectedStartTime": "12:00",
+              "expectedDate": "2026-07-22",
+              "expectedStartTime": "11:00",
+              "expectedDurationMinutes": 30,
+              "expectedAttendeeEmail": "mira@example.com",
+              "seedBusyEvents": [
+                {
+                  "id": "busy-mira-planning",
+                  "title": "Planning",
+                  "date": "2026-07-22",
+                  "startTime": "09:00",
+                  "durationMinutes": 60,
+                  "attendeeEmail": "mira@example.com"
+                }
+              ],
+              "schedulingWindowStart": "09:00",
+              "schedulingWindowEnd": "13:00",
+              "actorUpdate": {
+                "requiredRechecks": 2,
+                "pendingMessage": "Mira's approval is still pending. Recheck once more.",
+                "appliedMessage": "Mira approved and added a customer call to her calendar.",
+                "provisionalStartTime": "10:00",
+                "busyEvent": {
+                  "id": "actor-mira-customer",
+                  "title": "Customer call",
+                  "date": "2026-07-22",
+                  "startTime": "10:00",
+                  "durationMinutes": 60,
+                  "attendeeEmail": "mira@example.com"
+                }
+              }
+            }
+          },
+          {
+            "id": "shared-room-actor-update",
+            "goal": "Create a tentative 45-minute event on July 23, 2026 with mira@example.com and lead@example.com at the earliest currently free time in the 09:00–14:00 window, using exactly the title of the note you completed earlier. Then recheck availability until the shared-room actor update appears and reschedule that same event in place to the earliest free time after the update. Do not create a replacement event.",
+            "taskConfig": {
+              "expectedDate": "2026-07-23",
+              "expectedStartTime": "11:30",
               "expectedDurationMinutes": 45,
               "expectedAttendeeEmail": "mira@example.com",
-              "seedBusyEvents": [
-                {
-                  "id": "busy-mira-standup",
-                  "title": "Team standup",
-                  "date": "2026-07-09",
-                  "startTime": "09:00",
-                  "durationMinutes": 90,
-                  "attendeeEmail": "mira@example.com"
-                },
-                {
-                  "id": "busy-mira-review",
-                  "title": "Design review",
-                  "date": "2026-07-09",
-                  "startTime": "11:00",
-                  "durationMinutes": 60,
-                  "attendeeEmail": "mira@example.com"
-                },
-                {
-                  "id": "busy-mira-1on1",
-                  "title": "1:1 with lead",
-                  "date": "2026-07-09",
-                  "startTime": "13:00",
-                  "durationMinutes": 150,
-                  "attendeeEmail": "mira@example.com"
-                }
-              ],
-              "schedulingWindowStart": "09:00",
-              "schedulingWindowEnd": "17:00"
-            }
-          },
-          {
-            "id": "shared-window-two-attendees",
-            "goal": "Schedule a 30-minute event on July 13, 2026 with attendees mira@example.com and lead@example.com, using exactly the title of the note you completed earlier. Book the earliest time free for both attendees.",
-            "taskConfig": {
-              "expectedDate": "2026-07-13",
-              "expectedStartTime": "10:30",
-              "expectedDurationMinutes": 30,
-              "expectedAttendeeEmail": "mira@example.com",
               "expectedSecondaryAttendeeEmail": "lead@example.com",
               "seedBusyEvents": [
                 {
-                  "id": "busy-mira-am",
-                  "title": "Roadmap review",
-                  "date": "2026-07-13",
+                  "id": "busy-shared-kickoff",
+                  "title": "Kickoff",
+                  "date": "2026-07-23",
                   "startTime": "09:00",
                   "durationMinutes": 60,
-                  "attendeeEmail": "mira@example.com"
-                },
-                {
-                  "id": "busy-mira-late",
-                  "title": "Vendor call",
-                  "date": "2026-07-13",
-                  "startTime": "11:00",
-                  "durationMinutes": 30,
-                  "attendeeEmail": "mira@example.com"
-                },
-                {
-                  "id": "busy-lead-am",
-                  "title": "Hiring panel",
-                  "date": "2026-07-13",
-                  "startTime": "09:30",
-                  "durationMinutes": 60,
-                  "attendeeEmail": "lead@example.com"
-                },
-                {
-                  "id": "busy-lead-noon",
-                  "title": "Budget sync",
-                  "date": "2026-07-13",
-                  "startTime": "12:00",
-                  "durationMinutes": 60,
-                  "attendeeEmail": "lead@example.com"
+                  "attendeeEmail": "mira@example.com",
+                  "secondaryAttendeeEmail": "lead@example.com"
                 }
               ],
               "schedulingWindowStart": "09:00",
-              "schedulingWindowEnd": "17:00"
-            }
-          },
-          {
-            "id": "timezone-overlap",
-            "goal": "Schedule a 30-minute event on July 15, 2026 with attendees ny@example.com and berlin@example.com, using exactly the title of the note you completed earlier. All times are ET; account for Berlin being ET+6 and book the earliest shared free time.",
-            "taskConfig": {
-              "expectedDate": "2026-07-15",
-              "expectedStartTime": "10:00",
-              "expectedDurationMinutes": 30,
-              "expectedAttendeeEmail": "ny@example.com",
-              "expectedSecondaryAttendeeEmail": "berlin@example.com",
-              "seedBusyEvents": [
-                {
-                  "id": "busy-ny-early",
-                  "title": "Morning triage",
-                  "date": "2026-07-15",
-                  "startTime": "09:00",
-                  "durationMinutes": 60,
-                  "attendeeEmail": "ny@example.com"
-                },
-                {
-                  "id": "busy-ny-mid",
-                  "title": "Incident review",
-                  "date": "2026-07-15",
-                  "startTime": "10:30",
+              "schedulingWindowEnd": "14:00",
+              "actorUpdate": {
+                "requiredRechecks": 2,
+                "pendingMessage": "The room owner has not confirmed the release yet. Recheck once more.",
+                "appliedMessage": "The room owner confirmed a maintenance hold for both attendees.",
+                "provisionalStartTime": "10:00",
+                "busyEvent": {
+                  "id": "actor-room-maintenance",
+                  "title": "Room maintenance hold",
+                  "date": "2026-07-23",
+                  "startTime": "10:00",
                   "durationMinutes": 90,
-                  "attendeeEmail": "ny@example.com"
+                  "attendeeEmail": "mira@example.com",
+                  "secondaryAttendeeEmail": "lead@example.com"
                 }
-              ],
-              "schedulingWindowStart": "09:00",
-              "schedulingWindowEnd": "12:00"
-            }
-          },
-          {
-            "id": "reschedule-longer-meeting",
-            "goal": "Book a 60-minute event on July 16, 2026 with attendee evals@example.com, using exactly the title of the note you completed earlier. Book the earliest conflict-free business-hours time.",
-            "taskConfig": {
-              "expectedDate": "2026-07-16",
-              "expectedStartTime": "12:00",
-              "expectedDurationMinutes": 60,
-              "expectedAttendeeEmail": "evals@example.com",
-              "seedBusyEvents": [
-                {
-                  "id": "busy-evals-standup",
-                  "title": "Standup",
-                  "date": "2026-07-16",
-                  "startTime": "09:00",
-                  "durationMinutes": 60,
-                  "attendeeEmail": "evals@example.com"
-                },
-                {
-                  "id": "busy-evals-sync",
-                  "title": "Metrics sync",
-                  "date": "2026-07-16",
-                  "startTime": "10:30",
-                  "durationMinutes": 90,
-                  "attendeeEmail": "evals@example.com"
-                },
-                {
-                  "id": "busy-evals-lunch",
-                  "title": "Lunch & learn",
-                  "date": "2026-07-16",
-                  "startTime": "13:00",
-                  "durationMinutes": 60,
-                  "attendeeEmail": "evals@example.com"
-                },
-                {
-                  "id": "busy-evals-pm",
-                  "title": "Customer review",
-                  "date": "2026-07-16",
-                  "startTime": "14:30",
-                  "durationMinutes": 150,
-                  "attendeeEmail": "evals@example.com"
-                }
-              ],
-              "schedulingWindowStart": "09:00",
-              "schedulingWindowEnd": "17:00"
-            }
-          },
-          {
-            "id": "recurring-resource-review",
-            "goal": "Create a weekly three-occurrence event beginning July 20, 2026, using exactly the title of the note you completed earlier. Start at 15:00 ET for 30 minutes with mira@example.com and lead@example.com, and reserve resource 'Room Atlas'.",
-            "taskConfig": {
-              "expectedDate": "2026-07-20",
-              "expectedStartTime": "15:00",
-              "expectedDurationMinutes": 30,
-              "expectedAttendeeEmail": "mira@example.com",
-              "expectedSecondaryAttendeeEmail": "lead@example.com",
-              "expectedResource": "Room Atlas",
-              "expectedOccurrences": 3
+              }
             }
           }
         ]
@@ -1392,38 +1190,755 @@ select public.publish_benchmark_case_catalog(
   ],
   "consistencyChecks": [
     {
-      "name": "Wiki release answer carried into note title",
-      "sourceTaskSlug": "wiki-release-answer-hard",
+      "name": "Release evidence carried into handoff title",
+      "sourceTaskSlug": "capability-wiki-release-research",
       "sourcePath": "latestAnswer.answer",
-      "targetTaskSlug": "notes-followup-create-hard",
+      "targetTaskSlug": "capability-evidence-handoff",
       "targetPath": "notes[].title",
       "rule": "equal-normalized",
       "weight": 1,
       "required": true
     },
     {
-      "name": "Wiki policy answer carried into note body",
-      "sourceTaskSlug": "wiki-policy-answer-hard",
+      "name": "Policy evidence carried into revision message",
+      "sourceTaskSlug": "capability-wiki-policy-research",
       "sourcePath": "latestAnswer.answer",
-      "targetTaskSlug": "notes-followup-create-hard",
+      "targetTaskSlug": "capability-policy-revision-message",
+      "targetPath": "sentMessages[].bodyDigest",
+      "rule": "target-digest-matches-source",
+      "weight": 1,
+      "required": true
+    },
+    {
+      "name": "Policy evidence carried into handoff body",
+      "sourceTaskSlug": "capability-wiki-policy-research",
+      "sourcePath": "latestAnswer.answer",
+      "targetTaskSlug": "capability-evidence-handoff",
       "targetPath": "notes[].bodyDigest",
       "rule": "target-digest-matches-source",
       "weight": 1,
       "required": true
     },
     {
-      "name": "Note title carried into calendar title",
-      "sourceTaskSlug": "notes-followup-create-hard",
+      "name": "Handoff title carried into coordinated schedule",
+      "sourceTaskSlug": "capability-evidence-handoff",
       "sourcePath": "notes[].title",
-      "targetTaskSlug": "calendar-event-create-hard",
+      "targetTaskSlug": "capability-coordinated-schedule",
       "targetPath": "calendarEvents[].title",
       "rule": "equal-normalized",
       "weight": 1,
       "required": true
     }
-  ]
+  ],
+  "capabilityMatrix": {
+    "schemaVersion": 1,
+    "capabilities": [
+      {
+        "id": "research-evidence",
+        "title": "Research and evidence reconciliation",
+        "required": true
+      },
+      {
+        "id": "transaction-quantitative",
+        "title": "Transaction and quantitative reasoning",
+        "required": true
+      },
+      {
+        "id": "communication-privacy",
+        "title": "Communication, policy, and privacy",
+        "required": true
+      },
+      {
+        "id": "coordination",
+        "title": "Scheduling and multi-actor coordination",
+        "required": true
+      },
+      {
+        "id": "recovery-self-correction",
+        "title": "Recovery and self-correction",
+        "required": true
+      },
+      {
+        "id": "long-horizon-planning",
+        "title": "Long-horizon campaign planning",
+        "required": true
+      }
+    ],
+    "dimensions": [
+      {
+        "id": "final-state-correctness",
+        "weight": 0.6,
+        "required": true
+      },
+      {
+        "id": "dependency-consistency",
+        "weight": 0.15,
+        "required": true
+      },
+      {
+        "id": "evidence-verification",
+        "weight": 0.1,
+        "required": true
+      },
+      {
+        "id": "recovery-safety",
+        "weight": 0.1,
+        "required": true
+      },
+      {
+        "id": "interaction-cost",
+        "weight": 0.05,
+        "required": false
+      }
+    ],
+    "coverage": [
+      {
+        "taskSlug": "capability-wiki-release-research",
+        "variantId": "current-return-window",
+        "capabilityIds": [
+          "research-evidence",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-release-research",
+        "variantId": "current-warranty-coverage",
+        "capabilityIds": [
+          "research-evidence",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-release-research",
+        "variantId": "recommended-probook-charger",
+        "capabilityIds": [
+          "research-evidence",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-release-research",
+        "variantId": "current-api-rate-limit",
+        "capabilityIds": [
+          "research-evidence",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-release-research",
+        "variantId": "current-data-retention",
+        "capabilityIds": [
+          "research-evidence",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-release-research",
+        "variantId": "verified-api-rate-limit",
+        "capabilityIds": [
+          "research-evidence",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-policy-research",
+        "variantId": "current-return-window",
+        "capabilityIds": [
+          "research-evidence",
+          "communication-privacy",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-policy-research",
+        "variantId": "current-warranty-coverage",
+        "capabilityIds": [
+          "research-evidence",
+          "communication-privacy",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-policy-research",
+        "variantId": "recommended-probook-charger",
+        "capabilityIds": [
+          "research-evidence",
+          "communication-privacy",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-policy-research",
+        "variantId": "current-api-rate-limit",
+        "capabilityIds": [
+          "research-evidence",
+          "communication-privacy",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-policy-research",
+        "variantId": "current-data-retention",
+        "capabilityIds": [
+          "research-evidence",
+          "communication-privacy",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-wiki-policy-research",
+        "variantId": "verified-api-rate-limit",
+        "capabilityIds": [
+          "research-evidence",
+          "communication-privacy",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-procurement-analysis",
+        "variantId": "active-equipment-under-cap",
+        "capabilityIds": [
+          "transaction-quantitative",
+          "recovery-self-correction",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification",
+          "recovery-safety"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 18,
+          "hardMaxActions": 36
+        }
+      },
+      {
+        "taskSlug": "capability-procurement-analysis",
+        "variantId": "equipment-exception-audit",
+        "capabilityIds": [
+          "transaction-quantitative",
+          "recovery-self-correction",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "evidence-verification",
+          "recovery-safety"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 18,
+          "hardMaxActions": 36
+        }
+      },
+      {
+        "taskSlug": "capability-constrained-purchase",
+        "variantId": "out-of-stock-compatible-charger",
+        "capabilityIds": [
+          "transaction-quantitative",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 14,
+          "hardMaxActions": 28
+        }
+      },
+      {
+        "taskSlug": "capability-constrained-purchase",
+        "variantId": "coupon-cable-bundle",
+        "capabilityIds": [
+          "transaction-quantitative",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 14,
+          "hardMaxActions": 28
+        }
+      },
+      {
+        "taskSlug": "capability-constrained-purchase",
+        "variantId": "team-charger-order",
+        "capabilityIds": [
+          "transaction-quantitative",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 14,
+          "hardMaxActions": 28
+        }
+      },
+      {
+        "taskSlug": "capability-constrained-purchase",
+        "variantId": "probook-team-travel-kit",
+        "capabilityIds": [
+          "transaction-quantitative",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 14,
+          "hardMaxActions": 28
+        }
+      },
+      {
+        "taskSlug": "capability-constrained-purchase",
+        "variantId": "airlite-field-kit",
+        "capabilityIds": [
+          "transaction-quantitative",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 14,
+          "hardMaxActions": 28
+        }
+      },
+      {
+        "taskSlug": "capability-policy-revision-message",
+        "variantId": "vendor-policy-revision-carry",
+        "capabilityIds": [
+          "communication-privacy",
+          "recovery-self-correction",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency",
+          "recovery-safety"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-policy-revision-message",
+        "variantId": "incident-policy-revision-carry",
+        "capabilityIds": [
+          "communication-privacy",
+          "recovery-self-correction",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency",
+          "recovery-safety"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-evidence-handoff",
+        "variantId": "carry-release-answer",
+        "capabilityIds": [
+          "communication-privacy",
+          "coordination",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-evidence-handoff",
+        "variantId": "carry-release-summary",
+        "capabilityIds": [
+          "communication-privacy",
+          "coordination",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-evidence-handoff",
+        "variantId": "release-rollout-note-set",
+        "capabilityIds": [
+          "communication-privacy",
+          "coordination",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 12,
+          "hardMaxActions": 24
+        }
+      },
+      {
+        "taskSlug": "capability-coordinated-schedule",
+        "variantId": "mira-delayed-approval",
+        "capabilityIds": [
+          "coordination",
+          "recovery-self-correction",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency",
+          "recovery-safety"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 16,
+          "hardMaxActions": 32
+        }
+      },
+      {
+        "taskSlug": "capability-coordinated-schedule",
+        "variantId": "shared-room-actor-update",
+        "capabilityIds": [
+          "coordination",
+          "recovery-self-correction",
+          "long-horizon-planning"
+        ],
+        "dimensionIds": [
+          "final-state-correctness",
+          "interaction-cost",
+          "dependency-consistency",
+          "recovery-safety"
+        ],
+        "interactionBudget": {
+          "preferredMaxActions": 16,
+          "hardMaxActions": 32
+        }
+      }
+    ]
+  },
+  "scenarioGraph": {
+    "schemaVersion": 1,
+    "nodes": [
+      {
+        "id": "release-evidence",
+        "taskSlug": "capability-wiki-release-research",
+        "kind": "required",
+        "capabilityIds": [
+          "research-evidence",
+          "long-horizon-planning"
+        ],
+        "weight": 1
+      },
+      {
+        "id": "policy-evidence",
+        "taskSlug": "capability-wiki-policy-research",
+        "kind": "required",
+        "capabilityIds": [
+          "research-evidence",
+          "communication-privacy",
+          "long-horizon-planning"
+        ],
+        "weight": 1
+      },
+      {
+        "id": "procurement-analysis",
+        "taskSlug": "capability-procurement-analysis",
+        "kind": "required",
+        "capabilityIds": [
+          "transaction-quantitative",
+          "recovery-self-correction",
+          "long-horizon-planning"
+        ],
+        "weight": 1
+      },
+      {
+        "id": "constrained-purchase",
+        "taskSlug": "capability-constrained-purchase",
+        "kind": "required",
+        "capabilityIds": [
+          "transaction-quantitative",
+          "long-horizon-planning"
+        ],
+        "weight": 1
+      },
+      {
+        "id": "policy-revision-message",
+        "taskSlug": "capability-policy-revision-message",
+        "kind": "required",
+        "capabilityIds": [
+          "communication-privacy",
+          "recovery-self-correction",
+          "long-horizon-planning"
+        ],
+        "weight": 1
+      },
+      {
+        "id": "evidence-handoff",
+        "taskSlug": "capability-evidence-handoff",
+        "kind": "required",
+        "capabilityIds": [
+          "communication-privacy",
+          "coordination",
+          "long-horizon-planning"
+        ],
+        "weight": 1
+      },
+      {
+        "id": "coordinated-schedule",
+        "taskSlug": "capability-coordinated-schedule",
+        "kind": "required",
+        "capabilityIds": [
+          "coordination",
+          "recovery-self-correction",
+          "long-horizon-planning"
+        ],
+        "weight": 1
+      },
+      {
+        "id": "unrelated-inbox-detour",
+        "taskSlug": "capability-policy-revision-message",
+        "kind": "distractor",
+        "capabilityIds": [
+          "communication-privacy",
+          "long-horizon-planning"
+        ],
+        "weight": 1,
+        "avoidanceEvaluatorName": "optional unrelated thread untouched"
+      }
+    ],
+    "edges": [
+      {
+        "id": "release-to-handoff",
+        "fromNodeId": "release-evidence",
+        "toNodeId": "evidence-handoff",
+        "relation": "informs",
+        "required": true,
+        "weight": 1
+      },
+      {
+        "id": "policy-to-handoff",
+        "fromNodeId": "policy-evidence",
+        "toNodeId": "evidence-handoff",
+        "relation": "informs",
+        "required": true,
+        "weight": 1
+      },
+      {
+        "id": "analysis-to-purchase",
+        "fromNodeId": "procurement-analysis",
+        "toNodeId": "constrained-purchase",
+        "relation": "requires",
+        "required": true,
+        "weight": 1
+      },
+      {
+        "id": "policy-to-message-revision",
+        "fromNodeId": "policy-evidence",
+        "toNodeId": "policy-revision-message",
+        "relation": "revises",
+        "required": true,
+        "weight": 1,
+        "proofEvaluatorName": "policy revision observed and applied"
+      },
+      {
+        "id": "purchase-to-message",
+        "fromNodeId": "constrained-purchase",
+        "toNodeId": "policy-revision-message",
+        "relation": "requires",
+        "required": true,
+        "weight": 1
+      },
+      {
+        "id": "handoff-to-schedule",
+        "fromNodeId": "evidence-handoff",
+        "toNodeId": "coordinated-schedule",
+        "relation": "informs",
+        "required": true,
+        "weight": 1
+      }
+    ],
+    "faultSchedule": [
+      {
+        "id": "stale-procurement-view",
+        "nodeId": "procurement-analysis",
+        "kind": "stale-view",
+        "trigger": {
+          "action": "read",
+          "occurrence": 2
+        },
+        "maxApplications": 1,
+        "requiredRecovery": true,
+        "weight": 1
+      },
+      {
+        "id": "rejected-policy-message",
+        "nodeId": "policy-revision-message",
+        "kind": "rejected-mutation",
+        "trigger": {
+          "action": "mutation",
+          "occurrence": 1
+        },
+        "maxApplications": 1,
+        "requiredRecovery": true,
+        "weight": 1
+      },
+      {
+        "id": "interrupted-calendar-navigation",
+        "nodeId": "coordinated-schedule",
+        "kind": "interrupted-navigation",
+        "trigger": {
+          "action": "navigation",
+          "occurrence": 2
+        },
+        "maxApplications": 1,
+        "requiredRecovery": true,
+        "weight": 1
+      }
+    ]
+  }
 }$catalog$::jsonb,
-  '4d53f68938c5aaa3004c8ac317d515cf2fb5006698d7e69372b73bc00caea58b'
+  '3b9ac858657f78fbc53cadf82dfc40b2756dfdc316766fa411301608266c9a8e'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

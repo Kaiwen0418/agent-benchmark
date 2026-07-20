@@ -28,6 +28,8 @@ export const inboxLiteTestSupport: HostedAppTestSupport<"inbox-lite"> = {
           id: `policy-check-test-${index}`,
           checkNumber: index,
           status: index === amendment.requiredRechecks ? "updated" : "pending",
+          draftId: "inbox-sent-test",
+          baselineRevisionCount: 0,
           createdAt: "2026-07-01T09:59:00.000Z",
         });
       }
@@ -39,6 +41,8 @@ export const inboxLiteTestSupport: HostedAppTestSupport<"inbox-lite"> = {
       subject: configString(config, "expectedSubject"),
       body: configStringOrNull(config, "expectedBody") ?? "carried-policy-answer",
       createdAt: "2026-07-01T10:00:00.000Z",
+      updatedAt: "2026-07-01T10:00:30.000Z",
+      revisionCount: amendment ? 1 : 0,
       sentAt: "2026-07-01T10:01:00.000Z",
     });
   },

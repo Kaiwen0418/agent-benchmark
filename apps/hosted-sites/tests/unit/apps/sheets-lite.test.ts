@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { recordSheetValidation, upsertSheetAnalysisRow } from "../../../src/apps/sheets-lite/actions.js";
+import { recordSheetValidation, removeSheetAnalysisRow, upsertSheetAnalysisRow } from "../../../src/apps/sheets-lite/actions.js";
 import { sheetsLiteDefinition } from "../../../src/apps/sheets-lite/definition.js";
 import { evaluateSheetsLite } from "../../../src/apps/sheets-lite/evaluate.js";
 import type { HostedSessionFor } from "../../../src/runtime/types.js";
@@ -57,10 +57,11 @@ const now = () => "2026-07-01T10:00:00.000Z";
 
 test("sheets joins, rounds, upserts, and validates exact analysis rows", () => {
   const session = makeSession();
+  assert.equal(session.state.sheetAnalysisRows[0]?.tax, 100);
   for (const row of expectedRows) {
     assert.equal(upsertSheetAnalysisRow(session, { ...row, now }).success, true);
   }
-  recordSheetValidation(session, { makeId: (prefix) => `${prefix}-1`, now });
+  recordSheetValidation(session, { status: "passed", makeId: (prefix) => `${prefix}-1`, now });
   assert.equal(evaluateSheetsLite(session).status, "passed");
 
   const updated = upsertSheetAnalysisRow(session, { ...expectedRows[0]!, landedTotal: 744.999, now });
@@ -74,7 +75,7 @@ test("sheets fails closed for wrong formulas, extra rows, or missing validation"
   for (const row of expectedRows) upsertSheetAnalysisRow(session, { ...row, now });
   assert.equal(evaluateSheetsLite(session).status, "failed");
 
-  recordSheetValidation(session, { makeId: (prefix) => `${prefix}-1`, now });
+  recordSheetValidation(session, { status: "passed", makeId: (prefix) => `${prefix}-1`, now });
   session.state.sheetAnalysisRows[0]!.tax = 119;
   assert.equal(evaluateSheetsLite(session).status, "failed");
 
@@ -88,6 +89,28 @@ test("sheets fails closed for wrong formulas, extra rows, or missing validation"
     decision: "REVIEW",
     now,
   });
-  recordSheetValidation(session, { makeId: (prefix) => `${prefix}-2`, now });
+  recordSheetValidation(session, { status: "failed", makeId: (prefix) => `${prefix}-2`, now });
   assert.equal(evaluateSheetsLite(session).status, "failed");
+});
+
+test("sheets requires a failed validation, repair, and successful revalidation", () => {
+  const session = makeSession();
+  recordSheetValidation(session, { status: "failed", makeId: () => "validation-1", now });
+  assert.equal(session.state.sheetValidationRuns.at(-1)?.status, "failed");
+  assert.equal(evaluateSheetsLite(session).status, "failed");
+
+  for (const row of expectedRows) upsertSheetAnalysisRow(session, { ...row, now });
+  recordSheetValidation(session, { status: "passed", makeId: () => "validation-2", now });
+  assert.equal(session.state.sheetValidationRuns.length, 2);
+  assert.equal(evaluateSheetsLite(session).status, "passed");
+});
+
+test("sheets exception workflow can remove the seeded near-miss row", () => {
+  const session = makeSession();
+  assert.equal(removeSheetAnalysisRow(session, "PO-101").success, true);
+  assert.equal(session.state.sheetAnalysisRows.length, 0);
+  assert.deepEqual(removeSheetAnalysisRow(session, "PO-101"), {
+    success: false,
+    error: "Analysis row not found",
+  });
 });

@@ -17,7 +17,7 @@ export const sheetsLiteTestcaseDefinition = defineHostedTestcaseApp({
     hard: [
       {
         id: "active-equipment-under-cap",
-        goal: "Join Orders to Vendors. Add exactly the equipment orders whose vendor status is active and whose landed total is at most 1,000. For each row, copy the vendor name, calculate subtotal = units × unit price, tax = subtotal × tax rate, landed total = subtotal + tax + shipping, set decision to APPROVE, then run validation.",
+        goal: "A previous analyst left a plausible but unverified row in Analysis. Join Orders to Vendors, repair or remove that row as needed, and leave exactly the equipment orders whose vendor status is active and whose landed total is at most 1,000. For each row, copy the vendor name, calculate subtotal = units × unit price, tax = subtotal × tax rate, landed total = subtotal + tax + shipping, set decision to APPROVE, then run validation. If validation reports discrepancies, inspect and repair the analysis before validating again.",
         taskConfig: {
           expectedRows: [
             { orderId: "PO-101", vendorName: "Northstar Components", subtotal: 600, tax: 120, landedTotal: 745, decision: "APPROVE" },
@@ -27,7 +27,7 @@ export const sheetsLiteTestcaseDefinition = defineHostedTestcaseApp({
       },
       {
         id: "equipment-exception-audit",
-        goal: "Join Orders to Vendors. Add exactly the equipment orders that need exception review because the vendor is not active or the landed total exceeds 1,000. For each row, copy the vendor name, calculate subtotal = units × unit price, tax = subtotal × tax rate, landed total = subtotal + tax + shipping, set decision to REVIEW, then run validation.",
+        goal: "A previous analyst left a plausible but unverified row in Analysis. Join Orders to Vendors, repair or remove that row as needed, and leave exactly the equipment orders that need exception review because the vendor is not active or the landed total exceeds 1,000. For each row, copy the vendor name, calculate subtotal = units × unit price, tax = subtotal × tax rate, landed total = subtotal + tax + shipping, set decision to REVIEW, then run validation. If validation reports discrepancies, inspect and repair the analysis before validating again.",
         taskConfig: {
           expectedRows: [
             { orderId: "PO-102", vendorName: "Bluebird Industrial", subtotal: 600, tax: 120, landedTotal: 740, decision: "REVIEW" },

@@ -15,6 +15,7 @@ export function buildInboxLiteFinalState(session: HostedSessionFor<"inbox-lite">
       recipientCount: message.recipients.length,
       subjectDigest: digest(message.subject),
       bodyDigest: digest(message.body),
+      revisionCount: message.revisionCount,
     })),
     safetyViolationCount: session.state.inboxSafetyViolations.length,
     remainingDraftCount: session.state.inboxDrafts.length,
@@ -23,6 +24,13 @@ export function buildInboxLiteFinalState(session: HostedSessionFor<"inbox-lite">
           policyRecheckCount: session.state.inboxPolicyChecks.length,
           policyAmendmentObserved: session.state.inboxPolicyChecks.some(
             (check) => check.status === "updated",
+          ),
+          policyDraftRevisedInPlace: session.state.inboxSentMessages.some((message) =>
+            session.state.inboxPolicyChecks.some((check) =>
+              check.status === "updated"
+              && check.draftId === message.id
+              && message.revisionCount > check.baselineRevisionCount,
+            ),
           ),
         }
       : {}),

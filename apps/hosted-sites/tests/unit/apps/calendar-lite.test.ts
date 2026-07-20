@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createCalendarEvent,
   recheckCalendarAvailability,
+  updateCalendarEvent,
 } from "../../../src/apps/calendar-lite/actions.js";
 import { evaluateCalendarLite } from "../../../src/apps/calendar-lite/evaluate.js";
 import {
@@ -372,6 +373,7 @@ test("calendar campaign requires a deterministic actor recheck before accepting 
       requiredRechecks: 2,
       pendingMessage: "Still pending",
       appliedMessage: "Customer call added",
+      provisionalStartTime: "10:00",
       busyEvent: { id: "busy-actor", title: "Customer call", date: "2026-07-22", startTime: "10:00", durationMinutes: 60, attendeeEmail: "mira@example.com" },
     },
   };
@@ -379,12 +381,13 @@ test("calendar campaign requires a deterministic actor recheck before accepting 
   createCalendarEvent(session, {
     title: taskConfig.expectedTitle,
     date: taskConfig.expectedDate,
-    startTime: taskConfig.expectedStartTime,
+    startTime: taskConfig.actorUpdate.provisionalStartTime,
     durationMinutes: taskConfig.expectedDurationMinutes,
     attendeeEmail: taskConfig.expectedAttendeeEmail,
     makeId: () => "event-campaign",
     now: () => "2026-06-24T00:00:00.000Z",
   });
+  assert.equal(session.state.calendarEvents[0]?.revisionCount, 0);
   assert.equal(evaluateCalendarLite(session).status, "failed");
 
   const first = recheckCalendarAvailability(session, taskConfig, {
@@ -401,6 +404,19 @@ test("calendar campaign requires a deterministic actor recheck before accepting 
   });
   assert.equal(second.success && second.check.status, "updated");
   assert.equal(visibleBusyEvents(taskConfig, 2).length, 2);
+  assert.equal(evaluateCalendarLite(session).status, "failed");
+  const revised = updateCalendarEvent(session, {
+    eventId: "event-campaign",
+    title: taskConfig.expectedTitle,
+    date: taskConfig.expectedDate,
+    startTime: taskConfig.expectedStartTime,
+    durationMinutes: taskConfig.expectedDurationMinutes,
+    attendeeEmail: taskConfig.expectedAttendeeEmail,
+    now: () => "2026-06-24T00:00:03.000Z",
+  });
+  assert.equal(revised.success, true);
+  assert.equal(revised.success && revised.calendarEvent.id, "event-campaign");
+  assert.equal(revised.success && revised.calendarEvent.revisionCount, 1);
   assert.equal(evaluateCalendarLite(session).status, "passed");
   assert.equal(
     computeEarliestFreeSlot({
@@ -413,4 +429,43 @@ test("calendar campaign requires a deterministic actor recheck before accepting 
     }),
     taskConfig.expectedStartTime,
   );
+});
+
+test("calendar campaign rejects a replacement event after the actor update", () => {
+  const taskConfig = {
+    expectedTitle: "Carried note title",
+    expectedDate: "2026-07-22",
+    expectedStartTime: "11:00",
+    expectedDurationMinutes: 30,
+    expectedAttendeeEmail: "mira@example.com",
+    actorUpdate: {
+      requiredRechecks: 2,
+      pendingMessage: "Still pending",
+      appliedMessage: "Customer call added",
+      provisionalStartTime: "10:00",
+      busyEvent: { id: "busy-actor", title: "Customer call", date: "2026-07-22", startTime: "10:00", durationMinutes: 60, attendeeEmail: "mira@example.com" },
+    },
+  };
+  const session = makeHardSession(taskConfig);
+  createCalendarEvent(session, {
+    title: taskConfig.expectedTitle,
+    date: taskConfig.expectedDate,
+    startTime: taskConfig.actorUpdate.provisionalStartTime,
+    durationMinutes: taskConfig.expectedDurationMinutes,
+    attendeeEmail: taskConfig.expectedAttendeeEmail,
+    makeId: () => "event-tentative",
+    now: () => "2026-06-24T00:00:00.000Z",
+  });
+  recheckCalendarAvailability(session, taskConfig, { makeId: () => "check-1", now: () => "2026-06-24T00:00:01.000Z" });
+  recheckCalendarAvailability(session, taskConfig, { makeId: () => "check-2", now: () => "2026-06-24T00:00:02.000Z" });
+  createCalendarEvent(session, {
+    title: taskConfig.expectedTitle,
+    date: taskConfig.expectedDate,
+    startTime: taskConfig.expectedStartTime,
+    durationMinutes: taskConfig.expectedDurationMinutes,
+    attendeeEmail: taskConfig.expectedAttendeeEmail,
+    makeId: () => "event-replacement",
+    now: () => "2026-06-24T00:00:03.000Z",
+  });
+  assert.equal(evaluateCalendarLite(session).status, "failed");
 });

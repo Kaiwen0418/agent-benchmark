@@ -28,6 +28,7 @@ export type SheetAnalysisRow = {
 export type SheetValidationRun = {
   id: string;
   rowCount: number;
+  status: "passed" | "failed";
   createdAt: string;
 };
 
