@@ -204,7 +204,7 @@ Exit criteria: the hard suite is published as its own immutable revision, every 
 
 ### P2.3 Capability-Complete Hard Testbench
 
-Status: Planned ([#181](https://github.com/Kaiwen0418/agent-benchmark/issues/181))
+Status: In progress ([#181](https://github.com/Kaiwen0418/agent-benchmark/issues/181))
 
 The current hard v1.0.5 suite is structurally medium-hard: it is strong at
 deterministic multi-step browser execution, exact backend-state scoring,
@@ -229,6 +229,28 @@ single longer scripted workflow:
 | Scheduling and multi-actor coordination | React to deterministic delayed approvals and availability changes by polling, rechecking, and revising a schedule. |
 | Recovery and self-correction | Recover from seeded stale views, rejected mutations, version conflicts, and interrupted navigation without duplicate side effects. |
 | Long-horizon campaign | Execute a private branch-and-merge dependency graph across at least six sessions and four apps, including one required revision after new evidence. |
+
+Implementation checkpoint: the typed capability matrix, private scenario
+graph, one-shot deterministic fault runtime, server-owned terminal capability
+aggregation, and normalized action-cost collector are implemented on the
+upgrade branch. A seven-session, six-app unpublished campaign manifest now
+exercises a branch-and-merge evidence handoff, a required two-recheck Inbox
+policy revision,
+three deterministic fault classes, and an explicitly scored inbox distractor.
+Revision and distractor outcomes require named persisted evaluator evidence;
+session completion metadata cannot claim either result. A deterministic
+calibration report harness now computes repeated-seed, per-family, per-track,
+time, and action-cost statistics with 95% confidence intervals; representative
+agent observations still need to be collected before release. The two staged task
+surfaces now exist: `inbox-lite` enforces
+safe approval routing with canary/prohibited-recipient gates, while
+`sheets-lite` evaluates deterministic joins, filtering, formulas, and explicit
+validation. Inbox also has two cross-session carry variants. Both surfaces
+have real-browser desktop/narrow verification. Calendar campaign variants add
+a deterministic two-poll actor update and require scheduling against the
+revised availability without using wall-clock timing. They remain outside the
+published suite registry until the remaining track depth, calibration, and
+release gates are complete; v1.0.5 remains unchanged.
 
 Delivery is sequenced as follows:
 

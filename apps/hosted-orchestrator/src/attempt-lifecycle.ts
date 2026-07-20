@@ -11,6 +11,8 @@ import {
   type HostedWebSuiteSessionScore,
   type SuiteConsistencyCheck,
 } from "@agentbench/scoring";
+import { collectNormalizedActionCosts } from "./action-cost.js";
+import { buildCapabilityAttemptEvaluation } from "./capability-aggregation.js";
 
 export type AttemptStatus = "created" | "running" | "scoring" | "completed" | "failed" | "cancelled" | "timeout";
 export type HostedSessionStatus = HostedAttemptSessionStatus;
@@ -150,7 +152,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
 
     const { data: resultRows, error: resultsError } = await supabase
       .from("hosted_web_results")
-      .select("session_id, app, task_slug, score, status, weight, final_state")
+      .select("session_id, app, task_slug, score, status, weight, final_state, evaluators")
       .eq("attempt_id", session.attemptId)
       .order("created_at", { ascending: true });
 
@@ -160,7 +162,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
 
     const { data: sessionRows, error: sessionsError } = await supabase
       .from("hosted_web_sessions")
-      .select("id, app, task_slug, weight, required, sequence_index")
+      .select("id, app, task_slug, weight, required, sequence_index, metadata")
       .eq("attempt_id", session.attemptId)
       .order("sequence_index", { ascending: true });
 
@@ -169,6 +171,11 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     }
 
     const latestResultBySessionId = new Map<string, HostedWebSuiteSessionScore>();
+    const resultEvidenceBySessionId = new Map<string, {
+      status: "passed" | "failed" | "error";
+      score: number;
+      evaluators: unknown;
+    }>();
     for (const row of resultRows) {
       latestResultBySessionId.set(row.session_id, {
         sessionId: row.session_id,
@@ -179,6 +186,11 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
         weight: row.weight,
         required: true,
       });
+      resultEvidenceBySessionId.set(row.session_id, {
+        status: row.status,
+        score: row.score,
+        evaluators: row.evaluators,
+      });
     }
     latestResultBySessionId.set(session.id, {
       sessionId: session.id,
@@ -188,6 +200,11 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       status: result.status,
       weight: session.weight,
       required: sessionRows.find((row) => row.id === session.id)?.required ?? true,
+    });
+    resultEvidenceBySessionId.set(session.id, {
+      status: result.status,
+      score: result.score,
+      evaluators: result.evaluators,
     });
 
     const completedSessionIds = new Set(latestResultBySessionId.keys());
@@ -252,9 +269,46 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
         consistencyChecks.length > 0
           ? evaluateSuiteConsistency(consistencyChecks, finalStateByTaskSlug)
           : [];
+      let normalizedActionCosts = new Map<string, number>();
+      if (existingAttemptMetadata.capabilityMatrix !== undefined) {
+        const { data: eventRows, error: eventsError } = await supabase
+          .from("hosted_web_events")
+          .select("session_id, type, payload")
+          .eq("attempt_id", session.attemptId)
+          .order("created_at", { ascending: true });
+        if (eventsError || !eventRows) {
+          throw eventsError ?? new Error(`Attempt ${session.attemptId} action telemetry is unavailable.`);
+        }
+        normalizedActionCosts = collectNormalizedActionCosts(eventRows.map((row) => ({
+          sessionId: row.session_id,
+          type: row.type,
+          payload: row.payload,
+        })));
+      }
+      const capabilityEvaluation = buildCapabilityAttemptEvaluation({
+        attemptMetadata: existingAttemptMetadata,
+        sessions: sessionRows.flatMap((row) => {
+          const evidence = resultEvidenceBySessionId.get(row.id);
+          return evidence
+            ? [{
+                id: row.id,
+                taskSlug: row.task_slug,
+                metadata: row.metadata,
+                normalizedActionCost: normalizedActionCosts.get(row.id) ?? null,
+                ...evidence,
+              }]
+            : [];
+        }),
+      });
       aggregate = aggregateSuiteScore({
         sessions: suiteSessions,
         consistency,
+        ...(capabilityEvaluation
+          ? {
+              capabilities: capabilityEvaluation.capabilities,
+              scenarioGraph: capabilityEvaluation.scenarioGraph,
+            }
+          : {}),
         passSummary: `All required hosted sessions for ${session.suiteSlug} passed.`,
         failSummary: `One or more required hosted sessions for ${session.suiteSlug} failed.`,
       });

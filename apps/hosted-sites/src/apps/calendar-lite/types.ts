@@ -11,6 +11,14 @@ export type CalendarEvent = {
   createdAt: string;
 };
 
+export type CalendarAvailabilityCheck = {
+  id: string;
+  checkNumber: number;
+  status: "pending" | "updated";
+  createdAt: string;
+};
+
 export type AppSessionState = {
   calendarEvents: CalendarEvent[];
+  calendarAvailabilityChecks: CalendarAvailabilityCheck[];
 };

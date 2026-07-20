@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { hostedSessionDefinitionSchema } from "./generated-app-registry.js";
+import {
+  capabilityMatrixSchema,
+  privateScenarioGraphSchema,
+} from "./capability-benchmark.js";
 
 export { hostedSessionDefinitionSchema, parseQuestionVariants } from "./generated-app-registry.js";
 
@@ -32,6 +36,10 @@ export const hostedSuiteMetadataSchema = z.object({
   // Optional so suites without a chain (the easy suite) parse to byte-identical
   // manifests — the key is simply absent rather than defaulted in.
   consistencyChecks: z.array(hostedSuiteConsistencyCheckSchema).optional(),
+  // Service-role-only contracts for capability-oriented releases. They remain
+  // absent from legacy manifests so published content hashes stay immutable.
+  capabilityMatrix: capabilityMatrixSchema.optional(),
+  scenarioGraph: privateScenarioGraphSchema.optional(),
 }).superRefine((suite, context) => {
   const indexes = suite.sessions.map((session) => session.sequenceIndex);
   if (new Set(indexes).size !== indexes.length || indexes.some((value, index) => value !== index)) {
@@ -81,6 +89,54 @@ export const hostedSuiteMetadataSchema = z.object({
         message: `Consistency check "${check.name}" requires its source session to run before its target session.`,
         path: ["consistencyChecks", index],
       });
+    }
+  }
+
+  const sessionByTaskSlug = new Map(suite.sessions.map((session) => [session.taskSlug, session]));
+  const knownCapabilities = new Set(
+    suite.capabilityMatrix?.capabilities.map((capability) => capability.id) ?? [],
+  );
+  for (const [index, entry] of (suite.capabilityMatrix?.coverage ?? []).entries()) {
+    const session = sessionByTaskSlug.get(entry.taskSlug);
+    if (!session) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Capability coverage references unknown session ${entry.taskSlug}.`,
+        path: ["capabilityMatrix", "coverage", index, "taskSlug"],
+      });
+      continue;
+    }
+    if (!session.metadata.questionVariants.some((variant) => variant.id === entry.variantId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Capability coverage references unknown variant ${entry.variantId} for ${entry.taskSlug}.`,
+        path: ["capabilityMatrix", "coverage", index, "variantId"],
+      });
+    }
+  }
+  if (suite.scenarioGraph && !suite.capabilityMatrix) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A scenario graph requires a capability matrix.",
+      path: ["capabilityMatrix"],
+    });
+  }
+  for (const [index, node] of (suite.scenarioGraph?.nodes ?? []).entries()) {
+    if (!sessionByTaskSlug.has(node.taskSlug)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Scenario node ${node.id} references unknown session ${node.taskSlug}.`,
+        path: ["scenarioGraph", "nodes", index, "taskSlug"],
+      });
+    }
+    for (const capabilityId of node.capabilityIds) {
+      if (!knownCapabilities.has(capabilityId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Scenario node ${node.id} references unknown capability ${capabilityId}.`,
+          path: ["scenarioGraph", "nodes", index, "capabilityIds"],
+        });
+      }
     }
   }
 });

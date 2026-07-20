@@ -121,3 +121,16 @@ test("layout never renders Score JSON link", () => {
   });
   assert.doesNotMatch(terminalHtml, /Score JSON/);
 });
+
+test("input telemetry records field identity without capturing typed values", () => {
+  const html = layout({
+    title: "Telemetry privacy",
+    session: makeSession("workspace", "light"),
+    body: '<input name="confidential" />',
+    publicBaseUrl: "http://localhost:3003",
+    defaultStartPathForApp: () => "/wiki",
+  });
+
+  assert.match(html, /target\.getAttribute\("name"\)/);
+  assert.doesNotMatch(html, /valuePreview|target\.value/);
+});

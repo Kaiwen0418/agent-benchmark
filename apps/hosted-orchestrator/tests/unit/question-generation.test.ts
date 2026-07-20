@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hostedTestcaseApps } from "@agentbench/test-cases";
+import {
+  hostedTestcaseApps,
+  hostedWebCapabilityDraftMetadata,
+} from "@agentbench/test-cases";
 import { generateAttemptQuestions } from "../../src/question-generation.js";
 
 const wikiQuestionVariants = hostedTestcaseApps["wiki-lite"].variantPools.release;
@@ -89,4 +92,31 @@ test("question generation rejects missing, singleton, and duplicate variant pool
     }], "duplicate-pool"),
     /ids must be unique/,
   );
+});
+
+test("capability draft seed sweep reaches every declared variant deterministically", () => {
+  const selectedByTask = new Map(
+    hostedWebCapabilityDraftMetadata.sessions.map((definition) => [
+      definition.taskSlug,
+      new Set<string>(),
+    ]),
+  );
+  for (let index = 0; index < 1024; index += 1) {
+    const seed = `capability-sweep-${index}`;
+    const first = generateAttemptQuestions(hostedWebCapabilityDraftMetadata.sessions, seed);
+    const second = generateAttemptQuestions(hostedWebCapabilityDraftMetadata.sessions, seed);
+    assert.deepEqual(second, first);
+    for (const generated of first.sessions) {
+      const selection = generated.metadata.questionGeneration as Record<string, unknown>;
+      selectedByTask.get(generated.taskSlug)?.add(String(selection.variantId));
+    }
+  }
+
+  for (const definition of hostedWebCapabilityDraftMetadata.sessions) {
+    assert.deepEqual(
+      selectedByTask.get(definition.taskSlug),
+      new Set(definition.metadata.questionVariants.map((variant) => variant.id)),
+      definition.taskSlug,
+    );
+  }
 });

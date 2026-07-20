@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCalendarEvent } from "../../../src/apps/calendar-lite/actions.js";
+import {
+  createCalendarEvent,
+  recheckCalendarAvailability,
+} from "../../../src/apps/calendar-lite/actions.js";
 import { evaluateCalendarLite } from "../../../src/apps/calendar-lite/evaluate.js";
-import { computeEarliestFreeSlot, readBusyEvents } from "../../../src/apps/calendar-lite/scheduling.js";
+import {
+  computeEarliestFreeSlot,
+  readBusyEvents,
+  visibleBusyEvents,
+} from "../../../src/apps/calendar-lite/scheduling.js";
 import { buildInitialSessionState } from "../../../src/runtime/app-registry.js";
 import type { HostedSessionFor } from "../../../src/runtime/types.js";
 
@@ -44,6 +51,23 @@ test("calendar action normalizes and persists a valid event", () => {
   assert.equal(session.state.calendarEvents[0]?.title, "Architecture review");
   assert.equal(session.state.calendarEvents[0]?.attendeeEmail, "mira@example.com");
   assert.equal(evaluateCalendarLite(session).status, "passed");
+});
+
+test("calendar action treats an empty optional secondary attendee as absent", () => {
+  const session = makeSession();
+  const result = createCalendarEvent(session, {
+    title: "Architecture review",
+    date: "2026-07-08",
+    startTime: "14:30",
+    durationMinutes: 45,
+    attendeeEmail: "mira@example.com",
+    secondaryAttendeeEmail: "   ",
+    makeId: () => "event-1",
+    now: () => "2026-06-24T00:00:00.000Z",
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(session.state.calendarEvents[0]?.secondaryAttendeeEmail, undefined);
 });
 
 test("calendar evaluator rejects the wrong schedule", () => {
@@ -331,3 +355,62 @@ for (const variant of hardCalendarVariants) {
     assert.equal(earliest, config.expectedStartTime);
   });
 }
+
+test("calendar campaign requires a deterministic actor recheck before accepting the revised schedule", () => {
+  const taskConfig = {
+    expectedTitle: "Carried note title",
+    expectedDate: "2026-07-22",
+    expectedStartTime: "11:00",
+    expectedDurationMinutes: 30,
+    expectedAttendeeEmail: "mira@example.com",
+    schedulingWindowStart: "09:00",
+    schedulingWindowEnd: "13:00",
+    seedBusyEvents: [
+      { id: "busy-initial", title: "Planning", date: "2026-07-22", startTime: "09:00", durationMinutes: 60, attendeeEmail: "mira@example.com" },
+    ],
+    actorUpdate: {
+      requiredRechecks: 2,
+      pendingMessage: "Still pending",
+      appliedMessage: "Customer call added",
+      busyEvent: { id: "busy-actor", title: "Customer call", date: "2026-07-22", startTime: "10:00", durationMinutes: 60, attendeeEmail: "mira@example.com" },
+    },
+  };
+  const session = makeHardSession(taskConfig);
+  createCalendarEvent(session, {
+    title: taskConfig.expectedTitle,
+    date: taskConfig.expectedDate,
+    startTime: taskConfig.expectedStartTime,
+    durationMinutes: taskConfig.expectedDurationMinutes,
+    attendeeEmail: taskConfig.expectedAttendeeEmail,
+    makeId: () => "event-campaign",
+    now: () => "2026-06-24T00:00:00.000Z",
+  });
+  assert.equal(evaluateCalendarLite(session).status, "failed");
+
+  const first = recheckCalendarAvailability(session, taskConfig, {
+    makeId: () => "check-1",
+    now: () => "2026-06-24T00:00:01.000Z",
+  });
+  assert.equal(first.success && first.check.status, "pending");
+  assert.equal(visibleBusyEvents(taskConfig, 1).length, 1);
+  assert.equal(evaluateCalendarLite(session).status, "failed");
+
+  const second = recheckCalendarAvailability(session, taskConfig, {
+    makeId: () => "check-2",
+    now: () => "2026-06-24T00:00:02.000Z",
+  });
+  assert.equal(second.success && second.check.status, "updated");
+  assert.equal(visibleBusyEvents(taskConfig, 2).length, 2);
+  assert.equal(evaluateCalendarLite(session).status, "passed");
+  assert.equal(
+    computeEarliestFreeSlot({
+      date: taskConfig.expectedDate,
+      durationMinutes: taskConfig.expectedDurationMinutes,
+      windowStart: taskConfig.schedulingWindowStart,
+      windowEnd: taskConfig.schedulingWindowEnd,
+      attendees: [taskConfig.expectedAttendeeEmail],
+      busyEvents: visibleBusyEvents(taskConfig, 2),
+    }),
+    taskConfig.expectedStartTime,
+  );
+});

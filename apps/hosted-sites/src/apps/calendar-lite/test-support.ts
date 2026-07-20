@@ -1,4 +1,5 @@
 import { configString, configStringOrNull, type HostedAppTestSupport } from "../../runtime/test-support.js";
+import { readActorUpdate } from "./scheduling.js";
 
 export const calendarLiteTestSupport: HostedAppTestSupport<"calendar-lite"> = {
   exampleTaskConfig: {
@@ -9,6 +10,17 @@ export const calendarLiteTestSupport: HostedAppTestSupport<"calendar-lite"> = {
     expectedAttendeeEmail: "mira@example.com",
   },
   applyPassingState(session, config) {
+    const actorUpdate = readActorUpdate(config);
+    if (actorUpdate) {
+      for (let index = 1; index <= actorUpdate.requiredRechecks; index += 1) {
+        session.state.calendarAvailabilityChecks.push({
+          id: `availability-check-test-${index}`,
+          checkNumber: index,
+          status: index === actorUpdate.requiredRechecks ? "updated" : "pending",
+          createdAt: "2026-06-24T00:00:00.000Z",
+        });
+      }
+    }
     session.state.calendarEvents.push({
       id: "event-test",
       title: configStringOrNull(config, "expectedTitle") ?? "carried-value",
