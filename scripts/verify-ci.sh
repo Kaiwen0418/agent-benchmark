@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+echo "== Hosted variant sweep workflow =="
+bash scripts/test-hosted-variant-sweep.sh
+
 echo "== Deployment classifier =="
 bash scripts/test-deploy-classifier.sh
 

@@ -58,7 +58,7 @@ performed prerequisite actions out of order.
 
 ## Independent Suite Versioning
 
-The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.10` and `hosted-web-hard-suite-v1.0.3`). A change to a hard variant, the hard pool composition, a hard cross-app chain, or a testcase time limit bumps the affected suite's version and content hash.
+The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.10` and `hosted-web-hard-suite-v1.0.4`). A change to a hard variant, the hard pool composition, a hard cross-app chain, or a testcase time limit bumps the affected suite's version and content hash.
 
 This is enforced mechanically: new task-config fields used by hard variants are optional and only inspected when present, and `consistencyChecks` is an optional manifest key that is absent from the easy manifest. The easy catalog's "stable revision identity and content hash" test fails if a hard-suite change leaks into the easy manifest.
 
@@ -100,7 +100,7 @@ Publishing converts the validated catalog into an immutable `benchmark_case_revi
 - `pnpm --filter hosted-sites test` imports the canonical catalog, executes positive and negative scoring for every declared variant across both published suites, and repeats each passing state across all layouts and themes.
 - `pnpm catalog:publish` validates and publishes the current catalog release with service-role credentials.
 - `pnpm verify:ci` runs the complete repository gate, including Redis command tests, PostgreSQL lifecycle races, local hosted smoke, and production builds.
-- `Hosted Variant Sweep` runs seven deterministic full-pass attempts against the development environment every Monday and on demand. The default-branch schedule dispatches the workflow from `develop` before it requests the protected `development` Environment. Seeds `full-pool-0`, `full-pool-1`, `full-pool-2`, `full-pool-18`, `full-pool-59`, `full-pool-152`, and `full-pool-197` cover every current variant without using Web guest quota. The hard suite is swept independently from the easy suite and ranked separately on public result and leaderboard surfaces.
+- `Hosted Variant Sweep` runs seven deterministic full-pass attempts per suite against the development environment every Monday and on demand. The default-branch schedule dispatches the workflow from `develop` before it requests the protected `development` Environment. The workflow matrix passes `BENCHMARK_CASE_SLUG` explicitly for both `hosted-web-suite` and `hosted-web-hard-suite`. Seeds `full-pool-164`, `full-pool-268`, `full-pool-327`, `full-pool-548`, `full-pool-819`, `full-pool-843`, and `full-pool-853` cover every current variant without using Web guest quota; an orchestrator test reads this list directly from the workflow and fails if either suite loses coverage. The hard suite is swept independently from the easy suite and ranked separately on public result and leaderboard surfaces.
 - Each lifecycle smoke logs selected variant IDs and requires one unique `hosted_web_results` row per suite session plus one `benchmark_attempt_scores` row.
 
 The seed list is versioned with the suite. Recompute it whenever variant IDs, session order, app slug, or task slug changes; CI remains the immediate guard against an uncovered variant.
