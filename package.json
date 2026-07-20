@@ -33,6 +33,6 @@
     "prepare": "sh scripts/install-git-hooks.sh"
   },
   "devDependencies": {
-    "turbo": "^2.10.3"
+    "turbo": "^2.10.5"
   }
 }
