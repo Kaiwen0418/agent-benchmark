@@ -15,6 +15,7 @@ import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironmen
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 import { hostedWebCatalogReleases } from "@agentbench/test-cases/release";
 import type { PublicConsistencyCheck } from "./public-result-consistency";
+import { groupLeaderboardVersions, type LeaderboardVersionCandidate } from "./leaderboard-versions";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
@@ -741,6 +742,7 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
 
 export type LeaderboardVersion = {
   version: string;
+  versions: string[];
   slug: string;
   tag: string;
 };
@@ -765,7 +767,7 @@ export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersio
   const releaseByCaseId = new Map(releases.map((release) => [release.benchmarkCase.id, release]));
 
   const seen = new Set<string>();
-  const versions: LeaderboardVersion[] = [];
+  const versions: LeaderboardVersionCandidate[] = [];
   const tagBySuiteSlug = new Map<string, string>();
 
   for (const item of cases) {
@@ -822,23 +824,18 @@ export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersio
     }
   }
 
-  return versions.sort((left, right) => {
-    if (left.tag !== right.tag) {
-      return right.tag.localeCompare(left.tag);
-    }
-    return right.version.localeCompare(left.version, undefined, { numeric: true, sensitivity: "base" });
-  });
+  return groupLeaderboardVersions(versions);
 }
 
-export async function listPublicLeaderboard(limit = 20, suiteVersion?: string, suiteSlug?: string): Promise<LeaderboardEntry[]> {
+export async function listPublicLeaderboard(limit = 20, suiteVersions?: string[], suiteSlug?: string): Promise<LeaderboardEntry[]> {
   const supabase = getSupabase();
 
   let versionRunIds: string[] | null = null;
-  if (suiteVersion) {
+  if (suiteVersions && suiteVersions.length > 0) {
     let versionAttemptsQuery = supabase
       .from("public_hosted_run_summaries")
       .select("run_id")
-      .eq("suite_version", suiteVersion)
+      .in("suite_version", suiteVersions)
       .limit(1000);
 
     if (suiteSlug) {

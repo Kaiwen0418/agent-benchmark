@@ -128,19 +128,26 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
                   <span>{entry.baseModel}</span>
                   <span className="lg:hidden"> · {entry.browser ?? "Unknown browser"} / {entry.platform ?? "Unknown platform"}</span>
                 </div>
-                {entry.status === "completed" ? (
-                  <div className="mt-2 inline-flex rounded-full bg-[#d7ff00]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#d7ff00]">
-                    Finished
-                  </div>
-                ) : entry.status === "timeout" ? (
-                  <div className="mt-2 inline-flex rounded-full bg-[#ffb627]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ffc44d]">
-                    Timed out
-                  </div>
-                ) : entry.status === "failed" ? (
-                  <div className="mt-2 inline-flex rounded-full bg-[#ff8d7a]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ff9f90]">
-                    Failed run
-                  </div>
-                ) : null}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {entry.status === "completed" ? (
+                    <div className="inline-flex rounded-full bg-[#d7ff00]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#d7ff00]">
+                      Finished
+                    </div>
+                  ) : entry.status === "timeout" ? (
+                    <div className="inline-flex rounded-full bg-[#ffb627]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ffc44d]">
+                      Timed out
+                    </div>
+                  ) : entry.status === "failed" ? (
+                    <div className="inline-flex rounded-full bg-[#ff8d7a]/15 px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-[#ff9f90]">
+                      Failed run
+                    </div>
+                  ) : null}
+                  {entry.suiteVersion ? (
+                    <div className="inline-flex rounded-full border border-white/15 px-2 py-0.5 text-[9px] tracking-[0.12em] text-white/45">
+                      {entry.suiteVersion}
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <div className="hidden min-w-0 lg:block">
                 <div className="truncate text-sm text-white/85">{entry.browser ?? "Unknown browser"}</div>
