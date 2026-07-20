@@ -156,16 +156,18 @@ Confidentiality is the gating constraint for the epic: scorer oracle surfaces (v
 | #113 Calendar hard pool | Complete | Conflict-avoidance, shared-window, timezone-overlap, and reschedule variants. |
 | #114 Repo hard pool | Complete | Coherent multi-edit / rename / rollout variants with required messages. |
 | #110 Shopping hard pool | Complete | Stock-aware, compatibility, and coupon constrained-checkout variants. |
-| #115 Cross-app chain | In Progress | Hard v1.0.4 requires the agent to carry two exact wiki answers into a later note's title and body; enforced only by suite-level consistency checks against the agent's own final states. |
+| #115 Cross-app chain | In Progress | Hard v1.0.5 requires the agent to carry two exact wiki answers into a later note's title and body; the body is checked through a normalized digest so final evidence stays redacted. |
 | #116 Verification matrix and docs | In Progress | Both suites swept independently by the generic matrix; independent semantic versioning, cross-app consistency, and scorer oracle policy documented. |
-| #140 Hard v1.0.4 scale expansion | In Progress | Expand all six hard pools, add a required workflow spanning at least three sessions, and complete deterministic, confidentiality, browser, and lifecycle verification before publishing v1.0.4. |
+| #140 Hard v1.0.5 lifecycle closure | In Progress | Validate all six expanded hard pools and the three-session workflow through deterministic dev sweeps; publish the digest-backed carry correction without exposing note bodies. |
 
 Each hard variant receives positive, negative, and presentation-invariant matrix coverage in `apps/hosted-sites/tests/unit/variant-matrix.test.ts`, which iterates every published suite. Per-session scoring stays deterministic; suite-level checks live solely in the scoring module (`evaluateSuiteConsistency`) and orchestrator aggregation. The easy and hard suites version and publish independently; a hard-suite change must not alter the easy manifest's content hash.
 
-Issue #140 is the umbrella work item for the unpublished `v1.0.4` revision. The
-revision remains `v1.0.4` while this scope is assembled; affected task and seed
-versions still advance whenever their semantics or fixtures change. Delivery is
-split into four increments:
+Issue #140 is the umbrella work item for the hard expansion. The immutable
+`v1.0.4` release exposed a dev-sweep-only evidence mismatch: Notes redacted the
+body from final state while the suite attempted to read that body directly.
+`v1.0.5` keeps the task semantics and adds digest-backed carry verification;
+affected task and seed versions still advance whenever their semantics or
+fixtures change. Delivery is split into four increments:
 
 1. Complete the two-value Wiki-to-Notes carry chain and its fail-closed
    aggregation coverage.
@@ -204,7 +206,7 @@ Exit criteria: the hard suite is published as its own immutable revision, every 
 
 Status: Planned ([#181](https://github.com/Kaiwen0418/agent-benchmark/issues/181))
 
-The current hard v1.0.4 suite is structurally medium-hard: it is strong at
+The current hard v1.0.5 suite is structurally medium-hard: it is strong at
 deterministic multi-step browser execution, exact backend-state scoring,
 ordered mutations, bounded constraint reasoning, and a three-session carry
 chain. Its principal blind spots are conflicting-evidence reconciliation,
@@ -214,7 +216,7 @@ task compositions. This 3/5 structural assessment is provisional until
 repeated representative-agent runs establish empirical pass rates and
 confidence intervals.
 
-P2.3 preserves the immutable v1.0.4 release and builds the next revision as a
+P2.3 preserves the immutable v1.0.5 release and builds the next revision as a
 capability-oriented testbench with independently reported tracks rather than a
 single longer scripted workflow:
 
@@ -230,7 +232,7 @@ single longer scripted workflow:
 
 Delivery is sequenced as follows:
 
-1. Establish the machine-readable capability matrix and calibrate v1.0.4 with
+1. Establish the machine-readable capability matrix and calibrate v1.0.5 with
    repeated runs from at least three representative agent families.
 2. Add generic private scenario-graph, deterministic fault-schedule, scoring,
    and per-capability result contracts before app-specific implementations.
@@ -251,7 +253,7 @@ Exit criteria: every scored capability maps to at least two independent
 variants; the suite includes at least four tracks, two new task surfaces, and
 one deterministic branching campaign; recoverable-failure and privacy canary
 tests pass without oracle leakage; representative-agent repeated-seed results
-show a statistically supported difficulty increase over v1.0.4; historical
+show a statistically supported difficulty increase over v1.0.5; historical
 easy and hard content hashes remain unchanged; and catalog checks, browser E2E,
 Docker-backed lifecycle smoke, and `pnpm verify:ci` are green.
 

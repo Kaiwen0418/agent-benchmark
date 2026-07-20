@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   aggregateStrictScore,
   aggregateSuiteScore,
+  createConsistencyDigest,
   evaluateSuiteConsistency,
   failedEvaluator,
   passedEvaluator,
@@ -204,6 +205,30 @@ test("evaluateSuiteConsistency equal-normalized ignores case and surrounding whi
     states,
   );
   assert.equal(result!.status, "passed");
+});
+
+test("evaluateSuiteConsistency matches a source value to a redacted target digest", () => {
+  const sourceValue = "  Ninety   Days ";
+  const [result] = evaluateSuiteConsistency(
+    [
+      chain({
+        sourceTaskSlug: "wiki",
+        sourcePath: "answer",
+        targetTaskSlug: "notes",
+        targetPath: "notes[].bodyDigest",
+        rule: "target-digest-matches-source",
+      }),
+    ],
+    new Map<string, unknown>([
+      ["wiki", { answer: sourceValue }],
+      ["notes", { notes: [{ bodyDigest: createConsistencyDigest("ninety days") }] }],
+    ]),
+  );
+
+  assert.equal(result!.status, "passed");
+  assert.equal(result!.evidence?.digestMatched, true);
+  assert.equal("matchedValue" in (result!.evidence ?? {}), false);
+  assert.equal(JSON.stringify(result).includes(sourceValue), false);
 });
 
 test("aggregateSuiteScore folds a failed required consistency check into status and score", () => {
