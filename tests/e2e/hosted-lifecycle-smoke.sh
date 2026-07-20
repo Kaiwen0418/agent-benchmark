@@ -110,14 +110,16 @@ const runnerSecret = process.env.RUNNER_SHARED_SECRET;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+function isRecoverableFault(status, body) {
+  return [409, 503].includes(status) && body.includes(">Retry</a>");
+}
+
 async function checkedFetch(url, init = {}) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const response = await fetch(url, init);
     if (response.ok) return response;
     const body = await response.text();
-    const recoverableFault = [409, 503].includes(response.status)
-      && body.includes(">Retry</a>");
-    if (recoverableFault && attempt === 0) continue;
+    if (isRecoverableFault(response.status, body) && attempt === 0) continue;
     throw new Error(
       `${init.method ?? "GET"} ${new URL(url).pathname} failed with HTTP ${response.status}: ${body}`,
     );
@@ -168,11 +170,28 @@ async function insertRow(table, value) {
 }
 
 async function postForm(path, token, values) {
-  return checkedFetch(`${hostedBaseUrl}${path}?session=${encodeURIComponent(token)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(values),
-  });
+  const formUrl = `${hostedBaseUrl}${path}?session=${encodeURIComponent(token)}`;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    // Follow redirects explicitly. A successful mutation can redirect to a GET
+    // that receives a deterministic navigation fault; replaying the original
+    // POST would duplicate the already-applied mutation.
+    const response = await fetch(formUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(values),
+      redirect: "manual",
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location) throw new Error(`POST ${path} redirected without a Location header.`);
+      return checkedFetch(new URL(location, formUrl));
+    }
+    if (response.ok) return response;
+    const body = await response.text();
+    if (isRecoverableFault(response.status, body) && attempt === 0) continue;
+    throw new Error(`POST ${path} failed with HTTP ${response.status}: ${body}`);
+  }
+  throw new Error(`POST ${path} exhausted its recovery retry.`);
 }
 
 function requireObject(value, label) {

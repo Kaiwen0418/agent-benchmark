@@ -34,6 +34,8 @@ fi
 
 require_text "${SMOKE}" 'BENCHMARK_CASE_SLUG="${BENCHMARK_CASE_SLUG:-hosted-web-suite}"'
 require_text "${SMOKE}" 'slug: `eq.${benchmarkCaseSlug}`'
+require_text "${SMOKE}" 'redirect: "manual"'
+require_text "${SMOKE}" 'return checkedFetch(new URL(location, formUrl));'
 require_text "${WORKFLOW}" 'gh workflow run hosted-variant-sweep.yml --ref develop --repo "${GITHUB_REPOSITORY}"'
 require_text "${WORKFLOW}" 'benchmark_case_slug:'
 require_text "${WORKFLOW}" '          - hosted-web-suite'
