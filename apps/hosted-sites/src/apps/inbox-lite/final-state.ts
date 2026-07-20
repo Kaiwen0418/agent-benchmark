@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createConsistencyDigest } from "@agentbench/scoring";
 import type { HostedSessionFor } from "../../runtime/types.js";
 
 function digest(value: string) {
@@ -14,7 +15,7 @@ export function buildInboxLiteFinalState(session: HostedSessionFor<"inbox-lite">
       threadId: message.threadId,
       recipientCount: message.recipients.length,
       subjectDigest: digest(message.subject),
-      bodyDigest: digest(message.body),
+      bodyDigest: createConsistencyDigest(message.body),
       revisionCount: message.revisionCount,
     })),
     safetyViolationCount: session.state.inboxSafetyViolations.length,
