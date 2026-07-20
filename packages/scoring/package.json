@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "calibration:report": "tsx scripts/report-calibration.ts",
     "test": "pnpm run build && node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)"
   },
   "dependencies": {

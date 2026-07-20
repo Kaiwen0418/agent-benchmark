@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import {
+  capabilityBreakdownSchema,
+  publicScenarioGraphEvaluationSchema,
+  type CapabilityBreakdown,
+  type PublicScenarioGraphEvaluation,
+} from "./capability.js";
+
+export * from "./capability.js";
+export * from "./calibration.js";
 
 export const hostedWebEvaluatorTypeSchema = z.enum([
   "retrieve_value",
@@ -96,9 +105,11 @@ export const hostedWebSuiteScoreResultSchema = z.object({
   status: hostedWebEvaluatorStatusSchema,
   summary: z.string(),
   breakdown: z.object({
-    aggregation: z.literal("weighted-required-suite"),
+    aggregation: z.enum(["weighted-required-suite", "capability-dimension-weighted-suite"]),
     sessions: z.array(hostedWebSuiteSessionScoreSchema),
     consistency: z.array(suiteConsistencyResultSchema).optional(),
+    capabilities: capabilityBreakdownSchema.optional(),
+    scenarioGraph: publicScenarioGraphEvaluationSchema.optional(),
   }),
 });
 
@@ -158,6 +169,8 @@ export function failedEvaluator(params: {
 export function aggregateSuiteScore(params: {
   sessions: HostedWebSuiteSessionScore[];
   consistency?: SuiteConsistencyResult[];
+  capabilities?: CapabilityBreakdown;
+  scenarioGraph?: PublicScenarioGraphEvaluation;
   passSummary?: string;
   failSummary?: string;
 }): HostedWebSuiteScoreResult {
@@ -170,7 +183,12 @@ export function aggregateSuiteScore(params: {
   const requiredConsistencyPassed = consistency
     .filter((check) => check.required !== false)
     .every((check) => check.status === "passed");
-  const requiredPassed = requiredSessionsPassed && requiredConsistencyPassed;
+  const capabilitiesPassed = !params.capabilities || params.capabilities.status === "passed";
+  const scenarioGraphPassed = !params.scenarioGraph || params.scenarioGraph.status === "passed";
+  const requiredPassed = requiredSessionsPassed
+    && requiredConsistencyPassed
+    && capabilitiesPassed
+    && scenarioGraphPassed;
 
   // Consistency checks are first-class weighted-required components alongside
   // sessions, so a broken cross-app chain lowers the score and fails the suite.
@@ -181,8 +199,14 @@ export function aggregateSuiteScore(params: {
     sessions.reduce((sum, session) => sum + session.score * Math.max(session.weight, 0), 0) +
     consistency.reduce((sum, check) => sum + check.score * Math.max(check.weight, 0), 0);
   const weightedScore = totalWeight > 0 ? weightedSum / totalWeight : 0;
-  const normalizedScore = Number(weightedScore.toFixed(4));
-  const status = hasError ? "error" : requiredPassed ? "passed" : "failed";
+  const normalizedScore = params.capabilities?.score ?? Number(weightedScore.toFixed(4));
+  const hasCapabilityError = params.capabilities?.status === "error";
+  const hasScenarioError = params.scenarioGraph?.status === "error";
+  const status = hasError || hasCapabilityError || hasScenarioError
+    ? "error"
+    : requiredPassed
+      ? "passed"
+      : "failed";
 
   return {
     score: normalizedScore,
@@ -192,9 +216,13 @@ export function aggregateSuiteScore(params: {
         ? params.passSummary ?? "All required hosted-web sessions passed."
         : params.failSummary ?? "One or more required hosted-web sessions failed.",
     breakdown: {
-      aggregation: "weighted-required-suite",
+      aggregation: params.capabilities
+        ? "capability-dimension-weighted-suite"
+        : "weighted-required-suite",
       sessions,
       ...(consistency.length > 0 ? { consistency } : {}),
+      ...(params.capabilities ? { capabilities: params.capabilities } : {}),
+      ...(params.scenarioGraph ? { scenarioGraph: params.scenarioGraph } : {}),
     },
   };
 }

@@ -9,7 +9,7 @@ This document defines who may read, mutate, and recover each state family. Owner
 | `profiles`, Supabase Auth identity | Web control plane | Supabase Auth / Web | Web | User identity and plan data |
 | `benchmark_cases` | Web control plane | release/admin workflow | Web, orchestrator service-role code | Case identity, visibility, display fields, and current revision pointer |
 | `public_benchmark_cases` | Web control plane | database projection | anonymous/authenticated clients, Web | Display-safe discovery only |
-| `benchmark_case_revisions` | benchmark release workflow | `publish_benchmark_case_catalog` | orchestrator, Web service-role recovery | Immutable private manifest plus synchronized public case identity |
+| `benchmark_case_revisions` | benchmark release workflow | `publish_benchmark_case_catalog` | orchestrator, Web service-role recovery | Immutable private manifest, including optional capability coverage, scenario graph, and deterministic fault schedule, plus synchronized public case identity |
 | `benchmark_runs` | Web control plane | Web | Web, public read models | User-facing run lifecycle |
 | `run_events`, `artifacts` | Web control plane | Web internal APIs | Web UI and public read models | Live observability and output artifacts |
 | `benchmark_attempts` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; Web uses orchestrator APIs/public read models | Canonical hosted attempt lifecycle and active-session pointer |
@@ -65,3 +65,4 @@ Session keys and command keys currently share one Redis instance but are separat
 - Redis cannot override a terminal PostgreSQL transition.
 - Web callbacks cannot roll back a completed hosted transaction.
 - Public case discovery never exposes private manifest, variant pool, canonical answer, or evaluator configuration.
+- Public aggregate results may expose capability and scoring-dimension labels plus redacted graph counts, but never scenario node/edge/fault identifiers, triggers, or component evidence.

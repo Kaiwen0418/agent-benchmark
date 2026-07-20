@@ -15,5 +15,13 @@ export function buildCalendarLiteFinalState(session: HostedSessionFor<"calendar-
       resource: calendarEvent.resource ?? null,
       occurrences: calendarEvent.occurrences ?? 1,
     })),
+    ...(session.state.calendarAvailabilityChecks.length > 0
+      ? {
+          availabilityRecheckCount: session.state.calendarAvailabilityChecks.length,
+          actorUpdateApplied: session.state.calendarAvailabilityChecks.some(
+            (check) => check.status === "updated",
+          ),
+        }
+      : {}),
   };
 }

@@ -77,9 +77,111 @@ The hard suite declares a two-value cross-app chain: the release-lookup answer m
 
 Orchestrator unit coverage must include the chain succeeding, the carry mismatching, a missing prior output, and a chain-free suite that omits `consistencyChecks` entirely.
 
+## Capability Testbench Contracts
+
+Capability-oriented releases add two optional service-role-only manifest
+contracts. They are absent from legacy releases so historical suite content
+hashes remain unchanged.
+
+- `capabilityMatrix` declares public capability tracks, the five versioned
+  scoring dimensions, their weights, and exact task/variant coverage. Every
+  declared track and dimension requires at least two independent variants;
+  weights must sum to one, and every reference must resolve to a variant in the
+  same immutable manifest.
+- `scenarioGraph` declares private required and distractor nodes, dependency
+  and revision edges, plus deterministic stale-view, rejected-mutation, and
+  interrupted-navigation schedules. Graphs must be acyclic, references must
+  resolve, and each fault fires at one declared action occurrence at most once.
+
+`packages/scoring` evaluates graph nodes, dependencies, explicit revision
+proof, avoided distractors, and recovered faults fail-closed. Revision edges
+name a persisted evaluator on the target session, and distractor nodes name a
+persisted avoidance evaluator; missing or failed proof is not inferred from
+session completion or browser metadata. Missing required
+outcomes never count as partial success. It aggregates independently reported
+capability tracks and scoring dimensions; required final-state and
+recovery/safety components remain pass gates while optional interaction cost
+can lower the score without changing a correct run to failed.
+Scenario outcomes are constructed by service-role orchestration from persisted
+results and compact telemetry; browser-authored final state must never be
+trusted to assert recovered faults, revision proof, or distractor avoidance
+directly. Duplicate or
+out-of-graph outcome claims are rejected.
+
+At attempt initialization, the orchestrator copies only the active task's
+fault subset into private session metadata. Hosted-sites counts matching
+read/navigation and mutation requests durably, applies each scheduled fault at
+most once, and returns a visible retry surface without mutating app state. A
+matching retry clears the pending fault and records recovery in server-owned
+session metadata. Triggers that would collide on the same task and request
+occurrence are rejected when the manifest is parsed. Sessions without a fault
+schedule, viewer sessions, terminal sessions, and non-app API routes never
+enter this path.
+
+At terminal aggregation, the orchestrator joins each selected variant to its
+matrix coverage entry. Final-state components come from the persisted session
+score; evidence-verification components accept only required retrieve-value or
+UI-state evaluators; dependency and recovery components come from the private
+graph evaluation and server-owned recovery state. Unknown selected variants,
+missing required evaluators, missing recovery/revision/avoidance proof, duplicated graph
+outcomes, and graph metadata without its matrix fail closed. Interaction cost
+is computed from persisted page-load, navigation, click, submit, and field-edit
+telemetry. Consecutive input events on one field collapse into a single edit
+burst. Each covered variant declares preferred and hard action budgets: cost at
+or below the preferred budget receives full credit, cost at or above the hard
+budget receives none, and the interval is linear. This dimension remains
+non-gating, and missing telemetry earns no efficiency credit rather than being
+treated as a free run. Wall-clock time is never substituted as an efficiency
+score.
+
+### Capability calibration reports
+
+Calibration input is a JSON array of deterministic run observations. Each row
+identifies the immutable benchmark revision, agent family, generation seed,
+terminal status, completion milliseconds, normalized action cost, and the
+reported capability-track statuses and scores. Duplicate
+revision/agent-family/seed identities are rejected so a retry cannot silently
+inflate the sample.
+
+Generate the machine-readable report with:
+
+```bash
+pnpm calibration:report observations.json hard-v1.0.5 capability-candidate
+```
+
+The report includes overall and per-agent-family pass rates, per-track scores,
+completion cost, action cost, and two-sided 95% confidence intervals. Pass
+rates use Wilson intervals; continuous metrics use Student-t intervals for
+small repeated-seed samples. Release readiness requires at least three agent
+families represented in both revisions and at least two seeds per family per
+revision. The conservative `measurablyHarder` flag is true only when the
+candidate pass-rate interval's upper bound is below the baseline interval's
+lower bound. This report is evidence tooling, not a substitute for actually
+running the representative agents.
+
+The staged `inbox-lite` surface scores exact server-owned outbound message
+state and a separate required safety evaluator. Confidential canaries and
+prohibited recipients are rejected before a draft is persisted; only the
+violation class is retained. Public final state contains message identifiers,
+counts, and content digests, never recipient addresses or message bodies. Its
+campaign variants reveal an amended routing policy only after two deterministic
+rechecks and require the resulting message to use that revision; a named
+persisted evaluator supplies graph revision proof.
+The staged `sheets-lite` surface scores an exact filtered result set after a
+join, normalized two-decimal formulas, decisions, and a required explicit
+validation run. Extra rows, incorrect formulas, or validation performed before
+the final row set fail closed. Both staged pools receive positive, negative,
+and all-presentation scoring sweeps even before they enter an immutable suite.
+
+Only a redacted graph projection may be stored in or exposed through the suite
+aggregate: score, status, and passed/failed/error counts. Node IDs, edge IDs,
+fault IDs and triggers, component IDs, private variant coverage, and evaluator
+evidence stay inside service-role evaluation. Capability track and dimension
+names are public result fields by design.
+
 ## Scorer Oracle Visibility
 
-Scorer oracle surfaces — variant pools, canonical answers, evaluator parameters, private `taskConfig`, and full final-state corpora — are visible only to service-role and operator/test contexts, never to public sessions or browsers:
+Scorer oracle surfaces — variant pools, canonical answers, evaluator parameters, private `taskConfig`, capability coverage, scenario graphs, deterministic fault schedules, and full final-state corpora — are visible only to service-role and operator/test contexts, never to public sessions or browsers:
 
 - **Public sessions / browsers:** display-safe goals, stable scores, and redacted final evidence only. Variant pools and answer contracts are stripped at selection time; the orchestrator persists only the selected metadata.
 - **Service-role (orchestrator):** the complete private manifest, generation, and aggregation, including consistency evaluation.

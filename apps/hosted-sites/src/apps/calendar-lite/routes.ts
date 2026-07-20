@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
 import { redirect, sendJson } from "../../runtime/http.js";
+import { readTaskConfig } from "../../runtime/question-config.js";
 import { isHostedSessionForApp } from "../../runtime/types.js";
-import { createCalendarEvent } from "./actions.js";
+import { createCalendarEvent, recheckCalendarAvailability } from "./actions.js";
 import { renderCalendarLite } from "./render.js";
 
 export function createCalendarLiteRoutes(deps: HostedAppRouteDeps) {
@@ -12,12 +13,33 @@ export function createCalendarLiteRoutes(deps: HostedAppRouteDeps) {
   }
   async function handle(request: IncomingMessage, response: ServerResponse, url: URL) {
     const session = await getSession(url, request);
-    if ((url.pathname === "/calendar" || url.pathname === "/calendar/events") && !session) {
+    if ((url.pathname === "/calendar" || url.pathname === "/calendar/events" || url.pathname === "/calendar/availability/recheck") && !session) {
       deps.badRequest(response, "Missing or invalid session");
       return true;
     }
     if (request.method === "GET" && url.pathname === "/calendar") {
       renderCalendarLite(session!, response, deps.publicBaseUrl, deps.defaultStartPathForApp);
+      return true;
+    }
+    if (request.method === "POST" && url.pathname === "/calendar/availability/recheck") {
+      if (deps.rejectTerminalMutation(session!, response)) return true;
+      const checked = recheckCalendarAvailability(
+        session!,
+        readTaskConfig(session!.metadata),
+        { makeId: deps.makeId, now: deps.now },
+      );
+      if (!checked.success) {
+        deps.badRequest(response, checked.error);
+        return true;
+      }
+      await deps.persistSessionSnapshot(session!);
+      await deps.recordEvent(session!, {
+        type: "task.signal",
+        name: "calendar.availability_rechecked",
+        checkNumber: checked.check.checkNumber,
+        status: checked.check.status,
+      });
+      redirect(response, `/calendar?session=${encodeURIComponent(session!.token)}`);
       return true;
     }
     if (request.method === "POST" && url.pathname === "/calendar/events") {

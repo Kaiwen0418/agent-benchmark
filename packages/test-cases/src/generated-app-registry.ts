@@ -2,8 +2,10 @@
 import { z } from "zod";
 import { calendarLiteTestcaseDefinition } from "./apps/calendar-lite/definition.js";
 import { forumLiteTestcaseDefinition } from "./apps/forum-lite/definition.js";
+import { inboxLiteTestcaseDefinition } from "./apps/inbox-lite/definition.js";
 import { notesLiteTestcaseDefinition } from "./apps/notes-lite/definition.js";
 import { repoLiteTestcaseDefinition } from "./apps/repo-lite/definition.js";
+import { sheetsLiteTestcaseDefinition } from "./apps/sheets-lite/definition.js";
 import { shoppingLiteTestcaseDefinition } from "./apps/shopping-lite/definition.js";
 import { wikiLiteTestcaseDefinition } from "./apps/wiki-lite/definition.js";
 import { createHostedSessionSchema } from "./app-definition.js";
@@ -11,24 +13,30 @@ import { createHostedSessionSchema } from "./app-definition.js";
 export const hostedTestcaseApps = {
   "calendar-lite": calendarLiteTestcaseDefinition,
   "forum-lite": forumLiteTestcaseDefinition,
+  "inbox-lite": inboxLiteTestcaseDefinition,
   "notes-lite": notesLiteTestcaseDefinition,
   "repo-lite": repoLiteTestcaseDefinition,
+  "sheets-lite": sheetsLiteTestcaseDefinition,
   "shopping-lite": shoppingLiteTestcaseDefinition,
   "wiki-lite": wikiLiteTestcaseDefinition,
 } as const;
 
 export const calendarLiteSessionSchema = createHostedSessionSchema("calendar-lite", calendarLiteTestcaseDefinition.questionVariantSchema);
 export const forumLiteSessionSchema = createHostedSessionSchema("forum-lite", forumLiteTestcaseDefinition.questionVariantSchema);
+export const inboxLiteSessionSchema = createHostedSessionSchema("inbox-lite", inboxLiteTestcaseDefinition.questionVariantSchema);
 export const notesLiteSessionSchema = createHostedSessionSchema("notes-lite", notesLiteTestcaseDefinition.questionVariantSchema);
 export const repoLiteSessionSchema = createHostedSessionSchema("repo-lite", repoLiteTestcaseDefinition.questionVariantSchema);
+export const sheetsLiteSessionSchema = createHostedSessionSchema("sheets-lite", sheetsLiteTestcaseDefinition.questionVariantSchema);
 export const shoppingLiteSessionSchema = createHostedSessionSchema("shopping-lite", shoppingLiteTestcaseDefinition.questionVariantSchema);
 export const wikiLiteSessionSchema = createHostedSessionSchema("wiki-lite", wikiLiteTestcaseDefinition.questionVariantSchema);
 
 export const hostedSessionDefinitionSchema = z.discriminatedUnion("app", [
   calendarLiteSessionSchema,
   forumLiteSessionSchema,
+  inboxLiteSessionSchema,
   notesLiteSessionSchema,
   repoLiteSessionSchema,
+  sheetsLiteSessionSchema,
   shoppingLiteSessionSchema,
   wikiLiteSessionSchema,
 ]);

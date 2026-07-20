@@ -91,3 +91,44 @@ test("hard smoke drivers carry Wiki answers through Notes into Calendar", async 
     },
   });
 });
+
+test("capability surface smoke drivers complete inbox and sheets workflows", async () => {
+  const inbox = (await import("../../src/apps/inbox-lite/test-driver.mjs")) as Driver;
+  const sheets = (await import("../../src/apps/sheets-lite/test-driver.mjs")) as Driver;
+  const formPosts: Array<{ path: string; values: Record<string, string> }> = [];
+  const common = {
+    postForm: async (path: string, _token: string, values: Record<string, string>) => {
+      formPosts.push({ path, values });
+    },
+    requireString,
+  };
+
+  await inbox.complete({
+    ...common,
+    session: { token: "inbox" },
+    config: {
+      targetThreadId: "thread-northwind-contract",
+      expectedRecipients: ["legal-approvals@acme.test"],
+      expectedSubject: "Approval: Northwind contract exception",
+      expectedBody: "Safe summary",
+    },
+  });
+  await sheets.complete({
+    ...common,
+    session: { token: "sheets" },
+    config: {
+      expectedRows: [{
+        orderId: "PO-101",
+        vendorName: "Northstar Components",
+        subtotal: 600,
+        tax: 120,
+        landedTotal: 745,
+        decision: "APPROVE",
+      }],
+    },
+  });
+
+  assert.equal(formPosts[0]?.path, "/inbox/send");
+  assert.equal(formPosts[1]?.path, "/sheets/rows");
+  assert.equal(formPosts[2]?.path, "/sheets/validate");
+});

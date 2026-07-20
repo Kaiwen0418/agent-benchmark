@@ -27,6 +27,10 @@ import { createSessionStore } from "./runtime/session-store.js";
 import { createTelemetryRuntime } from "./runtime/telemetry.js";
 import { isHostedViewerMutation } from "./runtime/viewer-access.js";
 import { parseScorePreviewMode, sanitizeScoreResult } from "./runtime/score-preview-policy.js";
+import {
+  observeDeterministicFault,
+  renderRecoverableFault,
+} from "./runtime/deterministic-faults.js";
 
 const port = Number(process.env.HOSTED_SITES_PORT ?? 3003);
 const publicBaseUrl = process.env.HOSTED_SITES_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -96,7 +100,23 @@ const sessionStore = createSessionStore({
   onSessionExpired: orchestratorClient.timeoutAttempt,
 });
 
-const { createHostedSession, getSession, getSessionByToken, persistSessionSnapshot, markSessionTerminal } = sessionStore;
+const {
+  createHostedSession,
+  getSession: loadSession,
+  getSessionByToken,
+  persistSessionSnapshot,
+  markSessionTerminal,
+} = sessionStore;
+const requestSessionCache = new WeakMap<IncomingMessage, Promise<HostedSession | null>>();
+
+async function getSession(url: URL, request: IncomingMessage) {
+  const cached = requestSessionCache.get(request);
+  if (cached) return cached;
+
+  const pending = loadSession(url, request);
+  requestSessionCache.set(request, pending);
+  return pending;
+}
 const telemetryRuntime = createTelemetryRuntime({
   now,
   agentbenchWebUrl,
@@ -136,6 +156,16 @@ function rejectTerminalMutation(session: HostedSession, response: ServerResponse
   }
   sendJson(response, 409, { error: "session_terminal", status: session.status });
   return true;
+}
+
+function isSessionAppPath(session: HostedSession, pathname: string) {
+  const rootSegment = depsPathRoot(defaultStartPathForApp(session.app));
+  return pathname === rootSegment || pathname.startsWith(`${rootSegment}/`);
+}
+
+function depsPathRoot(pathname: string) {
+  const segment = pathname.split("/").filter(Boolean)[0];
+  return segment ? `/${segment}` : "/";
 }
 
 const attemptsRoutes = createAttemptsRoutes({
@@ -218,6 +248,37 @@ const server = createServer(async (request, response) => {
       });
       redirect(response, `/shopping?session=${encodeURIComponent(session.token)}`);
       return;
+    }
+
+    if (requestToken && (request.method === "GET" || request.method === "POST")) {
+      const session = await getSession(url, request);
+      if (
+        session
+        && session.accessMode !== "viewer"
+        && session.status === "active"
+        && isSessionAppPath(session, url.pathname)
+      ) {
+        const observation = observeDeterministicFault(
+          session.metadata,
+          request.method === "POST" ? ["mutation"] : ["navigation", "read"],
+        );
+        if (observation.injected) {
+          await recordEvent(session, {
+            type: "scenario.fault_applied",
+            kind: observation.injected.kind,
+          });
+          renderRecoverableFault(response, observation.injected.kind, `${url.pathname}${url.search}`);
+          return;
+        }
+        if (observation.recovered) {
+          await recordEvent(session, {
+            type: "scenario.fault_recovered",
+            kind: observation.recovered.kind,
+          });
+        } else if (observation.changed) {
+          await persistSessionSnapshot(session);
+        }
+      }
     }
 
     if (await routes.handle(request, response, url)) {

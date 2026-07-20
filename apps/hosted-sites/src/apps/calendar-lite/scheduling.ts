@@ -11,6 +11,13 @@ export type BusyEvent = {
   secondaryAttendeeEmail?: string;
 };
 
+export type ActorUpdate = {
+  requiredRechecks: number;
+  pendingMessage: string;
+  appliedMessage: string;
+  busyEvent: BusyEvent;
+};
+
 export function toMinutes(time: string): number {
   const [hours, minutes] = time.split(":").map((part) => Number(part));
   return hours * 60 + minutes;
@@ -44,6 +51,45 @@ export function readBusyEvents(config: Record<string, unknown>): BusyEvent[] {
     attendeeEmail: event.attendeeEmail.toLowerCase(),
     secondaryAttendeeEmail: event.secondaryAttendeeEmail?.toLowerCase(),
   }));
+}
+
+export function readActorUpdate(config: Record<string, unknown>): ActorUpdate | null {
+  const value = config.actorUpdate;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.requiredRechecks !== "number"
+    || !Number.isInteger(record.requiredRechecks)
+    || record.requiredRechecks < 2
+    || typeof record.pendingMessage !== "string"
+    || record.pendingMessage.length === 0
+    || typeof record.appliedMessage !== "string"
+    || record.appliedMessage.length === 0
+    || !isBusyEvent(record.busyEvent)
+  ) {
+    return null;
+  }
+  return {
+    requiredRechecks: record.requiredRechecks,
+    pendingMessage: record.pendingMessage,
+    appliedMessage: record.appliedMessage,
+    busyEvent: {
+      ...record.busyEvent,
+      attendeeEmail: record.busyEvent.attendeeEmail.toLowerCase(),
+      secondaryAttendeeEmail: record.busyEvent.secondaryAttendeeEmail?.toLowerCase(),
+    },
+  };
+}
+
+export function visibleBusyEvents(
+  config: Record<string, unknown>,
+  availabilityCheckCount: number,
+): BusyEvent[] {
+  const events = readBusyEvents(config);
+  const actorUpdate = readActorUpdate(config);
+  return actorUpdate && availabilityCheckCount >= actorUpdate.requiredRechecks
+    ? [...events, actorUpdate.busyEvent]
+    : events;
 }
 
 // Compute the earliest start (to the minute) on `date` at which a meeting of

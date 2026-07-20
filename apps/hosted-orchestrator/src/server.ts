@@ -29,6 +29,7 @@ import { createIdempotentInitializer } from "./idempotent-initializer.js";
 import { createSingleFlight } from "./single-flight.js";
 import { createCallbackOutboxProcessor } from "./callback-outbox.js";
 import { resolveBenchmarkCaseRevision } from "./case-revisions.js";
+import { buildSessionScenarioFaultSchedule } from "./scenario-runtime.js";
 import {
   pruneCommandDeadLetters,
   redactCommandErrorMessage,
@@ -808,6 +809,8 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     // completion-time aggregation can evaluate them without re-reading the
     // manifest. Absent for suites without a chain.
     consistencyChecks: revision.consistencyChecks ?? [],
+    ...(revision.capabilityMatrix ? { capabilityMatrix: revision.capabilityMatrix } : {}),
+    ...(revision.scenarioGraph ? { scenarioGraph: revision.scenarioGraph } : {}),
   };
 
   const { data: attemptRow, error: attemptError } = await supabase
@@ -847,6 +850,10 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     const sessionExpiresAtValue = status === "active"
       ? sessionExpiresAt(Date.now(), suiteTimeLimitMinutes)
       : null;
+    const scenarioFaultSchedule = buildSessionScenarioFaultSchedule(
+      revision.scenarioGraph,
+      session.taskSlug,
+    );
     const sessionMetadata = {
       ...session.metadata,
       schemaVersion: 1,
@@ -859,6 +866,7 @@ async function initializeAttempt(params: InitializeAttemptParams) {
       goal: session.goal,
       startPath,
       timeLimitMinutesPerTestcase: suiteTimeLimitMinutes,
+      ...(scenarioFaultSchedule ? { scenarioFaultSchedule } : {}),
     } satisfies HostedWebSessionMetadata;
 
     return {

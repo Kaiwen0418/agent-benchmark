@@ -2,7 +2,7 @@ import type { ServerResponse } from "node:http";
 import { readTaskConfig } from "../../runtime/question-config.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
-import { readBusyEvents } from "./scheduling.js";
+import { readActorUpdate, visibleBusyEvents } from "./scheduling.js";
 
 export function renderCalendarLite(
   session: HostedSessionFor<"calendar-lite">,
@@ -22,12 +22,32 @@ export function renderCalendarLite(
     : '<article class="card"><p class="muted">No events scheduled.</p></article>';
 
   // Hard variants surface read-only existing commitments the agent must avoid.
-  let busyEvents: ReturnType<typeof readBusyEvents> = [];
+  let busyEvents: ReturnType<typeof visibleBusyEvents> = [];
+  let actorUpdate: ReturnType<typeof readActorUpdate> = null;
   try {
-    busyEvents = readBusyEvents(readTaskConfig(session.metadata));
+    const config = readTaskConfig(session.metadata);
+    actorUpdate = readActorUpdate(config);
+    busyEvents = visibleBusyEvents(config, session.state.calendarAvailabilityChecks.length);
   } catch {
     busyEvents = [];
   }
+  const latestCheck = session.state.calendarAvailabilityChecks.at(-1);
+  const coordinationHtml = actorUpdate
+    ? `<section class="panel" style="margin-top:16px;">
+      <h2>Actor availability update</h2>
+      <p class="muted">${escapeHtml(
+        latestCheck?.status === "updated"
+          ? actorUpdate.appliedMessage
+          : latestCheck?.status === "pending"
+            ? actorUpdate.pendingMessage
+            : "An external approval is pending. Recheck availability before scheduling.",
+      )}</p>
+      <p class="muted">Rechecks completed: ${session.state.calendarAvailabilityChecks.length}</p>
+      <form method="post" action="/calendar/availability/recheck?session=${encodeURIComponent(session.token)}">
+        <button type="submit">Recheck availability</button>
+      </form>
+    </section>`
+    : "";
   const commitmentsHtml = busyEvents.length
     ? `<section class="panel" style="margin-top:16px;">
       <h2>Existing commitments</h2>
@@ -70,6 +90,7 @@ export function renderCalendarLite(
         <button type="submit" style="margin-top:12px;">Create event</button>
       </form>
     </section>
+    ${coordinationHtml}
     ${commitmentsHtml}
     <section class="grid" style="margin-top:16px;">${eventsHtml}</section>`,
   }));

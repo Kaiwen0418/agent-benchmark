@@ -41,6 +41,16 @@ flowchart LR
 - Telemetry must avoid secrets and unnecessary form values.
 - IP and user-agent access logs require retention limits.
 - Final-state evidence should contain only data needed to explain scoring.
+- Capability results must project only public track/dimension labels and
+  redacted graph counts; private scenario identifiers, fault triggers, variant
+  coverage, and scorer component evidence remain service-role-only.
+- Fault schedules and applied/recovered fault IDs remain in orchestrator and
+  hosted-session metadata. Browser-visible recovery pages expose only the
+  generalized failure kind and retry action.
+- Browser action telemetry records control tag/name and action type, never
+  input values or value-derived click labels. Safety-sensitive hosted apps
+  reject confidential content and prohibited recipients before persisting a
+  draft and retain only a non-content violation class for scoring.
 - Redis should not be publicly reachable.
 - Nginx should expose only intended hosted and orchestrator routes.
 
