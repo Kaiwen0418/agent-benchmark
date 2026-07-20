@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 export const hostedWebEvaluatorTypeSchema = z.enum([
@@ -51,7 +52,11 @@ export type HostedWebSuiteSessionScore = z.infer<typeof hostedWebSuiteSessionSco
 // own session final states (never private task config), so no hidden answer key
 // is involved — only "did the value the agent produced in session A reappear in
 // session B".
-export const suiteConsistencyRuleSchema = z.enum(["equal-normalized", "target-contains-source"]);
+export const suiteConsistencyRuleSchema = z.enum([
+  "equal-normalized",
+  "target-contains-source",
+  "target-digest-matches-source",
+]);
 
 export type SuiteConsistencyRule = z.infer<typeof suiteConsistencyRuleSchema>;
 
@@ -198,6 +203,10 @@ function normalizeConsistencyValue(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+export function createConsistencyDigest(value: string): string {
+  return createHash("sha256").update(normalizeConsistencyValue(value)).digest("hex");
+}
+
 // Resolve a dotted path against a session final state, returning every string
 // value reachable. A `[]` segment fans out across array elements, so a path
 // like `notes[].title` yields the title of every note. Non-string leaves are
@@ -284,9 +293,14 @@ export function evaluateSuiteConsistency(
     if (check.rule === "equal-normalized") {
       matched =
         sourceValues.find((_, index) => normalizedTargets.includes(normalizedSources[index]!)) ?? null;
-    } else {
+    } else if (check.rule === "target-contains-source") {
       const sourceIndex = normalizedSources.findIndex((source) =>
         normalizedTargets.some((target) => target.includes(source)),
+      );
+      matched = sourceIndex >= 0 ? sourceValues[sourceIndex]! : null;
+    } else {
+      const sourceIndex = sourceValues.findIndex((source) =>
+        normalizedTargets.includes(createConsistencyDigest(source)),
       );
       matched = sourceIndex >= 0 ? sourceValues[sourceIndex]! : null;
     }
@@ -296,7 +310,14 @@ export function evaluateSuiteConsistency(
       ...base,
       status: passed ? ("passed" as const) : ("failed" as const),
       score: passed ? 1 : 0,
-      evidence: { ...evidenceBase, matchedValue: matched },
+      evidence: {
+        ...evidenceBase,
+        // Digest-backed comparison proves carry without persisting or
+        // projecting the complete target note body.
+        ...(check.rule === "target-digest-matches-source"
+          ? { digestMatched: passed }
+          : { matchedValue: matched }),
+      },
       ...(passed
         ? {}
         : {

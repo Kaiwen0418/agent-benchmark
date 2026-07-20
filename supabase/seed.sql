@@ -608,10 +608,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-hard-suite-v1.0.4',
+  'hosted-web-hard-suite-v1.0.5',
   $catalog${
   "suiteSlug": "hosted-web-hard-suite-v1",
-  "suiteVersion": "v1.0.4",
+  "suiteVersion": "v1.0.5",
   "timeLimitMinutesPerTestcase": 10,
   "sessions": [
     {
@@ -1406,8 +1406,8 @@ select public.publish_benchmark_case_catalog(
       "sourceTaskSlug": "wiki-policy-answer-hard",
       "sourcePath": "latestAnswer.answer",
       "targetTaskSlug": "notes-followup-create-hard",
-      "targetPath": "notes[].body",
-      "rule": "equal-normalized",
+      "targetPath": "notes[].bodyDigest",
+      "rule": "target-digest-matches-source",
       "weight": 1,
       "required": true
     },
@@ -1423,7 +1423,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  'dc793b8caaff6183dc97a8afca5b24eac3fe4e9ff9cc0725b6953f5977095ef2'
+  '4d53f68938c5aaa3004c8ac317d515cf2fb5006698d7e69372b73bc00caea58b'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)

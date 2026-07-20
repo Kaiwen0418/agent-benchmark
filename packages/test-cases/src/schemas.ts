@@ -13,7 +13,11 @@ export const hostedSuiteConsistencyCheckSchema = z.object({
   sourcePath: z.string().min(1),
   targetTaskSlug: z.string().min(1),
   targetPath: z.string().min(1),
-  rule: z.enum(["equal-normalized", "target-contains-source"]).default("equal-normalized"),
+  rule: z.enum([
+    "equal-normalized",
+    "target-contains-source",
+    "target-digest-matches-source",
+  ]).default("equal-normalized"),
   weight: z.number().nonnegative().default(1),
   required: z.boolean().default(true),
 });

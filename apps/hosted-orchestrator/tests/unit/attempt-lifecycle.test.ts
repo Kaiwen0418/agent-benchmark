@@ -7,7 +7,7 @@ import {
   type AttemptLifecycleAdvanceSession,
   type AttemptLifecycleSession,
 } from "../../src/attempt-lifecycle.js";
-import type { HostedWebScoreResult } from "@agentbench/scoring";
+import { createConsistencyDigest, type HostedWebScoreResult } from "@agentbench/scoring";
 
 function createLifecycle(overrides?: {
   getSupabaseAdmin?: () => SupabaseClient<Database> | null;
@@ -756,12 +756,13 @@ test("complete-session passes the suite when the agent carries the value across 
   assert.equal(aggregate.breakdown.consistency?.[0]?.evidence?.matchedValue, "90 days");
 });
 
-test("complete-session requires both hard v1.0.4 wiki answers in distinct note fields", async () => {
+test("complete-session requires both hard v1.0.5 wiki answers in distinct note fields", async () => {
   const bodyChain = {
     ...consistencyChain,
     name: "Wiki policy answer carried into note body",
     sourceTaskSlug: "wiki-policy-answer-hard",
-    targetPath: "notes[].body",
+    targetPath: "notes[].bodyDigest",
+    rule: "target-digest-matches-source",
   };
   const { supabase } = createConsistencySupabase({
     wikiFinalState: { app: "wiki-lite", latestAnswer: { answer: "30 days" } },
@@ -774,7 +775,7 @@ test("complete-session requires both hard v1.0.4 wiki answers in distinct note f
     type: "complete-session",
     session: makeNotesTargetSession({
       app: "notes-lite",
-      notes: [{ id: "n1", title: "30 days", body: "wrong value", tag: "release" }],
+      notes: [{ id: "n1", title: "30 days", bodyDigest: createConsistencyDigest("wrong value"), tag: "release" }],
     }),
     result: makeScoreResult(),
   });

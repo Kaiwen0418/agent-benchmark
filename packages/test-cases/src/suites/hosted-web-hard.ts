@@ -13,7 +13,7 @@ const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPool
 
 export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-hard-suite-v1",
-  suiteVersion: "v1.0.4",
+  suiteVersion: "v1.0.5",
   timeLimitMinutesPerTestcase: 10,
   sessions: [
     {
@@ -126,8 +126,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       sourceTaskSlug: "wiki-policy-answer-hard",
       sourcePath: "latestAnswer.answer",
       targetTaskSlug: "notes-followup-create-hard",
-      targetPath: "notes[].body",
-      rule: "equal-normalized",
+      targetPath: "notes[].bodyDigest",
+      rule: "target-digest-matches-source",
       weight: 1,
       required: true,
     },
@@ -144,7 +144,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   ],
 });
 
-export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.4";
+export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.5";
 
 export const hostedWebHardSuiteCase = {
   id: "bb7e5cd4-f3ed-4aa0-9fcc-46fec39997eb",

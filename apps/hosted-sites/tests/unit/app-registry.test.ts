@@ -181,3 +181,22 @@ test("app registry dispatches evaluation and final state through definitions", (
     assert.equal((finalState as { app?: string }).app, app);
   }
 });
+
+test("notes final state retains a consistency digest without exposing note bodies", () => {
+  const session = makeSession("notes-lite");
+  session.state.notes = [{
+    id: "note-private",
+    title: "Release handoff",
+    body: "Private carried policy answer",
+    tag: "handoff",
+    createdAt: "2026-06-01T00:00:00.000Z",
+  }];
+
+  const finalState = buildFinalState(session) as {
+    notes: Array<Record<string, unknown>>;
+  };
+  assert.match(String(finalState.notes[0]?.bodyDigest), /^[0-9a-f]{64}$/);
+  assert.equal(finalState.notes[0]?.bodyLength, 29);
+  assert.equal("body" in finalState.notes[0]!, false);
+  assert.equal(JSON.stringify(finalState).includes("Private carried policy answer"), false);
+});

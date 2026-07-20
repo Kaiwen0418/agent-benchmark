@@ -1,3 +1,4 @@
+import { createConsistencyDigest } from "@agentbench/scoring";
 import type { HostedSessionFor } from "../../runtime/types.js";
 
 export function buildNotesFinalState(session: HostedSessionFor<"notes-lite">) {
@@ -9,6 +10,7 @@ export function buildNotesFinalState(session: HostedSessionFor<"notes-lite">) {
       title: note.title,
       tag: note.tag,
       bodyLength: note.body.length,
+      bodyDigest: createConsistencyDigest(note.body),
     })),
   };
 }

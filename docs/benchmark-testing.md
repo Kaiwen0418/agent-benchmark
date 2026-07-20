@@ -58,7 +58,7 @@ performed prerequisite actions out of order.
 
 ## Independent Suite Versioning
 
-The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.10` and `hosted-web-hard-suite-v1.0.4`). A change to a hard variant, the hard pool composition, a hard cross-app chain, or a testcase time limit bumps the affected suite's version and content hash.
+The easy and hard suites version independently. Each carries its own `suiteVersion` and is published as its own immutable revision (`hosted-web-suite-v3.0.10` and `hosted-web-hard-suite-v1.0.5`). A change to a hard variant, the hard pool composition, a hard cross-app chain, or a testcase time limit bumps the affected suite's version and content hash.
 
 This is enforced mechanically: new task-config fields used by hard variants are optional and only inspected when present, and `consistencyChecks` is an optional manifest key that is absent from the easy manifest. The easy catalog's "stable revision identity and content hash" test fails if a hard-suite change leaks into the easy manifest.
 
@@ -70,6 +70,10 @@ The hard suite declares a two-value cross-app chain: the release-lookup answer m
 - A check reads only the agents' own final states, never private `taskConfig`. The matching per-session evaluator stays lenient on the carried field so the carry is enforced only at suite level.
 - Source `sequenceIndex` must precede target; the manifest `superRefine` rejects out-of-order or unknown-task-slug checks.
 - Evidence surfaces only matched values, presence flags, and paths — never the corpus or the private answer contract.
+- Sensitive target fields use `target-digest-matches-source`: hosted-sites
+  persists only a SHA-256 digest of the normalized agent-authored value, and
+  scoring hashes the prior source value for comparison. The full Notes body is
+  never added to final-state evidence or aggregate output.
 
 Orchestrator unit coverage must include the chain succeeding, the carry mismatching, a missing prior output, and a chain-free suite that omits `consistencyChecks` entirely.
 
