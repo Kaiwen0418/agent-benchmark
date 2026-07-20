@@ -143,7 +143,7 @@ Exit criteria: every existing hosted app has at least one harder variant requiri
 
 ### P2.2 Hosted-Web Hard Suite
 
-Status: In Progress
+Status: Complete
 
 P2.1 raised the difficulty of individual apps in place. P2.2 (epic #107) instead publishes a **separate** hard suite, `hosted-web-hard-suite-v1`, that composes each app's `hard` variant pool and is ranked independently from the easy suite on public surfaces. The easy suite (`hosted-web-suite-v1`) is unchanged and keeps its revision identity and content hash.
 
@@ -156,9 +156,9 @@ Confidentiality is the gating constraint for the epic: scorer oracle surfaces (v
 | #113 Calendar hard pool | Complete | Conflict-avoidance, shared-window, timezone-overlap, and reschedule variants. |
 | #114 Repo hard pool | Complete | Coherent multi-edit / rename / rollout variants with required messages. |
 | #110 Shopping hard pool | Complete | Stock-aware, compatibility, and coupon constrained-checkout variants. |
-| #115 Cross-app chain | In Progress | Hard v1.0.5 requires the agent to carry two exact wiki answers into a later note's title and body; the body is checked through a normalized digest so final evidence stays redacted. |
-| #116 Verification matrix and docs | In Progress | Both suites swept independently by the generic matrix; independent semantic versioning, cross-app consistency, and scorer oracle policy documented. |
-| #140 Hard v1.0.5 lifecycle closure | In Progress | Validate all six expanded hard pools and the three-session workflow through deterministic dev sweeps; publish the digest-backed carry correction without exposing note bodies. |
+| #115 Cross-app chain | Complete | Hard v1.0.5 requires the agent to carry two exact wiki answers into a later note's title and body; the body is checked through a normalized digest so final evidence stays redacted. |
+| #116 Verification matrix and docs | Complete | Both suites swept independently by the generic matrix; independent semantic versioning, cross-app consistency, and scorer oracle policy documented. |
+| #140 Hard v1.0.5 lifecycle closure | Complete | All six expanded hard pools and the three-session workflow passed the 14-job deterministic development sweep with digest-backed carry verification. |
 
 Each hard variant receives positive, negative, and presentation-invariant matrix coverage in `apps/hosted-sites/tests/unit/variant-matrix.test.ts`, which iterates every published suite. Per-session scoring stays deterministic; suite-level checks live solely in the scoring module (`evaluateSuiteConsistency`) and orchestrator aggregation. The easy and hard suites version and publish independently; a hard-suite change must not alter the easy manifest's content hash.
 
@@ -182,7 +182,7 @@ fixtures change. Delivery is split into four increments:
    desktop and narrow-viewport browser verification, and full lifecycle smoke
    coverage before publishing the immutable revision.
 
-Current #140 progress: increment 1 is implemented, and the Shopping increment
+Final #140 result: increment 1 is implemented, and the Shopping increment
 adds combined compatibility, stock, multi-item, coupon, and pre-discount
 shipping-threshold variants. Shopping evaluation now independently recomputes
 subtotal, discount, shipping, and final total before accepting an order. The
