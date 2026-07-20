@@ -1,6 +1,10 @@
-export async function complete({ session, config, postForm, requireString }) {
+export async function complete({ session, config, context = {}, postForm, requireString }) {
   const payload = {
-    title: typeof config.expectedTitle === "string" ? config.expectedTitle : "carried-value",
+    title: typeof config.expectedTitle === "string"
+      ? config.expectedTitle
+      : typeof context.noteTitle === "string"
+        ? context.noteTitle
+        : "carried-value",
     date: requireString(config.expectedDate, "calendar-lite expectedDate"),
     startTime: requireString(config.expectedStartTime, "calendar-lite expectedStartTime"),
     durationMinutes: String(config.expectedDurationMinutes),

@@ -11,6 +11,8 @@ export const notesLiteTestcaseDefinition = defineHostedTestcaseApp({
     // Hard cross-app carry variants leave both title and body unpinned. Their
     // values are verified against prior session final states at suite level.
     expectedBody: z.string().min(1).optional(),
+    // For multi-record variants this identifies the additional unpinned carry
+    // note; suite consistency checks verify its title and body values.
     expectedTag: z.string().min(1),
     targetNoteId: z.string().min(1).optional(),
     expectedNotes: z
@@ -106,9 +108,9 @@ export const notesLiteTestcaseDefinition = defineHostedTestcaseApp({
       },
       {
         id: "release-rollout-note-set",
-        goal: "Create and organize all three rollout notes: (1) title 'API v3 implementation', body 'Track the implementation branch and conflict resolution.', tag 'implementation'; (2) title 'API v3 verification', body 'Record CI, reviewer, and compatibility evidence.', tag 'verification'; and (3) title 'API v3 release', body 'Schedule publication after verification passes.', tag 'release'. Create exactly these required notes.",
+        goal: "Create and organize all three rollout notes: (1) title 'API v3 implementation', body 'Track the implementation branch and conflict resolution.', tag 'implementation'; (2) title 'API v3 verification', body 'Record CI, reviewer, and compatibility evidence.', tag 'verification'; and (3) title 'API v3 release', body 'Schedule publication after verification passes.', tag 'release'. Then create a fourth handoff note whose title is exactly the answer you submitted in the earlier wiki release-lookup task, whose body is exactly the answer you submitted in the later wiki policy-lookup task, and whose tag is 'handoff'.",
         taskConfig: {
-          expectedTag: "project",
+          expectedTag: "handoff",
           expectedNotes: [
             { title: "API v3 implementation", body: "Track the implementation branch and conflict resolution.", tag: "implementation" },
             { title: "API v3 verification", body: "Record CI, reviewer, and compatibility evidence.", tag: "verification" },

@@ -756,7 +756,7 @@ test("complete-session passes the suite when the agent carries the value across 
   assert.equal(aggregate.breakdown.consistency?.[0]?.evidence?.matchedValue, "90 days");
 });
 
-test("complete-session requires both hard v1.0.3 wiki answers in distinct note fields", async () => {
+test("complete-session requires both hard v1.0.4 wiki answers in distinct note fields", async () => {
   const bodyChain = {
     ...consistencyChain,
     name: "Wiki policy answer carried into note body",

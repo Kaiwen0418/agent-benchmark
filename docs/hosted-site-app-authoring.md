@@ -267,4 +267,12 @@ HOSTED_SITES_PORT=4011 HOSTED_ORCHESTRATOR_PORT=5011 \
   bash tests/e2e/hosted-lifecycle-full-pass.sh
 ```
 
+The smoke defaults to `hosted-web-suite`. Select another published case
+explicitly when verifying an independent suite:
+
+```bash
+BENCHMARK_CASE_SLUG=hosted-web-hard-suite \
+  bash tests/e2e/hosted-lifecycle-full-pass.sh
+```
+
 Acceptance requires registered typed state, evaluator breakdowns, at least one required `backend_state` unless purely informational, redacted final evidence, no app-specific tables, no server browser, and successful initialization/operation/scoring as an orchestrated session.

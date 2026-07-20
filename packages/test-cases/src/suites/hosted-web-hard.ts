@@ -13,7 +13,7 @@ const calendarQuestionVariants = hostedTestcaseApps["calendar-lite"].variantPool
 
 export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   suiteSlug: "hosted-web-hard-suite-v1",
-  suiteVersion: "v1.0.3",
+  suiteVersion: "v1.0.4",
   timeLimitMinutesPerTestcase: 10,
   sessions: [
     {
@@ -85,8 +85,8 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
       taskSlug: "notes-followup-create-hard",
       title: "Notes Follow-up (Hard)",
       startPath: "/notes",
-      taskVersion: "v3",
-      seedVersion: "notes-lite-hard-v2",
+      taskVersion: "v4",
+      seedVersion: "notes-lite-hard-v3",
       sequenceIndex: 5,
       weight: 1,
       required: true,
@@ -144,7 +144,7 @@ export const hostedWebHardSuiteMetadata = hostedSuiteMetadataSchema.parse({
   ],
 });
 
-export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.3";
+export const hostedWebHardSuiteRevision = "hosted-web-hard-suite-v1.0.4";
 
 export const hostedWebHardSuiteCase = {
   id: "bb7e5cd4-f3ed-4aa0-9fcc-46fec39997eb",

@@ -1,4 +1,4 @@
-export async function complete({ session, config, hostedBaseUrl, checkedFetch, postForm, requireString, requireObject }) {
+export async function complete({ session, config, context = {}, hostedBaseUrl, checkedFetch, postForm, requireString, requireObject }) {
   const articleSlug = requireString(config.targetArticleSlug, "wiki targetArticleSlug");
   const answerContract = requireObject(config.answerContract, "wiki answerContract");
   const secondaryArticleSlug = config.secondaryArticleSlug;
@@ -11,7 +11,8 @@ export async function complete({ session, config, hostedBaseUrl, checkedFetch, p
     }
   }
   await checkedFetch(`${hostedBaseUrl}/wiki/article/${encodeURIComponent(articleSlug)}?session=${encodeURIComponent(session.token)}`);
-  await postForm("/wiki/answer", session.token, {
-    answer: requireString(answerContract.canonicalValue, "wiki canonicalValue"),
-  });
+  const answer = requireString(answerContract.canonicalValue, "wiki canonicalValue");
+  await postForm("/wiki/answer", session.token, { answer });
+  if (session.taskSlug === "wiki-release-answer-hard") context.wikiReleaseAnswer = answer;
+  if (session.taskSlug === "wiki-policy-answer-hard") context.wikiPolicyAnswer = answer;
 }

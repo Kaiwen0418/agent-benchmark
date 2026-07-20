@@ -85,9 +85,9 @@ test("hard consistency checks reference real sessions with source before target"
   }
 });
 
-test("hard v1.0.3 requires both wiki answers to be carried into distinct note fields", () => {
+test("hard v1.0.4 requires both wiki answers to be carried into distinct note fields", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
-  assert.equal(suite.suiteVersion, "v1.0.3");
+  assert.equal(suite.suiteVersion, "v1.0.4");
   assert.deepEqual(
     suite.consistencyChecks?.map((check) => ({
       sourceTaskSlug: check.sourceTaskSlug,
@@ -114,7 +114,7 @@ test("hard v1.0.3 requires both wiki answers to be carried into distinct note fi
   );
 });
 
-test("hard v1.0.3 includes combined-constraint shopping variants on the v2 seed", () => {
+test("hard v1.0.4 includes combined-constraint shopping variants on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const shopping = suite.sessions.find((session) => session.app === "shopping-lite");
   assert.ok(shopping);
@@ -125,7 +125,7 @@ test("hard v1.0.3 includes combined-constraint shopping variants on the v2 seed"
   assert.ok(variantIds.includes("airlite-field-kit"));
 });
 
-test("hard v1.0.3 includes ordered forum escalation on the v2 seed", () => {
+test("hard v1.0.4 includes ordered forum escalation on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const forum = suite.sessions.find((session) => session.app === "forum-lite");
   assert.ok(forum);
@@ -136,7 +136,7 @@ test("hard v1.0.3 includes ordered forum escalation on the v2 seed", () => {
   );
 });
 
-test("hard v1.0.3 includes conflict-aware repo workflow on the v2 seed", () => {
+test("hard v1.0.4 includes conflict-aware repo workflow on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const repo = suite.sessions.find((session) => session.app === "repo-lite");
   assert.ok(repo);
@@ -145,7 +145,7 @@ test("hard v1.0.3 includes conflict-aware repo workflow on the v2 seed", () => {
   assert.ok(repo.metadata.questionVariants.some((variant) => variant.id === "api-v3-conflict-rollout"));
 });
 
-test("hard v1.0.3 includes three-article wiki verification on the v2 seed", () => {
+test("hard v1.0.4 includes three-article wiki verification on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const wikiSessions = suite.sessions.filter((session) => session.app === "wiki-lite");
   assert.ok(wikiSessions.every((session) => session.seedVersion === "wiki-lite-hard-v2"));
@@ -156,16 +156,19 @@ test("hard v1.0.3 includes three-article wiki verification on the v2 seed", () =
   );
 });
 
-test("hard v1.0.3 includes a multi-record notes workflow on the v2 seed", () => {
+test("hard v1.0.4 includes a multi-record notes workflow with a carry handoff", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const notes = suite.sessions.find((session) => session.app === "notes-lite");
   assert.ok(notes);
-  assert.equal(notes.taskVersion, "v3");
-  assert.equal(notes.seedVersion, "notes-lite-hard-v2");
-  assert.ok(notes.metadata.questionVariants.some((variant) => variant.id === "release-rollout-note-set"));
+  assert.equal(notes.taskVersion, "v4");
+  assert.equal(notes.seedVersion, "notes-lite-hard-v3");
+  const rollout = notes.metadata.questionVariants.find((variant) => variant.id === "release-rollout-note-set");
+  assert.ok(rollout);
+  assert.equal(rollout.taskConfig.expectedTag, "handoff");
+  assert.match(rollout.goal, /fourth handoff note/);
 });
 
-test("hard v1.0.3 includes recurring resource calendar workflow on the v2 seed", () => {
+test("hard v1.0.4 includes recurring resource calendar workflow on the v2 seed", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const calendar = suite.sessions.find((session) => session.app === "calendar-lite");
   assert.ok(calendar);

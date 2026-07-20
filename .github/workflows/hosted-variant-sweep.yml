@@ -23,7 +23,7 @@ jobs:
       - name: Dispatch sweep from develop
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run hosted-variant-sweep.yml --ref develop
+        run: gh workflow run hosted-variant-sweep.yml --ref develop --repo "${GITHUB_REPOSITORY}"
 
   sweep-development:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'
@@ -36,14 +36,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        benchmark_case_slug:
+          - hosted-web-suite
+          - hosted-web-hard-suite
         generation_seed:
-          - full-pool-0
-          - full-pool-1
-          - full-pool-2
-          - full-pool-18
-          - full-pool-59
-          - full-pool-152
-          - full-pool-197
+          - full-pool-164
+          - full-pool-268
+          - full-pool-327
+          - full-pool-548
+          - full-pool-819
+          - full-pool-843
+          - full-pool-853
     steps:
       - name: Checkout develop
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -55,6 +58,7 @@ jobs:
         env:
           START_LOCAL_SERVICES: "false"
           SMOKE_MODE: full-pass
+          BENCHMARK_CASE_SLUG: ${{ matrix.benchmark_case_slug }}
           GENERATION_SEED: ${{ matrix.generation_seed }}
           HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
           HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}

@@ -608,10 +608,10 @@ select public.publish_benchmark_case_catalog(
   "metadata": {},
   "isPublic": true
 }$case$::jsonb,
-  'hosted-web-hard-suite-v1.0.3',
+  'hosted-web-hard-suite-v1.0.4',
   $catalog${
   "suiteSlug": "hosted-web-hard-suite-v1",
-  "suiteVersion": "v1.0.3",
+  "suiteVersion": "v1.0.4",
   "timeLimitMinutesPerTestcase": 10,
   "sessions": [
     {
@@ -1150,8 +1150,8 @@ select public.publish_benchmark_case_catalog(
       "taskSlug": "notes-followup-create-hard",
       "title": "Notes Follow-up (Hard)",
       "startPath": "/notes",
-      "taskVersion": "v3",
-      "seedVersion": "notes-lite-hard-v2",
+      "taskVersion": "v4",
+      "seedVersion": "notes-lite-hard-v3",
       "sequenceIndex": 5,
       "weight": 1,
       "required": true,
@@ -1174,9 +1174,9 @@ select public.publish_benchmark_case_catalog(
           },
           {
             "id": "release-rollout-note-set",
-            "goal": "Create and organize all three rollout notes: (1) title 'API v3 implementation', body 'Track the implementation branch and conflict resolution.', tag 'implementation'; (2) title 'API v3 verification', body 'Record CI, reviewer, and compatibility evidence.', tag 'verification'; and (3) title 'API v3 release', body 'Schedule publication after verification passes.', tag 'release'. Create exactly these required notes.",
+            "goal": "Create and organize all three rollout notes: (1) title 'API v3 implementation', body 'Track the implementation branch and conflict resolution.', tag 'implementation'; (2) title 'API v3 verification', body 'Record CI, reviewer, and compatibility evidence.', tag 'verification'; and (3) title 'API v3 release', body 'Schedule publication after verification passes.', tag 'release'. Then create a fourth handoff note whose title is exactly the answer you submitted in the earlier wiki release-lookup task, whose body is exactly the answer you submitted in the later wiki policy-lookup task, and whose tag is 'handoff'.",
             "taskConfig": {
-              "expectedTag": "project",
+              "expectedTag": "handoff",
               "expectedNotes": [
                 {
                   "title": "API v3 implementation",
@@ -1423,7 +1423,7 @@ select public.publish_benchmark_case_catalog(
     }
   ]
 }$catalog$::jsonb,
-  '423b56db70db3489bdbadc11d27094486f2293b400b79acaab1e55d988305ba0'
+  'dc793b8caaff6183dc97a8afca5b24eac3fe4e9ff9cc0725b6953f5977095ef2'
 );
 
 insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)
