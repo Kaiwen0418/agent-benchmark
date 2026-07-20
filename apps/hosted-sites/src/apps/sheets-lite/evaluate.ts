@@ -33,6 +33,16 @@ function comparable(row: ExpectedRow) {
   return [row.orderId, row.vendorName, row.subtotal, row.tax, row.landedTotal, row.decision];
 }
 
+export function sheetRowsAreExact(session: HostedSessionFor<"sheets-lite">) {
+  const expected = expectedRows(readTaskConfig(session.metadata)).sort(
+    (left, right) => left.orderId.localeCompare(right.orderId),
+  );
+  const actual = session.state.sheetAnalysisRows.map(({ updatedAt: _updatedAt, ...row }) => row).sort(
+    (left, right) => left.orderId.localeCompare(right.orderId),
+  );
+  return JSON.stringify(actual.map(comparable)) === JSON.stringify(expected.map(comparable));
+}
+
 export function evaluateSheetsLite(session: HostedSessionFor<"sheets-lite">): HostedWebScoreResult {
   const expected = expectedRows(readTaskConfig(session.metadata)).sort(
     (left, right) => left.orderId.localeCompare(right.orderId),
@@ -40,9 +50,9 @@ export function evaluateSheetsLite(session: HostedSessionFor<"sheets-lite">): Ho
   const actual = session.state.sheetAnalysisRows.map(({ updatedAt: _updatedAt, ...row }) => row).sort(
     (left, right) => left.orderId.localeCompare(right.orderId),
   );
-  const rowsPassed = JSON.stringify(actual.map(comparable)) === JSON.stringify(expected.map(comparable));
+  const rowsPassed = sheetRowsAreExact(session);
   const validation = session.state.sheetValidationRuns.at(-1);
-  const validationPassed = validation !== undefined && validation.rowCount === actual.length;
+  const validationPassed = validation?.status === "passed" && validation.rowCount === actual.length;
 
   return aggregateStrictScore({
     evaluators: [

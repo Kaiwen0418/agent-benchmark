@@ -35,7 +35,7 @@ test("hard smoke drivers carry Wiki answers through Notes into Calendar", async 
 
   await wiki.complete({
     ...common,
-    session: { token: "wiki-release", taskSlug: "wiki-release-answer-hard" },
+    session: { token: "wiki-release", taskSlug: "capability-wiki-release-research" },
     config: {
       targetArticleSlug: "returns-policy",
       answerContract: { canonicalValue: "30 days" },
@@ -43,7 +43,7 @@ test("hard smoke drivers carry Wiki answers through Notes into Calendar", async 
   });
   await wiki.complete({
     ...common,
-    session: { token: "wiki-policy", taskSlug: "wiki-policy-answer-hard" },
+    session: { token: "wiki-policy", taskSlug: "capability-wiki-policy-research" },
     config: {
       targetArticleSlug: "retention-policy",
       answerContract: { canonicalValue: "90 days" },
@@ -51,7 +51,7 @@ test("hard smoke drivers carry Wiki answers through Notes into Calendar", async 
   });
   await notes.complete({
     ...common,
-    session: { token: "notes", taskSlug: "notes-followup-create-hard" },
+    session: { token: "notes", taskSlug: "capability-evidence-handoff" },
     config: {
       expectedTag: "handoff",
       expectedNotes: [
@@ -62,7 +62,7 @@ test("hard smoke drivers carry Wiki answers through Notes into Calendar", async 
   });
   await calendar.complete({
     ...common,
-    session: { token: "calendar", taskSlug: "calendar-event-create-hard" },
+    session: { token: "calendar", taskSlug: "capability-coordinated-schedule" },
     config: {
       expectedDate: "2026-07-20",
       expectedStartTime: "15:00",
@@ -97,6 +97,8 @@ test("capability surface smoke drivers complete inbox and sheets workflows", asy
   const sheets = (await import("../../src/apps/sheets-lite/test-driver.mjs")) as Driver;
   const formPosts: Array<{ path: string; values: Record<string, string> }> = [];
   const common = {
+    hostedBaseUrl: "https://hosted.example.test",
+    checkedFetch: async () => undefined,
     postForm: async (path: string, _token: string, values: Record<string, string>) => {
       formPosts.push({ path, values });
     },
@@ -129,6 +131,68 @@ test("capability surface smoke drivers complete inbox and sheets workflows", asy
   });
 
   assert.equal(formPosts[0]?.path, "/inbox/send");
-  assert.equal(formPosts[1]?.path, "/sheets/rows");
-  assert.equal(formPosts[2]?.path, "/sheets/validate");
+  assert.equal(formPosts[1]?.path, "/sheets/rows/PO-101/delete");
+  assert.equal(formPosts[2]?.path, "/sheets/rows");
+  assert.equal(formPosts[3]?.path, "/sheets/validate");
+});
+
+test("campaign smoke drivers revise the tracked draft and event in place", async () => {
+  const inbox = (await import("../../src/apps/inbox-lite/test-driver.mjs")) as Driver;
+  const calendar = (await import("../../src/apps/calendar-lite/test-driver.mjs")) as Driver;
+  const formPosts: Array<{ path: string; values: Record<string, string> }> = [];
+  const common = {
+    context: { wikiPolicyAnswer: "90 days", noteTitle: "Release handoff" },
+    hostedBaseUrl: "https://hosted.example.test",
+    checkedFetch: async (url: string) => ({
+      text: async () => url.includes("/inbox/")
+        ? '<form action="/inbox/drafts/inbox-draft-1?session=tok"></form>'
+        : '<form action="/calendar/events/event-1?session=tok"></form>',
+    }),
+    postForm: async (path: string, _token: string, values: Record<string, string>) => {
+      formPosts.push({ path, values });
+    },
+    requireString,
+  };
+
+  await inbox.complete({
+    ...common,
+    session: { token: "inbox" },
+    config: {
+      targetThreadId: "thread-northwind-contract",
+      expectedRecipients: ["finance-approvals@acme.test"],
+      expectedSubject: "Approval: Northwind policy revision",
+      policyAmendment: {
+        requiredRechecks: 2,
+        provisionalRecipients: ["legal-approvals@acme.test"],
+        provisionalSubject: "Approval: Northwind contract exception",
+      },
+    },
+  });
+  await calendar.complete({
+    ...common,
+    session: { token: "calendar" },
+    config: {
+      expectedDate: "2026-07-22",
+      expectedStartTime: "11:00",
+      expectedDurationMinutes: 30,
+      expectedAttendeeEmail: "mira@example.com",
+      actorUpdate: { requiredRechecks: 2, provisionalStartTime: "10:00" },
+    },
+  });
+
+  assert.deepEqual(formPosts.map((post) => post.path), [
+    "/inbox/drafts",
+    "/inbox/policy/recheck",
+    "/inbox/policy/recheck",
+    "/inbox/drafts/inbox-draft-1",
+    "/inbox/drafts/inbox-draft-1/send",
+    "/calendar/events",
+    "/calendar/availability/recheck",
+    "/calendar/availability/recheck",
+    "/calendar/events/event-1",
+  ]);
+  assert.equal(formPosts[0]?.values.recipients, "legal-approvals@acme.test");
+  assert.equal(formPosts[3]?.values.recipients, "finance-approvals@acme.test");
+  assert.equal(formPosts[5]?.values.startTime, "10:00");
+  assert.equal(formPosts[8]?.values.startTime, "11:00");
 });

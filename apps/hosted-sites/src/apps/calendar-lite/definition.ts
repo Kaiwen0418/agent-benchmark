@@ -17,7 +17,11 @@ function isCalendarEvent(value: unknown): value is CalendarEvent {
     (value.secondaryAttendeeEmail === undefined || typeof value.secondaryAttendeeEmail === "string") &&
     (value.resource === undefined || typeof value.resource === "string") &&
     (value.occurrences === undefined || typeof value.occurrences === "number") &&
-    typeof value.createdAt === "string"
+    typeof value.createdAt === "string" &&
+    typeof value.updatedAt === "string" &&
+    typeof value.revisionCount === "number" &&
+    Number.isInteger(value.revisionCount) &&
+    value.revisionCount >= 0
   );
 }
 
@@ -27,6 +31,10 @@ function isCalendarAvailabilityCheck(value: unknown): value is CalendarAvailabil
     && typeof value.checkNumber === "number"
     && Number.isInteger(value.checkNumber)
     && (value.status === "pending" || value.status === "updated")
+    && typeof value.eventId === "string"
+    && typeof value.baselineRevisionCount === "number"
+    && Number.isInteger(value.baselineRevisionCount)
+    && value.baselineRevisionCount >= 0
     && typeof value.createdAt === "string";
 }
 

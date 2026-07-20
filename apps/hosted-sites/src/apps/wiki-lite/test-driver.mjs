@@ -13,6 +13,10 @@ export async function complete({ session, config, context = {}, hostedBaseUrl, c
   await checkedFetch(`${hostedBaseUrl}/wiki/article/${encodeURIComponent(articleSlug)}?session=${encodeURIComponent(session.token)}`);
   const answer = requireString(answerContract.canonicalValue, "wiki canonicalValue");
   await postForm("/wiki/answer", session.token, { answer });
-  if (session.taskSlug === "wiki-release-answer-hard") context.wikiReleaseAnswer = answer;
-  if (session.taskSlug === "wiki-policy-answer-hard") context.wikiPolicyAnswer = answer;
+  if (["wiki-release-answer-hard", "capability-wiki-release-research"].includes(session.taskSlug)) {
+    context.wikiReleaseAnswer = answer;
+  }
+  if (["wiki-policy-answer-hard", "capability-wiki-policy-research"].includes(session.taskSlug)) {
+    context.wikiPolicyAnswer = answer;
+  }
 }

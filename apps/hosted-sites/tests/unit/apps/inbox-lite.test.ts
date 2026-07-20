@@ -4,6 +4,7 @@ import {
   recheckInboxPolicy,
   saveInboxDraft,
   sendInboxDraft,
+  updateInboxDraft,
 } from "../../../src/apps/inbox-lite/actions.js";
 import { evaluateInboxLite } from "../../../src/apps/inbox-lite/evaluate.js";
 import { buildInboxLiteFinalState } from "../../../src/apps/inbox-lite/final-state.js";
@@ -142,33 +143,89 @@ test("inbox blocks prohibited recipients and public final state contains only di
 test("inbox campaign accepts a non-empty carried body for suite-level verification", () => {
   const session = makeSession();
   const generation = session.metadata.questionGeneration as Record<string, unknown>;
-  generation.taskConfig = {
+  const campaignConfig = {
     ...taskConfig,
+    expectedRecipients: ["finance-approvals@acme.test"],
+    expectedSubject: "Approval: Northwind policy revision",
     expectedBody: undefined,
     policyAmendment: {
       requiredRechecks: 2,
       pendingMessage: "Still pending",
       appliedMessage: "Amended routing approved",
+      provisionalRecipients: ["legal-approvals@acme.test"],
+      provisionalSubject: "Approval: Northwind contract exception",
     },
   };
+  generation.taskConfig = campaignConfig;
   const saved = saveInboxDraft(session, {
     threadId: taskConfig.targetThreadId,
-    recipients: taskConfig.expectedRecipients,
-    subject: taskConfig.expectedSubject,
+    recipients: ["legal-approvals@acme.test"],
+    subject: "Approval: Northwind contract exception",
     body: "earlier-wiki-policy-answer",
     ...actionDeps,
   });
   assert.equal(saved.success, true);
   if (!saved.success) return;
+  assert.equal(evaluateInboxLite(session).status, "failed");
+  assert.equal(recheckInboxPolicy(session, generation.taskConfig as Record<string, unknown>, actionDeps).success, true);
+  assert.equal(evaluateInboxLite(session).status, "failed");
+  assert.equal(recheckInboxPolicy(session, generation.taskConfig as Record<string, unknown>, actionDeps).success, true);
+  assert.equal(evaluateInboxLite(session).status, "failed");
+  const updated = updateInboxDraft(session, {
+    draftId: saved.draft.id,
+    recipients: campaignConfig.expectedRecipients,
+    subject: campaignConfig.expectedSubject,
+    body: "earlier-wiki-policy-answer",
+    ...actionDeps,
+  });
+  assert.equal(updated.success, true);
+  assert.equal(updated.success && updated.draft.id, saved.draft.id);
+  assert.equal(updated.success && updated.draft.revisionCount, 1);
   sendInboxDraft(session, { draftId: saved.draft.id, now: actionDeps.now });
-
-  assert.equal(evaluateInboxLite(session).status, "failed");
-  assert.equal(recheckInboxPolicy(session, generation.taskConfig as Record<string, unknown>, actionDeps).success, true);
-  assert.equal(evaluateInboxLite(session).status, "failed");
-  assert.equal(recheckInboxPolicy(session, generation.taskConfig as Record<string, unknown>, actionDeps).success, true);
   assert.equal(evaluateInboxLite(session).status, "passed");
   assert.equal(
     JSON.stringify(buildInboxLiteFinalState(session)).includes("earlier-wiki-policy-answer"),
     false,
   );
+});
+
+test("inbox campaign rejects a replacement draft instead of an in-place revision", () => {
+  const session = makeSession();
+  const generation = session.metadata.questionGeneration as Record<string, unknown>;
+  const campaignConfig = {
+    ...taskConfig,
+    expectedRecipients: ["finance-approvals@acme.test"],
+    expectedSubject: "Approval: Northwind policy revision",
+    expectedBody: undefined,
+    policyAmendment: {
+      requiredRechecks: 2,
+      pendingMessage: "Still pending",
+      appliedMessage: "Amended routing approved",
+      provisionalRecipients: ["legal-approvals@acme.test"],
+      provisionalSubject: "Approval: Northwind contract exception",
+    },
+  };
+  generation.taskConfig = campaignConfig;
+  const provisional = saveInboxDraft(session, {
+    threadId: taskConfig.targetThreadId,
+    recipients: ["legal-approvals@acme.test"],
+    subject: "Approval: Northwind contract exception",
+    body: "earlier-wiki-policy-answer",
+    ...actionDeps,
+  });
+  assert.equal(provisional.success, true);
+  if (!provisional.success) return;
+  recheckInboxPolicy(session, generation.taskConfig as Record<string, unknown>, actionDeps);
+  recheckInboxPolicy(session, generation.taskConfig as Record<string, unknown>, actionDeps);
+  const replacement = saveInboxDraft(session, {
+    threadId: taskConfig.targetThreadId,
+    recipients: campaignConfig.expectedRecipients,
+    subject: campaignConfig.expectedSubject,
+    body: "earlier-wiki-policy-answer",
+    ...actionDeps,
+  });
+  assert.equal(replacement.success, true);
+  if (!replacement.success) return;
+  sendInboxDraft(session, { draftId: replacement.draft.id, now: actionDeps.now });
+  assert.equal(evaluateInboxLite(session).status, "failed");
 });

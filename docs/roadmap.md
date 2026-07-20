@@ -204,9 +204,9 @@ Exit criteria: the hard suite is published as its own immutable revision, every 
 
 ### P2.3 Capability-Complete Hard Testbench
 
-Status: In progress ([#181](https://github.com/Kaiwen0418/agent-benchmark/issues/181))
+Status: In progress — v1.1.0 development release ([#181](https://github.com/Kaiwen0418/agent-benchmark/issues/181))
 
-The current hard v1.0.5 suite is structurally medium-hard: it is strong at
+The v1.0.5 calibration baseline is structurally medium-hard: it is strong at
 deterministic multi-step browser execution, exact backend-state scoring,
 ordered mutations, bounded constraint reasoning, and a three-session carry
 chain. Its principal blind spots are conflicting-evidence reconciliation,
@@ -216,9 +216,9 @@ task compositions. This 3/5 structural assessment is provisional until
 repeated representative-agent runs establish empirical pass rates and
 confidence intervals.
 
-P2.3 preserves the immutable v1.0.5 release and builds the next revision as a
-capability-oriented testbench with independently reported tracks rather than a
-single longer scripted workflow:
+P2.3 preserves the immutable v1.0.5 release and publishes v1.1.0 to the
+development catalog as a capability-oriented testbench with independently
+reported tracks rather than a single longer scripted workflow:
 
 | Capability track | Milestone scope |
 | --- | --- |
@@ -232,25 +232,27 @@ single longer scripted workflow:
 
 Implementation checkpoint: the typed capability matrix, private scenario
 graph, one-shot deterministic fault runtime, server-owned terminal capability
-aggregation, and normalized action-cost collector are implemented on the
-upgrade branch. A seven-session, six-app unpublished campaign manifest now
+aggregation, and normalized action-cost collector are implemented. The
+seven-session, six-app v1.1.0 campaign manifest
 exercises a branch-and-merge evidence handoff, a required two-recheck Inbox
-policy revision,
+policy revision that updates a tracked provisional draft in place,
 three deterministic fault classes, and an explicitly scored inbox distractor.
 Revision and distractor outcomes require named persisted evaluator evidence;
 session completion metadata cannot claim either result. A deterministic
 calibration report harness now computes repeated-seed, per-family, per-track,
 time, and action-cost statistics with 95% confidence intervals; representative
-agent observations still need to be collected before release. The two staged task
-surfaces now exist: `inbox-lite` enforces
+agent observations still need to be collected before production promotion. The
+two development task surfaces now exist: `inbox-lite` enforces
 safe approval routing with canary/prohibited-recipient gates, while
-`sheets-lite` evaluates deterministic joins, filtering, formulas, and explicit
-validation. Inbox also has two cross-session carry variants. Both surfaces
+`sheets-lite` evaluates deterministic joins, filtering, formulas, and repair
+after a coarse non-terminal validation failure. Inbox also has two cross-session carry variants. Both surfaces
 have real-browser desktop/narrow verification. Calendar campaign variants add
-a deterministic two-poll actor update and require scheduling against the
-revised availability without using wall-clock timing. They remain outside the
-published suite registry until the remaining track depth, calibration, and
-release gates are complete; v1.0.5 remains unchanged.
+a deterministic two-poll actor update and require the same tentative event to
+be rescheduled in place against revised availability without using wall-clock
+timing or leaving a duplicate. The manifest is registered as immutable hard
+v1.1.0 for development publication; v1.0.5 remains unchanged as the comparison
+baseline. Production promotion remains gated on representative calibration and
+production-like capacity evidence.
 
 Delivery is sequenced as follows:
 
@@ -262,8 +264,9 @@ Delivery is sequenced as follows:
    and `sheets-lite`, and implement at least four independently runnable
    capability tracks with two materially distinct variants each.
 4. Complete presentation, recovery, confidentiality, anti-forgery, browser,
-   lifecycle, seed-sweep, and production-like capacity verification before
-   publishing a new immutable hard-suite revision.
+   lifecycle, and seed-sweep verification for the development v1.1.0 release;
+   retain calibration and production-like capacity as production-promotion
+   gates.
 
 The proposed score reports final-state correctness, cross-task consistency,
 evidence and verification, recovery and safety, and normalized interaction

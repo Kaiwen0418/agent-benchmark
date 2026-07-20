@@ -18,6 +18,24 @@ export function renderCalendarLite(
         <p class="muted">${escapeHtml(calendarEvent.attendeeEmail)}${calendarEvent.secondaryAttendeeEmail ? `, ${escapeHtml(calendarEvent.secondaryAttendeeEmail)}` : ""}</p>
         ${calendarEvent.resource ? `<p class="muted">Resource: ${escapeHtml(calendarEvent.resource)}</p>` : ""}
         ${calendarEvent.occurrences ? `<p class="muted">Weekly occurrences: ${calendarEvent.occurrences}</p>` : ""}
+        <p class="muted">Revision count: ${calendarEvent.revisionCount}</p>
+        <form method="post" action="/calendar/events/${encodeURIComponent(calendarEvent.id)}?session=${encodeURIComponent(session.token)}">
+          <label>Title <input name="title" value="${escapeHtml(calendarEvent.title)}" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+          <div class="grid" style="margin-top:12px;">
+            <label>Date <input type="date" name="date" value="${escapeHtml(calendarEvent.date)}" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+            <label>Start time <input type="time" name="startTime" value="${escapeHtml(calendarEvent.startTime)}" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+            <label>Duration
+              <select name="durationMinutes" style="display:block;width:100%;margin-top:8px;">
+                ${[30, 45, 60].map((duration) => `<option value="${duration}"${calendarEvent.durationMinutes === duration ? " selected" : ""}>${duration} minutes</option>`).join("")}
+              </select>
+            </label>
+          </div>
+          <label style="display:block;margin-top:12px;">Attendee email <input type="email" name="attendeeEmail" value="${escapeHtml(calendarEvent.attendeeEmail)}" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+          <label style="display:block;margin-top:12px;">Secondary attendee email <input type="email" name="secondaryAttendeeEmail" value="${escapeHtml(calendarEvent.secondaryAttendeeEmail ?? "")}" placeholder="Optional" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+          <label style="display:block;margin-top:12px;">Resource <input name="resource" value="${escapeHtml(calendarEvent.resource ?? "")}" placeholder="Optional room or resource" /></label>
+          <label style="display:block;margin-top:12px;">Weekly occurrences <input type="number" min="1" name="occurrences" value="${calendarEvent.occurrences ?? 1}" /></label>
+          <button type="submit" style="margin-top:12px;">Update event</button>
+        </form>
       </article>`).join("")
     : '<article class="card"><p class="muted">No events scheduled.</p></article>';
 

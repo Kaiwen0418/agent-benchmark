@@ -3,8 +3,9 @@ import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
 import { redirect, sendJson } from "../../runtime/http.js";
 import { readTaskConfig } from "../../runtime/question-config.js";
 import { isHostedSessionForApp } from "../../runtime/types.js";
-import { createCalendarEvent, recheckCalendarAvailability } from "./actions.js";
+import { createCalendarEvent, recheckCalendarAvailability, updateCalendarEvent } from "./actions.js";
 import { renderCalendarLite } from "./render.js";
+import { readActorUpdate } from "./scheduling.js";
 
 export function createCalendarLiteRoutes(deps: HostedAppRouteDeps) {
   async function getSession(url: URL, request: IncomingMessage) {
@@ -13,7 +14,8 @@ export function createCalendarLiteRoutes(deps: HostedAppRouteDeps) {
   }
   async function handle(request: IncomingMessage, response: ServerResponse, url: URL) {
     const session = await getSession(url, request);
-    if ((url.pathname === "/calendar" || url.pathname === "/calendar/events" || url.pathname === "/calendar/availability/recheck") && !session) {
+    const updateEventMatch = url.pathname.match(/^\/calendar\/events\/([^/]+)$/);
+    if ((url.pathname === "/calendar" || url.pathname === "/calendar/events" || url.pathname === "/calendar/availability/recheck" || updateEventMatch) && !session) {
       deps.badRequest(response, "Missing or invalid session");
       return true;
     }
@@ -44,6 +46,11 @@ export function createCalendarLiteRoutes(deps: HostedAppRouteDeps) {
     }
     if (request.method === "POST" && url.pathname === "/calendar/events") {
       if (deps.rejectTerminalMutation(session!, response)) return true;
+      const actorUpdate = readActorUpdate(readTaskConfig(session!.metadata));
+      if (actorUpdate && session!.state.calendarEvents.length > 0) {
+        deps.badRequest(response, "Update the existing tentative event instead of creating a replacement.");
+        return true;
+      }
       const form = await deps.readForm(request);
       const title = form.get("title");
       const date = form.get("date");
@@ -91,7 +98,62 @@ export function createCalendarLiteRoutes(deps: HostedAppRouteDeps) {
         name: "calendar.event_created",
         eventId: created.calendarEvent.id,
       });
+      if (actorUpdate) {
+        redirect(response, `/calendar?session=${encodeURIComponent(session!.token)}`);
+        return true;
+      }
       const completed = await deps.completeSession(session!, deps.evaluateSession(session!));
+      if (!completed) {
+        sendJson(response, 502, { error: "Hosted orchestrator unavailable" });
+        return true;
+      }
+      redirect(response, `/calendar?session=${encodeURIComponent(session!.token)}`);
+      return true;
+    }
+    if (request.method === "POST" && updateEventMatch) {
+      if (deps.rejectTerminalMutation(session!, response)) return true;
+      const form = await deps.readForm(request);
+      const title = form.get("title");
+      const date = form.get("date");
+      const startTime = form.get("startTime");
+      const durationMinutes = Number(form.get("durationMinutes"));
+      const attendeeEmail = form.get("attendeeEmail");
+      const secondaryAttendeeEmail = form.get("secondaryAttendeeEmail");
+      const resource = form.get("resource");
+      const occurrences = Number(form.get("occurrences") || 1);
+      if (typeof title !== "string" || typeof date !== "string" || typeof startTime !== "string" || typeof attendeeEmail !== "string") {
+        deps.badRequest(response, "Title, date, start time, duration, and attendee are required");
+        return true;
+      }
+      const updated = updateCalendarEvent(session!, {
+        eventId: decodeURIComponent(updateEventMatch[1]!),
+        title,
+        date,
+        startTime,
+        durationMinutes,
+        attendeeEmail,
+        secondaryAttendeeEmail: typeof secondaryAttendeeEmail === "string" ? secondaryAttendeeEmail : undefined,
+        resource: typeof resource === "string" ? resource : undefined,
+        occurrences,
+        now: deps.now,
+      });
+      if (!updated.success) {
+        deps.badRequest(response, updated.error);
+        return true;
+      }
+      await deps.persistSessionSnapshot(session!);
+      await deps.recordEvent(session!, {
+        type: "task.signal",
+        name: "calendar.event_revised",
+        eventId: updated.calendarEvent.id,
+        revisionCount: updated.calendarEvent.revisionCount,
+      });
+      const result = deps.evaluateSession(session!);
+      if (result.status !== "passed") {
+        redirect(response, `/calendar?session=${encodeURIComponent(session!.token)}`);
+        return true;
+      }
+      const completed = await deps.completeSession(session!, result);
       if (!completed) {
         sendJson(response, 502, { error: "Hosted orchestrator unavailable" });
         return true;

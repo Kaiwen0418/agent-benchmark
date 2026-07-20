@@ -20,6 +20,7 @@ export const sheetsLiteTestSupport: HostedAppTestSupport<"sheets-lite"> = {
     session.state.sheetValidationRuns.push({
       id: "sheet-validation-test",
       rowCount: session.state.sheetAnalysisRows.length,
+      status: "passed",
       createdAt: "2026-07-01T10:01:00.000Z",
     });
   },

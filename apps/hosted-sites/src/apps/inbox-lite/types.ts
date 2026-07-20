@@ -26,6 +26,8 @@ export type InboxDraft = {
   subject: string;
   body: string;
   createdAt: string;
+  updatedAt: string;
+  revisionCount: number;
 };
 
 export type InboxSentMessage = InboxDraft & {
@@ -42,6 +44,8 @@ export type InboxPolicyCheck = {
   id: string;
   checkNumber: number;
   status: "pending" | "updated";
+  draftId: string;
+  baselineRevisionCount: number;
   createdAt: string;
 };
 

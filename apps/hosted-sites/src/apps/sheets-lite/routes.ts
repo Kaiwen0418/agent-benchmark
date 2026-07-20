@@ -2,7 +2,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HostedAppRouteDeps } from "../../runtime/app-definition.js";
 import { redirect, sendJson } from "../../runtime/http.js";
 import { isHostedSessionForApp } from "../../runtime/types.js";
-import { recordSheetValidation, upsertSheetAnalysisRow } from "./actions.js";
+import { recordSheetValidation, removeSheetAnalysisRow, upsertSheetAnalysisRow } from "./actions.js";
+import { sheetRowsAreExact } from "./evaluate.js";
 import { renderSheetsLite } from "./render.js";
 
 export function createSheetsLiteRoutes(deps: HostedAppRouteDeps) {
@@ -12,7 +13,8 @@ export function createSheetsLiteRoutes(deps: HostedAppRouteDeps) {
   }
 
   async function handle(request: IncomingMessage, response: ServerResponse, url: URL) {
-    if (url.pathname !== "/sheets" && url.pathname !== "/sheets/rows" && url.pathname !== "/sheets/validate") {
+    const deleteRowMatch = url.pathname.match(/^\/sheets\/rows\/([^/]+)\/delete$/);
+    if (url.pathname !== "/sheets" && url.pathname !== "/sheets/rows" && url.pathname !== "/sheets/validate" && !deleteRowMatch) {
       return false;
     }
     const session = await getSession(url, request);
@@ -63,10 +65,31 @@ export function createSheetsLiteRoutes(deps: HostedAppRouteDeps) {
       redirect(response, `/sheets?session=${encodeURIComponent(session.token)}`);
       return true;
     }
+    if (request.method === "POST" && deleteRowMatch) {
+      if (deps.rejectTerminalMutation(session, response)) return true;
+      const removed = removeSheetAnalysisRow(session, decodeURIComponent(deleteRowMatch[1]!));
+      if (!removed.success) {
+        deps.badRequest(response, removed.error);
+        return true;
+      }
+      await deps.persistSessionSnapshot(session);
+      await deps.recordEvent(session, {
+        type: "task.signal",
+        name: "sheets.analysis_row_removed",
+        orderId: removed.row.orderId,
+      });
+      redirect(response, `/sheets?session=${encodeURIComponent(session.token)}`);
+      return true;
+    }
     if (request.method === "POST" && url.pathname === "/sheets/validate") {
       if (deps.rejectTerminalMutation(session, response)) return true;
-      recordSheetValidation(session, { makeId: deps.makeId, now: deps.now });
+      const status = sheetRowsAreExact(session) ? "passed" as const : "failed" as const;
+      recordSheetValidation(session, { status, makeId: deps.makeId, now: deps.now });
       await deps.persistSessionSnapshot(session);
+      if (status === "failed") {
+        redirect(response, `/sheets?session=${encodeURIComponent(session.token)}`);
+        return true;
+      }
       const completed = await deps.completeSession(session, deps.evaluateSession(session));
       if (!completed) {
         sendJson(response, 502, { error: "Hosted orchestrator unavailable" });

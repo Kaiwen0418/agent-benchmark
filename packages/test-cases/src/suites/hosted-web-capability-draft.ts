@@ -38,12 +38,13 @@ const finalAndCost: CapabilityScoreDimension[] = [
   "interaction-cost",
 ];
 
-// This manifest is intentionally exported for validation and calibration but
-// omitted from suites/registry.ts. It cannot be published or seeded until the
-// campaign exit criteria are met and its immutable release identity is frozen.
-export const hostedWebCapabilityDraftMetadata = hostedSuiteMetadataSchema.parse({
-  suiteSlug: "hosted-web-capability-suite-v1-draft",
-  suiteVersion: "unreleased",
+// This is the immutable v1.1 capability manifest used by the published hard
+// suite. Keeping the campaign definition separate from the catalog identity
+// makes the capability graph readable while the existing hard-suite case id
+// and slug continue to own historical and current revisions.
+export const hostedWebCapabilitySuiteMetadata = hostedSuiteMetadataSchema.parse({
+  suiteSlug: "hosted-web-hard-suite-v1",
+  suiteVersion: "v1.1.0",
   timeLimitMinutesPerTestcase: 10,
   sessions: [
     {
@@ -51,7 +52,7 @@ export const hostedWebCapabilityDraftMetadata = hostedSuiteMetadataSchema.parse(
       taskSlug: "capability-wiki-release-research",
       title: "Release Evidence Reconciliation",
       startPath: "/wiki",
-      taskVersion: "draft-v1",
+      taskVersion: "v1",
       seedVersion: "wiki-lite-hard-v2",
       sequenceIndex: 0,
       weight: 1,
@@ -63,7 +64,7 @@ export const hostedWebCapabilityDraftMetadata = hostedSuiteMetadataSchema.parse(
       taskSlug: "capability-wiki-policy-research",
       title: "Policy Evidence Reconciliation",
       startPath: "/wiki",
-      taskVersion: "draft-v1",
+      taskVersion: "v1",
       seedVersion: "wiki-lite-hard-v2",
       sequenceIndex: 1,
       weight: 1,
@@ -75,8 +76,8 @@ export const hostedWebCapabilityDraftMetadata = hostedSuiteMetadataSchema.parse(
       taskSlug: "capability-procurement-analysis",
       title: "Procurement Analysis",
       startPath: "/sheets",
-      taskVersion: "draft-v1",
-      seedVersion: "sheets-lite-v1",
+      taskVersion: "v2",
+      seedVersion: "sheets-lite-v2",
       sequenceIndex: 2,
       weight: 1,
       required: true,
@@ -87,7 +88,7 @@ export const hostedWebCapabilityDraftMetadata = hostedSuiteMetadataSchema.parse(
       taskSlug: "capability-constrained-purchase",
       title: "Constrained Purchase",
       startPath: "/shopping",
-      taskVersion: "draft-v1",
+      taskVersion: "v1",
       seedVersion: "shopping-lite-hard-v2",
       sequenceIndex: 3,
       weight: 1,
@@ -99,8 +100,8 @@ export const hostedWebCapabilityDraftMetadata = hostedSuiteMetadataSchema.parse(
       taskSlug: "capability-policy-revision-message",
       title: "Policy Revision Message",
       startPath: "/inbox",
-      taskVersion: "draft-v1",
-      seedVersion: "inbox-lite-v1",
+      taskVersion: "v2",
+      seedVersion: "inbox-lite-v2",
       sequenceIndex: 4,
       weight: 1,
       required: true,
@@ -111,7 +112,7 @@ export const hostedWebCapabilityDraftMetadata = hostedSuiteMetadataSchema.parse(
       taskSlug: "capability-evidence-handoff",
       title: "Evidence Handoff",
       startPath: "/notes",
-      taskVersion: "draft-v1",
+      taskVersion: "v1",
       seedVersion: "notes-lite-hard-v3",
       sequenceIndex: 5,
       weight: 1,
@@ -123,8 +124,8 @@ export const hostedWebCapabilityDraftMetadata = hostedSuiteMetadataSchema.parse(
       taskSlug: "capability-coordinated-schedule",
       title: "Coordinated Schedule",
       startPath: "/calendar",
-      taskVersion: "draft-v1",
-      seedVersion: "calendar-lite-campaign-v1",
+      taskVersion: "v2",
+      seedVersion: "calendar-lite-campaign-v2",
       sequenceIndex: 6,
       weight: 1,
       required: true,

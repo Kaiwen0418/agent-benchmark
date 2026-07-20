@@ -35,13 +35,21 @@ export function upsertSheetAnalysisRow(
   return { success: true, row } as const;
 }
 
+export function removeSheetAnalysisRow(session: SheetsSession, orderId: string) {
+  const existingIndex = session.state.sheetAnalysisRows.findIndex((row) => row.orderId === orderId);
+  if (existingIndex < 0) return { success: false, error: "Analysis row not found" } as const;
+  const [removed] = session.state.sheetAnalysisRows.splice(existingIndex, 1);
+  return { success: true, row: removed! } as const;
+}
+
 export function recordSheetValidation(
   session: SheetsSession,
-  input: { makeId: (prefix: string) => string; now: () => string },
+  input: { status: "passed" | "failed"; makeId: (prefix: string) => string; now: () => string },
 ) {
   const run = {
     id: input.makeId("sheet-validation"),
     rowCount: session.state.sheetAnalysisRows.length,
+    status: input.status,
     createdAt: input.now(),
   };
   session.state.sheetValidationRuns.push(run);

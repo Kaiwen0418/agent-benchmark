@@ -111,13 +111,18 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 async function checkedFetch(url, init = {}) {
-  const response = await fetch(url, init);
-  if (!response.ok) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(url, init);
+    if (response.ok) return response;
+    const body = await response.text();
+    const recoverableFault = [409, 503].includes(response.status)
+      && body.includes(">Retry</a>");
+    if (recoverableFault && attempt === 0) continue;
     throw new Error(
-      `${init.method ?? "GET"} ${new URL(url).pathname} failed with HTTP ${response.status}: ${await response.text()}`,
+      `${init.method ?? "GET"} ${new URL(url).pathname} failed with HTTP ${response.status}: ${body}`,
     );
   }
-  return response;
+  throw new Error(`${init.method ?? "GET"} ${new URL(url).pathname} exhausted its recovery retry.`);
 }
 
 async function orchestratorRequest(path, init = {}) {

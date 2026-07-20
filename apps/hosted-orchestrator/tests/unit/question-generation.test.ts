@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   hostedTestcaseApps,
-  hostedWebCapabilityDraftMetadata,
+  hostedWebCapabilitySuiteMetadata,
 } from "@agentbench/test-cases";
 import { generateAttemptQuestions } from "../../src/question-generation.js";
 
@@ -94,17 +94,17 @@ test("question generation rejects missing, singleton, and duplicate variant pool
   );
 });
 
-test("capability draft seed sweep reaches every declared variant deterministically", () => {
+test("hard v1.1.0 seed sweep reaches every declared variant deterministically", () => {
   const selectedByTask = new Map(
-    hostedWebCapabilityDraftMetadata.sessions.map((definition) => [
+    hostedWebCapabilitySuiteMetadata.sessions.map((definition) => [
       definition.taskSlug,
       new Set<string>(),
     ]),
   );
   for (let index = 0; index < 1024; index += 1) {
     const seed = `capability-sweep-${index}`;
-    const first = generateAttemptQuestions(hostedWebCapabilityDraftMetadata.sessions, seed);
-    const second = generateAttemptQuestions(hostedWebCapabilityDraftMetadata.sessions, seed);
+    const first = generateAttemptQuestions(hostedWebCapabilitySuiteMetadata.sessions, seed);
+    const second = generateAttemptQuestions(hostedWebCapabilitySuiteMetadata.sessions, seed);
     assert.deepEqual(second, first);
     for (const generated of first.sessions) {
       const selection = generated.metadata.questionGeneration as Record<string, unknown>;
@@ -112,7 +112,7 @@ test("capability draft seed sweep reaches every declared variant deterministical
     }
   }
 
-  for (const definition of hostedWebCapabilityDraftMetadata.sessions) {
+  for (const definition of hostedWebCapabilitySuiteMetadata.sessions) {
     assert.deepEqual(
       selectedByTask.get(definition.taskSlug),
       new Set(definition.metadata.questionVariants.map((variant) => variant.id)),

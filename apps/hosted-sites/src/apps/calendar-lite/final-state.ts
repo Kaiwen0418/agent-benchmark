@@ -14,12 +14,20 @@ export function buildCalendarLiteFinalState(session: HostedSessionFor<"calendar-
       secondaryAttendeeEmail: calendarEvent.secondaryAttendeeEmail ?? null,
       resource: calendarEvent.resource ?? null,
       occurrences: calendarEvent.occurrences ?? 1,
+      revisionCount: calendarEvent.revisionCount,
     })),
     ...(session.state.calendarAvailabilityChecks.length > 0
       ? {
           availabilityRecheckCount: session.state.calendarAvailabilityChecks.length,
           actorUpdateApplied: session.state.calendarAvailabilityChecks.some(
             (check) => check.status === "updated",
+          ),
+          tentativeEventRevisedInPlace: session.state.calendarEvents.some((event) =>
+            session.state.calendarAvailabilityChecks.some((check) =>
+              check.status === "updated"
+              && check.eventId === event.id
+              && event.revisionCount > check.baselineRevisionCount,
+            ),
           ),
         }
       : {}),

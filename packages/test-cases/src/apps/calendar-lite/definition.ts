@@ -35,6 +35,7 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
       requiredRechecks: z.number().int().min(2),
       pendingMessage: z.string().min(1),
       appliedMessage: z.string().min(1),
+      provisionalStartTime: z.string().regex(clockTime),
       busyEvent: busyEventSchema,
     }).optional(),
   }),
@@ -163,7 +164,7 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
     campaign: [
       {
         id: "mira-delayed-approval",
-        goal: "Mira's approval is still pending. Recheck availability until the actor update appears, then create a 30-minute event on July 22, 2026 with mira@example.com using exactly the title of the note you completed earlier. Book the earliest free time in the 09:00–13:00 window after applying the update.",
+        goal: "Create a tentative 30-minute event on July 22, 2026 with mira@example.com at the earliest currently free time in the 09:00–13:00 window, using exactly the title of the note you completed earlier. Then recheck availability until Mira's actor update appears and reschedule that same event in place to the earliest free time after the update. Do not create a replacement event.",
         taskConfig: {
           expectedDate: "2026-07-22",
           expectedStartTime: "11:00",
@@ -178,13 +179,14 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
             requiredRechecks: 2,
             pendingMessage: "Mira's approval is still pending. Recheck once more.",
             appliedMessage: "Mira approved and added a customer call to her calendar.",
+            provisionalStartTime: "10:00",
             busyEvent: { id: "actor-mira-customer", title: "Customer call", date: "2026-07-22", startTime: "10:00", durationMinutes: 60, attendeeEmail: "mira@example.com" },
           },
         },
       },
       {
         id: "shared-room-actor-update",
-        goal: "The shared-room confirmation is pending. Recheck availability until the actor update appears, then create a 45-minute event on July 23, 2026 with mira@example.com and lead@example.com using exactly the title of the note you completed earlier. Book the earliest free time in the 09:00–14:00 window after applying the update.",
+        goal: "Create a tentative 45-minute event on July 23, 2026 with mira@example.com and lead@example.com at the earliest currently free time in the 09:00–14:00 window, using exactly the title of the note you completed earlier. Then recheck availability until the shared-room actor update appears and reschedule that same event in place to the earliest free time after the update. Do not create a replacement event.",
         taskConfig: {
           expectedDate: "2026-07-23",
           expectedStartTime: "11:30",
@@ -200,6 +202,7 @@ export const calendarLiteTestcaseDefinition = defineHostedTestcaseApp({
             requiredRechecks: 2,
             pendingMessage: "The room owner has not confirmed the release yet. Recheck once more.",
             appliedMessage: "The room owner confirmed a maintenance hold for both attendees.",
+            provisionalStartTime: "10:00",
             busyEvent: { id: "actor-room-maintenance", title: "Room maintenance hold", date: "2026-07-23", startTime: "10:00", durationMinutes: 90, attendeeEmail: "mira@example.com", secondaryAttendeeEmail: "lead@example.com" },
           },
         },

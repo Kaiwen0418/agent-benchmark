@@ -115,10 +115,15 @@ export function renderInboxCompose(
 ) {
   const options = session.state.inboxThreads.map((thread) => `<option value="${escapeHtml(thread.id)}"${thread.id === selectedThreadId ? " selected" : ""}>${escapeHtml(thread.subject)}</option>`).join("");
   const drafts = session.state.inboxDrafts.map((draft) => `<article class="card">
-    <p class="muted">To ${escapeHtml(draft.recipients.join(", "))}</p>
-    <h3>${escapeHtml(draft.subject)}</h3>
-    <p>${escapeHtml(draft.body)}</p>
-    <form method="post" action="/inbox/drafts/${encodeURIComponent(draft.id)}/send?session=${encodeURIComponent(session.token)}">
+    <h3>Saved draft</h3>
+    <p class="muted">Revision count: ${draft.revisionCount}</p>
+    <form method="post" action="/inbox/drafts/${encodeURIComponent(draft.id)}?session=${encodeURIComponent(session.token)}">
+      <label style="display:block;margin-top:12px;">Recipients (comma separated)<input name="recipients" value="${escapeHtml(draft.recipients.join(", "))}" style="display:block;width:100%;margin-top:8px;" /></label>
+      <label style="display:block;margin-top:12px;">Subject<input name="subject" value="${escapeHtml(draft.subject)}" style="display:block;width:100%;margin-top:8px;" /></label>
+      <label style="display:block;margin-top:12px;">Body<textarea name="body" rows="6" style="display:block;width:100%;margin-top:8px;">${escapeHtml(draft.body)}</textarea></label>
+      <button type="submit" style="margin-top:12px;">Update saved draft</button>
+    </form>
+    <form method="post" action="/inbox/drafts/${encodeURIComponent(draft.id)}/send?session=${encodeURIComponent(session.token)}" style="margin-top:8px;">
       <button type="submit">Send saved draft</button>
     </form>
   </article>`).join("");
