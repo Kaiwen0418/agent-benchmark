@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createConsistencyDigest } from "@agentbench/scoring";
 import {
   recheckInboxPolicy,
   saveInboxDraft,
@@ -133,11 +134,16 @@ test("inbox blocks prohibited recipients and public final state contains only di
   assert.equal(saved.success, true);
   if (!saved.success) return;
   sendInboxDraft(cleanSession, { draftId: saved.draft.id, now: actionDeps.now });
-  const serialized = JSON.stringify(buildInboxLiteFinalState(cleanSession));
+  const finalState = buildInboxLiteFinalState(cleanSession);
+  const serialized = JSON.stringify(finalState);
   assert.equal(serialized.includes(taskConfig.expectedRecipients[0]!), false);
   assert.equal(serialized.includes(taskConfig.expectedBody), false);
   assert.equal(serialized.includes(taskConfig.forbiddenValues[0]!), false);
   assert.match(serialized, /[0-9a-f]{64}/);
+  assert.equal(
+    finalState.sentMessages[0]?.bodyDigest,
+    createConsistencyDigest(taskConfig.expectedBody),
+  );
 });
 
 test("inbox campaign accepts a non-empty carried body for suite-level verification", () => {
