@@ -65,6 +65,8 @@ Changing seed data, success conditions, task wording that affects behavior, or a
 
 Hosted suite releases use `v<major>.<minor>.<patch>` for `suiteVersion` and mirror that value in the revision name, for example `hosted-web-suite-v3.0.1`.
 
+Public leaderboard comparability follows the suite slug and `major.minor` release line. Patch releases such as `v1.0.1`, `v1.0.3`, and `v1.0.5` share one ranking while each result retains its exact executed version. Different major or minor lines remain separate, and legacy versions that do not match the hosted suite version format are ranked only against the same exact version.
+
 - Increment the patch version for small compatible testcase additions, new app sessions, extra variants, wording clarifications that preserve semantics, and scorer fixes that do not redefine historical intent.
 - Increment the minor version only for large batch updates, broad suite composition changes, or material scoring/task semantics changes that still belong to the same major benchmark line.
 - Increment the major version only when the project owner explicitly requests a new major suite line.
