@@ -11,7 +11,7 @@ This document defines who may read, mutate, and recover each state family. Owner
 | `public_benchmark_cases` | Web control plane | database projection | anonymous/authenticated clients, Web | Display-safe discovery only |
 | `benchmark_case_revisions` | benchmark release workflow | `publish_benchmark_case_catalog` | orchestrator, Web service-role recovery | Immutable private manifest, including optional capability coverage, scenario graph, and deterministic fault schedule, plus synchronized public case identity |
 | `benchmark_runs` | Web control plane | Web | Web, public read models | User-facing run lifecycle |
-| `model_catalog`, `model_catalog_sync_runs` | Web control plane | authenticated Web sync API | Web autocomplete and run metadata validation | Operational model identity and source health; not benchmark/scoring truth |
+| `model_catalog`, `model_catalog_sync_runs` | Web control plane | GitHub maintenance workflow through `packages/model-catalog-sync` | Web autocomplete and run metadata validation | Operational model identity and source health; not benchmark/scoring truth |
 | `run_events`, `artifacts` | Web control plane | Web internal APIs | Web UI and public read models | Live observability and output artifacts |
 | `benchmark_attempts` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; Web uses orchestrator APIs/public read models | Canonical hosted attempt lifecycle and active-session pointer |
 | `hosted_web_sessions` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; hosted-sites recovery uses an internal API | Durable lifecycle, generated per-session task config, plus latest successful app-state snapshot |

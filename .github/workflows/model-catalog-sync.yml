@@ -37,6 +37,7 @@ jobs:
     timeout-minutes: 10
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         source:
           - openrouter
@@ -48,19 +49,35 @@ jobs:
           - kimi
           - deepseek
     steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Sync ${{ matrix.source }}
         env:
-          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
-          MODEL_CATALOG_SYNC_SECRET: ${{ secrets.MODEL_CATALOG_SYNC_SECRET }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
           set -euo pipefail
-          test -n "${AGENTBENCH_WEB_URL}"
-          test -n "${MODEL_CATALOG_SYNC_SECRET}"
-          curl --fail-with-body \
-            --retry 3 \
-            --retry-all-errors \
-            --connect-timeout 10 \
-            --max-time 120 \
-            -X POST \
-            -H "Authorization: Bearer ${MODEL_CATALOG_SYNC_SECRET}" \
-            "${AGENTBENCH_WEB_URL%/}/api/internal/model-catalog/sync/${{ matrix.source }}"
+          test -n "${SUPABASE_URL}"
+          test -n "${SUPABASE_SERVICE_ROLE_KEY}"
+          pnpm --filter @agentbench/model-catalog-sync sync "${{ matrix.source }}"

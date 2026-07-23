@@ -7,7 +7,7 @@ import {
   parseLiteLlmPayload,
   parseOpenAiCompatiblePayload,
   parseOpenRouterPayload,
-} from "../../lib/model-catalog-sources";
+} from "../../src/sources.js";
 
 const fixtures = JSON.parse(
   readFileSync(

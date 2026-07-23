@@ -62,8 +62,10 @@ Provider APIs have identity priority over OpenRouter and LiteLLM. A lower
 priority discovery source may add an alias but cannot replace an official
 display name. Missing or failed sources do not delete or downgrade entries, and
 callability alone cannot reactivate a curated legacy/deprecated entry.
-`model_catalog_sync_runs` records each source execution independently so one
-provider outage or absent optional credential does not block the other sources.
+`model_catalog_sync_runs` records each source execution independently. The
+GitHub maintenance workflow invokes the package CLI with environment-scoped
+service-role credentials; Web never performs catalog writes. One provider
+outage or absent optional credential does not block the other sources.
 
 ### `benchmark_attempts`
 

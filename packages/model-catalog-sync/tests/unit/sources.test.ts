@@ -4,7 +4,7 @@ import {
   humanizeModelId,
   modelStatusFromId,
   normalizeModelProvider,
-} from "../../lib/model-catalog-sources";
+} from "../../src/sources.js";
 
 test("normalizes aggregator provider slugs to catalog owners", () => {
   assert.equal(normalizeModelProvider("x-ai"), "xai");

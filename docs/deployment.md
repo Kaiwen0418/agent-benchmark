@@ -109,7 +109,6 @@ Required secrets in each GitHub Environment:
 - `GHCR_PAT` with `read:packages`
 - `RUNNER_SHARED_SECRET`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `MODEL_CATALOG_SYNC_SECRET`
 
 Migration-only database secrets:
 
@@ -129,12 +128,11 @@ Each Vercel Web project must independently configure:
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
-- `MODEL_CATALOG_SYNC_SECRET` matching the GitHub Environment secret
 - optional `GUEST_RUN_LIMIT`
 - optional `RUN_CONNECT_RATE_LIMIT` (defaults to 5 requests per run and client
   address per minute on each Web instance)
 
-Optional Vercel provider credentials enable first-party model discovery:
+Optional GitHub Environment secrets enable first-party model discovery:
 
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
@@ -143,13 +141,17 @@ Optional Vercel provider credentials enable first-party model discovery:
 - `MOONSHOT_API_KEY`
 - `DEEPSEEK_API_KEY`
 
-The daily model-catalog workflow invokes every source independently for both
-`develop` and `main`. OpenRouter and LiteLLM require no credential and provide
-supplemental discovery for all supported providers, including Z.AI/GLM.
-First-party provider APIs override aggregator display identity when available.
-An unavailable source is recorded without deleting or downgrading existing
-catalog rows. Trigger the workflow once after applying the model-catalog
-migration; normal hosted Compose deployment is unaffected.
+The daily model-catalog workflow checks out the matching branch and invokes
+`packages/model-catalog-sync` with `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, and any provider keys from the selected GitHub
+Environment. It writes directly to Supabase and does not call Vercel.
+OpenRouter and LiteLLM require no credential and provide supplemental discovery
+for all supported providers, including Z.AI/GLM. First-party provider APIs
+override aggregator display identity when available. Sources execute
+sequentially to avoid conflicting upserts; an unavailable source is recorded
+without deleting or downgrading existing catalog rows. Trigger the workflow
+once after applying the model-catalog migration; normal hosted Compose and Web
+deployments are unaffected.
 
 Development values must point to the test hosted hostname and development Supabase target; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
 

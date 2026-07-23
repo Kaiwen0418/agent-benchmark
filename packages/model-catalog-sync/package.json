@@ -1,0 +1,21 @@
+{
+  "name": "@agentbench/model-catalog-sync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "sync": "tsx src/cli.ts",
+    "test": "node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)"
+  },
+  "dependencies": {
+    "@agentbench/protocol": "workspace:*",
+    "@agentbench/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.110.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.7.3"
+  }
+}
