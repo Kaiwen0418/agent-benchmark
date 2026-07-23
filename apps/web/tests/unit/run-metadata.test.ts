@@ -108,6 +108,30 @@ test("agent metadata cannot replace the server-owned calibration selection", () 
   });
 });
 
+test("agent metadata cannot forge the server-owned catalog verification timestamp", () => {
+  const patch = buildRunMetadataUpdate({
+    currentMetadata: {},
+    currentStatus: "waiting_for_agent",
+    startedAt: null,
+    input: {
+      name: "Codex",
+      version: "latest",
+      baseModel: "Private model",
+      metadata: {
+        modelCatalogVerifiedAt: "2099-01-01T00:00:00.000Z",
+      },
+    },
+    browserEnvironment: {},
+    now: "2026-07-23T12:00:00.000Z",
+  });
+
+  assert.equal(patch.model_catalog_verified_at, null);
+  assert.equal(
+    Object.hasOwn(patch.metadata as Record<string, unknown>, "modelCatalogVerifiedAt"),
+    false,
+  );
+});
+
 test("run creation stores a server-owned calibration selection", () => {
   const insert = buildInitialRunMetadata({
     agent: undefined,
@@ -148,6 +172,56 @@ test("run creation persists selected identity without connecting the agent", () 
     identityReportedAt: "2026-06-24T12:00:00.000Z",
     identitySource: "run-creation",
   });
+});
+
+test("selected catalog identity persists separately from its display snapshot", () => {
+  const patch = buildRunMetadataUpdate({
+    currentMetadata: {},
+    currentStatus: "waiting_for_agent",
+    startedAt: null,
+    input: {
+      name: "Codex",
+      version: "0.144.0",
+      baseModel: "GPT-5.6 Sol",
+      model: {
+        provider: "openai",
+        id: "gpt-5.6-sol",
+        displayName: "GPT-5.6 Sol",
+        reasoningEffort: "medium",
+      },
+      metadata: {},
+    },
+    modelCatalogVerifiedAt: "2026-07-09T00:00:00.000Z",
+    browserEnvironment: {},
+    now: "2026-07-23T12:00:00.000Z",
+  });
+
+  assert.equal(patch.base_model, "GPT-5.6 Sol");
+  assert.equal(patch.model_provider, "openai");
+  assert.equal(patch.model_id, "gpt-5.6-sol");
+  assert.equal(patch.reasoning_effort, "medium");
+  assert.equal(patch.model_catalog_verified_at, "2026-07-09T00:00:00.000Z");
+});
+
+test("free-text model input clears an earlier structured selection", () => {
+  const patch = buildRunMetadataUpdate({
+    currentMetadata: {},
+    currentStatus: "running",
+    startedAt: "2026-07-23T11:00:00.000Z",
+    input: {
+      name: "Private Agent",
+      version: "latest",
+      baseModel: "private-model-v2",
+      metadata: {},
+    },
+    browserEnvironment: {},
+    now: "2026-07-23T12:00:00.000Z",
+  });
+
+  assert.equal(patch.model_provider, null);
+  assert.equal(patch.model_id, null);
+  assert.equal(patch.reasoning_effort, null);
+  assert.equal(patch.model_catalog_verified_at, null);
 });
 
 test("run creation identity does not unlock the hosted suite before connection registration", () => {

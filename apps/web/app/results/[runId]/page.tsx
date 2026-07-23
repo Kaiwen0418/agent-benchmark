@@ -47,7 +47,12 @@ export default async function PublicResultPage({ params }: { params: Promise<{ r
         <section className="grid gap-px bg-white/10 sm:grid-cols-2 lg:grid-cols-4">
           {[
             ["Agent", run.agent ? `${run.agent.name} ${run.agent.version}` : "Unreported"],
-            ["Base model", run.agent?.baseModel ?? "Unreported"],
+            [
+              "Base model",
+              run.agent
+                ? [run.agent.baseModel, run.agent.model?.reasoningEffort].filter(Boolean).join(" · ")
+                : "Unreported",
+            ],
             ["Environment", [run.browserEnvironment?.browser, run.browserEnvironment?.platform].filter(Boolean).join(" · ") || "Unknown"],
             ["Duration", formatDuration(run.startedAt, run.completedAt)],
           ].map(([label, value]) => (

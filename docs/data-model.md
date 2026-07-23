@@ -16,6 +16,8 @@ erDiagram
   BENCHMARK_ATTEMPTS ||--o| HOSTED_CALLBACK_OUTBOX : enqueues
   BENCHMARK_RUNS ||--o{ RUN_EVENTS : streams
   BENCHMARK_RUNS ||--o{ ARTIFACTS : owns
+  MODEL_CATALOG ||--o{ BENCHMARK_RUNS : identifies
+  MODEL_CATALOG_SYNC_RUNS }o--|| MODEL_CATALOG : refreshes
   ORCHESTRATOR_COMMAND_DEAD_LETTERS {
     uuid id PK
     text command_id UK
@@ -41,6 +43,27 @@ An immutable, service-role-only release record containing `revision`, SHA-256 `c
 The user-facing execution record. Important fields include owner (`user_id` or `guest_id`), `case_id`, `execution_mode`, lifecycle `status`, final `score`, timestamps, and error information.
 
 Current hosted-web runs use `external-agent`. Some legacy enum values and columns remain in migrations for compatibility but are not active architecture components.
+
+Agent and model identity is self-reported. `agent_name`, `agent_version`, and
+`base_model` preserve the submitted display snapshot. A catalog selection also
+stores normalized `model_provider`, canonical `model_id`, optional
+`reasoning_effort`, and the server-owned `model_catalog_verified_at` timestamp.
+Free-text input leaves these structured catalog columns null.
+
+### `model_catalog` and `model_catalog_sync_runs`
+
+`model_catalog` is the service-role-only source behind the public Web
+autocomplete API. Its composite key is `(provider, model_id)`. It stores a
+display name, aliases, lifecycle status, supported reasoning-effort labels,
+release/verification timestamps, source references, and ranking signals.
+Direct anonymous/authenticated table access is intentionally absent.
+
+Provider APIs have identity priority over OpenRouter and LiteLLM. A lower
+priority discovery source may add an alias but cannot replace an official
+display name. Missing or failed sources do not delete or downgrade entries, and
+callability alone cannot reactivate a curated legacy/deprecated entry.
+`model_catalog_sync_runs` records each source execution independently so one
+provider outage or absent optional credential does not block the other sources.
 
 ### `benchmark_attempts`
 
