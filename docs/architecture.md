@@ -32,8 +32,8 @@ flowchart LR
 - allocates hosted attempts through the orchestrator
 - receives internal run events and final completion
 - serves live SSE snapshots, artifacts, and replay UI
-- owns the server-side model identity catalog, autocomplete API, and scheduled
-  source synchronization used by self-reported agent metadata
+- serves the model autocomplete API and validates catalog selections used by
+  self-reported agent metadata
 
 ### `apps/hosted-sites`
 
@@ -85,9 +85,12 @@ Supabase stores durable control-plane and audit data: runs, attempts, hosted ses
 
 `model_catalog` is a Web-owned operational catalog, not benchmark truth. It
 combines canonical IDs from provider APIs with discovery-only aggregator
-signals. A selected entry is revalidated by Web before its provider, model ID,
-reasoning effort, and catalog verification timestamp are written to a run.
-Free-text model names remain valid but do not receive a canonical provider/ID.
+signals. The environment-scoped GitHub maintenance workflow runs
+`packages/model-catalog-sync` and writes directly to Supabase; synchronization
+does not traverse the Web deployment. A selected entry is revalidated by Web
+before its provider, model ID, reasoning effort, and catalog verification
+timestamp are written to a run. Free-text model names remain valid but do not
+receive a canonical provider/ID.
 
 `benchmark_cases` stores case identity, display fields, visibility, and the current revision pointer. Private suite manifests and evaluator inputs exist only in immutable `benchmark_case_revisions`. Anonymous and authenticated database clients discover cases through `public_benchmark_cases`, which projects display-safe suite and session fields from the current revision. Service-role code must not return the private manifest through a public API or read model.
 

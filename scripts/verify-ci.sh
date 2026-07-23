@@ -7,6 +7,9 @@ cd "${ROOT_DIR}"
 echo "== Hosted variant sweep workflow =="
 bash scripts/test-hosted-variant-sweep.sh
 
+echo "== Model catalog sync workflow =="
+bash scripts/test-model-catalog-sync-workflow.sh
+
 echo "== Deployment classifier =="
 bash scripts/test-deploy-classifier.sh
 
@@ -52,6 +55,10 @@ bash scripts/test-model-catalog-postgres.sh
 echo "== Benchmark catalog =="
 pnpm --filter @agentbench/test-cases test
 pnpm catalog:check
+
+echo "== Model catalog synchronization =="
+pnpm --filter @agentbench/model-catalog-sync test
+pnpm --filter @agentbench/model-catalog-sync build
 
 echo "== Web library tests =="
 pnpm --filter web test

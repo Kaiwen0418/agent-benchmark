@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DiscoveredModel } from "../../lib/model-catalog-sources";
+import type { DiscoveredModel } from "../../src/sources.js";
 import {
+  createModelCatalogClient,
   deduplicateDiscoveredModels,
   mergeCatalogModel,
-} from "../../lib/model-catalog-sync";
+} from "../../src/sync.js";
 
 function discovered(overrides: Partial<DiscoveredModel> = {}): DiscoveredModel {
   return {
@@ -111,4 +112,22 @@ test("deduplicates aggregator routes before a database upsert", () => {
     "openrouter/openai/gpt-5.6-sol",
   ]);
   assert.equal(result[0]?.benchmarkPopularity, 20);
+});
+
+test("direct synchronization requires environment-scoped Supabase credentials", () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    assert.throws(
+      () => createModelCatalogClient(),
+      /SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required/,
+    );
+  } finally {
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
 });

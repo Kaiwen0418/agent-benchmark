@@ -11,6 +11,9 @@ Use linked documents for details instead of duplicating them here.
   telemetry, and app evaluation.
 - `apps/hosted-orchestrator` owns attempt initialization, commands, suite
   advancement, aggregation, timeout, and cleanup.
+- `packages/model-catalog-sync` owns offline model-source discovery and direct
+  environment-scoped Supabase synchronization; do not route maintenance sync
+  through `apps/web`.
 - Keep cross-service contracts in `packages/protocol`, scoring contracts in
   `packages/scoring`, shared projections in `packages/shared`, and benchmark
   definitions in `packages/test-cases`.

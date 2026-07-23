@@ -27,7 +27,6 @@ Hosted task requests use an opaque session token in `?session=<token>` or in the
 | `GET` | `/api/runs/:runId/artifacts/file?path=...` | Read local artifact file | run visibility rules |
 | `GET` | `/api/agent-options` | List curated agent options | public |
 | `GET` | `/api/model-options?q=...&limit=...` | Search server-maintained model identities | public |
-| `POST` | `/api/internal/model-catalog/sync/:source` | Refresh one independent model source | bearer sync secret |
 
 ### Create Run
 
@@ -62,11 +61,10 @@ name, aliases, lifecycle status, available reasoning efforts, release time, and
 verification time. A catalog outage returns `503`; the model text field remains
 usable as free text.
 
-`POST /api/internal/model-catalog/sync/:source` accepts `openai`, `anthropic`,
-`google`, `xai`, `kimi`, `deepseek`, `openrouter`, or `litellm`. It requires
-`Authorization: Bearer <MODEL_CATALOG_SYNC_SECRET>`. Missing optional provider
-credentials produce a recorded `skipped` run; source failures are isolated and
-return `502`.
+Catalog synchronization is not exposed as a Web API. The environment-scoped
+GitHub maintenance workflow executes `packages/model-catalog-sync` directly
+against Supabase. Missing optional provider credentials produce a recorded
+`skipped` run.
 
 ### Connect Run
 

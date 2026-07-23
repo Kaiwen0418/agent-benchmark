@@ -1,11 +1,12 @@
 import type { Json } from "@agentbench/shared";
-import { createSupabaseAdminClient } from "./supabase/admin";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@agentbench/shared";
 import {
   MissingModelSourceCredentialError,
   modelCatalogSources,
   type DiscoveredModel,
   type ModelCatalogSourceName,
-} from "./model-catalog-sources";
+} from "./sources.js";
 
 type ExistingCatalogRow = {
   provider: string;
@@ -115,8 +116,26 @@ export function deduplicateDiscoveredModels(discovered: DiscoveredModel[]) {
   return [...byKey.values()];
 }
 
-export async function syncModelCatalogSource(source: ModelCatalogSourceName) {
-  const supabase = createSupabaseAdminClient();
+export function createModelCatalogClient() {
+  const url = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceRoleKey) {
+    throw new Error(
+      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for model catalog sync.",
+    );
+  }
+  return createClient<Database>(url, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
+export async function syncModelCatalogSource(
+  source: ModelCatalogSourceName,
+  supabase: SupabaseClient<Database> = createModelCatalogClient(),
+) {
   const { data: syncRun, error: syncRunError } = await supabase
     .from("model_catalog_sync_runs")
     .insert({ source, status: "running" })
