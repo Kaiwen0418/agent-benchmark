@@ -46,6 +46,9 @@ bash scripts/test-case-revisions-postgres.sh
 echo "== Hosted public read models =="
 bash scripts/test-hosted-read-models-postgres.sh
 
+echo "== Model catalog Postgres integration =="
+bash scripts/test-model-catalog-postgres.sh
+
 echo "== Benchmark catalog =="
 pnpm --filter @agentbench/test-cases test
 pnpm catalog:check

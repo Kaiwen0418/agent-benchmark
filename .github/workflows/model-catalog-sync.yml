@@ -1,0 +1,66 @@
+name: Model Catalog Sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: model-catalog-sync-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch-scheduled:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      matrix:
+        ref:
+          - develop
+          - main
+    steps:
+      - name: Dispatch environment sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run model-catalog-sync.yml --ref "${{ matrix.ref }}" --repo "${GITHUB_REPOSITORY}"
+
+  sync:
+    if: github.event_name == 'workflow_dispatch' && (github.ref_name == 'develop' || github.ref_name == 'main')
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        source:
+          - openrouter
+          - litellm
+          - openai
+          - anthropic
+          - google
+          - xai
+          - kimi
+          - deepseek
+    steps:
+      - name: Sync ${{ matrix.source }}
+        env:
+          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
+          MODEL_CATALOG_SYNC_SECRET: ${{ secrets.MODEL_CATALOG_SYNC_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "${AGENTBENCH_WEB_URL}"
+          test -n "${MODEL_CATALOG_SYNC_SECRET}"
+          curl --fail-with-body \
+            --retry 3 \
+            --retry-all-errors \
+            --connect-timeout 10 \
+            --max-time 120 \
+            -X POST \
+            -H "Authorization: Bearer ${MODEL_CATALOG_SYNC_SECRET}" \
+            "${AGENTBENCH_WEB_URL%/}/api/internal/model-catalog/sync/${{ matrix.source }}"

@@ -45,6 +45,12 @@ pnpm verify:ci
 
 `pnpm verify:ci` is the required pre-PR command. It runs static checks, PostgreSQL integration tests, unit and coverage suites, local multi-service smoke, and production builds. `scripts/check-test-layout.sh` prevents tests from being added to production source directories.
 
+Model catalog tests use recorded provider/aggregator payloads rather than live
+network calls. `scripts/test-model-catalog-postgres.sh` applies the catalog
+migration to an isolated PostgreSQL 17 container and verifies seed data,
+structured run columns, lifecycle constraints, and the direct-read RLS
+boundary.
+
 ## Adding Tests
 
 1. Put unit tests in the owning workspace's `tests/unit` directory.

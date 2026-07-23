@@ -1,33 +1,45 @@
 "use client";
 
-import type { AgentIdentity } from "@agentbench/protocol";
-import { useEffect, useState } from "react";
+import type { AgentIdentity, ModelCatalogOption } from "@agentbench/protocol";
 import {
-  agentCatalog as fallbackCatalog,
+  agentCatalog,
   catalogSelection,
   OTHER_OPTION_VALUE,
-  type AgentCatalog,
 } from "@/lib/agent-catalog";
 import { SiteSelect } from "@/components/ui/SiteSelect";
+import { ModelAutocompleteInput } from "./ModelAutocompleteInput";
 
 export type AgentIdentityDraft = {
   agentSelection: string;
   customAgent: string;
   agentVersion: string;
-  modelSelection: string;
-  customModel: string;
+  modelInput: string;
+  selectedModel: ModelCatalogOption | null;
+  reasoningEffort: string;
 };
 
 export function identityDraftFromAgent(agent: AgentIdentity | null): AgentIdentityDraft {
-  const agentSelection = catalogSelection(agent?.name ?? "", fallbackCatalog.agents);
-  const modelSelection = catalogSelection(agent?.baseModel ?? "", fallbackCatalog.models);
+  const agentSelection = catalogSelection(agent?.name ?? "", agentCatalog.agents);
+  const selectedModel = agent?.model
+    ? {
+        provider: agent.model.provider,
+        modelId: agent.model.id,
+        displayName: agent.model.displayName,
+        aliases: [],
+        status: "active" as const,
+        reasoningEfforts: agent.model.reasoningEffort ? [agent.model.reasoningEffort] : [],
+        releasedAt: null,
+        verifiedAt: null,
+      }
+    : null;
 
   return {
     agentSelection,
     customAgent: agentSelection === OTHER_OPTION_VALUE ? agent?.name ?? "" : "",
     agentVersion: agent?.version ?? "latest",
-    modelSelection,
-    customModel: modelSelection === OTHER_OPTION_VALUE ? agent?.baseModel ?? "" : "",
+    modelInput: agent?.baseModel ?? "",
+    selectedModel,
+    reasoningEffort: agent?.model?.reasoningEffort ?? "",
   };
 }
 
@@ -42,32 +54,6 @@ export function AgentIdentityFields({
   disabled?: boolean;
   className?: string;
 }) {
-  const [catalog, setCatalog] = useState<AgentCatalog>(fallbackCatalog);
-
-  useEffect(() => {
-    let active = true;
-
-    void fetch("/api/agent-options", { cache: "force-cache" })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("Unable to load agent options");
-        }
-        return response.json() as Promise<AgentCatalog>;
-      })
-      .then((result) => {
-        if (active) {
-          setCatalog(result);
-        }
-      })
-      .catch(() => {
-        // The bundled catalog keeps the form usable if the options endpoint is unavailable.
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const inputClass =
     "mt-2 w-full rounded-[0.9rem] border border-[#d8d1c4] bg-white px-3.5 py-3 text-sm text-[#111111] outline-none transition focus:border-[#111111] disabled:cursor-not-allowed disabled:bg-[#eeeae2] disabled:text-[#777168]";
   const selectClass = "mt-2";
@@ -82,7 +68,7 @@ export function AgentIdentityFields({
           ariaLabel="Agent"
           options={[
             { value: "", label: "Select an agent", disabled: true },
-            ...catalog.agents.map((option) => ({ value: option.value, label: option.label })),
+            ...agentCatalog.agents.map((option) => ({ value: option.value, label: option.label })),
             { value: OTHER_OPTION_VALUE, label: "Other" },
           ]}
           disabled={disabled}
@@ -112,35 +98,40 @@ export function AgentIdentityFields({
           className={inputClass}
         />
       </label>
-      <label className="text-xs font-medium text-[#4f4a43]">
-        Base model
-        <SiteSelect
-          value={value.modelSelection}
-          onValueChange={(modelSelection) => onChange({ ...value, modelSelection })}
-          ariaLabel="Base model"
-          options={[
-            { value: "", label: "Select a model", disabled: true },
-            ...catalog.models.map((option) => ({
-              value: option.value,
-              label: `${option.label} · ${option.provider}`,
-            })),
-            { value: OTHER_OPTION_VALUE, label: "Other" },
-          ]}
+      <div className="text-xs font-medium text-[#4f4a43]">
+        <label htmlFor="agent-base-model">Base model</label>
+        <ModelAutocompleteInput
+          id="agent-base-model"
+          value={value.modelInput}
+          selectedModel={value.selectedModel}
+          onChange={(modelInput, selectedModel) => onChange({
+            ...value,
+            modelInput,
+            selectedModel,
+            reasoningEffort: selectedModel?.reasoningEfforts.includes(value.reasoningEffort)
+              ? value.reasoningEffort
+              : "",
+          })}
           disabled={disabled}
-          className={selectClass}
         />
-        {value.modelSelection === OTHER_OPTION_VALUE ? (
-          <input
-            required
-            maxLength={160}
-            value={value.customModel}
-            onChange={(event) => onChange({ ...value, customModel: event.target.value })}
+        {value.selectedModel && value.selectedModel.reasoningEfforts.length > 0 ? (
+          <SiteSelect
+            value={value.reasoningEffort}
+            onValueChange={(reasoningEffort) => onChange({ ...value, reasoningEffort })}
+            ariaLabel="Reasoning effort"
+            options={[
+              { value: "", label: "Default reasoning effort" },
+              ...value.selectedModel.reasoningEfforts.map((effort) => ({
+                value: effort,
+                label: `${effort[0]?.toUpperCase()}${effort.slice(1)} reasoning`,
+              })),
+            ]}
             disabled={disabled}
-            placeholder="Model name"
-            className={inputClass}
+            compact
+            className="mt-2"
           />
         ) : null}
-      </label>
+      </div>
     </div>
   );
 }

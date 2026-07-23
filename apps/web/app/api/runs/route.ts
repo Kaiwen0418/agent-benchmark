@@ -6,7 +6,12 @@ import {
   GUEST_COOKIE_NAME,
   isDevQuotaBypassed,
 } from "@/lib/auth";
-import { BenchmarkCaseUnavailableError, createBenchmarkRun, getQuotaStatus } from "@/lib/db";
+import {
+  BenchmarkCaseUnavailableError,
+  createBenchmarkRun,
+  getQuotaStatus,
+  InvalidModelCatalogSelectionError,
+} from "@/lib/db";
 import { captureBrowserEnvironment } from "@/lib/run-metadata";
 import { isCalibrationControlsEnabled } from "@/lib/calibration";
 
@@ -113,6 +118,12 @@ export async function POST(request: Request) {
         : undefined,
     });
   } catch (error) {
+    if (error instanceof InvalidModelCatalogSelectionError) {
+      return NextResponse.json(
+        { error: error.code, message: error.message },
+        { status: 400 },
+      );
+    }
     if (error instanceof BenchmarkCaseUnavailableError) {
       return NextResponse.json(
         { error: error.code, message: error.message },

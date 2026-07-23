@@ -242,6 +242,89 @@ export type Database = {
         };
         Relationships: [];
       };
+      model_catalog: {
+        Row: {
+          aliases: string[];
+          benchmark_popularity: number;
+          display_name: string;
+          family: string | null;
+          first_seen_at: string;
+          last_seen_at: string;
+          model_id: string;
+          provider: string;
+          reasoning_efforts: string[];
+          released_at: string | null;
+          source_priority: number;
+          source_refs: Json;
+          status: "active" | "preview" | "legacy" | "deprecated";
+          verified_at: string | null;
+        };
+        Insert: {
+          aliases?: string[];
+          benchmark_popularity?: number;
+          display_name: string;
+          family?: string | null;
+          first_seen_at?: string;
+          last_seen_at?: string;
+          model_id: string;
+          provider: string;
+          reasoning_efforts?: string[];
+          released_at?: string | null;
+          source_priority?: number;
+          source_refs?: Json;
+          status?: "active" | "preview" | "legacy" | "deprecated";
+          verified_at?: string | null;
+        };
+        Update: {
+          aliases?: string[];
+          benchmark_popularity?: number;
+          display_name?: string;
+          family?: string | null;
+          first_seen_at?: string;
+          last_seen_at?: string;
+          model_id?: string;
+          provider?: string;
+          reasoning_efforts?: string[];
+          released_at?: string | null;
+          source_priority?: number;
+          source_refs?: Json;
+          status?: "active" | "preview" | "legacy" | "deprecated";
+          verified_at?: string | null;
+        };
+        Relationships: [];
+      };
+      model_catalog_sync_runs: {
+        Row: {
+          completed_at: string | null;
+          discovered_count: number;
+          error_message: string | null;
+          id: string;
+          source: string;
+          started_at: string;
+          status: "running" | "completed" | "failed" | "skipped";
+          upserted_count: number;
+        };
+        Insert: {
+          completed_at?: string | null;
+          discovered_count?: number;
+          error_message?: string | null;
+          id?: string;
+          source: string;
+          started_at?: string;
+          status?: "running" | "completed" | "failed" | "skipped";
+          upserted_count?: number;
+        };
+        Update: {
+          completed_at?: string | null;
+          discovered_count?: number;
+          error_message?: string | null;
+          source?: string;
+          started_at?: string;
+          status?: "running" | "completed" | "failed" | "skipped";
+          upserted_count?: number;
+        };
+        Relationships: [];
+      };
       benchmark_runs: {
         Row: {
           agent_name: string | null;
@@ -258,6 +341,10 @@ export type Database = {
           is_public: boolean;
           live_view_url: string | null;
           metadata: Json;
+          model_catalog_verified_at: string | null;
+          model_id: string | null;
+          model_provider: string | null;
+          reasoning_effort: string | null;
           runner_id: string | null;
           score: number | null;
           started_at: string | null;
@@ -289,6 +376,10 @@ export type Database = {
           is_public?: boolean;
           live_view_url?: string | null;
           metadata?: Json;
+          model_catalog_verified_at?: string | null;
+          model_id?: string | null;
+          model_provider?: string | null;
+          reasoning_effort?: string | null;
           runner_id?: string | null;
           score?: number | null;
           started_at?: string | null;
@@ -320,6 +411,10 @@ export type Database = {
           is_public?: boolean;
           live_view_url?: string | null;
           metadata?: Json;
+          model_catalog_verified_at?: string | null;
+          model_id?: string | null;
+          model_provider?: string | null;
+          reasoning_effort?: string | null;
           runner_id?: string | null;
           score?: number | null;
           started_at?: string | null;

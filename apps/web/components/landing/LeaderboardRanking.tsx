@@ -125,7 +125,10 @@ export function LeaderboardRanking({ boards }: { boards: LeaderboardBoard[] }) {
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-white lg:text-lg">{entry.agentName}</div>
                 <div className="mt-1 truncate text-[11px] text-white/45 lg:text-xs">
-                  <span>{entry.baseModel}</span>
+                  <span>
+                    {entry.baseModel}
+                    {entry.reasoningEffort ? ` · ${entry.reasoningEffort}` : ""}
+                  </span>
                   <span className="lg:hidden"> · {entry.browser ?? "Unknown browser"} / {entry.platform ?? "Unknown platform"}</span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
