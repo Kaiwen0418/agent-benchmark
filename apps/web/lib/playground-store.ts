@@ -28,6 +28,14 @@ export type BenchmarkOption = {
   version: string;
 };
 
+export type CalibrationRevisionOption = {
+  caseId: string;
+  revisionId: string;
+  revision: string;
+  version: string;
+  current: boolean;
+};
+
 export type RunPhase = "idle" | "booting" | "running" | "completed" | "failed";
 export type PanelTab = "events" | "files" | "screenshots" | "score";
 
@@ -53,6 +61,10 @@ type PlaygroundStore = {
   benchmark: PlaygroundBenchmark;
   benchmarks: BenchmarkOption[];
   benchmarksLoading: boolean;
+  calibrationEnabled: boolean;
+  calibrationRevisions: CalibrationRevisionOption[];
+  calibrationRevisionId: string;
+  calibrationSeed: string;
   currentRunId: string | null;
   currentExecutionMode: RunExecutionMode | null;
   liveViewUrl: string | null;
@@ -75,6 +87,8 @@ type PlaygroundStore = {
   setEndpoint: (value: string) => void;
   setApiKey: (value: string) => void;
   setBenchmark: (value: PlaygroundBenchmark) => void;
+  setCalibrationRevisionId: (value: string) => void;
+  setCalibrationSeed: (value: string) => void;
   setActiveTab: (value: PanelTab) => void;
   setLiveSlide: (index: number) => void;
   fetchQuota: () => Promise<void>;
@@ -97,6 +111,10 @@ const initialState = {
   benchmark: "" as PlaygroundBenchmark,
   benchmarks: [] as BenchmarkOption[],
   benchmarksLoading: false,
+  calibrationEnabled: false,
+  calibrationRevisions: [] as CalibrationRevisionOption[],
+  calibrationRevisionId: "",
+  calibrationSeed: "",
   currentRunId: null,
   currentExecutionMode: null,
   liveViewUrl: null,
@@ -479,6 +497,10 @@ async function requestBenchmarks() {
 
   return (await response.json()) as {
     cases: Array<{ id: string; slug: string; title: string; description: string; difficulty: string; tag: string; version: string }>;
+    calibration?: {
+      enabled: boolean;
+      revisions?: CalibrationRevisionOption[];
+    };
   };
 }
 
@@ -595,7 +617,15 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
   ...initialState,
   setEndpoint: (value) => set({ endpoint: value }),
   setApiKey: (value) => set({ apiKey: value }),
-  setBenchmark: (value) => set({ benchmark: value }),
+  setBenchmark: (value) => set((state) => ({
+    benchmark: value,
+    calibrationRevisionId:
+      state.calibrationRevisions.find((revision) => (
+        revision.caseId === value && revision.current
+      ))?.revisionId ?? "",
+  })),
+  setCalibrationRevisionId: (value) => set({ calibrationRevisionId: value }),
+  setCalibrationSeed: (value) => set({ calibrationSeed: value }),
   setActiveTab: (value) => set({ activeTab: value }),
   setLiveSlide: (index) => set({ liveSlide: index }),
   fetchQuota: async () => {
@@ -625,10 +655,18 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       // The backend orders suites with the default (hard) first; the frontend
       // simply selects the first option without hardcoding any tag.
       const defaultBenchmark = benchmarks[0]?.id ?? "";
+      const calibrationRevisions = result.calibration?.revisions ?? [];
       set((state) => ({
         benchmarks,
         benchmarksLoading: false,
         benchmark: state.benchmark || defaultBenchmark,
+        calibrationEnabled: result.calibration?.enabled === true,
+        calibrationRevisions,
+        calibrationRevisionId:
+          calibrationRevisions.find((revision) => (
+            revision.caseId === (state.benchmark || defaultBenchmark)
+            && revision.current
+          ))?.revisionId ?? "",
       }));
     } catch {
       set({ benchmarksLoading: false, runError: "Failed to load benchmark catalog." });
@@ -700,6 +738,34 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
         });
         return;
       }
+      const calibrationRevision = state.calibrationRevisions.find((revision) => (
+        revision.caseId === benchmark
+        && revision.revisionId === state.calibrationRevisionId
+      ));
+      const calibrationSeed = state.calibrationSeed.trim();
+      if (
+        state.calibrationEnabled
+        && calibrationRevision
+        && !calibrationRevision.current
+        && !calibrationSeed
+      ) {
+        set({
+          quotaLoading: false,
+          runError: "Enter a seed to run a historical revision.",
+          phase: "idle",
+          statusLine: "Enter a seed to run a historical revision.",
+          streamMode: "idle",
+        });
+        return;
+      }
+      const calibrationInput = state.calibrationEnabled
+        && calibrationRevision
+        && calibrationSeed
+        ? {
+            caseRevisionId: calibrationRevision.revisionId,
+            generationSeed: calibrationSeed,
+          }
+        : {};
       const response = await fetch("/api/runs", {
         method: "POST",
         headers: {
@@ -710,6 +776,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
           caseId: benchmark,
           executionMode: mode,
           isPublic: true,
+          ...calibrationInput,
         }),
       });
 

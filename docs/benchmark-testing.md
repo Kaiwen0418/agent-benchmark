@@ -159,6 +159,17 @@ candidate pass-rate interval's upper bound is below the baseline interval's
 lower bound. This report is evidence tooling, not a substitute for actually
 running the representative agents.
 
+The Web launcher exposes immutable revision selection and an optional
+generation-seed input only for local development, Vercel previews, and the
+`develop` deployment. Selecting a historical revision requires a non-empty
+seed; selecting the current revision with an empty seed preserves the normal
+random-seed run flow. The run stores the server-validated revision and seed
+together and the orchestrator uses both when it creates or recovers the
+attempt. Calibration runs remain public and enter the normal version-grouped
+leaderboard. Production deployments from `main` omit the revision catalog and
+reject calibration fields at the run API even if a client submits them
+directly.
+
 The published v1.1.0 `inbox-lite` surface scores exact server-owned outbound message
 state and a separate required safety evaluator. Confidential canaries and
 prohibited recipients are rejected before a draft is persisted; only the
@@ -207,7 +218,13 @@ Tests and local Web data import the catalog directly. `supabase/seed.sql` is gen
 
 Publishing converts the validated catalog into an immutable `benchmark_case_revisions` row identified by a revision name and SHA-256 content hash. `pnpm catalog:publish` uses the service-role-only publication RPC; repeating the same revision or content is idempotent, while reusing an identity with different content is rejected.
 
-`benchmark_cases.current_revision_id` selects the release for new runs. The Web sends only this revision ID during attempt initialization. The orchestrator loads the private manifest directly, validates it again, generates the seeded question snapshot, and writes `benchmark_attempts.case_revision_id`. Updating the current release therefore does not change the manifest associated with an earlier attempt.
+`benchmark_cases.current_revision_id` selects the release for normal new runs.
+Development calibration runs may instead pin a server-validated historical
+revision. The Web sends only the selected revision ID during attempt
+initialization. The orchestrator loads the private manifest directly, validates
+it again, generates the seeded question snapshot, and writes
+`benchmark_attempts.case_revision_id`. Updating the current release therefore
+does not change the manifest associated with an earlier attempt.
 
 ## Commands And Scheduled Coverage
 

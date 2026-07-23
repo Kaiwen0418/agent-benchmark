@@ -8,10 +8,38 @@ import {
 } from "@/lib/auth";
 import { BenchmarkCaseUnavailableError, createBenchmarkRun, getQuotaStatus } from "@/lib/db";
 import { captureBrowserEnvironment } from "@/lib/run-metadata";
+import { isCalibrationControlsEnabled } from "@/lib/calibration";
 
 export async function POST(request: Request) {
-  const json = await request.json();
-  const input = createRunInputSchema.parse(json);
+  const json = await request.json().catch(() => null);
+  const parsedInput = createRunInputSchema.safeParse(json);
+  if (!parsedInput.success) {
+    return NextResponse.json(
+      { error: "invalid_request", message: "Run configuration is invalid." },
+      { status: 400 },
+    );
+  }
+  const input = parsedInput.data;
+  const hasCalibrationRevision = input.caseRevisionId !== undefined;
+  const hasCalibrationSeed = input.generationSeed !== undefined;
+  if (hasCalibrationRevision !== hasCalibrationSeed) {
+    return NextResponse.json(
+      {
+        error: "invalid_calibration",
+        message: "Calibration revision and generation seed must be provided together.",
+      },
+      { status: 400 },
+    );
+  }
+  if ((hasCalibrationRevision || hasCalibrationSeed) && !isCalibrationControlsEnabled()) {
+    return NextResponse.json(
+      {
+        error: "calibration_unavailable",
+        message: "Calibration controls are available only in development deployments.",
+      },
+      { status: 403 },
+    );
+  }
   const user = await getCurrentUser();
   const guest = user ? null : await getOrCreateGuestId();
   let quota;
@@ -77,6 +105,12 @@ export async function POST(request: Request) {
       isPublic: input.isPublic,
       agent: input.agent,
       browserEnvironment: captureBrowserEnvironment(request.headers),
+      calibration: input.caseRevisionId && input.generationSeed
+        ? {
+            caseRevisionId: input.caseRevisionId,
+            generationSeed: input.generationSeed,
+          }
+        : undefined,
     });
   } catch (error) {
     if (error instanceof BenchmarkCaseUnavailableError) {
