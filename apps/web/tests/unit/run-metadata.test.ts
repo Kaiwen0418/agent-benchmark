@@ -77,6 +77,63 @@ test("repeated registration preserves the original start time", () => {
   assert.equal(patch.status, "running");
 });
 
+test("agent metadata cannot replace the server-owned calibration selection", () => {
+  const patch = buildRunMetadataUpdate({
+    currentMetadata: {
+      calibration: {
+        caseRevisionId: "revision-105",
+        generationSeed: "calibration-01",
+      },
+    },
+    currentStatus: "waiting_for_agent",
+    startedAt: null,
+    input: {
+      name: "Codex",
+      version: "1.2.3",
+      baseModel: "GPT-5",
+      metadata: {
+        calibration: {
+          caseRevisionId: "revision-current",
+          generationSeed: "replacement",
+        },
+      },
+    },
+    browserEnvironment: {},
+    now: "2026-06-19T12:00:00.000Z",
+  });
+
+  assert.deepEqual((patch.metadata as Record<string, unknown>).calibration, {
+    caseRevisionId: "revision-105",
+    generationSeed: "calibration-01",
+  });
+});
+
+test("run creation stores a server-owned calibration selection", () => {
+  const insert = buildInitialRunMetadata({
+    agent: undefined,
+    browserEnvironment: {
+      browser: "Chrome",
+      browserVersion: "126",
+      platform: "macOS",
+      mobile: false,
+    },
+    now: "2026-06-24T12:00:00.000Z",
+    serverMetadata: {
+      calibration: {
+        caseRevisionId: "revision-105",
+        generationSeed: "calibration-01",
+      },
+    },
+  });
+
+  assert.deepEqual(insert.metadata, {
+    calibration: {
+      caseRevisionId: "revision-105",
+      generationSeed: "calibration-01",
+    },
+  });
+});
+
 test("run creation persists selected identity without connecting the agent", () => {
   const insert = buildInitialRunMetadata({
     agent: { name: "Codex", version: "latest", baseModel: "GPT-5" },

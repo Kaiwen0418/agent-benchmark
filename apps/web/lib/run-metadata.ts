@@ -62,6 +62,7 @@ export function buildRunMetadataUpdate(params: {
   browserEnvironment: Record<string, unknown>;
   now: string;
 }): Database["public"]["Tables"]["benchmark_runs"]["Update"] {
+  const { calibration: _ignoredCalibration, ...agentMetadata } = params.input.metadata;
   return {
     agent_name: params.input.name,
     agent_version: params.input.version,
@@ -69,7 +70,7 @@ export function buildRunMetadataUpdate(params: {
     browser_environment: params.browserEnvironment,
     metadata: {
       ...params.currentMetadata,
-      ...params.input.metadata,
+      ...agentMetadata,
       identityReportedAt: params.now,
       identitySource: "connection-page",
     },
@@ -93,10 +94,12 @@ export function buildInitialRunMetadata(params: {
   agent: AgentIdentity | undefined;
   browserEnvironment: BrowserEnvironment;
   now: string;
+  serverMetadata?: Record<string, unknown>;
 }): Database["public"]["Tables"]["benchmark_runs"]["Update"] {
   if (!params.agent) {
     return {
       browser_environment: params.browserEnvironment,
+      metadata: params.serverMetadata,
     };
   }
 
@@ -105,6 +108,10 @@ export function buildInitialRunMetadata(params: {
     agent_version: params.agent.version,
     base_model: params.agent.baseModel,
     browser_environment: params.browserEnvironment,
-    metadata: { identityReportedAt: params.now, identitySource: "run-creation" },
+    metadata: {
+      ...params.serverMetadata,
+      identityReportedAt: params.now,
+      identitySource: "run-creation",
+    },
   };
 }

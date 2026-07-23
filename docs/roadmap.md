@@ -241,7 +241,11 @@ Revision and distractor outcomes require named persisted evaluator evidence;
 session completion metadata cannot claim either result. A deterministic
 calibration report harness now computes repeated-seed, per-family, per-track,
 time, and action-cost statistics with 95% confidence intervals; representative
-agent observations still need to be collected before production promotion. The
+agent observations still need to be collected before production promotion. A
+development-only launcher now exposes retained immutable revisions and
+repeatable generation seeds, while production omits the revision catalog and
+rejects calibration parameters; calibration results remain on the normal
+version-grouped leaderboard. The
 two development task surfaces now exist: `inbox-lite` enforces
 safe approval routing with canary/prohibited-recipient gates, while
 `sheets-lite` evaluates deterministic joins, filtering, formulas, and repair

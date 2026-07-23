@@ -212,6 +212,13 @@ export const createRunInputSchema = z.object({
   executionMode: runExecutionModeSchema.default("external-agent"),
   isPublic: z.boolean().default(true),
   agent: agentIdentitySchema.optional(),
+  caseRevisionId: z.string().uuid().optional(),
+  generationSeed: z.string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/, "Seed contains unsupported characters.")
+    .optional(),
 });
 
 export type CreateRunInput = z.infer<typeof createRunInputSchema>;

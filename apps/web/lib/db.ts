@@ -14,8 +14,10 @@ import { createSupabaseAdminClient } from "./supabase/admin";
 import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 import { hostedWebCatalogReleases } from "@agentbench/test-cases/release";
+import { hostedSuiteMetadataSchema } from "@agentbench/test-cases";
 import type { PublicConsistencyCheck } from "./public-result-consistency";
 import { groupLeaderboardVersions, type LeaderboardVersionCandidate } from "./leaderboard-versions";
+import { isCalibrationControlsEnabled, type CalibrationRunSelection } from "./calibration";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
@@ -33,7 +35,7 @@ function getGuestRunLimit() {
     return configuredLimit;
   }
 
-  return process.env.VERCEL_ENV === "preview" || process.env.VERCEL_GIT_COMMIT_REF === "develop"
+  return isCalibrationControlsEnabled()
     ? DEVELOPMENT_GUEST_RUN_LIMIT
     : PRODUCTION_GUEST_RUN_LIMIT;
 }
@@ -135,6 +137,14 @@ export type PublicBenchmarkCase = Pick<
   "id" | "slug" | "title" | "description" | "difficulty"
 > & { tag: string; version: string };
 
+export type CalibrationBenchmarkRevision = {
+  caseId: string;
+  revisionId: string;
+  revision: string;
+  version: string;
+  current: boolean;
+};
+
 // Display-safe projection for the public suite picker. Deliberately omits
 // `metadata` and `current_revision_id` so scorer-oracle surfaces never leak to
 // unauthenticated clients. `difficulty` is exposed as the suite tag and the
@@ -169,6 +179,75 @@ export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkC
       version: release?.manifest.suiteVersion ?? "",
     };
   });
+}
+
+export async function listCalibrationBenchmarkRevisions(
+  caseIds: string[],
+): Promise<CalibrationBenchmarkRevision[]> {
+  if (caseIds.length === 0) {
+    return [];
+  }
+
+  const supabase = getSupabase();
+  const [caseRows, revisionRows] = await Promise.all([
+    supabase
+      .from("benchmark_cases")
+      .select("id, current_revision_id")
+      .in("id", caseIds)
+      .eq("is_public", true)
+      .eq("provider", "hosted-web"),
+    supabase
+      .from("benchmark_case_revisions")
+      .select("id, case_id, revision, manifest, created_at")
+      .in("case_id", caseIds)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (caseRows.error || !caseRows.data) {
+    throw caseRows.error ?? new Error("Failed to load benchmark case revisions");
+  }
+  if (revisionRows.error || !revisionRows.data) {
+    throw revisionRows.error ?? new Error("Failed to load benchmark case revisions");
+  }
+
+  const currentByCaseId = new Map(
+    caseRows.data.map((row) => [row.id, row.current_revision_id]),
+  );
+
+  return revisionRows.data.flatMap((row) => {
+    if (!currentByCaseId.has(row.case_id)) {
+      return [];
+    }
+    const manifest = hostedSuiteMetadataSchema.safeParse(row.manifest);
+    if (!manifest.success) {
+      return [];
+    }
+    return [{
+      caseId: row.case_id,
+      revisionId: row.id,
+      revision: row.revision,
+      version: manifest.data.suiteVersion,
+      current: currentByCaseId.get(row.case_id) === row.id,
+    }];
+  });
+}
+
+async function isAvailableCalibrationRevision(
+  caseId: string,
+  caseRevisionId: string,
+) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("benchmark_case_revisions")
+    .select("id")
+    .eq("id", caseRevisionId)
+    .eq("case_id", caseId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+  return Boolean(data);
 }
 
 export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {  const supabase = getSupabase();
@@ -290,10 +369,20 @@ export async function createBenchmarkRun(params: {
   isPublic: boolean;
   agent?: BenchmarkRun["agent"];
   browserEnvironment: NonNullable<BenchmarkRun["browserEnvironment"]>;
+  calibration?: CalibrationRunSelection;
 }): Promise<BenchmarkRun> {
   const supabase = getSupabase();
   const benchmarkCase = await getBenchmarkCase(params.caseId);
   if (!isRunnableBenchmarkCase(benchmarkCase)) {
+    throw new BenchmarkCaseUnavailableError();
+  }
+  if (
+    params.calibration
+    && !await isAvailableCalibrationRevision(
+      benchmarkCase.id,
+      params.calibration.caseRevisionId,
+    )
+  ) {
     throw new BenchmarkCaseUnavailableError();
   }
   const initialStatus = params.executionMode === "external-agent" ? "waiting_for_agent" : "queued";
@@ -301,6 +390,9 @@ export async function createBenchmarkRun(params: {
     agent: params.agent ?? undefined,
     browserEnvironment: params.browserEnvironment,
     now: new Date().toISOString(),
+    serverMetadata: params.calibration
+      ? { calibration: params.calibration }
+      : undefined,
   });
 
   const { data, error } = await supabase
@@ -328,6 +420,7 @@ export async function createBenchmarkRun(params: {
       status: initialStatus,
       executionMode: params.executionMode,
       agent: params.agent ?? null,
+      calibration: Boolean(params.calibration),
     },
   });
 
