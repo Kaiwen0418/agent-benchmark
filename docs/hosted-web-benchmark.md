@@ -71,3 +71,12 @@ See [Hosted Site App Authoring](./hosted-site-app-authoring.md) for implementati
 - arbitrary public internet tasks
 - scoring based only on screenshots or free-form final answers
 - sharing mutable state between benchmark sessions
+
+## Complementary live-web benchmarks
+
+AgentBench intentionally evaluates deterministic, hosted web suites. For a
+complementary benchmark focused on multi-step tasks across live third-party
+websites, see [ClawBench](https://github.com/TIGER-AI-Lab/ClawBench) and its
+[project site](https://claw-bench.com/). ClawBench is an independent project;
+this link does not imply compatibility or shared scores between the two
+benchmarks.
