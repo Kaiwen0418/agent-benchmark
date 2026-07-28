@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
-import { hostedWebSuiteMetadata } from "@agentbench/test-cases";
+import { hostedWebHardSuiteMetadata, hostedWebSuiteMetadata } from "@agentbench/test-cases";
 import { generateAttemptQuestions } from "../../src/question-generation.js";
 
 function readHostedSuiteSeed() {
   return hostedWebSuiteMetadata;
+}
+
+function readScheduledSweepSeeds() {
+  const workflow = fs.readFileSync(
+    path.resolve(import.meta.dirname, "../../../../.github/workflows/hosted-variant-sweep.yml"),
+    "utf8",
+  );
+  const block = workflow.match(/generation_seed:\n((?:\s+- full-pool-\d+\n)+)/)?.[1];
+  assert.ok(block, "hosted variant sweep must declare generation seeds");
+  const seeds = [...block.matchAll(/- (full-pool-\d+)/g)].map((match) => match[1]!);
+  assert.equal(seeds.length, 7, "hosted variant sweep should retain seven covering seeds");
+  return seeds;
 }
 
 test("fresh database seed contains generated question pools without fixed session goals", () => {
@@ -52,31 +66,32 @@ test("wiki question variants declare typed answer contracts", () => {
   }
 });
 
-test("scheduled development seeds cover every declared variant", () => {
-  const suite = readHostedSuiteSeed();
-  const sessions = suite.sessions as Array<Record<string, unknown>>;
-  const selectedBySession = new Map<string, Set<string>>();
-  for (const seed of ["full-pool-0", "full-pool-1", "full-pool-2", "full-pool-18", "full-pool-59", "full-pool-152", "full-pool-197"]) {
-    const generated = generateAttemptQuestions(
-      sessions as Parameters<typeof generateAttemptQuestions>[0],
-      seed,
-    );
-    for (const session of generated.sessions) {
-      const generation = session.metadata.questionGeneration as Record<string, unknown>;
-      const key = `${session.app}/${session.taskSlug}`;
-      const selected = selectedBySession.get(key) ?? new Set<string>();
-      selected.add(String(generation.variantId));
-      selectedBySession.set(key, selected);
+for (const suite of [hostedWebSuiteMetadata, hostedWebHardSuiteMetadata]) {
+  test(`${suite.suiteSlug} scheduled development seeds cover every declared variant`, () => {
+    const sessions = suite.sessions as Array<Record<string, unknown>>;
+    const selectedBySession = new Map<string, Set<string>>();
+    for (const seed of readScheduledSweepSeeds()) {
+      const generated = generateAttemptQuestions(
+        sessions as Parameters<typeof generateAttemptQuestions>[0],
+        seed,
+      );
+      for (const session of generated.sessions) {
+        const generation = session.metadata.questionGeneration as Record<string, unknown>;
+        const key = `${session.app}/${session.taskSlug}`;
+        const selected = selectedBySession.get(key) ?? new Set<string>();
+        selected.add(String(generation.variantId));
+        selectedBySession.set(key, selected);
+      }
     }
-  }
 
-  for (const session of sessions) {
-    const variants = (session.metadata as Record<string, unknown>).questionVariants as Array<Record<string, unknown>>;
-    const key = `${String(session.app)}/${String(session.taskSlug)}`;
-    assert.deepEqual(
-      selectedBySession.get(key),
-      new Set(variants.map((variant) => String(variant.id))),
-      key,
-    );
-  }
-});
+    for (const session of sessions) {
+      const variants = (session.metadata as Record<string, unknown>).questionVariants as Array<Record<string, unknown>>;
+      const key = `${String(session.app)}/${String(session.taskSlug)}`;
+      assert.deepEqual(
+        selectedBySession.get(key),
+        new Set(variants.map((variant) => String(variant.id))),
+        key,
+      );
+    }
+  });
+}

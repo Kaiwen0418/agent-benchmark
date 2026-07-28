@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { submitRunMetadataInputSchema } from "@agentbench/protocol";
-import { submitBenchmarkRunMetadata } from "@/lib/db";
+import {
+  InvalidModelCatalogSelectionError,
+  submitBenchmarkRunMetadata,
+} from "@/lib/db";
 import { captureBrowserEnvironment } from "@/lib/run-metadata";
 
 export async function PATCH(
@@ -13,6 +16,12 @@ export async function PATCH(
   try {
     run = await submitBenchmarkRunMetadata(runId, input, captureBrowserEnvironment(request.headers));
   } catch (error) {
+    if (error instanceof InvalidModelCatalogSelectionError) {
+      return NextResponse.json(
+        { error: error.code, message: error.message },
+        { status: 400 },
+      );
+    }
     if (error instanceof Error && error.message.includes("locked")) {
       return NextResponse.json({ error: "run_metadata_locked", message: error.message }, { status: 409 });
     }

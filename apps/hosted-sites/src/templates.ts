@@ -101,7 +101,7 @@ export function layout(params: {
         if (!target) return;
         abTelemetry("click", {
           tag: target.tagName,
-          text: (target.innerText || target.value || target.getAttribute("aria-label") || "").slice(0, 80),
+          text: (target.innerText || target.getAttribute("aria-label") || target.getAttribute("name") || "").slice(0, 80),
           name: target.getAttribute("name"),
           href: target.getAttribute("href")
         });
@@ -111,8 +111,7 @@ export function layout(params: {
         if (!target || !target.getAttribute) return;
         abTelemetry("input", {
           tag: target.tagName,
-          name: target.getAttribute("name"),
-          valuePreview: String(target.value || "").slice(0, 40)
+          name: target.getAttribute("name")
         });
       }, true);
     </script>

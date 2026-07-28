@@ -11,6 +11,7 @@ WEB_URL="${AGENTBENCH_WEB_URL:-http://127.0.0.1:3999}"
 SMOKE_MODE="${SMOKE_MODE:-timeout}"
 START_LOCAL_SERVICES="${START_LOCAL_SERVICES:-true}"
 GENERATION_SEED="${GENERATION_SEED:-}"
+BENCHMARK_CASE_SLUG="${BENCHMARK_CASE_SLUG:-hosted-web-suite}"
 
 if [[ -f "${ENV_FILE}" && -z "${SUPABASE_URL:-}" && -z "${SUPABASE_SERVICE_ROLE_KEY:-}" && -z "${RUNNER_SHARED_SECRET:-}" ]]; then
   set -a
@@ -28,6 +29,10 @@ if [[ "${SMOKE_MODE}" != "full-pass" && "${SMOKE_MODE}" != "timeout" ]]; then
 fi
 if [[ "${START_LOCAL_SERVICES}" != "true" && "${START_LOCAL_SERVICES}" != "false" ]]; then
   echo "START_LOCAL_SERVICES must be true or false." >&2
+  exit 2
+fi
+if [[ ! "${BENCHMARK_CASE_SLUG}" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  echo "BENCHMARK_CASE_SLUG must be a lowercase hyphenated slug." >&2
   exit 2
 fi
 
@@ -87,6 +92,7 @@ curl -fsS "${ORCHESTRATOR_BASE_URL}/health" >/dev/null
 set +e
 SMOKE_MODE="${SMOKE_MODE}" \
 GENERATION_SEED="${GENERATION_SEED}" \
+BENCHMARK_CASE_SLUG="${BENCHMARK_CASE_SLUG}" \
 ROOT_DIR="${ROOT_DIR}" \
 HOSTED_BASE_URL="${HOSTED_BASE_URL}" \
 ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL}" \
@@ -96,6 +102,7 @@ const { pathToFileURL } = await import("node:url");
 
 const smokeMode = process.env.SMOKE_MODE;
 const generationSeed = process.env.GENERATION_SEED || undefined;
+const benchmarkCaseSlug = process.env.BENCHMARK_CASE_SLUG || "hosted-web-suite";
 const rootDir = process.env.ROOT_DIR;
 const hostedBaseUrl = process.env.HOSTED_BASE_URL;
 const orchestratorBaseUrl = process.env.ORCHESTRATOR_BASE_URL;
@@ -103,14 +110,21 @@ const runnerSecret = process.env.RUNNER_SHARED_SECRET;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+function isRecoverableFault(status, body) {
+  return [409, 503].includes(status) && body.includes(">Retry</a>");
+}
+
 async function checkedFetch(url, init = {}) {
-  const response = await fetch(url, init);
-  if (!response.ok) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(url, init);
+    if (response.ok) return response;
+    const body = await response.text();
+    if (isRecoverableFault(response.status, body) && attempt === 0) continue;
     throw new Error(
-      `${init.method ?? "GET"} ${new URL(url).pathname} failed with HTTP ${response.status}: ${await response.text()}`,
+      `${init.method ?? "GET"} ${new URL(url).pathname} failed with HTTP ${response.status}: ${body}`,
     );
   }
-  return response;
+  throw new Error(`${init.method ?? "GET"} ${new URL(url).pathname} exhausted its recovery retry.`);
 }
 
 async function orchestratorRequest(path, init = {}) {
@@ -156,11 +170,28 @@ async function insertRow(table, value) {
 }
 
 async function postForm(path, token, values) {
-  return checkedFetch(`${hostedBaseUrl}${path}?session=${encodeURIComponent(token)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(values),
-  });
+  const formUrl = `${hostedBaseUrl}${path}?session=${encodeURIComponent(token)}`;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    // Follow redirects explicitly. A successful mutation can redirect to a GET
+    // that receives a deterministic navigation fault; replaying the original
+    // POST would duplicate the already-applied mutation.
+    const response = await fetch(formUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(values),
+      redirect: "manual",
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location) throw new Error(`POST ${path} redirected without a Location header.`);
+      return checkedFetch(new URL(location, formUrl));
+    }
+    if (response.ok) return response;
+    const body = await response.text();
+    if (isRecoverableFault(response.status, body) && attempt === 0) continue;
+    throw new Error(`POST ${path} failed with HTTP ${response.status}: ${body}`);
+  }
+  throw new Error(`POST ${path} exhausted its recovery retry.`);
 }
 
 function requireObject(value, label) {
@@ -203,6 +234,23 @@ function normalizedSessions(benchmarkCase) {
   };
 }
 
+function minimumFullPassScore(manifest) {
+  if (!("capabilityMatrix" in manifest)) return 1;
+  const matrix = requireObject(manifest.capabilityMatrix, "capability matrix");
+  if (!Array.isArray(matrix.dimensions)) {
+    throw new Error("Capability matrix dimensions must be an array.");
+  }
+  const optionalWeight = matrix.dimensions.reduce((sum, value, index) => {
+    const dimension = requireObject(value, `capability dimension ${index}`);
+    if (dimension.required !== false) return sum;
+    if (typeof dimension.weight !== "number" || !Number.isFinite(dimension.weight)) {
+      throw new Error(`Capability dimension ${index} weight must be finite.`);
+    }
+    return sum + dimension.weight;
+  }, 0);
+  return Number((1 - optionalWeight).toFixed(4));
+}
+
 function generatedConfig(sessionRows, sequenceIndex) {
   const session = sessionRows.find((candidate) => candidate.sequence_index === sequenceIndex);
   const generation = requireObject(
@@ -216,6 +264,7 @@ function generatedConfig(sessionRows, sequenceIndex) {
 }
 
 const appCompletion = new Map();
+const completionContext = {};
 
 async function loadAppDriver(app) {
   if (appCompletion.has(app)) {
@@ -238,6 +287,7 @@ async function completeAndVerifySession(session, config) {
   await completeApp({
     session,
     config,
+    context: completionContext,
     hostedBaseUrl,
     checkedFetch,
     postForm,
@@ -269,11 +319,11 @@ async function loadAttemptState(attemptId) {
 async function main() {
   const benchmarkCases = await selectRows("benchmark_cases", {
     select: "id,slug,title,description,current_revision_id",
-    slug: "eq.hosted-web-suite",
+    slug: `eq.${benchmarkCaseSlug}`,
     limit: "1",
   });
   if (!Array.isArray(benchmarkCases) || benchmarkCases.length !== 1) {
-    throw new Error("benchmark case not found");
+    throw new Error(`benchmark case not found: ${benchmarkCaseSlug}`);
   }
   const benchmarkCase = benchmarkCases[0];
   const caseRevisionId = requireString(benchmarkCase.current_revision_id, "current benchmark revision");
@@ -428,11 +478,26 @@ async function main() {
   }
 
   const scoreRows = await selectRows("benchmark_attempt_scores", {
-    select: "id",
+    select: "id,status,score",
     attempt_id: `eq.${initialized.attemptId}`,
   });
   if (scoreRows.length !== 1) {
     throw new Error(`Expected one aggregate attempt score, got ${scoreRows.length}.`);
+  }
+  const aggregateScore = Number(scoreRows[0].score);
+  const minimumScore = minimumFullPassScore(revisionManifest);
+  if (
+    smokeMode === "full-pass"
+    && (
+      scoreRows[0].status !== "passed"
+      || !Number.isFinite(aggregateScore)
+      || aggregateScore < minimumScore
+      || aggregateScore > 1
+    )
+  ) {
+    throw new Error(
+      `Expected a passing aggregate score in [${minimumScore}, 1], got ${JSON.stringify(scoreRows[0])}.`,
+    );
   }
 
   const selectedVariants = sessionRows
@@ -446,7 +511,7 @@ async function main() {
     })
     .join(",");
   console.log(
-    `orchestrator smoke (${smokeMode}) passed: run=${run.id} attempt=${initialized.attemptId} sessions=${sessions.length} variants=${selectedVariants}`,
+    `orchestrator smoke (${smokeMode}) passed: case=${benchmarkCaseSlug} suite=${suite.suiteSlug}@${suite.suiteVersion} run=${run.id} attempt=${initialized.attemptId} sessions=${sessions.length} variants=${selectedVariants}`,
   );
 }
 

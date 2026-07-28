@@ -26,6 +26,7 @@ create table benchmark_runs (
   completed_at timestamptz
 );
 create table benchmark_attempts (id uuid primary key, run_id uuid not null, suite_slug text not null, suite_version text not null, status text not null);
+create table benchmark_attempt_scores (attempt_id uuid primary key, breakdown jsonb not null);
 create table hosted_web_sessions (run_id uuid not null, sequence_index int not null, first_seen_user_agent text);
 create table hosted_web_results (run_id uuid not null, app text, task_slug text, status text, score numeric, summary text, created_at timestamptz not null);
 
@@ -38,6 +39,10 @@ insert into benchmark_attempts values
   ('30000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'suite', 'v2', 'completed'),
   ('30000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002', 'suite', 'v2', 'completed'),
   ('30000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000003', 'suite', 'v2', 'failed');
+insert into benchmark_attempt_scores values
+  ('30000000-0000-0000-0000-000000000001', '{"consistency":[{"name":"Wiki answer carried into note","sourceTaskSlug":"wiki-release-answer","targetTaskSlug":"notes-followup","status":"failed","score":0,"required":true,"errorMessage":"Output from wiki-release-answer was not carried."}],"evidence":"private"}'),
+  ('30000000-0000-0000-0000-000000000002', '{"consistency":[{"name":"Private check","status":"passed","score":1,"required":true}]}'),
+  ('30000000-0000-0000-0000-000000000003', '{"consistency":[]}');
 insert into hosted_web_sessions values
   ('20000000-0000-0000-0000-000000000001', 0, 'public-agent'),
   ('20000000-0000-0000-0000-000000000002', 0, 'private-agent'),
@@ -50,9 +55,13 @@ SQL
 
 "${PSQL[@]}" -v ON_ERROR_STOP=1 < "${ROOT_DIR}/supabase/migrations/20260622000022_hosted_public_read_models.sql" >/dev/null
 "${PSQL[@]}" -v ON_ERROR_STOP=1 < "${ROOT_DIR}/supabase/migrations/20260624000025_publish_failed_benchmark_results.sql" >/dev/null
+"${PSQL[@]}" -v ON_ERROR_STOP=1 < "${ROOT_DIR}/supabase/migrations/20260713000032_public_consistency_read_model.sql" >/dev/null
 
 [[ "$(${PSQL[@]} -Atqc 'set role anon; select count(*) from public_hosted_run_summaries')" == "2" ]]
 [[ "$(${PSQL[@]} -Atqc "set role anon; select observed_user_agent from public_hosted_run_summaries where run_id = '20000000-0000-0000-0000-000000000003'")" == "failed-agent" ]]
 [[ "$(${PSQL[@]} -Atqc 'set role anon; select count(*) from public_hosted_run_tasks')" == "2" ]]
+[[ "$(${PSQL[@]} -Atqc 'set role anon; select count(*) from public_hosted_run_consistency_checks')" == "1" ]]
+[[ "$(${PSQL[@]} -Atqc "set role anon; select failure_reason from public_hosted_run_consistency_checks where run_id = '20000000-0000-0000-0000-000000000001'")" == "The required value was not carried consistently between tasks." ]]
+[[ "$(${PSQL[@]} -Atqc "select count(*) from information_schema.columns where table_name = 'public_hosted_run_consistency_checks' and column_name in ('evidence', 'breakdown', 'error_message')")" == "0" ]]
 
 echo "hosted public read-model Postgres tests passed"

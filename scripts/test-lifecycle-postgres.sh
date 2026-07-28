@@ -124,6 +124,37 @@ SQL
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.orchestrator_command_dead_letters where command_id in ('expired-dead', 'expired-resolved')")" == "1" ]]
 [[ "$("${PSQL[@]}" -Atqc "select public.prune_orchestrator_command_dead_letters(now() - interval '90 days', now() - interval '30 days', 10)")" == "1" ]]
 
+"${PSQL[@]}" -v ON_ERROR_STOP=1 \
+  < "${ROOT_DIR}/supabase/migrations/20260728000034_bound_command_dead_letter_growth.sql" >/dev/null
+
+"${PSQL[@]}" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
+truncate table public.orchestrator_command_dead_letters;
+insert into public.orchestrator_command_dead_letters (
+  command_id, stream, message_id, partition, payload_type, payload,
+  error_code, error_message, attempts, status, created_at, updated_at
+)
+select
+  'capacity-' || value,
+  'commands:p0',
+  value || '-0',
+  0,
+  'attempt.init',
+  '{}',
+  'Error',
+  'capacity test',
+  3,
+  'dead',
+  now() + value * interval '1 second',
+  now() + value * interval '1 second'
+from generate_series(1, 8) as value;
+SQL
+
+[[ "$("${PSQL[@]}" -Atqc "select public.prune_orchestrator_command_dead_letters_v2(now() - interval '1 day', now() - interval '1 day', 2, 3)")" == "2" ]]
+[[ "$("${PSQL[@]}" -Atqc "select public.prune_orchestrator_command_dead_letters_v2(now() - interval '1 day', now() - interval '1 day', 2, 3)")" == "2" ]]
+[[ "$("${PSQL[@]}" -Atqc "select public.prune_orchestrator_command_dead_letters_v2(now() - interval '1 day', now() - interval '1 day', 2, 3)")" == "1" ]]
+[[ "$("${PSQL[@]}" -Atqc "select count(*) from public.orchestrator_command_dead_letters")" == "3" ]]
+[[ "$("${PSQL[@]}" -Atqc "select string_agg(command_id, ',' order by command_id) from public.orchestrator_command_dead_letters")" == "capacity-6,capacity-7,capacity-8" ]]
+
 seed_attempt() {
   local attempt_id="$1"
   local session_id="$2"

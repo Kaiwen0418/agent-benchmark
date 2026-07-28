@@ -2,7 +2,7 @@ import type { ServerResponse } from "node:http";
 import { readTaskConfig } from "../../runtime/question-config.js";
 import type { HostedSessionFor } from "../../runtime/types.js";
 import { escapeHtml, layout, sendHtml } from "../../templates.js";
-import { readBusyEvents } from "./scheduling.js";
+import { readActorUpdate, visibleBusyEvents } from "./scheduling.js";
 
 export function renderCalendarLite(
   session: HostedSessionFor<"calendar-lite">,
@@ -18,16 +18,54 @@ export function renderCalendarLite(
         <p class="muted">${escapeHtml(calendarEvent.attendeeEmail)}${calendarEvent.secondaryAttendeeEmail ? `, ${escapeHtml(calendarEvent.secondaryAttendeeEmail)}` : ""}</p>
         ${calendarEvent.resource ? `<p class="muted">Resource: ${escapeHtml(calendarEvent.resource)}</p>` : ""}
         ${calendarEvent.occurrences ? `<p class="muted">Weekly occurrences: ${calendarEvent.occurrences}</p>` : ""}
+        <p class="muted">Revision count: ${calendarEvent.revisionCount}</p>
+        <form method="post" action="/calendar/events/${encodeURIComponent(calendarEvent.id)}?session=${encodeURIComponent(session.token)}">
+          <label>Title <input name="title" value="${escapeHtml(calendarEvent.title)}" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+          <div class="grid" style="margin-top:12px;">
+            <label>Date <input type="date" name="date" value="${escapeHtml(calendarEvent.date)}" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+            <label>Start time <input type="time" name="startTime" value="${escapeHtml(calendarEvent.startTime)}" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+            <label>Duration
+              <select name="durationMinutes" style="display:block;width:100%;margin-top:8px;">
+                ${[30, 45, 60].map((duration) => `<option value="${duration}"${calendarEvent.durationMinutes === duration ? " selected" : ""}>${duration} minutes</option>`).join("")}
+              </select>
+            </label>
+          </div>
+          <label style="display:block;margin-top:12px;">Attendee email <input type="email" name="attendeeEmail" value="${escapeHtml(calendarEvent.attendeeEmail)}" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+          <label style="display:block;margin-top:12px;">Secondary attendee email <input type="email" name="secondaryAttendeeEmail" value="${escapeHtml(calendarEvent.secondaryAttendeeEmail ?? "")}" placeholder="Optional" style="display:block;width:100%;margin-top:8px;padding:8px;" /></label>
+          <label style="display:block;margin-top:12px;">Resource <input name="resource" value="${escapeHtml(calendarEvent.resource ?? "")}" placeholder="Optional room or resource" /></label>
+          <label style="display:block;margin-top:12px;">Weekly occurrences <input type="number" min="1" name="occurrences" value="${calendarEvent.occurrences ?? 1}" /></label>
+          <button type="submit" style="margin-top:12px;">Update event</button>
+        </form>
       </article>`).join("")
     : '<article class="card"><p class="muted">No events scheduled.</p></article>';
 
   // Hard variants surface read-only existing commitments the agent must avoid.
-  let busyEvents: ReturnType<typeof readBusyEvents> = [];
+  let busyEvents: ReturnType<typeof visibleBusyEvents> = [];
+  let actorUpdate: ReturnType<typeof readActorUpdate> = null;
   try {
-    busyEvents = readBusyEvents(readTaskConfig(session.metadata));
+    const config = readTaskConfig(session.metadata);
+    actorUpdate = readActorUpdate(config);
+    busyEvents = visibleBusyEvents(config, session.state.calendarAvailabilityChecks.length);
   } catch {
     busyEvents = [];
   }
+  const latestCheck = session.state.calendarAvailabilityChecks.at(-1);
+  const coordinationHtml = actorUpdate
+    ? `<section class="panel" style="margin-top:16px;">
+      <h2>Actor availability update</h2>
+      <p class="muted">${escapeHtml(
+        latestCheck?.status === "updated"
+          ? actorUpdate.appliedMessage
+          : latestCheck?.status === "pending"
+            ? actorUpdate.pendingMessage
+            : "An external approval is pending. Recheck availability before scheduling.",
+      )}</p>
+      <p class="muted">Rechecks completed: ${session.state.calendarAvailabilityChecks.length}</p>
+      <form method="post" action="/calendar/availability/recheck?session=${encodeURIComponent(session.token)}">
+        <button type="submit">Recheck availability</button>
+      </form>
+    </section>`
+    : "";
   const commitmentsHtml = busyEvents.length
     ? `<section class="panel" style="margin-top:16px;">
       <h2>Existing commitments</h2>
@@ -70,6 +108,7 @@ export function renderCalendarLite(
         <button type="submit" style="margin-top:12px;">Create event</button>
       </form>
     </section>
+    ${coordinationHtml}
     ${commitmentsHtml}
     <section class="grid" style="margin-top:16px;">${eventsHtml}</section>`,
   }));

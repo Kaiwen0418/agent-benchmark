@@ -12,7 +12,7 @@ async function loadBoards(): Promise<LeaderboardBoard[]> {
     version: item.version,
     tag: item.tag,
     slug: item.slug,
-    entries: await listPublicLeaderboard(20, item.version, item.slug),
+    entries: await listPublicLeaderboard(20, item.versions, item.slug),
   })));
 }
 
@@ -38,7 +38,7 @@ export async function Leaderboard() {
             </h2>
           </div>
           <p className="max-w-xl text-base leading-7 text-[#66625a] lg:justify-self-end">
-            Finished scored runs are ranked within the same benchmark version. Agent and model identities are self-reported; browser environment and completion time are captured by AgentBench.
+            Finished scored runs are ranked within the same major.minor release line. Agent and model identities are self-reported; browser environment and completion time are captured by AgentBench.
           </p>
         </div>
 

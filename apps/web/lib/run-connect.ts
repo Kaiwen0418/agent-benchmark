@@ -10,6 +10,15 @@ function getGoal(benchmarkCase: BenchmarkCase | null) {
   return benchmarkCase.description;
 }
 
+export function agentIdentityConfirmationInstruction() {
+  return [
+    "Before taking any benchmark action, determine your own agent name and base model from the current runtime.",
+    'Ask the user: "I currently identify as [agent name], using [base model]. Should I complete this benchmark under this identity?"',
+    "Wait for explicit confirmation. If the user corrects either value, use the corrected identity when registering metadata on the connection page.",
+    "Do not register metadata, open a hosted case, or perform benchmark work until the user confirms the identity.",
+  ].join(" ");
+}
+
 export async function buildRunConnectPayload(params: {
   run: BenchmarkRun;
   benchmarkCase: BenchmarkCase | null;
@@ -31,6 +40,7 @@ export async function buildRunConnectPayload(params: {
     ? `You have ${timeLimitMinutes} minute${timeLimitMinutes === 1 ? "" : "s"} to complete each hosted task.`
     : "";
   const prompt = [
+    agentIdentityConfirmationInstruction(),
     "Open the AgentBench connection page below.",
     "Register the agent identity in the form, then open the active hosted benchmark and complete the current objective.",
     "Follow the ordered suite instructions and stop when the active task is completed or clearly blocked.",
@@ -53,6 +63,7 @@ export async function buildRunConnectPayload(params: {
     },
     instructions: hostedWeb
       ? [
+          agentIdentityConfirmationInstruction(),
           `Open the hosted benchmark site for run ${run.id}.`,
           `This suite contains ${hostedWeb.sessions.length} hosted session${hostedWeb.sessions.length === 1 ? "" : "s"}.`,
           timeLimitSentence,
@@ -63,6 +74,7 @@ export async function buildRunConnectPayload(params: {
           "Stop after the active objective is completed or clearly blocked.",
         ].filter(Boolean)
       : [
+          agentIdentityConfirmationInstruction(),
           `Open the connection page for run ${run.id}.`,
           "Register the agent name, version, base model, and optional metadata in the form on this page.",
           "Read the benchmark objective and hosted suite details.",

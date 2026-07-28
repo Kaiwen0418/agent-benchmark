@@ -1,4 +1,14 @@
-export async function complete({ session, config, hostedBaseUrl, checkedFetch, postForm, requireString }) {
+export async function complete({ session, config, context = {}, hostedBaseUrl, checkedFetch, postForm, requireString }) {
+  const title = typeof config.expectedTitle === "string"
+    ? config.expectedTitle
+    : typeof context.wikiReleaseAnswer === "string"
+      ? context.wikiReleaseAnswer
+      : "carried-value";
+  const body = typeof config.expectedBody === "string"
+    ? config.expectedBody
+    : typeof context.wikiPolicyAnswer === "string"
+      ? context.wikiPolicyAnswer
+      : "second-carried-value";
   if (Array.isArray(config.expectedNotes)) {
     for (const note of config.expectedNotes) {
       await postForm("/notes/create", session.token, {
@@ -7,10 +17,14 @@ export async function complete({ session, config, hostedBaseUrl, checkedFetch, p
         tag: requireString(note.tag, "notes set tag"),
       });
     }
+    await postForm("/notes/create", session.token, {
+      title,
+      body,
+      tag: requireString(config.expectedTag, "notes carry tag"),
+    });
+    context.noteTitle = title;
     return;
   }
-  const title = typeof config.expectedTitle === "string" ? config.expectedTitle : "carried-value";
-  const body = typeof config.expectedBody === "string" ? config.expectedBody : "second-carried-value";
   const tag = requireString(config.expectedTag, "notes expectedTag");
   if (config.targetNoteId) {
     await checkedFetch(`${hostedBaseUrl}/notes/${encodeURIComponent(config.targetNoteId)}/edit?session=${encodeURIComponent(session.token)}`);
@@ -18,4 +32,5 @@ export async function complete({ session, config, hostedBaseUrl, checkedFetch, p
   } else {
     await postForm("/notes/create", session.token, { title, body, tag });
   }
+  context.noteTitle = title;
 }

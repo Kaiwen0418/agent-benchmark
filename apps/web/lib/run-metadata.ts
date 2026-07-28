@@ -59,17 +59,27 @@ export function buildRunMetadataUpdate(params: {
   currentStatus: Database["public"]["Tables"]["benchmark_runs"]["Row"]["status"];
   startedAt: string | null;
   input: SubmitRunMetadataInput;
+  modelCatalogVerifiedAt?: string | null;
   browserEnvironment: Record<string, unknown>;
   now: string;
 }): Database["public"]["Tables"]["benchmark_runs"]["Update"] {
+  const {
+    calibration: _ignoredCalibration,
+    modelCatalogVerifiedAt: _ignoredModelCatalogVerifiedAt,
+    ...agentMetadata
+  } = params.input.metadata;
   return {
     agent_name: params.input.name,
     agent_version: params.input.version,
     base_model: params.input.baseModel,
+    model_provider: params.input.model?.provider ?? null,
+    model_id: params.input.model?.id ?? null,
+    reasoning_effort: params.input.model?.reasoningEffort ?? null,
+    model_catalog_verified_at: params.modelCatalogVerifiedAt ?? null,
     browser_environment: params.browserEnvironment,
     metadata: {
       ...params.currentMetadata,
-      ...params.input.metadata,
+      ...agentMetadata,
       identityReportedAt: params.now,
       identitySource: "connection-page",
     },
@@ -93,10 +103,13 @@ export function buildInitialRunMetadata(params: {
   agent: AgentIdentity | undefined;
   browserEnvironment: BrowserEnvironment;
   now: string;
+  serverMetadata?: Record<string, unknown>;
+  modelCatalogVerifiedAt?: string | null;
 }): Database["public"]["Tables"]["benchmark_runs"]["Update"] {
   if (!params.agent) {
     return {
       browser_environment: params.browserEnvironment,
+      metadata: params.serverMetadata,
     };
   }
 
@@ -104,7 +117,15 @@ export function buildInitialRunMetadata(params: {
     agent_name: params.agent.name,
     agent_version: params.agent.version,
     base_model: params.agent.baseModel,
+    model_provider: params.agent.model?.provider ?? null,
+    model_id: params.agent.model?.id ?? null,
+    reasoning_effort: params.agent.model?.reasoningEffort ?? null,
+    model_catalog_verified_at: params.modelCatalogVerifiedAt ?? null,
     browser_environment: params.browserEnvironment,
-    metadata: { identityReportedAt: params.now, identitySource: "run-creation" },
+    metadata: {
+      ...params.serverMetadata,
+      identityReportedAt: params.now,
+      identitySource: "run-creation",
+    },
   };
 }

@@ -25,7 +25,8 @@ Hosted task requests use an opaque session token in `?session=<token>` or in the
 | `GET` | `/api/runs/:runId/stream` | SSE snapshots, heartbeat, terminal event | run visibility rules |
 | `GET` | `/api/runs/:runId/artifacts` | List artifacts | run visibility rules |
 | `GET` | `/api/runs/:runId/artifacts/file?path=...` | Read local artifact file | run visibility rules |
-| `GET` | `/api/agent-options` | List curated agent and model options | public |
+| `GET` | `/api/agent-options` | List curated agent options | public |
+| `GET` | `/api/model-options?q=...&limit=...` | Search server-maintained model identities | public |
 
 ### Create Run
 
@@ -39,12 +40,31 @@ Content-Type: application/json
   "agent": {
     "name": "Codex",
     "version": "latest",
-    "baseModel": "GPT-5"
+    "baseModel": "GPT-5.6 Sol",
+    "model": {
+      "provider": "openai",
+      "id": "gpt-5.6-sol",
+      "displayName": "GPT-5.6 Sol",
+      "reasoningEffort": "medium"
+    }
   }
 }
 ```
 
-Response: `201 { run, quota }`. The service persists the self-reported identity and captures the request browser environment. `GET /api/agent-options` provides curated choices, but clients may submit other non-empty values. Quota exhaustion returns `403` with `trial_limit_reached` or `daily_limit_reached`.
+Response: `201 { run, quota }`. The service persists the self-reported identity and captures the request browser environment. The model remains one free-text input; selecting an autocomplete result adds a canonical provider/ID and optional reasoning effort. Web revalidates structured selections against `model_catalog`; arbitrary non-empty free text remains valid without a catalog verification claim. Quota exhaustion returns `403` with `trial_limit_reached` or `daily_limit_reached`.
+
+### Model Catalog
+
+`GET /api/model-options` requires at least two query characters and returns at
+most 25 ranked options. Results include provider, canonical model ID, display
+name, aliases, lifecycle status, available reasoning efforts, release time, and
+verification time. A catalog outage returns `503`; the model text field remains
+usable as free text.
+
+Catalog synchronization is not exposed as a Web API. The environment-scoped
+GitHub maintenance workflow executes `packages/model-catalog-sync` directly
+against Supabase. Missing optional provider credentials produce a recorded
+`skipped` run.
 
 ### Connect Run
 
@@ -81,6 +101,14 @@ rate-limited, and transient-error responses are never shared-cacheable.
 - `error`: stream-level error
 
 The connection lasts at most 25 seconds and clients reconnect using `retry: 2000`.
+
+### Public Result Pages
+
+`/results/:runId` renders terminal public hosted runs from filtered read-model
+views. In addition to per-task results, hard suites may expose a display-safe
+cross-app consistency breakdown. It contains check labels, task slugs, status,
+score, required flag, and generalized failure reasons only; evaluator evidence,
+generated task configuration, final state, and matched values remain private.
 
 ## Hosted-Sites API
 

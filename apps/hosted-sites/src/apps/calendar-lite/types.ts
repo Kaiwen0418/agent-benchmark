@@ -9,8 +9,20 @@ export type CalendarEvent = {
   resource?: string;
   occurrences?: number;
   createdAt: string;
+  updatedAt: string;
+  revisionCount: number;
+};
+
+export type CalendarAvailabilityCheck = {
+  id: string;
+  checkNumber: number;
+  status: "pending" | "updated";
+  eventId: string;
+  baselineRevisionCount: number;
+  createdAt: string;
 };
 
 export type AppSessionState = {
   calendarEvents: CalendarEvent[];
+  calendarAvailabilityChecks: CalendarAvailabilityCheck[];
 };

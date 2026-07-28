@@ -78,6 +78,7 @@ Relevant workflows:
 - [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 - [`.github/workflows/deploy-web.yml`](../.github/workflows/deploy-web.yml)
 - [`.github/workflows/deploy-hosted-sites.yml`](../.github/workflows/deploy-hosted-sites.yml)
+- [`.github/workflows/model-catalog-sync.yml`](../.github/workflows/model-catalog-sync.yml)
 
 Hosted CD only accepts `develop` and `main`:
 
@@ -131,6 +132,27 @@ Each Vercel Web project must independently configure:
 - optional `RUN_CONNECT_RATE_LIMIT` (defaults to 5 requests per run and client
   address per minute on each Web instance)
 
+Optional GitHub Environment secrets enable first-party model discovery:
+
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `GEMINI_API_KEY`
+- `XAI_API_KEY`
+- `MOONSHOT_API_KEY`
+- `DEEPSEEK_API_KEY`
+
+The daily model-catalog workflow checks out the matching branch and invokes
+`packages/model-catalog-sync` with `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, and any provider keys from the selected GitHub
+Environment. It writes directly to Supabase and does not call Vercel.
+OpenRouter and LiteLLM require no credential and provide supplemental discovery
+for all supported providers, including Z.AI/GLM. First-party provider APIs
+override aggregator display identity when available. Sources execute
+sequentially to avoid conflicting upserts; an unavailable source is recorded
+without deleting or downgrading existing catalog rows. Trigger the workflow
+once after applying the model-catalog migration; normal hosted Compose and Web
+deployments are unaffected.
+
 Development values must point to the test hosted hostname and development Supabase target; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
 
 All Supabase variables are server-only. Web browser bundles communicate through same-origin API routes and do not require or receive Supabase environment variables.
@@ -139,13 +161,28 @@ The self-hosted GitHub Actions runners must have `self-hosted` and `linux`, plus
 
 The development project must never operate on production containers. `COMPOSE_PROJECT_NAME`, image channel, runner label, gateway port, public URLs, and database URL are treated as one validated environment mapping by the deployment script.
 
-Command DLQ retention defaults to 90 days for unresolved `dead` records and 30
-days for `replayed` or `resolved` records. Configure
+Command DLQ retention defaults to 14 days for unresolved `dead` records and one
+day for `replayed` or `resolved` records. The maintenance sweep also retains at
+most the newest 10,000 records, deletes in batches of 1,000, and runs at most
+10 batches per sweep. New diagnostic payloads are limited to 16 KiB; oversized
+payloads are replaced with a redacted marker containing their original size
+and top-level field names. Configure
 `ORCHESTRATOR_DLQ_DEAD_RETENTION_MS`,
-`ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS`, and
-`ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE` when an environment requires different
-limits. Cleanup runs with the orchestrator maintenance sweep and failures are
-logged without dead-lettering the maintenance command itself.
+`ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS`,
+`ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE`,
+`ORCHESTRATOR_DLQ_PRUNE_MAX_BATCHES`, `ORCHESTRATOR_DLQ_MAX_ROWS`, and
+`ORCHESTRATOR_DLQ_MAX_PAYLOAD_BYTES` when an environment requires different
+limits. Cleanup uses small `SKIP LOCKED` transactions and runs with the
+orchestrator maintenance sweep; failures are logged without dead-lettering the
+maintenance command itself.
+
+After the first deployment of the bounded cleanup, PostgreSQL reuses space
+freed by normal vacuuming, but the dashboard's allocated table size may not
+drop immediately. Let the backlog drain, run
+`VACUUM (ANALYZE) public.orchestrator_command_dead_letters`, and inspect
+live/dead tuple counts. Use a separately scheduled maintenance window for
+`VACUUM FULL` or index rebuilds only when returning allocated disk space is
+necessary, because those operations can lock or disrupt the table.
 
 ## Cloudflare Tunnel
 

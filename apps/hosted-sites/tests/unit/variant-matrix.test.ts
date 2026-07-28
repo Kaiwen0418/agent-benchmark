@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hostedWebHardSuiteMetadata, hostedWebSuiteMetadata } from "@agentbench/test-cases";
+import {
+  hostedWebHardSuiteMetadata,
+  hostedWebSuiteMetadata,
+} from "@agentbench/test-cases";
 import { buildInitialSessionState, evaluateSession } from "../../src/runtime/app-registry.js";
 import { hostedAppTestSupport } from "../../src/runtime/generated-test-support.js";
 import type { HostedAppId, HostedSession } from "../../src/runtime/types.js";
@@ -27,10 +30,7 @@ type DeclaredSuite = {
 const uiVariants = ["workspace", "sidebar", "compact", "dashboard", "editorial"] as const;
 const uiThemes = ["light", "dark"] as const;
 
-// Every published suite must be swept independently: the easy and hard suites
-// have disjoint variant pools, and the hard suite (#107) must never weaken or
-// share coverage with the easy suite. Iterating both here guarantees each hard
-// variant gets positive, negative, and presentation-invariant assertions.
+// Every published suite is swept independently across all presentations.
 const suites: DeclaredSuite[] = [
   hostedWebSuiteMetadata as unknown as DeclaredSuite,
   hostedWebHardSuiteMetadata as unknown as DeclaredSuite,

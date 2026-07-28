@@ -10,6 +10,10 @@ import { SuiteTag } from "@/components/ui/SuiteTag";
 export function ConnectAgentCard() {
   const benchmark = usePlaygroundStore((state) => state.benchmark);
   const benchmarks = usePlaygroundStore((state) => state.benchmarks);
+  const calibrationEnabled = usePlaygroundStore((state) => state.calibrationEnabled);
+  const calibrationRevisions = usePlaygroundStore((state) => state.calibrationRevisions);
+  const calibrationRevisionId = usePlaygroundStore((state) => state.calibrationRevisionId);
+  const calibrationSeed = usePlaygroundStore((state) => state.calibrationSeed);
   const currentRunId = usePlaygroundStore((state) => state.currentRunId);
   const phase = usePlaygroundStore((state) => state.phase);
   const quota = usePlaygroundStore((state) => state.quota);
@@ -17,6 +21,8 @@ export function ConnectAgentCard() {
   const runError = usePlaygroundStore((state) => state.runError);
   const score = usePlaygroundStore((state) => state.score);
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
+  const setCalibrationRevisionId = usePlaygroundStore((state) => state.setCalibrationRevisionId);
+  const setCalibrationSeed = usePlaygroundStore((state) => state.setCalibrationSeed);
   const fetchQuota = usePlaygroundStore((state) => state.fetchQuota);
   const fetchBenchmarks = usePlaygroundStore((state) => state.fetchBenchmarks);
   const resumeRun = usePlaygroundStore((state) => state.resumeRun);
@@ -28,6 +34,19 @@ export function ConnectAgentCard() {
   const isDone = phase === "completed" || phase === "failed";
   const isQuotaBlocked = Boolean(quota && quota.remaining <= 0);
   const selectedBenchmark = benchmarks.find((item) => item.id === benchmark);
+  const selectedRevision = calibrationRevisions.find((revision) => (
+    revision.caseId === benchmark
+    && revision.revisionId === calibrationRevisionId
+  ));
+  const selectedCaseRevisions = calibrationRevisions.filter((revision) => (
+    revision.caseId === benchmark
+  ));
+  const isCalibrationBlocked = Boolean(
+    calibrationEnabled
+    && selectedRevision
+    && !selectedRevision.current
+    && !calibrationSeed.trim(),
+  );
 
   useEffect(() => {
     void fetchQuota();
@@ -182,6 +201,55 @@ export function ConnectAgentCard() {
           {selectedBenchmark?.description ?? "Loading available benchmark suites…"}
         </div>
 
+        {calibrationEnabled && selectedCaseRevisions.length > 0 ? (
+          <div className="rounded-[1.15rem] border border-[#c9c1b3] bg-white p-3.5">
+            <div className="mb-3">
+              <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-[#70695e]">
+                Development calibration
+              </div>
+              <p className="mt-1 text-[12px] leading-5 text-[#777064]">
+                Choose an immutable revision and enter a repeatable seed. Calibration results remain public and ranked.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-[12px] text-[#5d574d]">Suite revision</span>
+                <SiteSelect
+                  value={calibrationRevisionId}
+                  onValueChange={setCalibrationRevisionId}
+                  ariaLabel="Suite revision"
+                  options={selectedCaseRevisions.map((revision) => ({
+                    value: revision.revisionId,
+                    label: `${revision.version}${revision.current ? " · current" : ""}`,
+                  }))}
+                  compact
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-[12px] text-[#5d574d]">Generation seed</span>
+                <input
+                  type="text"
+                  value={calibrationSeed}
+                  onChange={(event) => setCalibrationSeed(event.target.value)}
+                  maxLength={120}
+                  pattern="[A-Za-z0-9][A-Za-z0-9._:-]*"
+                  placeholder="e.g. calibration-01"
+                  aria-label="Generation seed"
+                  className="w-full rounded-[0.6rem] border border-[#d8d1c4] bg-white px-3.5 py-2.5 text-sm text-[#111111] outline-none transition placeholder:text-[#9a9388] focus:border-[#111111]"
+                />
+              </label>
+            </div>
+
+            <p className="mt-2 text-[11px] leading-5 text-[#8a4334]">
+              {isCalibrationBlocked
+                ? "A historical revision requires a seed."
+                : "Leave the seed blank to start a normal run on the current revision."}
+            </p>
+          </div>
+        ) : null}
+
         <p className="text-[12px] leading-5 text-[#777064]">
           Agent identity, model, and optional metadata are registered on the connection page after the run is created.
         </p>
@@ -195,7 +263,7 @@ export function ConnectAgentCard() {
         <button
           type="button"
           onClick={() => void startRun("external-agent")}
-          disabled={quotaLoading || isQuotaBlocked || !benchmark}
+          disabled={quotaLoading || isQuotaBlocked || !benchmark || isCalibrationBlocked}
           className="w-full rounded-full bg-[#111111] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#d7ff00] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isQuotaBlocked

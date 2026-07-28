@@ -22,6 +22,13 @@ const boundedCommandDlqMigration = readFileSync(
   new URL("../../../../supabase/migrations/20260709000028_bound_command_dead_letters.sql", import.meta.url),
   "utf8",
 );
+const boundedCommandDlqGrowthMigration = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260728000034_bound_command_dead_letter_growth.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const pendingSessionTimeLimitMigration = readFileSync(
   new URL("../../../../supabase/migrations/20260710000029_set_pending_session_time_limit.sql", import.meta.url),
   "utf8",
@@ -86,6 +93,14 @@ test("command DLQ migration redacts history and prunes in bounded batches", () =
   assert.match(boundedCommandDlqMigration, /status = 'dead' and created_at < p_dead_before/i);
   assert.match(boundedCommandDlqMigration, /status in \('replayed', 'resolved'\)/i);
   assert.match(boundedCommandDlqMigration, /grant execute .* to service_role/is);
+});
+
+test("command DLQ growth migration enforces retention and capacity with locked batches", () => {
+  assert.match(boundedCommandDlqGrowthMigration, /prune_orchestrator_command_dead_letters_v2/i);
+  assert.match(boundedCommandDlqGrowthMigration, /offset bounded_max_rows/i);
+  assert.match(boundedCommandDlqGrowthMigration, /limit bounded_limit/i);
+  assert.match(boundedCommandDlqGrowthMigration, /for update of dead_letter skip locked/i);
+  assert.match(boundedCommandDlqGrowthMigration, /grant execute .* to service_role/is);
 });
 
 test("pending sessions adopt the ten-minute limit without changing active deadlines", () => {

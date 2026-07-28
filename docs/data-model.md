@@ -16,6 +16,8 @@ erDiagram
   BENCHMARK_ATTEMPTS ||--o| HOSTED_CALLBACK_OUTBOX : enqueues
   BENCHMARK_RUNS ||--o{ RUN_EVENTS : streams
   BENCHMARK_RUNS ||--o{ ARTIFACTS : owns
+  MODEL_CATALOG ||--o{ BENCHMARK_RUNS : identifies
+  MODEL_CATALOG_SYNC_RUNS }o--|| MODEL_CATALOG : refreshes
   ORCHESTRATOR_COMMAND_DEAD_LETTERS {
     uuid id PK
     text command_id UK
@@ -41,6 +43,29 @@ An immutable, service-role-only release record containing `revision`, SHA-256 `c
 The user-facing execution record. Important fields include owner (`user_id` or `guest_id`), `case_id`, `execution_mode`, lifecycle `status`, final `score`, timestamps, and error information.
 
 Current hosted-web runs use `external-agent`. Some legacy enum values and columns remain in migrations for compatibility but are not active architecture components.
+
+Agent and model identity is self-reported. `agent_name`, `agent_version`, and
+`base_model` preserve the submitted display snapshot. A catalog selection also
+stores normalized `model_provider`, canonical `model_id`, optional
+`reasoning_effort`, and the server-owned `model_catalog_verified_at` timestamp.
+Free-text input leaves these structured catalog columns null.
+
+### `model_catalog` and `model_catalog_sync_runs`
+
+`model_catalog` is the service-role-only source behind the public Web
+autocomplete API. Its composite key is `(provider, model_id)`. It stores a
+display name, aliases, lifecycle status, supported reasoning-effort labels,
+release/verification timestamps, source references, and ranking signals.
+Direct anonymous/authenticated table access is intentionally absent.
+
+Provider APIs have identity priority over OpenRouter and LiteLLM. A lower
+priority discovery source may add an alias but cannot replace an official
+display name. Missing or failed sources do not delete or downgrade entries, and
+callability alone cannot reactivate a curated legacy/deprecated entry.
+`model_catalog_sync_runs` records each source execution independently. The
+GitHub maintenance workflow invokes the package CLI with environment-scoped
+service-role credentials; Web never performs catalog writes. One provider
+outage or absent optional credential does not block the other sources.
 
 ### `benchmark_attempts`
 
@@ -90,6 +115,13 @@ Per-session evaluation result:
 Aggregate suite result with score, status, summary, and a JSON breakdown of all required and optional sessions.
 Each attempt has at most one aggregate score. A concurrent writer recovers and uses the existing row.
 
+Public result pages read terminal hosted score details through filtered views, not
+the lifecycle tables. `public_hosted_run_consistency_checks` exposes only the
+safe display projection of cross-app checks: name, source/target task slugs,
+status, score, required flag, and a generalized failure reason. It deliberately
+excludes final state, generated configuration, evaluator evidence, and matched
+values.
+
 ### `hosted_web_access_logs`
 
 Operational audit records for session access and expiry. These records have a retention sweep and should not be treated as permanent benchmark evidence.
@@ -104,12 +136,14 @@ Durable diagnostics for Redis commands that exhausted handler retries. It
 records the original command identity, Stream/message location, partition,
 payload type, redacted payload, final error, attempt count, and replay state.
 Sensitive payload keys and token-bearing strings are removed before
-persistence. Existing rows are scrubbed online in batches of at most 500 per
-maintenance sweep, avoiding a migration-time table rewrite. Dead records are
-retained for 90 days by default; replayed and resolved records are retained for
-30 days. Maintenance deletes at most 500 expired rows per sweep. Commands that
-require a removed credential must be reissued by their source rather than
-replayed from the diagnostic record.
+persistence. Existing rows are scrubbed online in bounded batches, avoiding a
+migration-time table rewrite. Dead records are retained for 14 days by
+default; replayed and resolved records are retained for one day. Capacity
+cleanup also retains only the newest 10,000 records and drains up to 10 batches
+of 1,000 rows per maintenance sweep. New payloads larger than 16 KiB are
+represented by compact, redacted diagnostics and cannot be replayed. Commands
+that require a removed credential or truncated payload must be reissued by
+their source rather than replayed from the diagnostic record.
 
 ## Redis Runtime Schema
 

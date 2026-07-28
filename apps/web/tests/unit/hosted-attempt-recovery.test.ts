@@ -75,3 +75,33 @@ test("missing hosted attempts fall through to initialization", async () => {
     else process.env.RUNNER_SHARED_SECRET = previousSecret;
   }
 });
+
+test("recovers a calibration attempt using its pinned historical revision", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousSecret = process.env.RUNNER_SHARED_SECRET;
+  process.env.RUNNER_SHARED_SECRET = "shared-secret";
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    assert.equal(url.searchParams.get("caseRevisionId"), "revision-105");
+    return Response.json({ error: "attempt_not_found" }, { status: 404 });
+  };
+
+  try {
+    assert.equal(await recoverExistingHostedWebAttemptConnection({
+      run: {
+        ...run,
+        metadata: {
+          calibration: {
+            caseRevisionId: "revision-105",
+            generationSeed: "calibration-01",
+          },
+        },
+      },
+      benchmarkCase,
+    }), null);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousSecret === undefined) delete process.env.RUNNER_SHARED_SECRET;
+    else process.env.RUNNER_SHARED_SECRET = previousSecret;
+  }
+});

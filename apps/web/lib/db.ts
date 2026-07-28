@@ -1,5 +1,6 @@
 import type {
   AppendRunEventInput,
+  AgentIdentity,
   Artifact,
   BenchmarkCase,
   BenchmarkRun,
@@ -14,12 +15,17 @@ import { createSupabaseAdminClient } from "./supabase/admin";
 import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 import { hostedWebCatalogReleases } from "@agentbench/test-cases/release";
+import { hostedSuiteMetadataSchema } from "@agentbench/test-cases";
+import type { PublicConsistencyCheck } from "./public-result-consistency";
+import { groupLeaderboardVersions, type LeaderboardVersionCandidate } from "./leaderboard-versions";
+import { isCalibrationControlsEnabled, type CalibrationRunSelection } from "./calibration";
+import { getModelCatalogOption } from "./model-catalog";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
 const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
 const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, current_revision_id, metadata, is_public, created_at";
-const benchmarkRunSelect = "id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at, metadata, agent_name, agent_version, base_model, browser_environment, is_public";
+const benchmarkRunSelect = "id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at, metadata, agent_name, agent_version, base_model, model_provider, model_id, reasoning_effort, model_catalog_verified_at, browser_environment, is_public";
 
 function getSupabase() {
   return createSupabaseAdminClient();
@@ -31,7 +37,7 @@ function getGuestRunLimit() {
     return configuredLimit;
   }
 
-  return process.env.VERCEL_ENV === "preview" || process.env.VERCEL_GIT_COMMIT_REF === "develop"
+  return isCalibrationControlsEnabled()
     ? DEVELOPMENT_GUEST_RUN_LIMIT
     : PRODUCTION_GUEST_RUN_LIMIT;
 }
@@ -43,6 +49,53 @@ export class BenchmarkCaseUnavailableError extends Error {
     super("Benchmark case is not available for hosted execution.");
     this.name = "BenchmarkCaseUnavailableError";
   }
+}
+
+export class InvalidModelCatalogSelectionError extends Error {
+  code = "invalid_model_selection" as const;
+
+  constructor(message = "The selected model is no longer available in the model catalog.") {
+    super(message);
+    this.name = "InvalidModelCatalogSelectionError";
+  }
+}
+
+async function canonicalizeAgentIdentity(
+  agent: AgentIdentity,
+): Promise<{ agent: AgentIdentity; catalogVerifiedAt: string | null }> {
+  if (!agent.model) {
+    return { agent, catalogVerifiedAt: null };
+  }
+
+  const option = await getModelCatalogOption(agent.model.provider, agent.model.id);
+  if (!option) {
+    throw new InvalidModelCatalogSelectionError();
+  }
+  if (
+    agent.model.reasoningEffort &&
+    option.reasoningEfforts.length > 0 &&
+    !option.reasoningEfforts.includes(agent.model.reasoningEffort)
+  ) {
+    throw new InvalidModelCatalogSelectionError(
+      "The selected reasoning effort is not supported by this catalog model.",
+    );
+  }
+
+  return {
+    agent: {
+      ...agent,
+      baseModel: option.displayName,
+      model: {
+        provider: option.provider,
+        id: option.modelId,
+        displayName: option.displayName,
+        ...(agent.model.reasoningEffort
+          ? { reasoningEffort: agent.model.reasoningEffort }
+          : {}),
+      },
+    },
+    catalogVerifiedAt: option.verifiedAt,
+  };
 }
 
 export function isRunnableBenchmarkCase(
@@ -133,6 +186,14 @@ export type PublicBenchmarkCase = Pick<
   "id" | "slug" | "title" | "description" | "difficulty"
 > & { tag: string; version: string };
 
+export type CalibrationBenchmarkRevision = {
+  caseId: string;
+  revisionId: string;
+  revision: string;
+  version: string;
+  current: boolean;
+};
+
 // Display-safe projection for the public suite picker. Deliberately omits
 // `metadata` and `current_revision_id` so scorer-oracle surfaces never leak to
 // unauthenticated clients. `difficulty` is exposed as the suite tag and the
@@ -167,6 +228,75 @@ export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkC
       version: release?.manifest.suiteVersion ?? "",
     };
   });
+}
+
+export async function listCalibrationBenchmarkRevisions(
+  caseIds: string[],
+): Promise<CalibrationBenchmarkRevision[]> {
+  if (caseIds.length === 0) {
+    return [];
+  }
+
+  const supabase = getSupabase();
+  const [caseRows, revisionRows] = await Promise.all([
+    supabase
+      .from("benchmark_cases")
+      .select("id, current_revision_id")
+      .in("id", caseIds)
+      .eq("is_public", true)
+      .eq("provider", "hosted-web"),
+    supabase
+      .from("benchmark_case_revisions")
+      .select("id, case_id, revision, manifest, created_at")
+      .in("case_id", caseIds)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (caseRows.error || !caseRows.data) {
+    throw caseRows.error ?? new Error("Failed to load benchmark case revisions");
+  }
+  if (revisionRows.error || !revisionRows.data) {
+    throw revisionRows.error ?? new Error("Failed to load benchmark case revisions");
+  }
+
+  const currentByCaseId = new Map(
+    caseRows.data.map((row) => [row.id, row.current_revision_id]),
+  );
+
+  return revisionRows.data.flatMap((row) => {
+    if (!currentByCaseId.has(row.case_id)) {
+      return [];
+    }
+    const manifest = hostedSuiteMetadataSchema.safeParse(row.manifest);
+    if (!manifest.success) {
+      return [];
+    }
+    return [{
+      caseId: row.case_id,
+      revisionId: row.id,
+      revision: row.revision,
+      version: manifest.data.suiteVersion,
+      current: currentByCaseId.get(row.case_id) === row.id,
+    }];
+  });
+}
+
+async function isAvailableCalibrationRevision(
+  caseId: string,
+  caseRevisionId: string,
+) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("benchmark_case_revisions")
+    .select("id")
+    .eq("id", caseRevisionId)
+    .eq("case_id", caseId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+  return Boolean(data);
 }
 
 export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {  const supabase = getSupabase();
@@ -244,6 +374,10 @@ function mapRunRow(row: {
   agent_name: string | null;
   agent_version: string | null;
   base_model: string | null;
+  model_provider: string | null;
+  model_id: string | null;
+  reasoning_effort: string | null;
+  model_catalog_verified_at: string | null;
   browser_environment: Database["public"]["Tables"]["benchmark_runs"]["Row"]["browser_environment"];
   is_public: boolean;
 }): BenchmarkRun {
@@ -266,7 +400,23 @@ function mapRunRow(row: {
     createdAt: row.created_at,
     metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {},
     agent: row.agent_name && row.agent_version && row.base_model
-      ? { name: row.agent_name, version: row.agent_version, baseModel: row.base_model }
+      ? {
+          name: row.agent_name,
+          version: row.agent_version,
+          baseModel: row.base_model,
+          ...(row.model_provider && row.model_id
+            ? {
+                model: {
+                  provider: row.model_provider,
+                  id: row.model_id,
+                  displayName: row.base_model,
+                  ...(row.reasoning_effort
+                    ? { reasoningEffort: row.reasoning_effort }
+                    : {}),
+                },
+              }
+            : {}),
+        }
       : null,
     browserEnvironment: browserEnvironment
       ? {
@@ -288,17 +438,34 @@ export async function createBenchmarkRun(params: {
   isPublic: boolean;
   agent?: BenchmarkRun["agent"];
   browserEnvironment: NonNullable<BenchmarkRun["browserEnvironment"]>;
+  calibration?: CalibrationRunSelection;
 }): Promise<BenchmarkRun> {
   const supabase = getSupabase();
+  const canonicalIdentity = params.agent
+    ? await canonicalizeAgentIdentity(params.agent)
+    : undefined;
   const benchmarkCase = await getBenchmarkCase(params.caseId);
   if (!isRunnableBenchmarkCase(benchmarkCase)) {
     throw new BenchmarkCaseUnavailableError();
   }
+  if (
+    params.calibration
+    && !await isAvailableCalibrationRevision(
+      benchmarkCase.id,
+      params.calibration.caseRevisionId,
+    )
+  ) {
+    throw new BenchmarkCaseUnavailableError();
+  }
   const initialStatus = params.executionMode === "external-agent" ? "waiting_for_agent" : "queued";
   const initialMetadata = buildInitialRunMetadata({
-    agent: params.agent ?? undefined,
+    agent: canonicalIdentity?.agent,
+    modelCatalogVerifiedAt: canonicalIdentity?.catalogVerifiedAt ?? null,
     browserEnvironment: params.browserEnvironment,
     now: new Date().toISOString(),
+    serverMetadata: params.calibration
+      ? { calibration: params.calibration }
+      : undefined,
   });
 
   const { data, error } = await supabase
@@ -325,7 +492,8 @@ export async function createBenchmarkRun(params: {
     payload: {
       status: initialStatus,
       executionMode: params.executionMode,
-      agent: params.agent ?? null,
+      agent: canonicalIdentity?.agent ?? null,
+      calibration: Boolean(params.calibration),
     },
   });
 
@@ -604,7 +772,6 @@ export async function submitBenchmarkRunMetadata(
   browserEnvironment: Record<string, unknown>,
 ) {
   const supabase = getSupabase();
-
   const existing = await supabase.from("benchmark_runs").select("metadata, status, started_at").eq("id", runId).maybeSingle();
   if (existing.error) {
     throw existing.error;
@@ -616,6 +783,11 @@ export async function submitBenchmarkRunMetadata(
     throw new Error("Run metadata is locked after the run reaches a terminal state.");
   }
 
+  const canonicalIdentity = await canonicalizeAgentIdentity(input);
+  const canonicalInput: SubmitRunMetadataInput = {
+    ...input,
+    ...canonicalIdentity.agent,
+  };
   const currentMetadata = existing.data.metadata && typeof existing.data.metadata === "object" && !Array.isArray(existing.data.metadata)
     ? existing.data.metadata
     : {};
@@ -627,7 +799,8 @@ export async function submitBenchmarkRunMetadata(
       currentMetadata,
       currentStatus: existing.data.status,
       startedAt: existing.data.started_at,
-      input,
+      input: canonicalInput,
+      modelCatalogVerifiedAt: canonicalIdentity.catalogVerifiedAt,
       browserEnvironment,
       now,
     }))
@@ -642,7 +815,14 @@ export async function submitBenchmarkRunMetadata(
     await supabase.from("run_events").insert({
       run_id: runId,
       type: "agent.connected",
-      payload: { agentName: input.name, agentVersion: input.version, baseModel: input.baseModel },
+      payload: {
+        agentName: canonicalInput.name,
+        agentVersion: canonicalInput.version,
+        baseModel: canonicalInput.baseModel,
+        modelProvider: canonicalInput.model?.provider ?? null,
+        modelId: canonicalInput.model?.id ?? null,
+        reasoningEffort: canonicalInput.model?.reasoningEffort ?? null,
+      },
     });
   }
   return data ? mapRunRow(data) : null;
@@ -660,6 +840,7 @@ export type LeaderboardEntry = {
   agentName: string;
   agentVersion: string;
   baseModel: string;
+  reasoningEffort: string | null;
   browser: string | null;
   platform: string | null;
 };
@@ -675,6 +856,7 @@ export type PublicBenchmarkResult = {
     score: number;
     summary: string;
   }>;
+  consistencyChecks: PublicConsistencyCheck[];
 };
 
 export async function getPublicBenchmarkResult(runId: string): Promise<PublicBenchmarkResult | null> {
@@ -691,13 +873,23 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
   if (!row) return null;
 
   const run = mapRunRow(row);
-  const [{ data: benchmark, error: benchmarkError }, { data: summary, error: summaryError }, { data: results, error: resultsError }] = await Promise.all([
+  const [
+    { data: benchmark, error: benchmarkError },
+    { data: summary, error: summaryError },
+    { data: results, error: resultsError },
+    { data: consistencyChecks, error: consistencyError },
+  ] = await Promise.all([
     supabase.from("benchmark_cases").select("title, description").eq("id", run.caseId).maybeSingle(),
     supabase.from("public_hosted_run_summaries").select("suite_slug, suite_version").eq("run_id", runId).maybeSingle(),
     supabase.from("public_hosted_run_tasks").select("app, task_slug, status, score, summary, created_at").eq("run_id", runId).order("created_at", { ascending: true }),
+    supabase
+      .from("public_hosted_run_consistency_checks")
+      .select("sequence_index, name, source_task_slug, target_task_slug, status, score, required, failure_reason")
+      .eq("run_id", runId)
+      .order("sequence_index", { ascending: true }),
   ]);
-  if (benchmarkError || summaryError || resultsError) {
-    throw benchmarkError ?? summaryError ?? resultsError;
+  if (benchmarkError || summaryError || resultsError || consistencyError) {
+    throw benchmarkError ?? summaryError ?? resultsError ?? consistencyError;
   }
   if (!benchmark) return null;
 
@@ -714,11 +906,22 @@ export async function getPublicBenchmarkResult(runId: string): Promise<PublicBen
       score: result.score!,
       summary: result.summary!,
     })),
+    consistencyChecks: (consistencyChecks ?? []).map((check) => ({
+      sequenceIndex: check.sequence_index ?? 0,
+      name: check.name ?? "Cross-app consistency check",
+      sourceTaskSlug: check.source_task_slug ?? "source task",
+      targetTaskSlug: check.target_task_slug ?? "target task",
+      status: check.status === "passed" ? "passed" : "failed",
+      score: check.score ?? 0,
+      required: check.required !== false,
+      failureReason: check.failure_reason,
+    })),
   };
 }
 
 export type LeaderboardVersion = {
   version: string;
+  versions: string[];
   slug: string;
   tag: string;
 };
@@ -743,7 +946,7 @@ export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersio
   const releaseByCaseId = new Map(releases.map((release) => [release.benchmarkCase.id, release]));
 
   const seen = new Set<string>();
-  const versions: LeaderboardVersion[] = [];
+  const versions: LeaderboardVersionCandidate[] = [];
   const tagBySuiteSlug = new Map<string, string>();
 
   for (const item of cases) {
@@ -800,23 +1003,18 @@ export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersio
     }
   }
 
-  return versions.sort((left, right) => {
-    if (left.tag !== right.tag) {
-      return right.tag.localeCompare(left.tag);
-    }
-    return right.version.localeCompare(left.version, undefined, { numeric: true, sensitivity: "base" });
-  });
+  return groupLeaderboardVersions(versions);
 }
 
-export async function listPublicLeaderboard(limit = 20, suiteVersion?: string, suiteSlug?: string): Promise<LeaderboardEntry[]> {
+export async function listPublicLeaderboard(limit = 20, suiteVersions?: string[], suiteSlug?: string): Promise<LeaderboardEntry[]> {
   const supabase = getSupabase();
 
   let versionRunIds: string[] | null = null;
-  if (suiteVersion) {
+  if (suiteVersions && suiteVersions.length > 0) {
     let versionAttemptsQuery = supabase
       .from("public_hosted_run_summaries")
       .select("run_id")
-      .eq("suite_version", suiteVersion)
+      .in("suite_version", suiteVersions)
       .limit(1000);
 
     if (suiteSlug) {
@@ -836,7 +1034,7 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string, s
 
   let runsQuery = supabase
     .from("benchmark_runs")
-    .select("id, case_id, status, score, started_at, completed_at, agent_name, agent_version, base_model, browser_environment")
+    .select("id, case_id, status, score, started_at, completed_at, agent_name, agent_version, base_model, reasoning_effort, browser_environment")
     .in("status", ["completed", "failed", "timeout"])
     .eq("is_public", true)
     .not("score", "is", null)
@@ -886,6 +1084,7 @@ export async function listPublicLeaderboard(limit = 20, suiteVersion?: string, s
       agentName: run.agent_name ?? "Unreported agent",
       agentVersion: run.agent_version ?? "unknown",
       baseModel: run.base_model ?? "Unreported model",
+      reasoningEffort: run.reasoning_effort,
       browser: observedBrowser?.browser ?? (typeof browser.browser === "string" ? browser.browser : null),
       platform: observedBrowser?.platform ?? (typeof browser.platform === "string" ? browser.platform : null),
     };

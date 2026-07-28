@@ -29,10 +29,11 @@ import { createIdempotentInitializer } from "./idempotent-initializer.js";
 import { createSingleFlight } from "./single-flight.js";
 import { createCallbackOutboxProcessor } from "./callback-outbox.js";
 import { resolveBenchmarkCaseRevision } from "./case-revisions.js";
+import { buildSessionScenarioFaultSchedule } from "./scenario-runtime.js";
 import {
+  compactCommandPayload,
   pruneCommandDeadLetters,
   redactCommandErrorMessage,
-  redactCommandPayload,
   scrubCommandDeadLetters,
 } from "./command-dead-letter.js";
 import {
@@ -130,9 +131,14 @@ const runSessionProjectionCacheTtlSeconds = Math.trunc(
   envNumber("HOSTED_SESSION_PROJECTION_CACHE_TTL_SECONDS", 10),
 );
 const accessLogRetentionMs = envNumber("HOSTED_ACCESS_LOG_RETENTION_MS", 14 * 24 * 60 * 60 * 1000);
-const commandDeadRetentionMs = envNumber("ORCHESTRATOR_DLQ_DEAD_RETENTION_MS", 90 * 24 * 60 * 60 * 1000);
-const commandResolvedRetentionMs = envNumber("ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS", 30 * 24 * 60 * 60 * 1000);
-const commandDeadLetterPruneBatchSize = Math.trunc(envNumber("ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE", 500));
+const commandDeadRetentionMs = envNumber("ORCHESTRATOR_DLQ_DEAD_RETENTION_MS", 14 * 24 * 60 * 60 * 1000);
+const commandResolvedRetentionMs = envNumber("ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS", 24 * 60 * 60 * 1000);
+const commandDeadLetterPruneBatchSize = Math.trunc(envNumber("ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE", 1_000));
+const commandDeadLetterPruneMaxBatches = Math.trunc(envNumber("ORCHESTRATOR_DLQ_PRUNE_MAX_BATCHES", 10));
+const commandDeadLetterMaxRows = Math.trunc(envNumber("ORCHESTRATOR_DLQ_MAX_ROWS", 10_000));
+const commandDeadLetterMaxPayloadBytes = Math.trunc(
+  envNumber("ORCHESTRATOR_DLQ_MAX_PAYLOAD_BYTES", 16_384),
+);
 
 function now() {
   return new Date().toISOString();
@@ -808,6 +814,8 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     // completion-time aggregation can evaluate them without re-reading the
     // manifest. Absent for suites without a chain.
     consistencyChecks: revision.consistencyChecks ?? [],
+    ...(revision.capabilityMatrix ? { capabilityMatrix: revision.capabilityMatrix } : {}),
+    ...(revision.scenarioGraph ? { scenarioGraph: revision.scenarioGraph } : {}),
   };
 
   const { data: attemptRow, error: attemptError } = await supabase
@@ -847,6 +855,10 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     const sessionExpiresAtValue = status === "active"
       ? sessionExpiresAt(Date.now(), suiteTimeLimitMinutes)
       : null;
+    const scenarioFaultSchedule = buildSessionScenarioFaultSchedule(
+      revision.scenarioGraph,
+      session.taskSlug,
+    );
     const sessionMetadata = {
       ...session.metadata,
       schemaVersion: 1,
@@ -859,6 +871,7 @@ async function initializeAttempt(params: InitializeAttemptParams) {
       goal: session.goal,
       startPath,
       timeLimitMinutesPerTestcase: suiteTimeLimitMinutes,
+      ...(scenarioFaultSchedule ? { scenarioFaultSchedule } : {}),
     } satisfies HostedWebSessionMetadata;
 
     return {
@@ -1357,7 +1370,7 @@ async function persistCommandDeadLetter(deadLetter: CommandDeadLetter) {
       partition: deadLetter.partition,
       partition_key: deadLetter.partitionKey,
       payload_type: deadLetter.payloadType,
-      payload: redactCommandPayload(deadLetter.payload),
+      payload: compactCommandPayload(deadLetter.payload, commandDeadLetterMaxPayloadBytes),
       error_code: deadLetter.errorCode,
       error_message: redactCommandErrorMessage(deadLetter.errorMessage),
       attempts: deadLetter.attempts,
@@ -1466,6 +1479,8 @@ async function pruneExpiredCommandDeadLetters() {
       deadRetentionMs: commandDeadRetentionMs,
       resolvedRetentionMs: commandResolvedRetentionMs,
       batchSize: commandDeadLetterPruneBatchSize,
+      maxBatches: commandDeadLetterPruneMaxBatches,
+      maxRows: commandDeadLetterMaxRows,
     });
   } catch (error) {
     console.error("[hosted-orchestrator] failed to prune command dead letters", error);

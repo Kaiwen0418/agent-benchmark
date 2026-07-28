@@ -1798,6 +1798,55 @@ test("evaluateNotes dual-carry variant fails when the carried body is empty", ()
   assert.equal(result.score, 0);
 });
 
+const rolloutNotes = [
+  { title: "API v3 implementation", body: "Track implementation.", tag: "implementation" },
+  { title: "API v3 verification", body: "Record verification.", tag: "verification" },
+];
+
+test("evaluateNotes multi-record carry variant requires the fixed set and a handoff note", () => {
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: [
+          ...rolloutNotes.map((note, index) => ({
+            id: `note_rollout_${index}`,
+            ...note,
+            createdAt: "2026-06-23T00:00:00.000Z",
+          })),
+          {
+            id: "note_handoff",
+            title: "30 days",
+            body: "90 days",
+            tag: "handoff",
+            createdAt: "2026-06-23T00:00:00.000Z",
+          },
+        ],
+      },
+      generatedTaskConfig({ expectedTag: "handoff", expectedNotes: rolloutNotes }),
+    ),
+  );
+  assert.equal(result.status, "passed");
+  assert.equal(result.evaluators[0]?.evidence?.carryNoteId, "note_handoff");
+});
+
+test("evaluateNotes multi-record carry variant fails without the handoff note", () => {
+  const result = evaluateNotes(
+    makeNotesSession(
+      {
+        notes: rolloutNotes.map((note, index) => ({
+          id: `note_rollout_${index}`,
+          ...note,
+          createdAt: "2026-06-23T00:00:00.000Z",
+        })),
+      },
+      generatedTaskConfig({ expectedTag: "handoff", expectedNotes: rolloutNotes }),
+    ),
+  );
+  assert.equal(result.status, "failed");
+  assert.equal(result.evaluators[0]?.evidence?.matchedNoteCount, rolloutNotes.length);
+  assert.equal(result.evaluators[0]?.evidence?.carryNoteId, null);
+});
+
 test("generated shopping config changes the accepted category and shipping method", () => {
   const session = makeShoppingSession({
     products: [{ id: "prod-cable", name: "USB-C Cable", category: "cable", price: 9.99 }],

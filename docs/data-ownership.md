@@ -9,8 +9,9 @@ This document defines who may read, mutate, and recover each state family. Owner
 | `profiles`, Supabase Auth identity | Web control plane | Supabase Auth / Web | Web | User identity and plan data |
 | `benchmark_cases` | Web control plane | release/admin workflow | Web, orchestrator service-role code | Case identity, visibility, display fields, and current revision pointer |
 | `public_benchmark_cases` | Web control plane | database projection | anonymous/authenticated clients, Web | Display-safe discovery only |
-| `benchmark_case_revisions` | benchmark release workflow | `publish_benchmark_case_catalog` | orchestrator, Web service-role recovery | Immutable private manifest plus synchronized public case identity |
+| `benchmark_case_revisions` | benchmark release workflow | `publish_benchmark_case_catalog` | orchestrator, Web service-role recovery | Immutable private manifest, including optional capability coverage, scenario graph, and deterministic fault schedule, plus synchronized public case identity |
 | `benchmark_runs` | Web control plane | Web | Web, public read models | User-facing run lifecycle |
+| `model_catalog`, `model_catalog_sync_runs` | Web control plane | GitHub maintenance workflow through `packages/model-catalog-sync` | Web autocomplete and run metadata validation | Operational model identity and source health; not benchmark/scoring truth |
 | `run_events`, `artifacts` | Web control plane | Web internal APIs | Web UI and public read models | Live observability and output artifacts |
 | `benchmark_attempts` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; Web uses orchestrator APIs/public read models | Canonical hosted attempt lifecycle and active-session pointer |
 | `hosted_web_sessions` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; hosted-sites recovery uses an internal API | Durable lifecycle, generated per-session task config, plus latest successful app-state snapshot |
@@ -19,7 +20,7 @@ This document defines who may read, mutate, and recover each state family. Owner
 | `hosted_web_results` | hosted orchestrator | transactional completion RPC | orchestrator and result/read-model code | One terminal result per session |
 | `benchmark_attempt_scores` | hosted orchestrator | transactional completion RPC | Web leaderboard/result reads | One aggregate score per attempt |
 | `hosted_callback_outbox` | hosted orchestrator | database trigger and orchestrator processor | orchestrator workers/maintenance | Durable handoff from hosted terminal state to Web |
-| `orchestrator_command_dead_letters` | hosted orchestrator | orchestrator workers | authenticated operator APIs | Redacted diagnostics after retry exhaustion; dead 90 days, replayed/resolved 30 days by default |
+| `orchestrator_command_dead_letters` | hosted orchestrator | orchestrator workers | authenticated operator APIs | Size-bounded redacted diagnostics after retry exhaustion; dead 14 days, replayed/resolved one day, newest 10,000 rows by default |
 
 `apps/hosted-sites` has no Supabase SDK or credential. Token and viewer recovery use an authenticated orchestrator contract. Web owns its control-plane tables and consumes hosted result data through filtered public read-model views.
 
@@ -52,10 +53,13 @@ Session keys and command keys currently share one Redis instance but are separat
 | Has Web observed terminal completion? | `hosted_callback_outbox.status` plus Web run state |
 | Did a Redis command finish recently? | Redis result key; durable side effects remain authoritative in PostgreSQL |
 | Why was a command abandoned? | `orchestrator_command_dead_letters` |
+| Which canonical model identity was selected for a run? | Structured model columns on `benchmark_runs`; `base_model` remains the display snapshot |
 
 ## Boundary Rules
 
 - Browser clients never receive Supabase service-role or Redis credentials.
+- Browsers search model identities through `/api/model-options`; they cannot
+  read the catalog or submit their own verification timestamp.
 - Web does not submit private suite manifests to orchestrator; it submits a revision ID.
 - Web does not query hosted lifecycle tables directly; attempt state comes from orchestrator APIs and public completed results come from read-model views.
 - Attempts do not own generated session definitions. `benchmark_attempts.metadata` is limited to revision identity, generation seed, active pointer, sequence pointer, and completed session ids.
@@ -65,3 +69,4 @@ Session keys and command keys currently share one Redis instance but are separat
 - Redis cannot override a terminal PostgreSQL transition.
 - Web callbacks cannot roll back a completed hosted transaction.
 - Public case discovery never exposes private manifest, variant pool, canonical answer, or evaluator configuration.
+- Public aggregate results may expose capability and scoring-dimension labels plus redacted graph counts, but never scenario node/edge/fault identifiers, triggers, or component evidence.

@@ -132,10 +132,42 @@ export const runExecutionModeSchema = z.enum(["internal", "external-agent"]);
 
 export type RunExecutionMode = z.infer<typeof runExecutionModeSchema>;
 
+export const modelCatalogStatusSchema = z.enum([
+  "active",
+  "preview",
+  "legacy",
+  "deprecated",
+]);
+
+export type ModelCatalogStatus = z.infer<typeof modelCatalogStatusSchema>;
+
+export const modelCatalogOptionSchema = z.object({
+  provider: z.string().min(1).max(80),
+  modelId: z.string().min(1).max(200),
+  displayName: z.string().min(1).max(200),
+  aliases: z.array(z.string().min(1).max(200)).default([]),
+  status: modelCatalogStatusSchema,
+  reasoningEfforts: z.array(z.string().min(1).max(40)).default([]),
+  releasedAt: z.string().datetime().nullable(),
+  verifiedAt: z.string().datetime().nullable(),
+});
+
+export type ModelCatalogOption = z.infer<typeof modelCatalogOptionSchema>;
+
+export const selectedModelIdentitySchema = z.object({
+  provider: z.string().min(1).max(80),
+  id: z.string().min(1).max(200),
+  displayName: z.string().min(1).max(200),
+  reasoningEffort: z.string().min(1).max(40).optional(),
+});
+
+export type SelectedModelIdentity = z.infer<typeof selectedModelIdentitySchema>;
+
 export const agentIdentitySchema = z.object({
   name: z.string().min(1).max(120),
   version: z.string().min(1).max(120),
   baseModel: z.string().min(1).max(160),
+  model: selectedModelIdentitySchema.optional(),
 });
 
 export type AgentIdentity = z.infer<typeof agentIdentitySchema>;
@@ -212,6 +244,13 @@ export const createRunInputSchema = z.object({
   executionMode: runExecutionModeSchema.default("external-agent"),
   isPublic: z.boolean().default(true),
   agent: agentIdentitySchema.optional(),
+  caseRevisionId: z.string().uuid().optional(),
+  generationSeed: z.string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/, "Seed contains unsupported characters.")
+    .optional(),
 });
 
 export type CreateRunInput = z.infer<typeof createRunInputSchema>;

@@ -3,7 +3,7 @@ import { evaluateCalendarLite } from "./evaluate.js";
 import { buildCalendarLiteFinalState } from "./final-state.js";
 import { createCalendarLiteRoutes } from "./routes.js";
 import { getCalendarLiteDefaultGoal, getCalendarLiteStartPath } from "./seed.js";
-import type { CalendarEvent } from "./types.js";
+import type { CalendarAvailabilityCheck, CalendarEvent } from "./types.js";
 
 function isCalendarEvent(value: unknown): value is CalendarEvent {
   return (
@@ -17,17 +17,41 @@ function isCalendarEvent(value: unknown): value is CalendarEvent {
     (value.secondaryAttendeeEmail === undefined || typeof value.secondaryAttendeeEmail === "string") &&
     (value.resource === undefined || typeof value.resource === "string") &&
     (value.occurrences === undefined || typeof value.occurrences === "number") &&
-    typeof value.createdAt === "string"
+    typeof value.createdAt === "string" &&
+    typeof value.updatedAt === "string" &&
+    typeof value.revisionCount === "number" &&
+    Number.isInteger(value.revisionCount) &&
+    value.revisionCount >= 0
   );
+}
+
+function isCalendarAvailabilityCheck(value: unknown): value is CalendarAvailabilityCheck {
+  return isStateRecord(value)
+    && typeof value.id === "string"
+    && typeof value.checkNumber === "number"
+    && Number.isInteger(value.checkNumber)
+    && (value.status === "pending" || value.status === "updated")
+    && typeof value.eventId === "string"
+    && typeof value.baselineRevisionCount === "number"
+    && Number.isInteger(value.baselineRevisionCount)
+    && value.baselineRevisionCount >= 0
+    && typeof value.createdAt === "string";
 }
 
 export const calendarLiteDefinition: HostedAppDefinition<"calendar-lite"> = {
   id: "calendar-lite",
-  stateKeys: ["calendarEvents"],
+  stateKeys: ["calendarEvents", "calendarAvailabilityChecks"],
   getDefaultStartPath: getCalendarLiteStartPath,
   getDefaultGoal: getCalendarLiteDefaultGoal,
-  buildInitialSessionState: () => ({ calendarEvents: [] }),
-  hydratePersistedState: (value) => ({ calendarEvents: readStateArray(value, "calendarEvents", isCalendarEvent) }),
+  buildInitialSessionState: () => ({ calendarEvents: [], calendarAvailabilityChecks: [] }),
+  hydratePersistedState: (value) => ({
+    calendarEvents: readStateArray(value, "calendarEvents", isCalendarEvent),
+    calendarAvailabilityChecks: readStateArray(
+      value,
+      "calendarAvailabilityChecks",
+      isCalendarAvailabilityCheck,
+    ),
+  }),
   buildFinalState: buildCalendarLiteFinalState,
   evaluate: evaluateCalendarLite,
   createRoutes: (deps) => [createCalendarLiteRoutes(deps).handle],

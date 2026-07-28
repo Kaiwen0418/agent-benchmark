@@ -85,67 +85,69 @@ test("hard consistency checks reference real sessions with source before target"
   }
 });
 
-test("hard v1.0.3 requires both wiki answers to be carried into distinct note fields", () => {
+test("hard v1.1.0 publishes the seven-session capability campaign", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
-  assert.equal(suite.suiteVersion, "v1.0.3");
+  assert.equal(suite.suiteVersion, "v1.1.0");
+  assert.equal(suite.sessions.length, 7);
+  assert.deepEqual(
+    suite.sessions.map((session) => session.app),
+    ["wiki-lite", "wiki-lite", "sheets-lite", "shopping-lite", "inbox-lite", "notes-lite", "calendar-lite"],
+  );
   assert.deepEqual(
     suite.consistencyChecks?.map((check) => ({
       sourceTaskSlug: check.sourceTaskSlug,
+      targetTaskSlug: check.targetTaskSlug,
       targetPath: check.targetPath,
+      rule: check.rule,
       required: check.required,
     })),
     [
       {
-        sourceTaskSlug: "wiki-release-answer-hard",
+        sourceTaskSlug: "capability-wiki-release-research",
+        targetTaskSlug: "capability-evidence-handoff",
         targetPath: "notes[].title",
+        rule: "equal-normalized",
         required: true,
       },
       {
-        sourceTaskSlug: "wiki-policy-answer-hard",
-        targetPath: "notes[].body",
+        sourceTaskSlug: "capability-wiki-policy-research",
+        targetTaskSlug: "capability-policy-revision-message",
+        targetPath: "sentMessages[].bodyDigest",
+        rule: "target-digest-matches-source",
         required: true,
       },
       {
-        sourceTaskSlug: "notes-followup-create-hard",
+        sourceTaskSlug: "capability-wiki-policy-research",
+        targetTaskSlug: "capability-evidence-handoff",
+        targetPath: "notes[].bodyDigest",
+        rule: "target-digest-matches-source",
+        required: true,
+      },
+      {
+        sourceTaskSlug: "capability-evidence-handoff",
+        targetTaskSlug: "capability-coordinated-schedule",
         targetPath: "calendarEvents[].title",
+        rule: "equal-normalized",
         required: true,
       },
     ],
   );
 });
 
-test("hard v1.0.3 includes combined-constraint shopping variants on the v2 seed", () => {
+test("hard v1.1.0 includes versioned sheets and inbox recovery surfaces", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
-  const shopping = suite.sessions.find((session) => session.app === "shopping-lite");
-  assert.ok(shopping);
-  assert.equal(shopping.taskVersion, "v3");
-  assert.equal(shopping.seedVersion, "shopping-lite-hard-v2");
-  const variantIds = shopping.metadata.questionVariants.map((variant) => variant.id);
-  assert.ok(variantIds.includes("probook-team-travel-kit"));
-  assert.ok(variantIds.includes("airlite-field-kit"));
+  const sheets = suite.sessions.find((session) => session.app === "sheets-lite");
+  const inbox = suite.sessions.find((session) => session.app === "inbox-lite");
+  assert.ok(sheets);
+  assert.equal(sheets.taskVersion, "v2");
+  assert.equal(sheets.seedVersion, "sheets-lite-v2");
+  assert.ok(inbox);
+  assert.equal(inbox.taskVersion, "v2");
+  assert.equal(inbox.seedVersion, "inbox-lite-v2");
+  assert.ok(inbox.metadata.questionVariants.every((variant) => variant.taskConfig.policyAmendment));
 });
 
-test("hard v1.0.3 includes ordered forum escalation on the v2 seed", () => {
-  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
-  const forum = suite.sessions.find((session) => session.app === "forum-lite");
-  assert.ok(forum);
-  assert.equal(forum.taskVersion, "v3");
-  assert.equal(forum.seedVersion, "forum-lite-hard-v2");
-  assert.ok(
-    forum.metadata.questionVariants.some((variant) => variant.id === "hot-charge-full-escalation"),
-  );
-});
-
-test("hard v1.0.3 includes conflict-aware repo workflow on the v2 seed", () => {
-  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
-  const repo = suite.sessions.find((session) => session.app === "repo-lite");
-  assert.ok(repo);
-  assert.equal(repo.taskVersion, "v3");
-  assert.equal(repo.seedVersion, "repo-lite-hard-v2");
-  assert.ok(repo.metadata.questionVariants.some((variant) => variant.id === "api-v3-conflict-rollout"));
-});
-
-test("hard v1.0.3 includes three-article wiki verification on the v2 seed", () => {
+test("hard v1.1.0 retains hard research, shopping, and handoff pools", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const wikiSessions = suite.sessions.filter((session) => session.app === "wiki-lite");
   assert.ok(wikiSessions.every((session) => session.seedVersion === "wiki-lite-hard-v2"));
@@ -154,25 +156,27 @@ test("hard v1.0.3 includes three-article wiki verification on the v2 seed", () =
       session.metadata.questionVariants.some((variant) => variant.id === "verified-api-rate-limit"),
     ),
   );
-});
-
-test("hard v1.0.3 includes a multi-record notes workflow on the v2 seed", () => {
-  const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
+  const shopping = suite.sessions.find((session) => session.app === "shopping-lite");
   const notes = suite.sessions.find((session) => session.app === "notes-lite");
+  assert.ok(shopping);
+  assert.equal(shopping.seedVersion, "shopping-lite-hard-v2");
+  assert.ok(shopping.metadata.questionVariants.some((variant) => variant.id === "probook-team-travel-kit"));
   assert.ok(notes);
-  assert.equal(notes.taskVersion, "v3");
-  assert.equal(notes.seedVersion, "notes-lite-hard-v2");
-  assert.ok(notes.metadata.questionVariants.some((variant) => variant.id === "release-rollout-note-set"));
+  assert.equal(notes.seedVersion, "notes-lite-hard-v3");
+  const rollout = notes.metadata.questionVariants.find((variant) => variant.id === "release-rollout-note-set");
+  assert.ok(rollout);
+  assert.equal(rollout.taskConfig.expectedTag, "handoff");
+  assert.match(rollout.goal, /fourth handoff note/);
 });
 
-test("hard v1.0.3 includes recurring resource calendar workflow on the v2 seed", () => {
+test("hard v1.1.0 requires the calendar campaign to reschedule in place", () => {
   const suite = hostedSuiteMetadataSchema.parse(hostedWebHardSuiteMetadata);
   const calendar = suite.sessions.find((session) => session.app === "calendar-lite");
   assert.ok(calendar);
-  assert.equal(calendar.taskVersion, "v3");
-  assert.equal(calendar.seedVersion, "calendar-lite-hard-v2");
+  assert.equal(calendar.taskVersion, "v2");
+  assert.equal(calendar.seedVersion, "calendar-lite-campaign-v2");
   assert.ok(
-    calendar.metadata.questionVariants.some((variant) => variant.id === "recurring-resource-review"),
+    calendar.metadata.questionVariants.every((variant) => variant.taskConfig.actorUpdate),
   );
 });
 
@@ -185,7 +189,7 @@ test("schema rejects a consistency check with an unknown task slug", () => {
       name: "bad",
       sourceTaskSlug: "does-not-exist",
       sourcePath: "latestAnswer.answer",
-      targetTaskSlug: "notes-followup-create-hard",
+      targetTaskSlug: "capability-evidence-handoff",
       targetPath: "notes[].title",
     },
   ];
@@ -199,9 +203,9 @@ test("schema rejects a consistency check whose source follows its target", () =>
   invalid.consistencyChecks = [
     {
       name: "reversed",
-      sourceTaskSlug: "notes-followup-create-hard",
+      sourceTaskSlug: "capability-evidence-handoff",
       sourcePath: "notes[].title",
-      targetTaskSlug: "wiki-release-answer-hard",
+      targetTaskSlug: "capability-wiki-release-research",
       targetPath: "latestAnswer.answer",
     },
   ];

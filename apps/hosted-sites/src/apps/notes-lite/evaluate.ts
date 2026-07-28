@@ -26,13 +26,13 @@ export function evaluateNotes(session: NotesEvaluationSession): HostedWebScoreRe
   const expectedNotes = readExpectedNotes(config);
   const backend =
     expectedNotes.length > 0
-      ? evaluateExpectedNoteSet(session.state.notes, expectedNotes)
+      ? evaluateExpectedNoteSet(session.state.notes, expectedNotes, expectedTag)
       : evaluateNotesBackendState(session.state.notes, expectedTitle, expectedBody, expectedTag, targetNoteId);
 
   return aggregateStrictScore({
     evaluators: [backend],
     passSummary: expectedNotes.length > 0
-      ? "Agent created the complete generated note set with exact titles, bodies, and tags."
+      ? "Agent created the complete generated note set and the carried handoff note."
       : targetNoteId
       ? expectedTitle && expectedBody
         ? "Agent updated the requested seeded note to the exact generated title, body, and tag."
@@ -60,7 +60,11 @@ function readExpectedNotes(config: Record<string, unknown>): ExpectedNote[] {
   );
 }
 
-function evaluateExpectedNoteSet(notes: Note[], expectedNotes: ExpectedNote[]): HostedWebEvaluatorResult {
+function evaluateExpectedNoteSet(
+  notes: Note[],
+  expectedNotes: ExpectedNote[],
+  expectedCarryTag: string,
+): HostedWebEvaluatorResult {
   const matched = expectedNotes.map((expected) =>
     notes.some(
       (note) =>
@@ -69,14 +73,25 @@ function evaluateExpectedNoteSet(notes: Note[], expectedNotes: ExpectedNote[]): 
         note.tag.trim() === expected.tag,
     ),
   );
-  const passed = matched.every(Boolean);
-  const evidence = { requiredNoteCount: expectedNotes.length, matchedNoteCount: matched.filter(Boolean).length };
+  const carryNote = notes.find(
+    (note) =>
+      note.tag.trim() === expectedCarryTag &&
+      note.title.trim().length > 0 &&
+      note.body.trim().length > 0,
+  );
+  const passed = matched.every(Boolean) && carryNote !== undefined;
+  const evidence = {
+    requiredNoteCount: expectedNotes.length,
+    matchedNoteCount: matched.filter(Boolean).length,
+    expectedCarryTag,
+    carryNoteId: carryNote?.id ?? null,
+  };
   return passed
     ? passedEvaluator({ type: "backend_state", name: "generated note set exists", evidence })
     : failedEvaluator({
         type: "backend_state",
         name: "generated note set exists",
-        errorMessage: "One or more required notes are missing or do not exactly match.",
+        errorMessage: "One or more required notes are missing, do not exactly match, or the carried handoff note is absent.",
         evidence,
       });
 }

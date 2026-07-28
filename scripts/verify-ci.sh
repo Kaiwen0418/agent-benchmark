@@ -4,6 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+echo "== Hosted variant sweep workflow =="
+bash scripts/test-hosted-variant-sweep.sh
+
+echo "== Model catalog sync workflow =="
+bash scripts/test-model-catalog-sync-workflow.sh
+
 echo "== Deployment classifier =="
 bash scripts/test-deploy-classifier.sh
 
@@ -43,9 +49,16 @@ bash scripts/test-case-revisions-postgres.sh
 echo "== Hosted public read models =="
 bash scripts/test-hosted-read-models-postgres.sh
 
+echo "== Model catalog Postgres integration =="
+bash scripts/test-model-catalog-postgres.sh
+
 echo "== Benchmark catalog =="
 pnpm --filter @agentbench/test-cases test
 pnpm catalog:check
+
+echo "== Model catalog synchronization =="
+pnpm --filter @agentbench/model-catalog-sync test
+pnpm --filter @agentbench/model-catalog-sync build
 
 echo "== Web library tests =="
 pnpm --filter web test

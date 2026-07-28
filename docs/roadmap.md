@@ -143,7 +143,7 @@ Exit criteria: every existing hosted app has at least one harder variant requiri
 
 ### P2.2 Hosted-Web Hard Suite
 
-Status: In Progress
+Status: Complete
 
 P2.1 raised the difficulty of individual apps in place. P2.2 (epic #107) instead publishes a **separate** hard suite, `hosted-web-hard-suite-v1`, that composes each app's `hard` variant pool and is ranked independently from the easy suite on public surfaces. The easy suite (`hosted-web-suite-v1`) is unchanged and keeps its revision identity and content hash.
 
@@ -156,16 +156,18 @@ Confidentiality is the gating constraint for the epic: scorer oracle surfaces (v
 | #113 Calendar hard pool | Complete | Conflict-avoidance, shared-window, timezone-overlap, and reschedule variants. |
 | #114 Repo hard pool | Complete | Coherent multi-edit / rename / rollout variants with required messages. |
 | #110 Shopping hard pool | Complete | Stock-aware, compatibility, and coupon constrained-checkout variants. |
-| #115 Cross-app chain | In Progress | Hard v1.0.3 requires the agent to carry two exact wiki answers into a later note's title and body; enforced only by suite-level consistency checks against the agent's own final states. |
-| #116 Verification matrix and docs | In Progress | Both suites swept independently by the generic matrix; independent semantic versioning, cross-app consistency, and scorer oracle policy documented. |
-| #140 Hard v1.0.3 scale expansion | In Progress | Expand all six hard pools, add a required workflow spanning at least three sessions, and complete deterministic, confidentiality, browser, and lifecycle verification before publishing v1.0.3. |
+| #115 Cross-app chain | Complete | Hard v1.0.5 requires the agent to carry two exact wiki answers into a later note's title and body; the body is checked through a normalized digest so final evidence stays redacted. |
+| #116 Verification matrix and docs | Complete | Both suites swept independently by the generic matrix; independent semantic versioning, cross-app consistency, and scorer oracle policy documented. |
+| #140 Hard v1.0.5 lifecycle closure | Complete | All six expanded hard pools and the three-session workflow passed the 14-job deterministic development sweep with digest-backed carry verification. |
 
 Each hard variant receives positive, negative, and presentation-invariant matrix coverage in `apps/hosted-sites/tests/unit/variant-matrix.test.ts`, which iterates every published suite. Per-session scoring stays deterministic; suite-level checks live solely in the scoring module (`evaluateSuiteConsistency`) and orchestrator aggregation. The easy and hard suites version and publish independently; a hard-suite change must not alter the easy manifest's content hash.
 
-Issue #140 is the umbrella work item for the unpublished `v1.0.3` revision. The
-revision remains `v1.0.3` while this scope is assembled; affected task and seed
-versions still advance whenever their semantics or fixtures change. Delivery is
-split into four increments:
+Issue #140 is the umbrella work item for the hard expansion. The immutable
+`v1.0.4` release exposed a dev-sweep-only evidence mismatch: Notes redacted the
+body from final state while the suite attempted to read that body directly.
+`v1.0.5` keeps the task semantics and adds digest-backed carry verification;
+affected task and seed versions still advance whenever their semantics or
+fixtures change. Delivery is split into four increments:
 
 1. Complete the two-value Wiki-to-Notes carry chain and its fail-closed
    aggregation coverage.
@@ -180,7 +182,7 @@ split into four increments:
    desktop and narrow-viewport browser verification, and full lifecycle smoke
    coverage before publishing the immutable revision.
 
-Current #140 progress: increment 1 is implemented, and the Shopping increment
+Final #140 result: increment 1 is implemented, and the Shopping increment
 adds combined compatibility, stock, multi-item, coupon, and pre-discount
 shipping-threshold variants. Shopping evaluation now independently recomputes
 subtotal, discount, shipping, and final total before accepting an order. The
@@ -192,12 +194,97 @@ simulated conflict-resolution requirements to coherent multi-file changes.
 The Wiki increment adds required article sets so a hard retrieval can require
 triangulation across three or more pages before the typed answer is submitted.
 The Notes increment supports multi-record tasks whose intermediate saves remain
-non-terminal until the complete exact note set exists in backend state.
+non-terminal until the complete exact note set and a Wiki-derived handoff note
+exist in backend state.
 The Calendar increment adds recurring occurrence and resource requirements.
 Every hard Calendar task also carries the preceding Notes title, completing a
 required Wiki-to-Notes-to-Calendar chain across three ordered sessions.
 
 Exit criteria: the hard suite is published as its own immutable revision, every hard variant and the cross-app carry checks pass unit and E2E checks, public surfaces rank the hard suite separately without exposing oracle data, and `pnpm verify:ci` remains green.
+
+### P2.3 Capability-Complete Hard Testbench
+
+Status: In progress — v1.1.0 development release ([#181](https://github.com/Kaiwen0418/agent-benchmark/issues/181))
+
+The v1.0.5 calibration baseline is structurally medium-hard: it is strong at
+deterministic multi-step browser execution, exact backend-state scoring,
+ordered mutations, bounded constraint reasoning, and a three-session carry
+chain. Its principal blind spots are conflicting-evidence reconciliation,
+branching long-horizon plans, deterministic failure recovery, asynchronous
+multi-actor state, privacy judgment, efficiency, and generalization to unseen
+task compositions. This 3/5 structural assessment is provisional until
+repeated representative-agent runs establish empirical pass rates and
+confidence intervals.
+
+P2.3 preserves the immutable v1.0.5 release and publishes v1.1.0 to the
+development catalog as a capability-oriented testbench with independently
+reported tracks rather than a single longer scripted workflow:
+
+| Capability track | Milestone scope |
+| --- | --- |
+| Research and evidence reconciliation | Resolve authoritative, stale, contradictory, and irrelevant sources and retain compact source evidence. |
+| Transaction and quantitative reasoning | Combine shopping decisions with deterministic table, formula, validation, and verification work. |
+| Software change and verification | Diagnose a seeded failing check, make dependency-aware repository changes, resolve review or conflict state, and record verification. |
+| Communication, policy, and privacy | Triage deterministic inbox-style work, route approvals, and prevent canary-secret or prohibited-recipient disclosure. |
+| Scheduling and multi-actor coordination | React to deterministic delayed approvals and availability changes by polling, rechecking, and revising a schedule. |
+| Recovery and self-correction | Recover from seeded stale views, rejected mutations, version conflicts, and interrupted navigation without duplicate side effects. |
+| Long-horizon campaign | Execute a private branch-and-merge dependency graph across at least six sessions and four apps, including one required revision after new evidence. |
+
+Implementation checkpoint: the typed capability matrix, private scenario
+graph, one-shot deterministic fault runtime, server-owned terminal capability
+aggregation, and normalized action-cost collector are implemented. The
+seven-session, six-app v1.1.0 campaign manifest
+exercises a branch-and-merge evidence handoff, a required two-recheck Inbox
+policy revision that updates a tracked provisional draft in place,
+three deterministic fault classes, and an explicitly scored inbox distractor.
+Revision and distractor outcomes require named persisted evaluator evidence;
+session completion metadata cannot claim either result. A deterministic
+calibration report harness now computes repeated-seed, per-family, per-track,
+time, and action-cost statistics with 95% confidence intervals; representative
+agent observations still need to be collected before production promotion. A
+development-only launcher now exposes retained immutable revisions and
+repeatable generation seeds, while production omits the revision catalog and
+rejects calibration parameters; calibration results remain on the normal
+version-grouped leaderboard. The
+two development task surfaces now exist: `inbox-lite` enforces
+safe approval routing with canary/prohibited-recipient gates, while
+`sheets-lite` evaluates deterministic joins, filtering, formulas, and repair
+after a coarse non-terminal validation failure. Inbox also has two cross-session carry variants. Both surfaces
+have real-browser desktop/narrow verification. Calendar campaign variants add
+a deterministic two-poll actor update and require the same tentative event to
+be rescheduled in place against revised availability without using wall-clock
+timing or leaving a duplicate. The manifest is registered as immutable hard
+v1.1.0 for development publication; v1.0.5 remains unchanged as the comparison
+baseline. Production promotion remains gated on representative calibration and
+production-like capacity evidence.
+
+Delivery is sequenced as follows:
+
+1. Establish the machine-readable capability matrix and calibrate v1.0.5 with
+   repeated runs from at least three representative agent families.
+2. Add generic private scenario-graph, deterministic fault-schedule, scoring,
+   and per-capability result contracts before app-specific implementations.
+3. Add at least two deterministic task surfaces, provisionally `inbox-lite`
+   and `sheets-lite`, and implement at least four independently runnable
+   capability tracks with two materially distinct variants each.
+4. Complete presentation, recovery, confidentiality, anti-forgery, browser,
+   lifecycle, and seed-sweep verification for the development v1.1.0 release;
+   retain calibration and production-like capacity as production-promotion
+   gates.
+
+The proposed score reports final-state correctness, cross-task consistency,
+evidence and verification, recovery and safety, and normalized interaction
+cost separately. Required final states and safety remain pass gates; wall-clock
+time remains diagnostic so infrastructure variance does not decide correctness.
+Weights and compatibility behavior must be frozen before publication.
+
+Exit criteria: every scored capability maps to at least two independent
+variants; the suite includes at least four tracks, two new task surfaces, and
+one deterministic branching campaign; recoverable-failure and privacy canary
+tests pass without oracle leakage; representative-agent repeated-seed results
+show a statistically supported difficulty increase over v1.0.5; historical
+easy and hard content hashes remain unchanged; and catalog checks, browser E2E,
+Docker-backed lifecycle smoke, and `pnpm verify:ci` are green.
 
 ## Explicit Non-Goals
 

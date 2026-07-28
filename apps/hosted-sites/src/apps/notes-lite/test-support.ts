@@ -19,6 +19,13 @@ export const notesLiteTestSupport: HostedAppTestSupport<"notes-lite"> = {
           createdAt: "2026-06-23T00:00:00.000Z",
         });
       });
+      session.state.notes.push({
+        id: "note-set-carry",
+        title: "carried-value",
+        body: "second-carried-value",
+        tag: configString(config, "expectedTag"),
+        createdAt: "2026-06-23T00:00:00.000Z",
+      });
       return;
     }
     const targetNoteId = configStringOrNull(config, "targetNoteId");

@@ -6,6 +6,7 @@ import type {
 } from "@agentbench/protocol";
 import { hostedAttemptConnectionSnapshotSchema } from "@agentbench/protocol";
 import { buildHostedAttemptReadModel } from "@agentbench/shared";
+import { readCalibrationRunSelection } from "./calibration";
 
 type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
 
@@ -296,12 +297,15 @@ async function getOrCreateHostedWebAttempt(params: {
   run: BenchmarkRun;
   benchmarkCase: BenchmarkCase;
 }) {
-  if (!params.benchmarkCase.currentRevisionId) {
+  const calibration = readCalibrationRunSelection(params.run);
+  const caseRevisionId = calibration?.caseRevisionId
+    ?? params.benchmarkCase.currentRevisionId;
+  if (!caseRevisionId) {
     throw new Error("Hosted benchmark case has no current revision.");
   }
   return {
     id: null,
-    caseRevisionId: params.benchmarkCase.currentRevisionId,
+    caseRevisionId,
     suiteSlug: params.benchmarkCase.slug,
     suiteVersion: "current",
     sessionDefinitions: [],
@@ -317,7 +321,11 @@ export async function recoverExistingHostedWebAttemptConnection(params: {
   const requestUrl = new URL(resolveHostedUrl(baseUrl, "/api/attempts/connection"));
   requestUrl.searchParams.set("runId", params.run.id);
   requestUrl.searchParams.set("caseId", params.benchmarkCase.id);
-  requestUrl.searchParams.set("caseRevisionId", params.benchmarkCase.currentRevisionId ?? "");
+  const calibration = readCalibrationRunSelection(params.run);
+  const caseRevisionId = calibration?.caseRevisionId
+    ?? params.benchmarkCase.currentRevisionId
+    ?? "";
+  requestUrl.searchParams.set("caseRevisionId", caseRevisionId);
 
   let response: Response;
   try {
@@ -351,7 +359,7 @@ export async function recoverExistingHostedWebAttemptConnection(params: {
   return toAttemptConnection({
     attempt: {
       id: snapshot.attemptId,
-      caseRevisionId: params.benchmarkCase.currentRevisionId,
+      caseRevisionId,
       suiteSlug: snapshot.suiteSlug,
       suiteVersion: snapshot.suiteVersion,
       sessionDefinitions: [],
@@ -377,12 +385,14 @@ export function buildHostedAttemptInitPayload(params: {
   caseId: string;
   caseRevisionId: string | null;
   callbackSecret: string;
+  generationSeed?: string;
 }) {
   return {
     runId: params.runId,
     caseId: params.caseId,
     caseRevisionId: params.caseRevisionId,
     callbackSecret: params.callbackSecret,
+    ...(params.generationSeed ? { generationSeed: params.generationSeed } : {}),
   };
 }
 
@@ -408,6 +418,7 @@ async function initializeHostedWebAttempt(params: {
         caseId: params.benchmarkCase.id,
         caseRevisionId: params.attempt.caseRevisionId,
         callbackSecret: runnerSecret,
+        generationSeed: readCalibrationRunSelection(params.run)?.generationSeed,
       })),
       cache: "no-store",
     });
