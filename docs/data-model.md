@@ -136,12 +136,14 @@ Durable diagnostics for Redis commands that exhausted handler retries. It
 records the original command identity, Stream/message location, partition,
 payload type, redacted payload, final error, attempt count, and replay state.
 Sensitive payload keys and token-bearing strings are removed before
-persistence. Existing rows are scrubbed online in batches of at most 500 per
-maintenance sweep, avoiding a migration-time table rewrite. Dead records are
-retained for 90 days by default; replayed and resolved records are retained for
-30 days. Maintenance deletes at most 500 expired rows per sweep. Commands that
-require a removed credential must be reissued by their source rather than
-replayed from the diagnostic record.
+persistence. Existing rows are scrubbed online in bounded batches, avoiding a
+migration-time table rewrite. Dead records are retained for 14 days by
+default; replayed and resolved records are retained for one day. Capacity
+cleanup also retains only the newest 10,000 records and drains up to 10 batches
+of 1,000 rows per maintenance sweep. New payloads larger than 16 KiB are
+represented by compact, redacted diagnostics and cannot be replayed. Commands
+that require a removed credential or truncated payload must be reissued by
+their source rather than replayed from the diagnostic record.
 
 ## Redis Runtime Schema
 

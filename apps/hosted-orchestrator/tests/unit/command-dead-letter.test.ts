@@ -3,6 +3,7 @@ import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@agentbench/shared";
 import {
+  compactCommandPayload,
   pruneCommandDeadLetters,
   redactCommandErrorMessage,
   redactCommandPayload,
@@ -41,12 +42,28 @@ test("redacts secrets from command error messages", () => {
   assert.match(redacted, /\[REDACTED\]/);
 });
 
-test("prunes command dead letters with bounded retention cutoffs", async () => {
+test("replaces oversized command payloads with compact diagnostics", () => {
+  const compacted = compactCommandPayload({
+    runId: "run-1",
+    callbackSecret: "secret-value",
+    evidence: "x".repeat(1_000),
+  }, 100);
+
+  assert.deepEqual(compacted, {
+    truncated: true,
+    originalBytes: 1031,
+    topLevelKeys: ["runId", "evidence"],
+  });
+  assert.doesNotMatch(JSON.stringify(compacted), /secret-value/);
+});
+
+test("prunes command dead letters across a bounded number of batches", async () => {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const batchResults = [500, 500, 37];
   const supabase = {
     rpc(name: string, args: Record<string, unknown>) {
       calls.push({ name, args });
-      return Promise.resolve({ data: 37, error: null });
+      return Promise.resolve({ data: batchResults.shift() ?? 0, error: null });
     },
   } as unknown as SupabaseClient<Database>;
 
@@ -56,19 +73,44 @@ test("prunes command dead letters with bounded retention cutoffs", async () => {
       deadRetentionMs: 90 * 24 * 60 * 60 * 1_000,
       resolvedRetentionMs: 30 * 24 * 60 * 60 * 1_000,
       batchSize: 500,
+      maxBatches: 5,
+      maxRows: 10_000,
     },
     Date.parse("2026-07-09T00:00:00.000Z"),
   );
 
-  assert.equal(deleted, 37);
-  assert.deepEqual(calls, [{
-    name: "prune_orchestrator_command_dead_letters",
+  assert.equal(deleted, 1_037);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls[0], {
+    name: "prune_orchestrator_command_dead_letters_v2",
     args: {
       p_dead_before: "2026-04-10T00:00:00.000Z",
       p_resolved_before: "2026-06-09T00:00:00.000Z",
       p_limit: 500,
+      p_max_rows: 10_000,
     },
-  }]);
+  });
+});
+
+test("stops command dead-letter pruning at the configured sweep budget", async () => {
+  let calls = 0;
+  const supabase = {
+    rpc() {
+      calls += 1;
+      return Promise.resolve({ data: 100, error: null });
+    },
+  } as unknown as SupabaseClient<Database>;
+
+  const deleted = await pruneCommandDeadLetters(supabase, {
+    deadRetentionMs: 1,
+    resolvedRetentionMs: 1,
+    batchSize: 100,
+    maxBatches: 3,
+    maxRows: 1_000,
+  });
+
+  assert.equal(deleted, 300);
+  assert.equal(calls, 3);
 });
 
 test("scrubs historical command dead letters in bounded batches", async () => {
