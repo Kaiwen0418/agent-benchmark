@@ -267,7 +267,7 @@ const server = createServer(async (request, response) => {
             type: "scenario.fault_applied",
             kind: observation.injected.kind,
           });
-          renderRecoverableFault(response, observation.injected.kind, `${url.pathname}${url.search}`);
+          renderRecoverableFault(response, observation.injected.kind);
           return;
         }
         if (observation.recovered) {
