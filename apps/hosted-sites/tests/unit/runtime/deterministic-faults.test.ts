@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { observeDeterministicFault } from "../../../src/runtime/deterministic-faults.js";
+import type { ServerResponse } from "node:http";
+import {
+  observeDeterministicFault,
+  renderRecoverableFault,
+} from "../../../src/runtime/deterministic-faults.js";
 
 function metadata() {
   return {
@@ -85,4 +89,26 @@ test("leaves legacy and malformed schedules unchanged", () => {
   });
   assert.equal("scenarioFaultState" in legacy, false);
   assert.equal("scenarioFaultState" in malformed, false);
+});
+
+test("renders recoverable faults without request-derived HTML", () => {
+  let status = 0;
+  let headers: Record<string, string> = {};
+  let body = "";
+  const response = {
+    writeHead(nextStatus: number, nextHeaders: Record<string, string>) {
+      status = nextStatus;
+      headers = nextHeaders;
+    },
+    end(nextBody: string) {
+      body = nextBody;
+    },
+  } as unknown as ServerResponse;
+
+  renderRecoverableFault(response, "stale-view");
+
+  assert.equal(status, 409);
+  assert.equal(headers["Content-Security-Policy"], "default-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+  assert.match(body, /<a href="">Retry<\/a>/);
+  assert.doesNotMatch(body, /<script|javascript:|onerror=/i);
 });

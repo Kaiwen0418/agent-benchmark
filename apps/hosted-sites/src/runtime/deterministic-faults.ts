@@ -144,23 +144,15 @@ const faultCopy: Record<FaultKind, { status: number; title: string; message: str
   },
 };
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
 export function renderRecoverableFault(
   response: ServerResponse,
   kind: FaultKind,
-  retryUrl: string,
 ) {
   const copy = faultCopy[kind];
   response.writeHead(copy.status, {
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
     "Retry-After": "0",
   });
   response.end(`<!doctype html>
@@ -170,7 +162,7 @@ export function renderRecoverableFault(
     <main>
       <h1>${copy.title}</h1>
       <p>${copy.message}</p>
-      <a href="${escapeHtml(retryUrl)}">Retry</a>
+      <a href="">Retry</a>
     </main>
   </body>
 </html>`);
