@@ -856,6 +856,15 @@ export type Database = {
         };
         Returns: number;
       };
+      prune_orchestrator_command_dead_letters_v2: {
+        Args: {
+          p_dead_before: string;
+          p_limit?: number;
+          p_max_rows?: number;
+          p_resolved_before: string;
+        };
+        Returns: number;
+      };
       scrub_orchestrator_command_dead_letters: {
         Args: { p_limit?: number };
         Returns: number;

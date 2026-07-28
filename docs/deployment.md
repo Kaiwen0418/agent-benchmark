@@ -161,13 +161,28 @@ The self-hosted GitHub Actions runners must have `self-hosted` and `linux`, plus
 
 The development project must never operate on production containers. `COMPOSE_PROJECT_NAME`, image channel, runner label, gateway port, public URLs, and database URL are treated as one validated environment mapping by the deployment script.
 
-Command DLQ retention defaults to 90 days for unresolved `dead` records and 30
-days for `replayed` or `resolved` records. Configure
+Command DLQ retention defaults to 14 days for unresolved `dead` records and one
+day for `replayed` or `resolved` records. The maintenance sweep also retains at
+most the newest 10,000 records, deletes in batches of 1,000, and runs at most
+10 batches per sweep. New diagnostic payloads are limited to 16 KiB; oversized
+payloads are replaced with a redacted marker containing their original size
+and top-level field names. Configure
 `ORCHESTRATOR_DLQ_DEAD_RETENTION_MS`,
-`ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS`, and
-`ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE` when an environment requires different
-limits. Cleanup runs with the orchestrator maintenance sweep and failures are
-logged without dead-lettering the maintenance command itself.
+`ORCHESTRATOR_DLQ_RESOLVED_RETENTION_MS`,
+`ORCHESTRATOR_DLQ_PRUNE_BATCH_SIZE`,
+`ORCHESTRATOR_DLQ_PRUNE_MAX_BATCHES`, `ORCHESTRATOR_DLQ_MAX_ROWS`, and
+`ORCHESTRATOR_DLQ_MAX_PAYLOAD_BYTES` when an environment requires different
+limits. Cleanup uses small `SKIP LOCKED` transactions and runs with the
+orchestrator maintenance sweep; failures are logged without dead-lettering the
+maintenance command itself.
+
+After the first deployment of the bounded cleanup, PostgreSQL reuses space
+freed by normal vacuuming, but the dashboard's allocated table size may not
+drop immediately. Let the backlog drain, run
+`VACUUM (ANALYZE) public.orchestrator_command_dead_letters`, and inspect
+live/dead tuple counts. Use a separately scheduled maintenance window for
+`VACUUM FULL` or index rebuilds only when returning allocated disk space is
+necessary, because those operations can lock or disrupt the table.
 
 ## Cloudflare Tunnel
 

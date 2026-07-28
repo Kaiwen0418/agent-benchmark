@@ -70,22 +70,54 @@ export type CommandDeadLetterRetention = {
   deadRetentionMs: number;
   resolvedRetentionMs: number;
   batchSize: number;
+  maxBatches: number;
+  maxRows: number;
 };
+
+export function compactCommandPayload(value: unknown, maxBytes: number): Json {
+  const redacted = redactCommandPayload(value);
+  const serialized = JSON.stringify(redacted);
+  const originalBytes = Buffer.byteLength(serialized, "utf8");
+  if (originalBytes <= maxBytes) {
+    return redacted;
+  }
+
+  return {
+    truncated: true,
+    originalBytes,
+    topLevelKeys:
+      redacted && typeof redacted === "object" && !Array.isArray(redacted)
+        ? Object.keys(redacted).slice(0, 25)
+        : [],
+  };
+}
 
 export async function pruneCommandDeadLetters(
   supabase: SupabaseClient<Database>,
   retention: CommandDeadLetterRetention,
   currentTime = Date.now(),
 ) {
-  const { data, error } = await supabase.rpc("prune_orchestrator_command_dead_letters", {
+  const args = {
     p_dead_before: new Date(currentTime - retention.deadRetentionMs).toISOString(),
     p_resolved_before: new Date(currentTime - retention.resolvedRetentionMs).toISOString(),
     p_limit: retention.batchSize,
-  });
-  if (error) {
-    throw error;
+    p_max_rows: retention.maxRows,
+  };
+  let deleted = 0;
+
+  for (let batch = 0; batch < retention.maxBatches; batch += 1) {
+    const { data, error } = await supabase.rpc("prune_orchestrator_command_dead_letters_v2", args);
+    if (error) {
+      throw error;
+    }
+    const batchDeleted = data ?? 0;
+    deleted += batchDeleted;
+    if (batchDeleted < retention.batchSize) {
+      break;
+    }
   }
-  return data ?? 0;
+
+  return deleted;
 }
 
 export async function scrubCommandDeadLetters(
