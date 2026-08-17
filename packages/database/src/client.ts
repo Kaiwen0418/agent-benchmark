@@ -11,6 +11,17 @@ export type DatabaseClient = {
 
 export type DatabaseEnvironment = Record<string, string | undefined>;
 
+export function postgresErrorCode(error: unknown): string | null {
+  let current = error;
+  const visited = new Set<object>();
+  while (typeof current === "object" && current !== null && !visited.has(current)) {
+    visited.add(current);
+    if ("code" in current && typeof current.code === "string") return current.code;
+    current = "cause" in current ? current.cause : null;
+  }
+  return null;
+}
+
 export function resolveDatabaseUrl(
   environment: DatabaseEnvironment = process.env,
   options: { preferDirect?: boolean } = {},

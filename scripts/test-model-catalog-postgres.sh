@@ -81,6 +81,75 @@ create table public.profiles (
   daily_run_limit integer default 3
 );
 
+create table public.benchmark_attempts (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  case_id uuid not null references public.benchmark_cases(id) on delete restrict,
+  case_revision_id uuid references public.benchmark_case_revisions(id) on delete restrict,
+  provider text not null,
+  suite_slug text not null,
+  suite_version text not null,
+  status text not null default 'created',
+  aggregate_score numeric,
+  scoring_summary jsonb not null default '{}'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  completed_at timestamptz
+);
+
+create unique index idx_benchmark_attempts_unique_hosted_run_case
+  on public.benchmark_attempts (run_id, case_id, provider)
+  where provider = 'hosted-web';
+
+create table public.hosted_web_sessions (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  case_id uuid not null references public.benchmark_cases(id) on delete restrict,
+  attempt_id uuid references public.benchmark_attempts(id) on delete cascade,
+  provider text not null default 'hosted-web',
+  app text not null,
+  task_slug text not null,
+  task_version text not null default 'v1',
+  sequence_index integer not null default 0,
+  weight numeric not null default 1,
+  required boolean not null default true,
+  seed_version text not null,
+  start_url text not null,
+  session_token_hash text not null unique,
+  status text not null default 'created',
+  metadata jsonb not null default '{}'::jsonb,
+  created_by_user_id uuid,
+  created_by_guest_id text,
+  first_seen_ip inet,
+  last_seen_ip inet,
+  first_seen_user_agent text,
+  last_seen_user_agent text,
+  access_count integer not null default 0,
+  last_accessed_at timestamptz,
+  created_at timestamptz not null default now(),
+  activated_at timestamptz,
+  completed_at timestamptz,
+  expires_at timestamptz
+);
+
+create table public.hosted_web_results (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.hosted_web_sessions(id) on delete cascade,
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  attempt_id uuid references public.benchmark_attempts(id) on delete cascade,
+  app text,
+  task_slug text,
+  status text not null,
+  score numeric not null,
+  weight numeric not null default 1,
+  summary text not null,
+  final_state jsonb not null default '{}'::jsonb,
+  evaluators jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (session_id)
+);
+
 create table public.run_events (
   id uuid primary key default gen_random_uuid(),
   run_id uuid not null references public.benchmark_runs(id) on delete cascade,

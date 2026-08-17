@@ -6,6 +6,10 @@ import {
   createBenchmarkCaseReadRepository,
   type BenchmarkCaseReadRepository,
 } from "@agentbench/database/benchmark-cases";
+import {
+  createHostedOrchestratorRepository,
+  type HostedOrchestratorRepository,
+} from "@agentbench/database/hosted-orchestrator";
 
 type OrchestratorDatabaseGlobal = typeof globalThis & {
   agentbenchOrchestratorDatabase?: DatabaseClient;
@@ -39,4 +43,9 @@ export function getOrchestratorDatabaseClient(): DatabaseClient | null {
 export function getOrchestratorBenchmarkCaseRepository(): BenchmarkCaseReadRepository | null {
   const client = getOrchestratorDatabaseClient();
   return client ? createBenchmarkCaseReadRepository(client.db) : null;
+}
+
+export function getHostedOrchestratorRepository(): HostedOrchestratorRepository | null {
+  const client = getOrchestratorDatabaseClient();
+  return client ? createHostedOrchestratorRepository(client.db) : null;
 }

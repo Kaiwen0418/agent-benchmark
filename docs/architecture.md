@@ -115,7 +115,9 @@ result/leaderboard projections. The control-plane
 repository uses PostgreSQL transactions for run creation plus its initial event,
 terminal completion plus artifacts/events, and metadata connection transitions.
 Web no longer uses PostgREST or the Supabase SDK. Hosted-orchestrator now uses
-Drizzle for immutable benchmark revision reads, with a temporary Supabase
+Drizzle for immutable benchmark revision reads, ordinary attempt/session/result
+read models, transactional attempt plus session initialization, and core session
+recovery/snapshot persistence, with a temporary Supabase
 fallback for deployments that have not configured `DATABASE_URL`; its lifecycle,
 outbox, telemetry, and DLQ repositories still use the Supabase client until
 those slices are implemented and verified. The benchmark repository exposes a display-safe

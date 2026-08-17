@@ -23,7 +23,9 @@ Compose project. This keeps image pulls, restarts, and rollbacks independent.
 Web requires only the pooled `DATABASE_URL` for persistence; it no longer needs
 Supabase URL or service-role variables. The separately deployed orchestrator
 also accepts `DATABASE_URL` and uses it for migrated repositories, currently
-immutable benchmark revision reads. It continues to require Supabase credentials
+immutable benchmark revision reads, attempt/session/result reads, and atomic
+attempt/session initialization plus session recovery/snapshot persistence. It
+continues to require Supabase credentials
 for lifecycle, outbox, telemetry, and DLQ paths until repository migration and
 cutover verification are complete. `DATABASE_POOL_MAX` defaults to `10` per
 orchestrator API/worker process, so size PgBouncer and PostgreSQL for the sum of
