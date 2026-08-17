@@ -96,6 +96,30 @@ Completion criteria: an operator can identify a stuck attempt and its last durab
 
 Completion criteria: transport changes do not require lifecycle changes, and incompatible command payloads fail validation before entering Redis Streams.
 
+## P1: Database Portability
+
+Status: In Progress ([#211](https://github.com/Kaiwen0418/agent-benchmark/issues/211))
+
+- Introduce domain-owned Drizzle repositories using standard PostgreSQL
+  connections while Supabase PostgreSQL remains the initial host.
+- Migrate model-catalog maintenance, Web control-plane persistence, and
+  orchestrator persistence in independently deployable slices.
+- Preserve lifecycle stored functions, locking, idempotency, public read
+  projections, and immutable migration history until equivalent integration
+  coverage exists.
+- Replace Supabase Auth schema coupling with application-owned Auth.js tables
+  before moving the database host.
+- Add self-hosted PostgreSQL, PgBouncer, backups, restore verification, metrics,
+  and a rollback-tested development cutover before production migration.
+- Keep runtime and migration contracts provider-neutral so a later managed
+  PostgreSQL deployment changes infrastructure and secrets rather than
+  application repositories.
+
+Completion criteria: a clean standard PostgreSQL deployment can restore and
+serve all application data without Supabase APIs, browsers have no direct
+database access, and development plus production cutovers have validated
+integrity, backup, restore, and rollback procedures.
+
 ## P1: Benchmark Quality
 
 Detailed scoring and coverage rules are defined in [Benchmark Scoring And Testing](./benchmark-testing.md). Roadmap status remains here.

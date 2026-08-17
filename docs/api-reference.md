@@ -63,7 +63,7 @@ usable as free text.
 
 Catalog synchronization is not exposed as a Web API. The environment-scoped
 GitHub maintenance workflow executes `packages/model-catalog-sync` directly
-against Supabase. Missing optional provider credentials produce a recorded
+against PostgreSQL through the Drizzle model-catalog repository. Missing optional provider credentials produce a recorded
 `skipped` run.
 
 ### Connect Run

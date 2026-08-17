@@ -11,6 +11,7 @@ cleanup() {
 trap cleanup EXIT
 
 docker run -d --rm --name "${CONTAINER}" \
+  -p 127.0.0.1::5432 \
   -e POSTGRES_PASSWORD=postgres \
   postgres:17-alpine >/dev/null
 
@@ -72,5 +73,9 @@ if "${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "
   echo "model catalog accepted an invalid lifecycle status" >&2
   exit 1
 fi
+
+POSTGRES_PORT="$(docker port "${CONTAINER}" 5432/tcp | sed -E 's/.*:([0-9]+)$/\1/')"
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:${POSTGRES_PORT}/postgres" \
+  pnpm --filter @agentbench/database test:integration
 
 echo "model catalog postgres tests passed"

@@ -141,10 +141,17 @@ Optional GitHub Environment secrets enable first-party model discovery:
 - `MOONSHOT_API_KEY`
 - `DEEPSEEK_API_KEY`
 
+The model-catalog workflow also requires `DATABASE_DIRECT_URL`. During the
+database portability transition it falls back to the matching legacy
+`TEST_SUPABASE_DB_URL` or `PROD_SUPABASE_DB_URL` secret, but new environments
+should configure the provider-neutral name. This job uses direct PostgreSQL
+through Drizzle and does not require `SUPABASE_URL` or
+`SUPABASE_SERVICE_ROLE_KEY`.
+
 The daily model-catalog workflow checks out the matching branch and invokes
-`packages/model-catalog-sync` with `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`, and any provider keys from the selected GitHub
-Environment. It writes directly to Supabase and does not call Vercel.
+`packages/model-catalog-sync` with `DATABASE_DIRECT_URL` and any provider keys
+from the selected GitHub Environment. It writes directly to PostgreSQL and does
+not call Vercel or Supabase REST.
 OpenRouter and LiteLLM require no credential and provide supplemental discovery
 for all supported providers, including Z.AI/GLM. First-party provider APIs
 override aggregator display identity when available. Sources execute

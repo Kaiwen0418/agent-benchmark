@@ -57,6 +57,7 @@ pnpm --filter @agentbench/test-cases test
 pnpm catalog:check
 
 echo "== Model catalog synchronization =="
+pnpm --filter @agentbench/database test
 pnpm --filter @agentbench/model-catalog-sync test
 pnpm --filter @agentbench/model-catalog-sync build
 

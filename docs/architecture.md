@@ -86,8 +86,9 @@ Supabase stores durable control-plane and audit data: runs, attempts, hosted ses
 `model_catalog` is a Web-owned operational catalog, not benchmark truth. It
 combines canonical IDs from provider APIs with discovery-only aggregator
 signals. The environment-scoped GitHub maintenance workflow runs
-`packages/model-catalog-sync` and writes directly to Supabase; synchronization
-does not traverse the Web deployment. A selected entry is revalidated by Web
+`packages/model-catalog-sync` and writes directly to PostgreSQL through the
+provider-neutral Drizzle repository in `packages/database`; synchronization
+does not traverse the Web deployment or Supabase REST API. A selected entry is revalidated by Web
 before its provider, model ID, reasoning effort, and catalog verification
 timestamp are written to a run. Free-text model names remain valid but do not
 receive a canonical provider/ID.
@@ -95,6 +96,22 @@ receive a canonical provider/ID.
 `benchmark_cases` stores case identity, display fields, visibility, and the current revision pointer. Private suite manifests and evaluator inputs exist only in immutable `benchmark_case_revisions`. Anonymous and authenticated database clients discover cases through `public_benchmark_cases`, which projects display-safe suite and session fields from the current revision. Service-role code must not return the private manifest through a public API or read model.
 
 Typed catalog releases are stored in immutable `benchmark_case_revisions`. A case points to the release selected for new attempts, while every attempt retains its own revision foreign key and generated question snapshot. The orchestrator, not Web input, is authoritative for loading and validating the private manifest during initialization.
+
+### Database portability transition
+
+Supabase PostgreSQL remains the deployed durable store while application access
+is migrated incrementally from PostgREST to Drizzle. `packages/database` owns
+provider-neutral connection construction, schema definitions, and repositories;
+service-specific repository exports preserve the ownership rules in this
+document. Runtime consumers use `DATABASE_URL`, maintenance and migration jobs
+prefer `DATABASE_DIRECT_URL`, and neither contract depends on a Supabase HTTP
+endpoint or service-role JWT.
+
+The first migrated consumer is `packages/model-catalog-sync`. Web and
+hosted-orchestrator continue using their existing Supabase clients until their
+repository slices are implemented and verified. Existing Supabase migrations
+remain immutable schema history during the transition; Drizzle migration scope
+is restricted to tables represented by the current Drizzle schema.
 
 ### Nginx and Cloudflare
 
