@@ -6,6 +6,10 @@ import {
   createModelCatalogReadRepository,
   type ModelCatalogReadRepository,
 } from "@agentbench/database/model-catalog";
+import {
+  createBenchmarkCaseReadRepository,
+  type BenchmarkCaseReadRepository,
+} from "@agentbench/database/benchmark-cases";
 
 type DatabaseGlobal = typeof globalThis & {
   agentbenchWebDatabase?: DatabaseClient;
@@ -51,4 +55,8 @@ export function getWebDatabaseClient() {
 
 export function getWebModelCatalogRepository(): ModelCatalogReadRepository {
   return createModelCatalogReadRepository(getWebDatabaseClient().db);
+}
+
+export function getWebBenchmarkCaseRepository(): BenchmarkCaseReadRepository {
+  return createBenchmarkCaseReadRepository(getWebDatabaseClient().db);
 }

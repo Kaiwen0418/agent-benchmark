@@ -20,11 +20,11 @@ import type { PublicConsistencyCheck } from "./public-result-consistency";
 import { groupLeaderboardVersions, type LeaderboardVersionCandidate } from "./leaderboard-versions";
 import { isCalibrationControlsEnabled, type CalibrationRunSelection } from "./calibration";
 import { getModelCatalogOption } from "./model-catalog";
+import { getWebBenchmarkCaseRepository } from "./database";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
 const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
-const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, current_revision_id, metadata, is_public, created_at";
 const benchmarkRunSelect = "id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at, metadata, agent_name, agent_version, base_model, model_provider, model_id, reasoning_effort, model_catalog_verified_at, browser_environment, is_public";
 
 function getSupabase() {
@@ -155,18 +155,8 @@ export function resolveLocalArtifactFile(runId: string, storagePath: string) {
 }
 
 export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
-    .from("benchmark_cases")
-    .select(benchmarkCaseSelect)
-    .order("created_at", { ascending: false });
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to list benchmark cases");
-  }
-
-  return data.map((item) => ({
+  const rows = await getWebBenchmarkCaseRepository().listAll();
+  return rows.map((item) => ({
     id: item.id,
     slug: item.slug,
     title: item.title,
@@ -174,10 +164,12 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
     category: item.category,
     difficulty: item.difficulty,
     provider: item.provider ?? "native",
-    currentRevisionId: item.current_revision_id,
-    metadata: item.metadata ?? {},
-    isPublic: item.is_public,
-    createdAt: item.created_at,
+    currentRevisionId: item.currentRevisionId,
+    metadata: item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
+      ? item.metadata
+      : {},
+    isPublic: item.isPublic,
+    createdAt: item.createdAt,
   }));
 }
 
@@ -199,24 +191,11 @@ export type CalibrationBenchmarkRevision = {
 // unauthenticated clients. `difficulty` is exposed as the suite tag and the
 // backend orders rows so the default suite (hard, when published) is first.
 export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkCase[]> {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
-    .from("benchmark_cases")
-    .select("id, slug, title, description, difficulty, created_at")
-    .eq("is_public", true)
-    .eq("provider", "hosted-web")
-    .order("difficulty", { ascending: false })
-    .order("created_at", { ascending: true });
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to list public benchmark cases");
-  }
-
+  const rows = await getWebBenchmarkCaseRepository().listPublicHosted();
   const releases = hostedWebCatalogReleases();
   const releaseByCaseId = new Map(releases.map((release) => [release.benchmarkCase.id, release]));
 
-  return data.map((item) => {
+  return rows.map((item) => {
     const release = releaseByCaseId.get(item.id);
     return {
       id: item.id,
@@ -237,46 +216,18 @@ export async function listCalibrationBenchmarkRevisions(
     return [];
   }
 
-  const supabase = getSupabase();
-  const [caseRows, revisionRows] = await Promise.all([
-    supabase
-      .from("benchmark_cases")
-      .select("id, current_revision_id")
-      .in("id", caseIds)
-      .eq("is_public", true)
-      .eq("provider", "hosted-web"),
-    supabase
-      .from("benchmark_case_revisions")
-      .select("id, case_id, revision, manifest, created_at")
-      .in("case_id", caseIds)
-      .order("created_at", { ascending: false }),
-  ]);
-
-  if (caseRows.error || !caseRows.data) {
-    throw caseRows.error ?? new Error("Failed to load benchmark case revisions");
-  }
-  if (revisionRows.error || !revisionRows.data) {
-    throw revisionRows.error ?? new Error("Failed to load benchmark case revisions");
-  }
-
-  const currentByCaseId = new Map(
-    caseRows.data.map((row) => [row.id, row.current_revision_id]),
-  );
-
-  return revisionRows.data.flatMap((row) => {
-    if (!currentByCaseId.has(row.case_id)) {
-      return [];
-    }
+  const rows = await getWebBenchmarkCaseRepository().listCalibrationRevisions(caseIds);
+  return rows.flatMap((row) => {
     const manifest = hostedSuiteMetadataSchema.safeParse(row.manifest);
     if (!manifest.success) {
       return [];
     }
     return [{
-      caseId: row.case_id,
+      caseId: row.caseId,
       revisionId: row.id,
       revision: row.revision,
       version: manifest.data.suiteVersion,
-      current: currentByCaseId.get(row.case_id) === row.id,
+      current: row.currentRevisionId === row.id,
     }];
   });
 }
@@ -285,74 +236,29 @@ async function isAvailableCalibrationRevision(
   caseId: string,
   caseRevisionId: string,
 ) {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("benchmark_case_revisions")
-    .select("id")
-    .eq("id", caseRevisionId)
-    .eq("case_id", caseId)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-  return Boolean(data);
+  return getWebBenchmarkCaseRepository().revisionExists(caseId, caseRevisionId);
 }
 
-export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {  const supabase = getSupabase();
-
-  const byId = await supabase
-    .from("benchmark_cases")
-    .select(benchmarkCaseSelect)
-    .eq("id", caseId)
-    .maybeSingle();
-
-  if (byId.error) {
-    throw byId.error;
-  }
-
-  if (byId.data) {
-    return {
-      id: byId.data.id,
-      slug: byId.data.slug,
-      title: byId.data.title,
-      description: byId.data.description,
-      category: byId.data.category,
-      difficulty: byId.data.difficulty,
-      provider: byId.data.provider ?? "native",
-      currentRevisionId: byId.data.current_revision_id,
-      metadata: byId.data.metadata ?? {},
-      isPublic: byId.data.is_public,
-      createdAt: byId.data.created_at,
-    };
-  }
-
-  const bySlug = await supabase
-    .from("benchmark_cases")
-    .select(benchmarkCaseSelect)
-    .eq("slug", caseId)
-    .maybeSingle();
-
-  if (bySlug.error) {
-    throw bySlug.error;
-  }
-
-  if (!bySlug.data) {
+export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {
+  const row = await getWebBenchmarkCaseRepository().findByIdOrSlug(caseId);
+  if (!row) {
     return null;
   }
 
   return {
-    id: bySlug.data.id,
-    slug: bySlug.data.slug,
-    title: bySlug.data.title,
-    description: bySlug.data.description,
-    category: bySlug.data.category,
-    difficulty: bySlug.data.difficulty,
-    provider: bySlug.data.provider ?? "native",
-    currentRevisionId: bySlug.data.current_revision_id,
-    metadata: bySlug.data.metadata ?? {},
-    isPublic: bySlug.data.is_public,
-    createdAt: bySlug.data.created_at,
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    description: row.description,
+    category: row.category,
+    difficulty: row.difficulty,
+    provider: row.provider ?? "native",
+    currentRevisionId: row.currentRevisionId,
+    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? row.metadata
+      : {},
+    isPublic: row.isPublic,
+    createdAt: row.createdAt,
   };
 }
 

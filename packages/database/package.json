@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./benchmark-cases": "./src/benchmark-cases/index.ts",
     "./model-catalog": "./src/model-catalog/index.ts"
   },
   "scripts": {

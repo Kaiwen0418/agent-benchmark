@@ -28,6 +28,32 @@ create role anon;
 create role authenticated;
 create role service_role bypassrls;
 
+create table public.benchmark_cases (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  title text not null,
+  description text not null,
+  category text not null,
+  difficulty text not null,
+  provider text default 'native',
+  current_revision_id uuid,
+  metadata jsonb not null default '{}'::jsonb,
+  is_public boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table public.benchmark_case_revisions (
+  id uuid primary key default gen_random_uuid(),
+  case_id uuid not null references public.benchmark_cases(id) on delete restrict,
+  revision text not null,
+  content_hash text not null,
+  manifest jsonb not null,
+  created_at timestamptz not null default now(),
+  unique (case_id, id),
+  unique (case_id, revision),
+  unique (case_id, content_hash)
+);
+
 create table public.benchmark_runs (
   id uuid primary key default gen_random_uuid()
 );
