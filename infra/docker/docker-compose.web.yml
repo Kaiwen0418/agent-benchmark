@@ -1,0 +1,37 @@
+name: ${WEB_COMPOSE_PROJECT_NAME:-agentbench-web}
+
+services:
+  web:
+    image: ${AGENTBENCH_WEB_IMAGE:-agentbench-web}:${AGENTBENCH_WEB_IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+    environment:
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-3}
+      DATABASE_URL: ${DATABASE_URL:-}
+      GUEST_RUN_LIMIT: ${GUEST_RUN_LIMIT:-3}
+      HOSTED_ORCHESTRATOR_URL: ${HOSTED_ORCHESTRATOR_URL}
+      HOSTED_SITES_URL: ${HOSTED_SITES_URL}
+      NODE_ENV: production
+      RUN_CONNECT_RATE_LIMIT: ${RUN_CONNECT_RATE_LIMIT:-30}
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_URL: ${SUPABASE_URL}
+    ports:
+      - "${AGENTBENCH_WEB_PORT:-3000}:3000"
+    volumes:
+      - web-artifacts:/app/apps/web/.runner-artifacts
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  web-artifacts:

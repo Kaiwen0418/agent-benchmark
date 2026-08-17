@@ -1,5 +1,29 @@
 # Deployment and Scaling
 
+## Self-hosted Web
+
+The complete Next.js Web control plane can run as a standalone container while
+its persistence is migrated incrementally from Supabase to PostgreSQL. Copy
+`infra/docker/.env.web.example` to a protected environment file outside source
+control, then start the dedicated Compose project from the repository root:
+
+```bash
+docker compose --env-file /path/to/web.env \
+  -f infra/docker/docker-compose.web.yml up -d --build
+```
+
+The service listens on `AGENTBENCH_WEB_PORT` (port `3000` by default) and
+exposes `GET /api/health` for container and gateway health checks. The
+`.runner-artifacts` directory is mounted as the `web-artifacts` named volume.
+Cloudflare or the public reverse proxy should target this port and preserve
+`Host`, `X-Forwarded-Host`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
+
+The Web Compose project is intentionally separate from the hosted runtime
+Compose project. This keeps image pulls, restarts, and rollbacks independent.
+During the database transition, configure both the Supabase variables and the
+pooled `DATABASE_URL`. Remove Supabase credentials only after every Web and
+orchestrator repository has moved to Drizzle and cutover verification passes.
+
 ## Local Docker Stack
 
 The default stack is defined by:
