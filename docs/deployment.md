@@ -25,8 +25,10 @@ Supabase URL or service-role variables. The separately deployed orchestrator
 also accepts `DATABASE_URL` and uses it for migrated repositories, currently
 immutable benchmark revision reads, attempt/session/result reads, and atomic
 attempt/session initialization plus session recovery/snapshot persistence. It
-continues to require Supabase credentials
-for lifecycle, outbox, telemetry, and DLQ paths until repository migration and
+also uses Drizzle for hosted access/event telemetry and expiry discovery. It
+uses the same connection for lifecycle reads and atomic PostgreSQL completion
+and timeout functions. It continues to require Supabase credentials
+for outbox and DLQ paths until repository migration and
 cutover verification are complete. `DATABASE_POOL_MAX` defaults to `10` per
 orchestrator API/worker process, so size PgBouncer and PostgreSQL for the sum of
 all replicas rather than for one container.

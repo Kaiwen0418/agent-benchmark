@@ -7,6 +7,8 @@ import {
   benchmarkCases,
   benchmarkRuns,
   createDatabaseClient,
+  hostedWebAccessLogs,
+  hostedWebEvents,
   hostedWebResults,
   hostedWebSessions,
   postgresErrorCode,
@@ -95,6 +97,10 @@ test("hosted orchestrator read repository maps durable attempt state", async () 
     assert.deepEqual(await repository.findAttemptMetadata(attempt.id), { activeSessionId: "first" });
     const ordered = await repository.listAttemptSessions(attempt.id);
     assert.deepEqual(ordered.map((row) => row.taskSlug), ["checkout", "handoff"]);
+    assert.deepEqual(
+      (await repository.listRunSessions(run.id)).map((row) => row.taskSlug),
+      ["checkout", "handoff"],
+    );
     assert.equal(ordered[0]?.weight, 0.75);
     assert.equal((await repository.findSessionById(sessions[0]!.id))?.taskSlug, "checkout");
     assert.equal(
@@ -110,6 +116,60 @@ test("hosted orchestrator read repository maps durable attempt state", async () 
       sessions[1]!.id,
     );
     assert.deepEqual((await repository.findSessionById(sessions[1]!.id))?.metadata, { snapshot: 2 });
+    assert.equal(await repository.recordSessionAccess({
+      session: sessions[1]!,
+      accessCount: 3,
+      accessedAt: new Date().toISOString(),
+      firstSeenIp: "192.0.2.1",
+      lastSeenIp: "192.0.2.2",
+      firstSeenUserAgent: "integration-first",
+      lastSeenUserAgent: "integration-last",
+      event: "session.access",
+      ip: "192.0.2.2",
+      userAgent: "integration-last",
+      referer: "https://example.test/",
+    }), true);
+    const accessedSession = await repository.findSessionById(sessions[1]!.id);
+    assert.equal(accessedSession?.accessCount, 3);
+    assert.equal(accessedSession?.lastSeenIp, "192.0.2.2");
+    const accessRows = await client.db.select().from(hostedWebAccessLogs)
+      .where(eq(hostedWebAccessLogs.sessionId, sessions[1]!.id));
+    assert.equal(accessRows.length, 1);
+    assert.deepEqual(accessRows[0]?.metadata, { app: "notes-lite", taskSlug: "handoff" });
+
+    assert.ok(await repository.appendHostedEvent({
+      sessionId: sessions[1]!.id,
+      runId: run.id,
+      attemptId: attempt.id,
+      type: "hosted.action",
+      name: "note.updated",
+      payload: { field: "body" },
+    }));
+    const eventRows = await client.db.select().from(hostedWebEvents)
+      .where(eq(hostedWebEvents.sessionId, sessions[1]!.id));
+    assert.deepEqual(eventRows.map((row) => row.name), ["note.updated"]);
+
+    await client.db.update(hostedWebSessions)
+      .set({ expiresAt: "2020-06-01T00:00:00.000Z" })
+      .where(eq(hostedWebSessions.id, sessions[1]!.id));
+    const expiredSessions = await repository.listExpiredSessions("2021-01-01T00:00:00.000Z", 10);
+    assert.deepEqual(expiredSessions.map((row) => row.id), [sessions[1]!.id]);
+    await repository.appendExpiryDetectedLogs(expiredSessions);
+    const expiryLogs = await client.db.select().from(hostedWebAccessLogs)
+      .where(eq(hostedWebAccessLogs.event, "session.expiry_detected"));
+    assert.equal(expiryLogs.length, 1);
+
+    await client.db.insert(hostedWebAccessLogs).values({
+      sessionId: sessions[1]!.id,
+      runId: run.id,
+      attemptId: attempt.id,
+      event: "expired.fixture",
+      createdAt: "2020-01-01T00:00:00.000Z",
+    });
+    assert.equal(
+      await repository.pruneAccessLogsBefore("2021-01-01T00:00:00.000Z"),
+      1,
+    );
     const result = await repository.findLatestSessionResult(sessions[0]!.id);
     assert.equal(result?.score, 0.9);
     assert.equal(result?.status, "passed");
@@ -196,6 +256,23 @@ test("hosted orchestrator initializes attempts and sessions atomically", async (
       activeSequenceIndex: 0,
       completedSessionIds: [],
     });
+    const transition = await repository.completeHostedAttemptSession({
+      attemptId: created.attempt.id,
+      sessionId: created.sessions[0]!.id,
+      completedAt: "2026-08-17T12:00:00.000Z",
+      result: { status: "passed", score: 1 },
+      attemptUpdate: { complete: false },
+    }) as Record<string, unknown>;
+    assert.equal(transition.attemptId, created.attempt.id);
+    assert.deepEqual(transition.result, { status: "passed", score: 1 });
+    const timeout = await repository.timeoutHostedAttempt({
+      attemptId: created.attempt.id,
+      timeoutAt: "2026-08-17T12:01:00.000Z",
+      timedOutSessionId: created.sessions[1]!.id,
+      scoringSummary: { status: "timeout" },
+    });
+    assert.equal(timeout?.transitioned, true);
+    assert.deepEqual(timeout?.expiredSessionIds, [created.sessions[1]!.id]);
     assert.equal((await repository.findHostedAttempt(runs[0]!.id, benchmarkCase.id))?.id, created.attempt.id);
     await assert.rejects(
       repository.createAttemptWithSessions(

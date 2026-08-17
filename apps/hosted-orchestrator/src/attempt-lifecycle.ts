@@ -91,9 +91,61 @@ export type TimeoutAttemptCommandResult = {
   summary: string | null;
 };
 
+export type AttemptLifecyclePersistence = {
+  findAttempt: (attemptId: string) => Promise<{
+    status: AttemptStatus;
+    suiteSlug: string;
+    metadata: unknown;
+  } | null>;
+  listAttemptResults: (attemptId: string) => Promise<Array<{
+    sessionId: string;
+    app: string | null;
+    taskSlug: string | null;
+    score: number;
+    status: "passed" | "failed" | "error";
+    weight: number;
+    finalState: unknown;
+    evaluators: unknown;
+  }>>;
+  listAttemptSessions: (attemptId: string) => Promise<Array<{
+    id: string;
+    runId: string;
+    app: string;
+    taskSlug: string;
+    weight: number;
+    required: boolean;
+    sequenceIndex: number;
+    status: string;
+    metadata: unknown;
+  }>>;
+  listAttemptEvents: (attemptId: string) => Promise<Array<{
+    sessionId: string;
+    type: string;
+    payload: unknown;
+  }>>;
+  completeHostedAttemptSession: (input: {
+    attemptId: string;
+    sessionId: string;
+    completedAt: string;
+    result: unknown;
+    attemptUpdate: unknown;
+  }) => Promise<unknown>;
+  timeoutHostedAttempt: (input: {
+    attemptId: string;
+    timeoutAt: string;
+    timedOutSessionId: string;
+    scoringSummary: unknown;
+  }) => Promise<{
+    transitioned: boolean;
+    attemptRunId: string | null;
+    expiredSessionIds: string[];
+  } | null>;
+};
+
 type AttemptLifecycleDeps = {
   now: () => string;
   getSupabaseAdmin: () => SupabaseClient<Database> | null | undefined;
+  getPersistence?: () => AttemptLifecyclePersistence | null;
   loadAttemptMetadata: (attemptId: string | null) => Promise<Record<string, unknown>>;
   loadAttemptSessions: (attemptId: string) => Promise<AttemptLifecycleAdvanceSession[]>;
   loadAttemptReadModel: (attemptId: string) => Promise<HostedAttemptReadModel<AttemptLifecycleAdvanceSession>>;
@@ -135,39 +187,76 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     complete: boolean;
     aggregate: HostedWebSuiteScoreResult | null;
   }> {
-    const supabase = deps.getSupabaseAdmin();
-    if (!supabase || !session.runId || !session.attemptId) {
+    const persistence = deps.getPersistence?.() ?? null;
+    const supabase = persistence ? null : deps.getSupabaseAdmin();
+    if ((!persistence && !supabase) || !session.runId || !session.attemptId) {
       throw new Error("Persisted session completion requires database-backed run and attempt ids.");
     }
 
-    const { data: attemptRow } = await supabase
-      .from("benchmark_attempts")
-      .select("metadata")
-      .eq("id", session.attemptId)
-      .maybeSingle();
+    const attemptRow = persistence
+      ? await persistence.findAttempt(session.attemptId)
+      : (await supabase!
+          .from("benchmark_attempts")
+          .select("metadata")
+          .eq("id", session.attemptId)
+          .maybeSingle()).data;
     const existingAttemptMetadata =
       attemptRow?.metadata && typeof attemptRow.metadata === "object" && !Array.isArray(attemptRow.metadata)
         ? (attemptRow.metadata as Record<string, unknown>)
         : {};
 
-    const { data: resultRows, error: resultsError } = await supabase
-      .from("hosted_web_results")
-      .select("session_id, app, task_slug, score, status, weight, final_state, evaluators")
-      .eq("attempt_id", session.attemptId)
-      .order("created_at", { ascending: true });
-
-    if (resultsError || !resultRows) {
-      throw resultsError ?? new Error(`Attempt ${session.attemptId} results are unavailable.`);
-    }
-
-    const { data: sessionRows, error: sessionsError } = await supabase
-      .from("hosted_web_sessions")
-      .select("id, app, task_slug, weight, required, sequence_index, metadata")
-      .eq("attempt_id", session.attemptId)
-      .order("sequence_index", { ascending: true });
-
-    if (sessionsError || !sessionRows) {
-      throw sessionsError ?? new Error(`Attempt ${session.attemptId} sessions are unavailable.`);
+    let resultRows: Array<{
+      session_id: string; app: string | null; task_slug: string | null; score: number;
+      status: "passed" | "failed" | "error"; weight: number; final_state: unknown; evaluators: unknown;
+    }>;
+    let sessionRows: Array<{
+      id: string; app: string; task_slug: string; weight: number; required: boolean;
+      sequence_index: number; status?: string; metadata: unknown;
+    }>;
+    if (persistence) {
+      const [results, sessions] = await Promise.all([
+        persistence.listAttemptResults(session.attemptId),
+        persistence.listAttemptSessions(session.attemptId),
+      ]);
+      resultRows = results.map((row) => ({
+        session_id: row.sessionId,
+        app: row.app,
+        task_slug: row.taskSlug,
+        score: row.score,
+        status: row.status,
+        weight: row.weight,
+        final_state: row.finalState,
+        evaluators: row.evaluators,
+      }));
+      sessionRows = sessions.map((row) => ({
+        id: row.id,
+        app: row.app,
+        task_slug: row.taskSlug,
+        weight: row.weight,
+        required: row.required,
+        sequence_index: row.sequenceIndex,
+        status: row.status,
+        metadata: row.metadata,
+      }));
+    } else {
+      const resultsResponse = await supabase!
+        .from("hosted_web_results")
+        .select("session_id, app, task_slug, score, status, weight, final_state, evaluators")
+        .eq("attempt_id", session.attemptId)
+        .order("created_at", { ascending: true });
+      if (resultsResponse.error || !resultsResponse.data) {
+        throw resultsResponse.error ?? new Error(`Attempt ${session.attemptId} results are unavailable.`);
+      }
+      resultRows = resultsResponse.data;
+      const sessionsResponse = await supabase!
+        .from("hosted_web_sessions")
+        .select("id, app, task_slug, weight, required, sequence_index, metadata")
+        .eq("attempt_id", session.attemptId)
+        .order("sequence_index", { ascending: true });
+      if (sessionsResponse.error || !sessionsResponse.data) {
+        throw sessionsResponse.error ?? new Error(`Attempt ${session.attemptId} sessions are unavailable.`);
+      }
+      sessionRows = sessionsResponse.data;
     }
 
     const latestResultBySessionId = new Map<string, HostedWebSuiteSessionScore>();
@@ -271,14 +360,23 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
           : [];
       let normalizedActionCosts = new Map<string, number>();
       if (existingAttemptMetadata.capabilityMatrix !== undefined) {
-        const { data: eventRows, error: eventsError } = await supabase
-          .from("hosted_web_events")
-          .select("session_id, type, payload")
-          .eq("attempt_id", session.attemptId)
-          .order("created_at", { ascending: true });
-        if (eventsError || !eventRows) {
-          throw eventsError ?? new Error(`Attempt ${session.attemptId} action telemetry is unavailable.`);
-        }
+        const eventRows = persistence
+          ? (await persistence.listAttemptEvents(session.attemptId)).map((row) => ({
+              session_id: row.sessionId,
+              type: row.type,
+              payload: row.payload,
+            }))
+          : await (async () => {
+              const response = await supabase!
+                .from("hosted_web_events")
+                .select("session_id, type, payload")
+                .eq("attempt_id", session.attemptId!)
+                .order("created_at", { ascending: true });
+              if (response.error || !response.data) {
+                throw response.error ?? new Error(`Attempt ${session.attemptId} action telemetry is unavailable.`);
+              }
+              return response.data;
+            })();
         normalizedActionCosts = collectNormalizedActionCosts(eventRows.map((row) => ({
           sessionId: row.session_id,
           type: row.type,
@@ -328,26 +426,38 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       };
     }
 
-    const { data: transition, error: transitionError } = await supabase.rpc("complete_hosted_attempt_session", {
-      p_attempt_id: session.attemptId,
-      p_session_id: session.id,
-      p_completed_at: deps.now(),
-      p_result: {
+    const completedAt = deps.now();
+    const resultPayload = {
         ...result,
         finalState: session.finalState ?? null,
-      },
-      p_attempt_update: {
+    };
+    const attemptUpdate = {
         complete: aggregate !== null,
         status: attemptStatus,
         aggregate,
         metadata,
         scoringSummary,
         nextSessionId: nextPendingSession?.id ?? null,
-      },
-    });
-    if (transitionError) {
-      throw transitionError;
-    }
+    };
+    const transition = persistence
+      ? await persistence.completeHostedAttemptSession({
+          attemptId: session.attemptId,
+          sessionId: session.id,
+          completedAt,
+          result: resultPayload,
+          attemptUpdate,
+        })
+      : await (async () => {
+          const response = await supabase!.rpc("complete_hosted_attempt_session", {
+            p_attempt_id: session.attemptId!,
+            p_session_id: session.id,
+            p_completed_at: completedAt,
+            p_result: resultPayload,
+            p_attempt_update: attemptUpdate,
+          });
+          if (response.error) throw response.error;
+          return response.data;
+        })();
 
     const payload = transition && typeof transition === "object" && !Array.isArray(transition)
       ? transition as Record<string, unknown>
@@ -423,8 +533,9 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     expiredSessionId: string;
     expiredTaskSlug: string;
   }) {
-    const supabase = deps.getSupabaseAdmin();
-    if (!supabase) {
+    const persistence = deps.getPersistence?.() ?? null;
+    const supabase = persistence ? null : deps.getSupabaseAdmin();
+    if (!persistence && !supabase) {
       return {
         command: "timeout-attempt",
         ok: false,
@@ -434,16 +545,28 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       } satisfies TimeoutAttemptCommandResult;
     }
 
-    const { data: attemptRow, error: attemptError } = await supabase
-      .from("benchmark_attempts")
-      .select("status, suite_slug, metadata")
-      .eq("id", params.attemptId)
-      .maybeSingle();
-
-    if (attemptError || !attemptRow) {
-      if (attemptError) {
-        console.error("[hosted-orchestrator] failed to load attempt for timeout", attemptError);
-      }
+    let attemptRow: { status: AttemptStatus; suite_slug: string; metadata: unknown } | null;
+    try {
+      attemptRow = persistence
+        ? await persistence.findAttempt(params.attemptId).then((row) => row ? ({
+            status: row.status,
+            suite_slug: row.suiteSlug,
+            metadata: row.metadata,
+          }) : null)
+        : await (async () => {
+            const response = await supabase!
+              .from("benchmark_attempts")
+              .select("status, suite_slug, metadata")
+              .eq("id", params.attemptId)
+              .maybeSingle();
+            if (response.error) throw response.error;
+            return response.data as typeof attemptRow;
+          })();
+    } catch (error) {
+      console.error("[hosted-orchestrator] failed to load attempt for timeout", error);
+      attemptRow = null;
+    }
+    if (!attemptRow) {
       return {
         command: "timeout-attempt",
         ok: false,
@@ -463,14 +586,32 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       } satisfies TimeoutAttemptCommandResult;
     }
 
-    const { data: sessionRows, error: sessionsError } = await supabase
-      .from("hosted_web_sessions")
-      .select("id, run_id, app, task_slug, sequence_index, status")
-      .eq("attempt_id", params.attemptId)
-      .order("sequence_index", { ascending: true });
-
-    if (sessionsError || !sessionRows) {
-      console.error("[hosted-orchestrator] failed to load attempt sessions for timeout", sessionsError);
+    let sessionRows: Array<{
+      id: string; run_id: string; app: string; task_slug: string; sequence_index: number; status: string;
+    }> | null = null;
+    try {
+      sessionRows = persistence
+        ? (await persistence.listAttemptSessions(params.attemptId)).map((row) => ({
+            id: row.id,
+            run_id: row.runId,
+            app: row.app,
+            task_slug: row.taskSlug,
+            sequence_index: row.sequenceIndex,
+            status: row.status,
+          }))
+        : await (async () => {
+            const response = await supabase!
+              .from("hosted_web_sessions")
+              .select("id, run_id, app, task_slug, sequence_index, status")
+              .eq("attempt_id", params.attemptId)
+              .order("sequence_index", { ascending: true });
+            if (response.error) throw response.error;
+            return response.data;
+          })();
+    } catch (error) {
+      console.error("[hosted-orchestrator] failed to load attempt sessions for timeout", error);
+    }
+    if (!sessionRows) {
       return {
         command: "timeout-attempt",
         ok: false,
@@ -503,19 +644,37 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
       },
     };
 
-    const { data: timeoutTransition, error: timeoutError } = await supabase
-      .rpc("timeout_hosted_attempt", {
-        p_attempt_id: params.attemptId,
-        p_timeout_at: timeoutAt,
-        p_timed_out_session_id: params.expiredSessionId,
-        p_scoring_summary: scoringSummary,
-      })
-      .maybeSingle();
-
-    if (timeoutError || !timeoutTransition?.transitioned) {
-      if (timeoutError) {
-        console.error("[hosted-orchestrator] failed to atomically time out attempt", timeoutError);
-      }
+    let timeoutTransition: {
+      transitioned: boolean;
+      attempt_run_id: string | null;
+      expired_session_ids: string[];
+    } | null = null;
+    try {
+      timeoutTransition = persistence
+        ? await persistence.timeoutHostedAttempt({
+            attemptId: params.attemptId,
+            timeoutAt,
+            timedOutSessionId: params.expiredSessionId,
+            scoringSummary,
+          }).then((row) => row ? ({
+            transitioned: row.transitioned,
+            attempt_run_id: row.attemptRunId,
+            expired_session_ids: row.expiredSessionIds,
+          }) : null)
+        : await (async () => {
+            const response = await supabase!.rpc("timeout_hosted_attempt", {
+              p_attempt_id: params.attemptId,
+              p_timeout_at: timeoutAt,
+              p_timed_out_session_id: params.expiredSessionId,
+              p_scoring_summary: scoringSummary,
+            }).maybeSingle();
+            if (response.error) throw response.error;
+            return response.data;
+          })();
+    } catch (error) {
+      console.error("[hosted-orchestrator] failed to atomically time out attempt", error);
+    }
+    if (!timeoutTransition?.transitioned) {
       return {
         command: "timeout-attempt",
         ok: false,

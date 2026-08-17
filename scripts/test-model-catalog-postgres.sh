@@ -150,6 +150,58 @@ create table public.hosted_web_results (
   unique (session_id)
 );
 
+create table public.hosted_web_events (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.hosted_web_sessions(id) on delete cascade,
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  attempt_id uuid references public.benchmark_attempts(id) on delete cascade,
+  type text not null,
+  name text,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table public.hosted_web_access_logs (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid references public.hosted_web_sessions(id) on delete cascade,
+  attempt_id uuid references public.benchmark_attempts(id) on delete cascade,
+  run_id uuid references public.benchmark_runs(id) on delete cascade,
+  event text not null,
+  ip inet,
+  user_agent text,
+  referer text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+-- Production lifecycle semantics are covered by test-hosted-lifecycle-postgres.sh.
+-- These fixtures verify parameter and result mapping through the Drizzle adapter.
+create function public.complete_hosted_attempt_session(
+  p_attempt_id uuid,
+  p_session_id uuid,
+  p_completed_at timestamptz,
+  p_result jsonb,
+  p_attempt_update jsonb
+) returns jsonb language sql as $$
+  select jsonb_build_object(
+    'attemptId', p_attempt_id,
+    'sessionId', p_session_id,
+    'completedAt', p_completed_at,
+    'result', p_result,
+    'attemptUpdate', p_attempt_update
+  )
+$$;
+
+create function public.timeout_hosted_attempt(
+  p_attempt_id uuid,
+  p_timeout_at timestamptz,
+  p_timed_out_session_id uuid,
+  p_scoring_summary jsonb
+) returns table (transitioned boolean, attempt_run_id uuid, expired_session_ids uuid[])
+language sql as $$
+  select true, p_attempt_id, array[p_timed_out_session_id]
+$$;
+
 create table public.run_events (
   id uuid primary key default gen_random_uuid(),
   run_id uuid not null references public.benchmark_runs(id) on delete cascade,

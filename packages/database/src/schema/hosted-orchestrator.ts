@@ -99,3 +99,35 @@ export const hostedWebResults = pgTable("hosted_web_results", {
 }, (table) => [
   index("idx_hosted_web_results_attempt_created_at").on(table.attemptId, table.createdAt),
 ]);
+
+export const hostedWebEvents = pgTable("hosted_web_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sessionId: uuid("session_id").notNull().references(() => hostedWebSessions.id, { onDelete: "cascade" }),
+  runId: uuid("run_id").notNull().references(() => benchmarkRuns.id, { onDelete: "cascade" }),
+  attemptId: uuid("attempt_id").references(() => benchmarkAttempts.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  name: text("name"),
+  payload: jsonb("payload").$type<JsonValue>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_hosted_web_events_session_created_at").on(table.sessionId, table.createdAt),
+  index("idx_hosted_web_events_run_created_at").on(table.runId, table.createdAt),
+  index("idx_hosted_web_events_attempt_created_at").on(table.attemptId, table.createdAt),
+  index("idx_hosted_web_events_type").on(table.type),
+]);
+
+export const hostedWebAccessLogs = pgTable("hosted_web_access_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sessionId: uuid("session_id").references(() => hostedWebSessions.id, { onDelete: "cascade" }),
+  attemptId: uuid("attempt_id").references(() => benchmarkAttempts.id, { onDelete: "cascade" }),
+  runId: uuid("run_id").references(() => benchmarkRuns.id, { onDelete: "cascade" }),
+  event: text("event").notNull(),
+  ip: inet("ip"),
+  userAgent: text("user_agent"),
+  referer: text("referer"),
+  metadata: jsonb("metadata").$type<JsonValue>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_hosted_web_access_logs_session_created_at").on(table.sessionId, table.createdAt),
+  index("idx_hosted_web_access_logs_run_created_at").on(table.runId, table.createdAt),
+]);

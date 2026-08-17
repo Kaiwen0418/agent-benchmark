@@ -1,7 +1,9 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import type { AgentBenchDatabase } from "../client";
 import {
   benchmarkAttempts,
+  hostedWebAccessLogs,
+  hostedWebEvents,
   hostedWebResults,
   hostedWebSessions,
 } from "../schema/index";
@@ -52,6 +54,13 @@ export function createHostedOrchestratorRepository(db: AgentBenchDatabase) {
       return row?.metadata ?? null;
     },
 
+    async findAttempt(attemptId: string) {
+      const [row] = await db.select().from(benchmarkAttempts)
+        .where(eq(benchmarkAttempts.id, attemptId))
+        .limit(1);
+      return row ?? null;
+    },
+
     async findHostedAttempt(runId: string, caseId: string) {
       const [row] = await db.select().from(benchmarkAttempts)
         .where(and(
@@ -97,6 +106,21 @@ export function createHostedOrchestratorRepository(db: AgentBenchDatabase) {
         .orderBy(asc(hostedWebSessions.sequenceIndex));
     },
 
+    listRunSessions(runId: string) {
+      return db.select().from(hostedWebSessions)
+        .where(eq(hostedWebSessions.runId, runId))
+        .orderBy(asc(hostedWebSessions.sequenceIndex));
+    },
+
+    listExpiredSessions(cutoff: string, limit: number) {
+      return db.select().from(hostedWebSessions)
+        .where(and(
+          lt(hostedWebSessions.expiresAt, cutoff),
+          inArray(hostedWebSessions.status, ["created", "active", "scoring"]),
+        ))
+        .limit(limit);
+    },
+
     async findSessionByTokenHash(sessionTokenHash: string) {
       const [row] = await db.select().from(hostedWebSessions)
         .where(eq(hostedWebSessions.sessionTokenHash, sessionTokenHash))
@@ -122,12 +146,137 @@ export function createHostedOrchestratorRepository(db: AgentBenchDatabase) {
       return row?.id ?? null;
     },
 
+    recordSessionAccess(input: {
+      session: HostedSessionRecord;
+      accessCount: number;
+      accessedAt: string;
+      firstSeenIp: string | null;
+      lastSeenIp: string | null;
+      firstSeenUserAgent: string | null;
+      lastSeenUserAgent: string | null;
+      event: string;
+      ip: string | null;
+      userAgent: string | null;
+      referer: string | null;
+    }) {
+      return db.transaction(async (tx) => {
+        const [updated] = await tx.update(hostedWebSessions).set({
+          accessCount: input.accessCount,
+          lastAccessedAt: input.accessedAt,
+          firstSeenIp: input.firstSeenIp,
+          lastSeenIp: input.lastSeenIp,
+          firstSeenUserAgent: input.firstSeenUserAgent,
+          lastSeenUserAgent: input.lastSeenUserAgent,
+        }).where(eq(hostedWebSessions.id, input.session.id)).returning({ id: hostedWebSessions.id });
+        if (!updated) return false;
+        await tx.insert(hostedWebAccessLogs).values({
+          sessionId: input.session.id,
+          attemptId: input.session.attemptId,
+          runId: input.session.runId,
+          event: input.event,
+          ip: input.ip,
+          userAgent: input.userAgent,
+          referer: input.referer,
+          metadata: { app: input.session.app, taskSlug: input.session.taskSlug },
+        });
+        return true;
+      });
+    },
+
+    async appendHostedEvent(input: {
+      sessionId: string;
+      runId: string;
+      attemptId: string | null;
+      type: string;
+      name: string;
+      payload: JsonValue;
+    }) {
+      const [row] = await db.insert(hostedWebEvents).values(input).returning({ id: hostedWebEvents.id });
+      return row?.id ?? null;
+    },
+
+    listAttemptEvents(attemptId: string) {
+      return db.select().from(hostedWebEvents)
+        .where(eq(hostedWebEvents.attemptId, attemptId))
+        .orderBy(asc(hostedWebEvents.createdAt));
+    },
+
+    async appendExpiryDetectedLogs(sessions: HostedSessionRecord[]) {
+      if (sessions.length === 0) return;
+      await db.insert(hostedWebAccessLogs).values(sessions.map((session) => ({
+        sessionId: session.id,
+        attemptId: session.attemptId,
+        runId: session.runId,
+        event: "session.expiry_detected",
+        metadata: { app: session.app, taskSlug: session.taskSlug },
+      })));
+    },
+
+    async pruneAccessLogsBefore(cutoff: string) {
+      const rows = await db.delete(hostedWebAccessLogs)
+        .where(lt(hostedWebAccessLogs.createdAt, cutoff))
+        .returning({ id: hostedWebAccessLogs.id });
+      return rows.length;
+    },
+
     async findLatestSessionResult(sessionId: string) {
       const [row] = await db.select().from(hostedWebResults)
         .where(eq(hostedWebResults.sessionId, sessionId))
         .orderBy(desc(hostedWebResults.createdAt))
         .limit(1);
       return row ?? null;
+    },
+
+    listAttemptResults(attemptId: string) {
+      return db.select().from(hostedWebResults)
+        .where(eq(hostedWebResults.attemptId, attemptId))
+        .orderBy(asc(hostedWebResults.createdAt));
+    },
+
+    async completeHostedAttemptSession(input: {
+      attemptId: string;
+      sessionId: string;
+      completedAt: string;
+      result: JsonValue;
+      attemptUpdate: JsonValue;
+    }) {
+      const queryResult = await db.execute<{ result: JsonValue }>(sql`
+        select public.complete_hosted_attempt_session(
+          ${input.attemptId}::uuid,
+          ${input.sessionId}::uuid,
+          ${input.completedAt}::timestamptz,
+          ${JSON.stringify(input.result)}::jsonb,
+          ${JSON.stringify(input.attemptUpdate)}::jsonb
+        ) as result
+      `);
+      return queryResult.rows[0]?.result ?? null;
+    },
+
+    async timeoutHostedAttempt(input: {
+      attemptId: string;
+      timeoutAt: string;
+      timedOutSessionId: string;
+      scoringSummary: JsonValue;
+    }) {
+      const queryResult = await db.execute<{
+        transitioned: boolean;
+        attempt_run_id: string | null;
+        expired_session_ids: string[];
+      }>(sql`
+        select transitioned, attempt_run_id, expired_session_ids
+        from public.timeout_hosted_attempt(
+          ${input.attemptId}::uuid,
+          ${input.timeoutAt}::timestamptz,
+          ${input.timedOutSessionId}::uuid,
+          ${JSON.stringify(input.scoringSummary)}::jsonb
+        )
+      `);
+      const row = queryResult.rows[0];
+      return row ? {
+        transitioned: row.transitioned,
+        attemptRunId: row.attempt_run_id,
+        expiredSessionIds: row.expired_session_ids,
+      } : null;
     },
   };
 }

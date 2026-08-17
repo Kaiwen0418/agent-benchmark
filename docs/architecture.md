@@ -116,10 +116,11 @@ repository uses PostgreSQL transactions for run creation plus its initial event,
 terminal completion plus artifacts/events, and metadata connection transitions.
 Web no longer uses PostgREST or the Supabase SDK. Hosted-orchestrator now uses
 Drizzle for immutable benchmark revision reads, ordinary attempt/session/result
-read models, transactional attempt plus session initialization, and core session
-recovery/snapshot persistence, with a temporary Supabase
-fallback for deployments that have not configured `DATABASE_URL`; its lifecycle,
-outbox, telemetry, and DLQ repositories still use the Supabase client until
+read models, transactional attempt plus session initialization, core session
+recovery/snapshot persistence, and hosted access/event telemetry, with a temporary Supabase
+fallback for deployments that have not configured `DATABASE_URL`. Lifecycle
+reads and atomic completion/timeout function calls also use the Drizzle adapter;
+outbox and DLQ repositories still use the Supabase client until
 those slices are implemented and verified. The benchmark repository exposes a display-safe
 public projection separately from the private calibration manifest projection.
 Existing Supabase migrations remain immutable schema history during the

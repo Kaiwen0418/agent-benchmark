@@ -23,6 +23,7 @@ import {
 import {
   createAttemptLifecycle,
   type AttemptLifecycleAdvanceSession,
+  type AttemptLifecyclePersistence,
   type AttemptLifecycleSession,
   type HostedSessionStatus,
 } from "./attempt-lifecycle.js";
@@ -1372,6 +1373,30 @@ async function persistHostedSessionAccess(
   token: string,
   input: Record<string, unknown>,
 ) {
+  const nullableString = (value: unknown) => (typeof value === "string" ? value : null);
+  const accessCount =
+    typeof input.accessCount === "number" && Number.isFinite(input.accessCount)
+      ? Math.max(0, Math.trunc(input.accessCount))
+      : 0;
+  const accessedAt = nullableString(input.accessedAt) ?? now();
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const session = await repository.findSessionByTokenHash(hashToken(token));
+    if (!session) return false;
+    return repository.recordSessionAccess({
+      session,
+      accessCount,
+      accessedAt,
+      firstSeenIp: nullableString(input.firstSeenIp),
+      lastSeenIp: nullableString(input.lastSeenIp),
+      firstSeenUserAgent: nullableString(input.firstSeenUserAgent),
+      lastSeenUserAgent: nullableString(input.lastSeenUserAgent),
+      event: typeof input.event === "string" ? input.event : "session.access",
+      ip: nullableString(input.ip),
+      userAgent: nullableString(input.userAgent),
+      referer: nullableString(input.referer),
+    });
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return false;
@@ -1381,13 +1406,6 @@ async function persistHostedSessionAccess(
   if (!session) {
     return false;
   }
-
-  const nullableString = (value: unknown) => (typeof value === "string" ? value : null);
-  const accessCount =
-    typeof input.accessCount === "number" && Number.isFinite(input.accessCount)
-      ? Math.max(0, Math.trunc(input.accessCount))
-      : 0;
-  const accessedAt = nullableString(input.accessedAt) ?? now();
 
   const { error: sessionError } = await supabase
     .from("hosted_web_sessions")
@@ -1425,6 +1443,20 @@ async function persistHostedSessionAccess(
 }
 
 async function persistHostedEvent(token: string, payload: Record<string, unknown>) {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const session = await repository.findSessionByTokenHash(hashToken(token));
+    if (!session || session.status !== "active") return false;
+    const type = typeof payload.type === "string" ? payload.type : "hosted.event";
+    return Boolean(await repository.appendHostedEvent({
+      sessionId: session.id,
+      runId: session.runId,
+      attemptId: session.attemptId,
+      type,
+      name: typeof payload.name === "string" ? payload.name : type,
+      payload: toDatabaseJson(payload),
+    }));
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return false;
@@ -1452,12 +1484,16 @@ async function persistHostedEvent(token: string, payload: Record<string, unknown
 }
 
 async function pruneExpiredAccessLogs() {
+  const cutoffIso = new Date(Date.now() - accessLogRetentionMs).toISOString();
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    return repository.pruneAccessLogsBefore(cutoffIso);
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return 0;
   }
 
-  const cutoffIso = new Date(Date.now() - accessLogRetentionMs).toISOString();
   const { data, error } = await supabase
     .from("hosted_web_access_logs")
     .delete()
@@ -1472,9 +1508,66 @@ async function pruneExpiredAccessLogs() {
   return data?.length ?? 0;
 }
 
+function getAttemptLifecyclePersistence(): AttemptLifecyclePersistence | null {
+  const repository = getHostedOrchestratorRepository();
+  if (!repository) return null;
+  return {
+    async findAttempt(attemptId) {
+      const row = await repository.findAttempt(attemptId);
+      return row ? { status: row.status, suiteSlug: row.suiteSlug, metadata: row.metadata } : null;
+    },
+    async listAttemptResults(attemptId) {
+      return (await repository.listAttemptResults(attemptId)).map((row) => ({
+        sessionId: row.sessionId,
+        app: row.app,
+        taskSlug: row.taskSlug,
+        score: row.score,
+        status: row.status,
+        weight: row.weight,
+        finalState: row.finalState,
+        evaluators: row.evaluators,
+      }));
+    },
+    async listAttemptSessions(attemptId) {
+      return (await repository.listAttemptSessions(attemptId)).map((row) => ({
+        id: row.id,
+        runId: row.runId,
+        app: row.app,
+        taskSlug: row.taskSlug,
+        weight: row.weight,
+        required: row.required,
+        sequenceIndex: row.sequenceIndex,
+        status: row.status,
+        metadata: row.metadata,
+      }));
+    },
+    async listAttemptEvents(attemptId) {
+      return (await repository.listAttemptEvents(attemptId)).map((row) => ({
+        sessionId: row.sessionId,
+        type: row.type,
+        payload: row.payload,
+      }));
+    },
+    completeHostedAttemptSession(input) {
+      return repository.completeHostedAttemptSession({
+        ...input,
+        result: toDatabaseJson(input.result),
+        attemptUpdate: toDatabaseJson(input.attemptUpdate),
+      });
+    },
+    timeoutHostedAttempt(input) {
+      return repository.timeoutHostedAttempt({
+        ...input,
+        scoringSummary: toDatabaseJson(input.scoringSummary),
+      });
+    },
+  };
+}
+
 const attemptLifecycle = createAttemptLifecycle({
   now,
   getSupabaseAdmin,
+  getPersistence: getAttemptLifecyclePersistence,
   loadAttemptMetadata,
   loadAttemptSessions,
   loadAttemptReadModel,
@@ -1685,46 +1778,53 @@ const commandBackbone = createCommandBackbone({
 });
 
 async function sweepExpiredSessions() {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const repository = getHostedOrchestratorRepository();
+  const supabase = repository ? null : getSupabaseAdmin();
+  if (!repository && !supabase) {
     return 0;
   }
 
   const sweepStartedAt = now();
-  const { data, error } = await supabase
-    .from("hosted_web_sessions")
-    .select(
-      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at",
-    )
-    .lt("expires_at", sweepStartedAt)
-    .in("status", ["created", "active", "scoring"])
-    .limit(500);
-
-  if (error) {
-    console.error("[hosted-orchestrator] failed to discover expired sessions", error);
-    return 0;
+  let expiredRows: PersistedSessionRow[];
+  let expiredSessionRecords: HostedSessionRecord[] | null = null;
+  if (repository) {
+    expiredSessionRecords = await repository.listExpiredSessions(sweepStartedAt, 500);
+    expiredRows = expiredSessionRecords.map(persistedSessionFromDatabase);
+  } else {
+    if (!supabase) return 0;
+    const { data, error } = await supabase
+      .from("hosted_web_sessions")
+      .select(
+        "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at",
+      )
+      .lt("expires_at", sweepStartedAt)
+      .in("status", ["created", "active", "scoring"])
+      .limit(500);
+    if (error) {
+      console.error("[hosted-orchestrator] failed to discover expired sessions", error);
+      return 0;
+    }
+    expiredRows = (data ?? []) as PersistedSessionRow[];
   }
-
-  const expiredRows = (data ?? []) as PersistedSessionRow[];
   if (expiredRows.length === 0) {
     return 0;
   }
 
-  const { error: accessLogError } = await supabase.from("hosted_web_access_logs").insert(
-    expiredRows.map((row) => ({
-      session_id: row.id,
-      attempt_id: row.attempt_id,
-      run_id: row.run_id,
+  if (repository) {
+    await repository.appendExpiryDetectedLogs(expiredSessionRecords ?? []);
+  } else if (supabase) {
+    const { error: accessLogError } = await supabase.from("hosted_web_access_logs").insert(
+      expiredRows.map((row) => ({
+        session_id: row.id,
+        attempt_id: row.attempt_id,
+        run_id: row.run_id,
         event: "session.expiry_detected",
-      metadata: {
-        app: row.app,
-        taskSlug: row.task_slug,
-      },
-    })),
-  );
-
-  if (accessLogError) {
-    console.error("[hosted-orchestrator] failed to persist expiry sweep logs", accessLogError);
+        metadata: { app: row.app, taskSlug: row.task_slug },
+      })),
+    );
+    if (accessLogError) {
+      console.error("[hosted-orchestrator] failed to persist expiry sweep logs", accessLogError);
+    }
   }
 
   for (const row of expiredRows) {
@@ -1923,34 +2023,54 @@ const server = createServer(async (request, response) => {
       const runId = decodeURIComponent(runSessionsMatch[1]!);
       let sessions = await readCachedRunSessionProjection(runId);
       if (!sessions) {
-        const supabase = getSupabaseAdmin();
-        if (!supabase) {
+        const repository = getHostedOrchestratorRepository();
+        const supabase = repository ? null : getSupabaseAdmin();
+        if (!repository && !supabase) {
           sendJson(response, 503, { error: "database_unavailable" });
           return;
         }
-        const { data, error } = await supabase
-          .from("hosted_web_sessions")
-          .select("id, task_slug, status, sequence_index, expires_at, metadata")
-          .eq("run_id", runId)
-          .order("sequence_index", { ascending: true });
-        if (error) {
-          sendJson(response, 500, { error: "session_read_failed" });
-          return;
-        }
-        sessions = (data ?? []).map((item) => {
-          const metadata = extractMetadata(item.metadata as Record<string, unknown> | null);
-          return {
-            sessionId: item.id,
-            taskSlug: item.task_slug ?? "hosted-task",
-            status: item.status ?? "created",
-            sequenceIndex: item.sequence_index ?? 0,
-            expiresAt: item.expires_at ?? null,
-            timeLimitMinutes:
-              typeof metadata.timeLimitMinutesPerTestcase === "number"
+        if (repository) {
+          sessions = (await repository.listRunSessions(runId)).map((item) => {
+            const metadata = extractMetadata(item.metadata as Record<string, unknown> | null);
+            return {
+              sessionId: item.id,
+              taskSlug: item.taskSlug,
+              status: item.status,
+              sequenceIndex: item.sequenceIndex,
+              expiresAt: item.expiresAt,
+              timeLimitMinutes: typeof metadata.timeLimitMinutesPerTestcase === "number"
                 ? metadata.timeLimitMinutesPerTestcase
                 : null,
-          };
-        });
+            };
+          });
+        } else {
+          if (!supabase) {
+            sendJson(response, 503, { error: "database_unavailable" });
+            return;
+          }
+          const { data, error } = await supabase
+            .from("hosted_web_sessions")
+            .select("id, task_slug, status, sequence_index, expires_at, metadata")
+            .eq("run_id", runId)
+            .order("sequence_index", { ascending: true });
+          if (error) {
+            sendJson(response, 500, { error: "session_read_failed" });
+            return;
+          }
+          sessions = (data ?? []).map((item) => {
+            const metadata = extractMetadata(item.metadata as Record<string, unknown> | null);
+            return {
+              sessionId: item.id,
+              taskSlug: item.task_slug ?? "hosted-task",
+              status: item.status ?? "created",
+              sequenceIndex: item.sequence_index ?? 0,
+              expiresAt: item.expires_at ?? null,
+              timeLimitMinutes: typeof metadata.timeLimitMinutesPerTestcase === "number"
+                ? metadata.timeLimitMinutesPerTestcase
+                : null,
+            };
+          });
+        }
         await cacheRunSessionProjection(runId, sessions);
       }
       sendJson(response, 200, { sessions });
