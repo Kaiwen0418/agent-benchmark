@@ -43,6 +43,7 @@ import {
   type ProjectionCacheRedis,
   type RunSessionProjection,
 } from "./run-session-projection-cache.js";
+import { getOrchestratorBenchmarkCaseRepository } from "./database.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -769,14 +770,30 @@ type InitializeAttemptParams = {
 };
 
 async function loadBenchmarkCaseRevision(caseId: string, caseRevisionId: string | null) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const repository = getOrchestratorBenchmarkCaseRepository();
+  const supabase = repository ? null : getSupabaseAdmin();
+  if (!repository && !supabase) {
     throw new Error("Hosted attempt initialization requires a database connection.");
   }
   return resolveBenchmarkCaseRevision({
     caseId,
     caseRevisionId,
     loadRevision: async (revisionId) => {
+      if (repository) {
+        const row = await repository.findRevisionById(revisionId);
+        return row
+          ? {
+              id: row.id,
+              case_id: row.caseId,
+              revision: row.revision,
+              content_hash: row.contentHash,
+              manifest: row.manifest,
+            }
+          : null;
+      }
+      if (!supabase) {
+        throw new Error("Hosted attempt initialization requires a database connection.");
+      }
       const { data, error } = await supabase
         .from("benchmark_case_revisions")
         .select("id, case_id, revision, content_hash, manifest")

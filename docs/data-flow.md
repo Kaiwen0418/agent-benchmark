@@ -8,13 +8,13 @@ This document describes the current runtime path. It does not treat planned Redi
 sequenceDiagram
   participant U as User Browser
   participant W as apps/web
-  participant D as Supabase
+  participant D as PostgreSQL (currently Supabase-hosted)
   participant A as orchestrator API
   participant R as Redis Streams
   participant K as partition worker
 
   U->>W: POST /api/runs
-  W->>D: insert benchmark_run
+  W->>D: transaction: insert benchmark_run + run.created event
   U->>W: GET /api/runs/:id/connect
   W->>D: load case and current revision ID
   W->>A: POST /api/attempts/init
@@ -29,6 +29,12 @@ sequenceDiagram
 ```
 
 Web sends `runId`, `caseId`, and `caseRevisionId`, but never sends the private suite manifest. The worker loads the selected service-role-only revision, validates it, generates a deterministic question snapshot, and binds the attempt to that revision. The attempt stores only revision identity, generation seed, and progress pointers. Each generated session stores its own `metadata.questionGeneration` snapshot. The first session is `active`; later sessions are `created`.
+
+Web-owned run creation, metadata connection transitions, and terminal updates
+use direct PostgreSQL through the Drizzle repository. Run creation and its
+initial event commit together. Completion applies a status compare-and-set and
+commits the terminal event and artifacts with the winning transition, so a
+duplicate completion cannot duplicate those dependent records.
 
 Attempt initialization also uses a short Redis lease to reduce duplicate work. PostgreSQL uniqueness on `(run_id, case_id, provider)` remains the correctness boundary when Redis is unavailable or two requests race. See [Hosted Attempt Consistency](./attempt-consistency.md).
 
@@ -65,7 +71,7 @@ sequenceDiagram
   participant O as orchestrator API
   participant S as Redis Stream
   participant K as partition worker
-  participant D as Supabase
+  participant D as PostgreSQL (currently Supabase-hosted)
   participant W as apps/web
 
   A->>H: task action with session token

@@ -52,6 +52,10 @@ test("benchmark case repository preserves public and private read boundaries", a
     assert.equal((await repository.findByIdOrSlug("integration-hosted-suite"))?.id, caseId);
     assert.equal(await repository.revisionExists(caseId, revisionId), true);
     assert.equal(await repository.revisionExists(caseId, "20000000-0000-4000-8000-000000000002"), false);
+    const revision = await repository.findRevisionById(revisionId);
+    assert.equal(revision?.caseId, caseId);
+    assert.equal(revision?.contentHash, "a".repeat(64));
+    assert.equal(await repository.findRevisionById("20000000-0000-4000-8000-000000000002"), null);
 
     const publicRows = await repository.listPublicHosted();
     const publicRow = publicRows.find((row) => row.id === caseId);

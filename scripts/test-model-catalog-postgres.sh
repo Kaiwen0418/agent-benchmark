@@ -55,7 +55,81 @@ create table public.benchmark_case_revisions (
 );
 
 create table public.benchmark_runs (
-  id uuid primary key default gen_random_uuid()
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid,
+  guest_id text,
+  case_id uuid not null references public.benchmark_cases(id) on delete restrict,
+  runner_id uuid,
+  execution_mode text not null default 'internal',
+  status text not null default 'queued',
+  score numeric,
+  live_view_url text,
+  error_message text,
+  started_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  metadata jsonb not null default '{}'::jsonb,
+  agent_name text,
+  agent_version text,
+  base_model text,
+  browser_environment jsonb not null default '{}'::jsonb,
+  is_public boolean not null default true
+);
+
+create table public.profiles (
+  id uuid primary key,
+  daily_run_limit integer default 3
+);
+
+create table public.run_events (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table public.artifacts (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  type text not null,
+  storage_path text,
+  url text,
+  created_at timestamptz not null default now()
+);
+
+-- The production objects are security-barrier views. Tables with the same
+-- projected columns keep this repository test independent from orchestrator
+-- fixture setup while exercising PostgreSQL/Drizzle type mapping.
+create table public.public_hosted_run_summaries (
+  run_id uuid,
+  case_id uuid,
+  benchmark_title text,
+  suite_slug text,
+  suite_version text,
+  observed_user_agent text
+);
+
+create table public.public_hosted_run_tasks (
+  run_id uuid,
+  app text,
+  task_slug text,
+  status text,
+  score numeric,
+  summary text,
+  created_at timestamptz
+);
+
+create table public.public_hosted_run_consistency_checks (
+  run_id uuid,
+  sequence_index bigint,
+  name text,
+  source_task_slug text,
+  target_task_slug text,
+  status text,
+  score numeric,
+  required boolean,
+  failure_reason text
 );
 SQL
 

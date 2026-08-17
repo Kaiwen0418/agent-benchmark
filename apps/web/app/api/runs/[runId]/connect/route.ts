@@ -5,7 +5,7 @@ import { buildRunConnectPayload } from "@/lib/run-connect";
 import { negativeRunConnectCacheHeaders } from "@/lib/run-connect-cache";
 import { checkRunConnectRateLimit } from "@/lib/connect-rate-limit";
 import { terminalRunStatuses } from "@/lib/run-lifecycle";
-import { SupabaseServiceUnavailableError } from "@/lib/supabase/admin";
+import { DatabaseServiceUnavailableError } from "@/lib/database";
 
 export async function GET(
   request: Request,
@@ -74,7 +74,7 @@ export async function GET(
       );
     }
 
-    if (error instanceof SupabaseServiceUnavailableError) {
+    if (error instanceof DatabaseServiceUnavailableError) {
       return NextResponse.json(
         { error: error.code, message: "The benchmark service is temporarily unavailable. Please try again shortly.", retryable: true },
         { status: error.status, headers: rateLimitHeaders },

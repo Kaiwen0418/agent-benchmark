@@ -10,6 +10,14 @@ import {
   createBenchmarkCaseReadRepository,
   type BenchmarkCaseReadRepository,
 } from "@agentbench/database/benchmark-cases";
+import {
+  createWebControlPlaneRepository,
+  type WebControlPlaneRepository,
+} from "@agentbench/database/web-control-plane";
+import {
+  createPublicResultReadRepository,
+  type PublicResultReadRepository,
+} from "@agentbench/database/public-results";
 
 type DatabaseGlobal = typeof globalThis & {
   agentbenchWebDatabase?: DatabaseClient;
@@ -59,4 +67,12 @@ export function getWebModelCatalogRepository(): ModelCatalogReadRepository {
 
 export function getWebBenchmarkCaseRepository(): BenchmarkCaseReadRepository {
   return createBenchmarkCaseReadRepository(getWebDatabaseClient().db);
+}
+
+export function getWebControlPlaneRepository(): WebControlPlaneRepository {
+  return createWebControlPlaneRepository(getWebDatabaseClient().db);
+}
+
+export function getPublicResultRepository(): PublicResultReadRepository {
+  return createPublicResultReadRepository(getWebDatabaseClient().db);
 }

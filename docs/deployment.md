@@ -20,9 +20,14 @@ Cloudflare or the public reverse proxy should target this port and preserve
 
 The Web Compose project is intentionally separate from the hosted runtime
 Compose project. This keeps image pulls, restarts, and rollbacks independent.
-During the database transition, configure both the Supabase variables and the
-pooled `DATABASE_URL`. Remove Supabase credentials only after every Web and
-orchestrator repository has moved to Drizzle and cutover verification passes.
+Web requires only the pooled `DATABASE_URL` for persistence; it no longer needs
+Supabase URL or service-role variables. The separately deployed orchestrator
+also accepts `DATABASE_URL` and uses it for migrated repositories, currently
+immutable benchmark revision reads. It continues to require Supabase credentials
+for lifecycle, outbox, telemetry, and DLQ paths until repository migration and
+cutover verification are complete. `DATABASE_POOL_MAX` defaults to `10` per
+orchestrator API/worker process, so size PgBouncer and PostgreSQL for the sum of
+all replicas rather than for one container.
 
 ## Local Docker Stack
 
@@ -147,10 +152,8 @@ Optional web deployment secret:
 
 Each Vercel Web project must independently configure:
 
-- `DATABASE_URL` using a pooled PostgreSQL endpoint for migrated repositories
+- `DATABASE_URL` using a pooled PostgreSQL endpoint
 - optional `DATABASE_POOL_MAX` (defaults to `3` connections per Web instance)
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
@@ -188,10 +191,9 @@ deployments are unaffected.
 
 Development values must point to the test hosted hostname and development Supabase target; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
 
-All Supabase variables are server-only. Web browser bundles communicate through same-origin API routes and do not require or receive Supabase environment variables.
-`DATABASE_URL` is also server-only. During the transition it serves migrated
-Drizzle repositories while the remaining Web repositories continue through
-Supabase. For Supabase-hosted PostgreSQL use its transaction-pool endpoint, not
+Web browser bundles communicate through same-origin API routes and never receive
+database credentials. `DATABASE_URL` is server-only and serves every Web
+Drizzle repository. For Supabase-hosted PostgreSQL use its transaction-pool endpoint, not
 the direct database endpoint; a self-hosted deployment will point the same
 variable at PgBouncer.
 

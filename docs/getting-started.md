@@ -15,13 +15,13 @@ cp apps/web/.env.example apps/web/.env.local
 
 Configure these values in `apps/web/.env.local`:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL` (a pooled PostgreSQL connection)
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
 
-Supabase variables are server-only. Browser components use same-origin `/api/*` routes and must not initialize a Supabase client.
+Database variables are server-only. Browser components use same-origin `/api/*`
+routes and must not initialize a database client.
 
 Copy the database target example and configure the root `.env.local`:
 

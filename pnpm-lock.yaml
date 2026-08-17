@@ -14,6 +14,9 @@ importers:
 
   apps/hosted-orchestrator:
     dependencies:
+      '@agentbench/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@agentbench/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -82,9 +85,6 @@ importers:
       '@agentbench/test-cases':
         specifier: workspace:*
         version: link:../../packages/test-cases
-      '@supabase/supabase-js':
-        specifier: ^2.110.0
-        version: 2.110.0
       '@tanstack/react-query':
         specifier: ^5.101.2
         version: 5.101.2(react@19.2.7)

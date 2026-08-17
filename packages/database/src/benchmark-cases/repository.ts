@@ -35,11 +35,21 @@ export type CalibrationBenchmarkRevisionRecord = {
   createdAt: string;
 };
 
+export type BenchmarkCaseRevisionRecord = {
+  id: string;
+  caseId: string;
+  revision: string;
+  contentHash: string;
+  manifest: JsonValue;
+  createdAt: string;
+};
+
 export type BenchmarkCaseReadRepository = {
   listAll: () => Promise<BenchmarkCaseRecord[]>;
   listPublicHosted: () => Promise<PublicHostedBenchmarkCaseRecord[]>;
   listCalibrationRevisions: (caseIds: string[]) => Promise<CalibrationBenchmarkRevisionRecord[]>;
   revisionExists: (caseId: string, revisionId: string) => Promise<boolean>;
+  findRevisionById: (revisionId: string) => Promise<BenchmarkCaseRevisionRecord | null>;
   findByIdOrSlug: (identity: string) => Promise<BenchmarkCaseRecord | null>;
 };
 
@@ -119,6 +129,22 @@ export function createBenchmarkCaseReadRepository(
         ))
         .limit(1);
       return Boolean(row);
+    },
+
+    async findRevisionById(revisionId) {
+      const [row] = await db
+        .select({
+          id: benchmarkCaseRevisions.id,
+          caseId: benchmarkCaseRevisions.caseId,
+          revision: benchmarkCaseRevisions.revision,
+          contentHash: benchmarkCaseRevisions.contentHash,
+          manifest: benchmarkCaseRevisions.manifest,
+          createdAt: benchmarkCaseRevisions.createdAt,
+        })
+        .from(benchmarkCaseRevisions)
+        .where(eq(benchmarkCaseRevisions.id, revisionId))
+        .limit(1);
+      return row ?? null;
     },
 
     async findByIdOrSlug(identity) {

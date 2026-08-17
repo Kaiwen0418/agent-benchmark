@@ -107,12 +107,19 @@ document. Runtime consumers use `DATABASE_URL`, maintenance and migration jobs
 prefer `DATABASE_DIRECT_URL`, and neither contract depends on a Supabase HTTP
 endpoint or service-role JWT.
 
-The first migrated consumers are `packages/model-catalog-sync`, Web's
-model-catalog search and identity validation path, and Web's benchmark case and
-immutable revision reads. The benchmark repository exposes a display-safe
+The migrated consumers are `packages/model-catalog-sync`, Web's model-catalog
+search and identity validation path, Web's benchmark case and immutable
+revision reads, Web-owned run lifecycle persistence (`benchmark_runs`,
+`run_events`, `artifacts`, and quota reads from `profiles`), and public
+result/leaderboard projections. The control-plane
+repository uses PostgreSQL transactions for run creation plus its initial event,
+terminal completion plus artifacts/events, and metadata connection transitions.
+Web no longer uses PostgREST or the Supabase SDK. Hosted-orchestrator now uses
+Drizzle for immutable benchmark revision reads, with a temporary Supabase
+fallback for deployments that have not configured `DATABASE_URL`; its lifecycle,
+outbox, telemetry, and DLQ repositories still use the Supabase client until
+those slices are implemented and verified. The benchmark repository exposes a display-safe
 public projection separately from the private calibration manifest projection.
-Other Web persistence and hosted-orchestrator continue using their existing
-Supabase clients until their repository slices are implemented and verified.
 Existing Supabase migrations remain immutable schema history during the
 transition; Drizzle migration scope is restricted to tables represented by the
 current Drizzle schema.

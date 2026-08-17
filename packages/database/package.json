@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./benchmark-cases": "./src/benchmark-cases/index.ts",
-    "./model-catalog": "./src/model-catalog/index.ts"
+    "./model-catalog": "./src/model-catalog/index.ts",
+    "./public-results": "./src/public-results/index.ts",
+    "./web-control-plane": "./src/web-control-plane/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
