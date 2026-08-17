@@ -123,6 +123,8 @@ Optional web deployment secret:
 
 Each Vercel Web project must independently configure:
 
+- `DATABASE_URL` using a pooled PostgreSQL endpoint for migrated repositories
+- optional `DATABASE_POOL_MAX` (defaults to `3` connections per Web instance)
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RUNNER_SHARED_SECRET`
@@ -163,6 +165,11 @@ deployments are unaffected.
 Development values must point to the test hosted hostname and development Supabase target; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
 
 All Supabase variables are server-only. Web browser bundles communicate through same-origin API routes and do not require or receive Supabase environment variables.
+`DATABASE_URL` is also server-only. During the transition it serves migrated
+Drizzle repositories while the remaining Web repositories continue through
+Supabase. For Supabase-hosted PostgreSQL use its transaction-pool endpoint, not
+the direct database endpoint; a self-hosted deployment will point the same
+variable at PgBouncer.
 
 The self-hosted GitHub Actions runners must have `self-hosted` and `linux`, plus `agentbench-dev` for development or `agentbench-prod` for production. They need Docker access, Docker Compose, enough disk space for images, and network access to GHCR and Supabase.
 

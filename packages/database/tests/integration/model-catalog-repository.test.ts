@@ -6,7 +6,10 @@ import {
   modelCatalogSyncRuns,
   resolveDatabaseUrl,
 } from "../../src/index.js";
-import { createModelCatalogRepository } from "../../src/model-catalog/index.js";
+import {
+  createModelCatalogReadRepository,
+  createModelCatalogRepository,
+} from "../../src/model-catalog/index.js";
 
 test("model catalog repository runs against plain PostgreSQL", async () => {
   const client = createDatabaseClient({
@@ -15,6 +18,7 @@ test("model catalog repository runs against plain PostgreSQL", async () => {
     max: 1,
   });
   const repository = createModelCatalogRepository(client.db);
+  const readRepository = createModelCatalogReadRepository(client.db);
 
   try {
     const sync = await repository.startSync("integration-test");
@@ -39,6 +43,15 @@ test("model catalog repository runs against plain PostgreSQL", async () => {
 
     const inserted = await repository.listByProviders(["integration"]);
     assert.equal(inserted[0]?.display_name, "Portable Model");
+    assert.equal(
+      (await readRepository.findByIdentity("integration", "portable-model"))?.displayName,
+      "Portable Model",
+    );
+    assert.deepEqual(
+      (await readRepository.searchCandidates("portable", 10)).map((row) => row.modelId),
+      ["portable-model"],
+    );
+    assert.equal((await readRepository.searchCandidates("%' or true --", 10)).length, 0);
 
     await repository.finishSync(sync.id, {
       status: "completed",

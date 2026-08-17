@@ -70,6 +70,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@agentbench/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@agentbench/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

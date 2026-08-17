@@ -107,7 +107,8 @@ document. Runtime consumers use `DATABASE_URL`, maintenance and migration jobs
 prefer `DATABASE_DIRECT_URL`, and neither contract depends on a Supabase HTTP
 endpoint or service-role JWT.
 
-The first migrated consumer is `packages/model-catalog-sync`. Web and
+The first migrated consumers are `packages/model-catalog-sync` and Web's
+model-catalog search and identity validation path. Other Web persistence and
 hosted-orchestrator continue using their existing Supabase clients until their
 repository slices are implemented and verified. Existing Supabase migrations
 remain immutable schema history during the transition; Drizzle migration scope

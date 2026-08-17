@@ -1,12 +1,12 @@
-import { eq, inArray, sql } from "drizzle-orm";
-import type { AgentBenchDatabase } from "../client.js";
+import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import type { AgentBenchDatabase } from "../client";
 import {
   modelCatalog,
   modelCatalogSyncRuns,
   type JsonValue,
   type ModelCatalogStatus,
   type ModelCatalogSyncStatus,
-} from "../schema/index.js";
+} from "../schema/index";
 
 export type ModelCatalogRecord = {
   provider: string;
@@ -32,12 +32,79 @@ export type ModelCatalogSyncResult = {
   completedAt: string;
 };
 
+export type ModelCatalogReadRecord = {
+  provider: string;
+  modelId: string;
+  displayName: string;
+  aliases: string[];
+  status: ModelCatalogStatus;
+  reasoningEfforts: string[];
+  releasedAt: string | null;
+  verifiedAt: string | null;
+  sourcePriority: number;
+  benchmarkPopularity: number;
+};
+
+export type ModelCatalogReadRepository = {
+  searchCandidates: (searchToken: string | null, limit: number) => Promise<ModelCatalogReadRecord[]>;
+  findByIdentity: (provider: string, modelId: string) => Promise<ModelCatalogReadRecord | null>;
+};
+
 export type ModelCatalogRepository = {
   startSync: (source: string) => Promise<{ id: string }>;
   listByProviders: (providers: string[]) => Promise<ModelCatalogRecord[]>;
   upsert: (records: ModelCatalogRecord[]) => Promise<void>;
   finishSync: (id: string, result: ModelCatalogSyncResult) => Promise<void>;
 };
+
+const modelCatalogReadSelection = {
+  provider: modelCatalog.provider,
+  modelId: modelCatalog.modelId,
+  displayName: modelCatalog.displayName,
+  aliases: modelCatalog.aliases,
+  status: modelCatalog.status,
+  reasoningEfforts: modelCatalog.reasoningEfforts,
+  releasedAt: modelCatalog.releasedAt,
+  verifiedAt: modelCatalog.verifiedAt,
+  sourcePriority: modelCatalog.sourcePriority,
+  benchmarkPopularity: modelCatalog.benchmarkPopularity,
+};
+
+export function createModelCatalogReadRepository(
+  db: AgentBenchDatabase,
+): ModelCatalogReadRepository {
+  return {
+    async searchCandidates(searchToken, limit) {
+      const boundedLimit = Math.max(1, Math.min(limit, 250));
+      const pattern = searchToken ? `%${searchToken}%` : null;
+      return db
+        .select(modelCatalogReadSelection)
+        .from(modelCatalog)
+        .where(pattern ? or(
+          ilike(modelCatalog.displayName, pattern),
+          ilike(modelCatalog.modelId, pattern),
+          ilike(modelCatalog.provider, pattern),
+        ) : undefined)
+        .orderBy(
+          asc(modelCatalog.sourcePriority),
+          sql`${modelCatalog.releasedAt} desc nulls last`,
+        )
+        .limit(boundedLimit);
+    },
+
+    async findByIdentity(provider, modelId) {
+      const [row] = await db
+        .select(modelCatalogReadSelection)
+        .from(modelCatalog)
+        .where(and(
+          eq(modelCatalog.provider, provider),
+          eq(modelCatalog.modelId, modelId),
+        ))
+        .limit(1);
+      return row ?? null;
+    },
+  };
+}
 
 export function createModelCatalogRepository(db: AgentBenchDatabase): ModelCatalogRepository {
   return {

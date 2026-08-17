@@ -1,2 +1,2 @@
-export * from "./repository.js";
-export type { JsonValue, ModelCatalogStatus, ModelCatalogSyncStatus } from "../schema/index.js";
+export * from "./repository";
+export type { JsonValue, ModelCatalogStatus, ModelCatalogSyncStatus } from "../schema/index";

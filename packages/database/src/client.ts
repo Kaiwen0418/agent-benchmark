@@ -1,6 +1,6 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "./schema/index.js";
+import * as schema from "./schema/index";
 
 export type AgentBenchDatabase = NodePgDatabase<typeof schema>;
 

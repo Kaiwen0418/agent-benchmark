@@ -1,1 +1,1 @@
-export * from "./model-catalog.js";
+export * from "./model-catalog";

@@ -11,6 +11,7 @@
     "test": "node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)"
   },
   "dependencies": {
+    "@agentbench/database": "workspace:*",
     "@agentbench/protocol": "workspace:*",
     "@agentbench/shared": "workspace:*",
     "@agentbench/test-cases": "workspace:*",
