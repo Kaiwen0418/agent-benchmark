@@ -19,6 +19,9 @@ bash scripts/test-web-deploy-workflow.sh
 echo "== Cutover canary =="
 bash scripts/test-cutover-canary.sh
 
+echo "== Development cutover =="
+bash scripts/test-development-cutover.sh
+
 echo "== Registry retry helper =="
 bash scripts/test-registry-retry.sh
 

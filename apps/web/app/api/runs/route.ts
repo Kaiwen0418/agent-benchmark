@@ -14,8 +14,26 @@ import {
 } from "@/lib/db";
 import { captureBrowserEnvironment } from "@/lib/run-metadata";
 import { isCalibrationControlsEnabled } from "@/lib/calibration";
+import { isRunCreationAllowed } from "@/lib/run-admission";
 
 export async function POST(request: Request) {
+  if (!isRunCreationAllowed()) {
+    return NextResponse.json(
+      {
+        error: "run_creation_frozen",
+        message: "New benchmark runs are temporarily paused for database maintenance.",
+        retryable: true,
+      },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store",
+          "Retry-After": "300",
+        },
+      },
+    );
+  }
+
   const json = await request.json().catch(() => null);
   const parsedInput = createRunInputSchema.safeParse(json);
   if (!parsedInput.success) {

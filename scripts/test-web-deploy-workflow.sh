@@ -19,6 +19,7 @@ require_text "${WORKFLOW}" "web: \${{ steps.changes.outputs.web }}"
 require_text "${WORKFLOW}" "if: needs.detect-changes.outputs.web == 'true'"
 require_text "${WORKFLOW}" "file: infra/docker/web.Dockerfile"
 require_text "${WORKFLOW}" "WEB_COMPOSE_PROJECT_NAME: agentbench-development-web"
+require_text "${WORKFLOW}" "RUN_CREATION_MODE: \${{ vars.RUN_CREATION_MODE || 'open' }}"
 require_text "${WORKFLOW}" "run: bash infra/scripts/deploy-web-stack.sh"
 require_text "${DEPLOY_SCRIPT}" 'COMPOSE_FILE="infra/docker/docker-compose.web.yml"'
 require_text "${DEPLOY_SCRIPT}" 'compose up -d --remove-orphans --no-deps web'
@@ -44,6 +45,31 @@ set -e
 
 if [[ "${invalid_status}" -eq 0 || "${invalid_output}" != *"Invalid Web deployment mapping"* ]]; then
   echo "Web deployment script did not reject a mixed environment mapping." >&2
+  exit 1
+fi
+
+set +e
+freeze_output="$({
+  AGENTBENCH_WEB_PORT=3000 \
+    DATABASE_URL=postgresql://test-only \
+    DEPLOYMENT_ENVIRONMENT=development \
+    GHCR_PAT=test-only \
+    GHCR_USERNAME=test-only \
+    GITHUB_REPOSITORY_OWNER=test-only \
+    HOSTED_ORCHESTRATOR_URL=http://orchestrator.invalid \
+    HOSTED_SITES_URL=http://sites.invalid \
+    IMAGE_CHANNEL=develop \
+    IMAGE_TAG=test-only \
+    RUN_CREATION_MODE=invalid \
+    RUNNER_SHARED_SECRET=test-only \
+    WEB_COMPOSE_PROJECT_NAME=agentbench-development-web \
+    bash "${DEPLOY_SCRIPT}"
+} 2>&1)"
+freeze_status=$?
+set -e
+
+if [[ "${freeze_status}" -eq 0 || "${freeze_output}" != *"RUN_CREATION_MODE must be open or frozen"* ]]; then
+  echo "Web deployment script did not reject an invalid run-creation mode." >&2
   exit 1
 fi
 
