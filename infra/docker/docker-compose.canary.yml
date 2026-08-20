@@ -1,0 +1,44 @@
+services:
+  web:
+    image: ${AGENTBENCH_WEB_IMAGE}:${IMAGE_TAG}
+    environment:
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-3}
+      DATABASE_URL: ${DATABASE_URL}
+      GUEST_RUN_LIMIT: 999
+      HOSTED_ORCHESTRATOR_URL: http://hosted-orchestrator:3004
+      HOSTED_SITES_URL: ${HOSTED_SITES_PUBLIC_URL}
+      NODE_ENV: production
+      RUN_CONNECT_RATE_LIMIT: 30
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET}
+    ports:
+      - "3182:3000"
+    depends_on:
+      - hosted-orchestrator
+      - hosted-sites
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  hosted-orchestrator:
+    environment:
+      AGENTBENCH_WEB_URL: http://web:3000
+
+  hosted-orchestrator-worker-0:
+    environment:
+      AGENTBENCH_WEB_URL: http://web:3000
+
+  hosted-orchestrator-worker-1:
+    environment:
+      AGENTBENCH_WEB_URL: http://web:3000
+
+  hosted-sites:
+    environment:
+      AGENTBENCH_WEB_URL: http://web:3000
