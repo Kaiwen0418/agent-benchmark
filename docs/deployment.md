@@ -157,6 +157,32 @@ projects where appropriate. Targeted deploys preserve the currently running
 replica counts, so scaling one service does not restart or resize another. The
 orchestrator API and workers always use the same immutable image tag within one environment.
 
+### Development cutover canary
+
+Dispatch `Deploy Hosted Sites` from the candidate feature branch with
+`canary_action=deploy`. A feature-branch push never deploys the canary. The job
+builds the exact commit images and starts Web, hosted-sites, the orchestrator
+API/workers, Nginx, and two Redis services in the fixed
+`agentbench-cutover-canary` Compose project.
+
+The canary exposes Web on port `3182` and its gateway on port `8182`. Internal
+callbacks use `http://web:3000`, and the project has its own network, Redis
+containers, and volumes. The deployment script rejects mutable image tags and
+any database name that does not end in `_candidate`; it cannot target the
+canonical development or production database.
+
+After readiness, the workflow runs the provider-neutral lifecycle smoke. The
+smoke creates its run through Web, drives lifecycle operations through the
+orchestrator API, and uses the candidate direct PostgreSQL URL only for
+read-only persistence assertions. The successful canary is retained for
+browser inspection and its commit tag, endpoints, and smoke result are recorded
+in the workflow summary.
+
+To remove it, dispatch the same feature branch with
+`canary_action=destroy`. This runs `docker compose down --volumes
+--remove-orphans` only for `agentbench-cutover-canary`; active development and
+production projects are not addressed.
+
 Before replacing any running service, the deploy script authenticates to GHCR and pulls every required target image with bounded exponential-backoff retries. Transient registry/network failures such as timeouts, DNS failures, connection resets, 429s, and 5xx responses retry. Permanent authentication failures and missing manifests fail promptly. If the retry budget is exhausted, the script exits before `docker compose up`, leaving the previous healthy stack serving traffic.
 
 ## Production Topology
@@ -183,12 +209,16 @@ Relevant workflows:
 - [`.github/workflows/deploy-hosted-sites.yml`](../.github/workflows/deploy-hosted-sites.yml)
 - [`.github/workflows/model-catalog-sync.yml`](../.github/workflows/model-catalog-sync.yml)
 
-Hosted CD only accepts `develop` and `main`:
+Automatic hosted CD only accepts `develop` and `main`:
 
 - `develop` automatically deploys through the GitHub `development` Environment, the `agentbench-dev` runner, `latest-develop` images, the `agentbench-development` Compose project, and gateway port `8081` by default.
 - `main` deploys only through the GitHub `production` Environment, the `agentbench-prod` runner, `latest-main` images, the `agentbench-production` Compose project, and gateway port `8080` by default.
 
-Manual dispatches from any other branch fail before accessing a self-hosted runner. Required CI also rejects pull requests to `main` unless their source is `develop` or `hotfix/*`. The `production` Environment should require approval and allow deployments only from `main`.
+Manual dispatches from another branch can only deploy or destroy the isolated
+cutover canary. They never migrate or address development/production Compose
+projects. Required CI also rejects pull requests to `main` unless their source
+is `develop` or `hotfix/*`. The `production` Environment should require approval
+and allow deployments only from `main`.
 
 The hosted deployment workflow builds images, pushes them to GHCR, and runs the server deployment through a self-hosted GitHub Actions runner on Linux. This infrastructure agent is unrelated to the removed benchmark execution runner. The server pulls the requested image tag and recreates the Compose services.
 
@@ -212,6 +242,7 @@ Required variables in each GitHub Environment:
 - `HOSTED_ORCHESTRATOR_PUBLIC_URL`
 - `GATEWAY_HTTP_PORT`
 - optional `AGENTBENCH_WEB_PORT` (development self-hosted Web, default `3000`)
+- optional `CANARY_HOST` (self-hosted runner LAN address; defaults to `192.168.1.242`)
 
 Required secrets in each GitHub Environment:
 

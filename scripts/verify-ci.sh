@@ -16,6 +16,9 @@ bash scripts/test-deploy-classifier.sh
 echo "== Web deployment workflow =="
 bash scripts/test-web-deploy-workflow.sh
 
+echo "== Cutover canary =="
+bash scripts/test-cutover-canary.sh
+
 echo "== Registry retry helper =="
 bash scripts/test-registry-retry.sh
 

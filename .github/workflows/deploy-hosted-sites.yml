@@ -2,6 +2,15 @@ name: Deploy Hosted Sites
 
 on:
   workflow_dispatch:
+    inputs:
+      canary_action:
+        description: Deploy or remove an isolated feature-branch cutover canary
+        required: true
+        default: deploy
+        type: choice
+        options:
+          - deploy
+          - destroy
   push:
     branches:
       - develop
@@ -22,10 +31,12 @@ on:
       - 'infra/docker/web.Dockerfile'
       - 'infra/docker/docker-compose.web.yml'
       - 'infra/docker/docker-compose.server.yml'
+      - 'infra/docker/docker-compose.canary.yml'
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'
       - 'infra/scripts/deploy-hosted-stack.sh'
       - 'infra/scripts/deploy-web-stack.sh'
+      - 'infra/scripts/deploy-cutover-canary.sh'
       - 'infra/scripts/registry-retry.sh'
       - 'infra/scripts/verify-orchestrator-worker-recovery.sh'
       - 'infra/scripts/validate-orchestrator-partitions.sh'
@@ -51,22 +62,43 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_channel: ${{ steps.environment.outputs.image_channel }}
+      deployment_mode: ${{ steps.environment.outputs.deployment_mode }}
+      canary_action: ${{ steps.environment.outputs.canary_action }}
     steps:
       - name: Select deployment environment
         id: environment
         shell: bash
+        env:
+          REQUESTED_CANARY_ACTION: ${{ inputs.canary_action }}
         run: |
           set -euo pipefail
           case "${GITHUB_REF}" in
             refs/heads/develop)
               echo "image_channel=develop" >> "${GITHUB_OUTPUT}"
+              echo "deployment_mode=standard" >> "${GITHUB_OUTPUT}"
+              echo "canary_action=none" >> "${GITHUB_OUTPUT}"
               ;;
             refs/heads/main)
               echo "image_channel=main" >> "${GITHUB_OUTPUT}"
+              echo "deployment_mode=standard" >> "${GITHUB_OUTPUT}"
+              echo "canary_action=none" >> "${GITHUB_OUTPUT}"
               ;;
             *)
-              echo "Hosted deployment is only allowed from develop or main; received ${GITHUB_REF}." >&2
-              exit 1
+              if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+                echo "Feature-branch canary deployment requires an explicit workflow dispatch." >&2
+                exit 1
+              fi
+              case "${REQUESTED_CANARY_ACTION}" in
+                deploy | destroy)
+                  ;;
+                *)
+                  echo "Unsupported canary action: ${REQUESTED_CANARY_ACTION}" >&2
+                  exit 1
+                  ;;
+              esac
+              echo "image_channel=canary" >> "${GITHUB_OUTPUT}"
+              echo "deployment_mode=canary" >> "${GITHUB_OUTPUT}"
+              echo "canary_action=${REQUESTED_CANARY_ACTION}" >> "${GITHUB_OUTPUT}"
               ;;
           esac
 
@@ -137,6 +169,7 @@ jobs:
 
   verify:
     needs: validate-ref
+    if: needs.validate-ref.outputs.canary_action != 'destroy'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -475,6 +508,103 @@ jobs:
           HOSTED_ORCHESTRATOR_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
           AGENTBENCH_WEB_PORT: ${{ vars.AGENTBENCH_WEB_PORT || '3000' }}
         run: bash infra/scripts/deploy-web-stack.sh
+
+  deploy-cutover-canary:
+    if: needs.validate-ref.outputs.deployment_mode == 'canary' && needs.validate-ref.outputs.canary_action == 'deploy'
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-dev
+    environment: development
+    needs:
+      - validate-ref
+      - detect-changes
+      - verify
+      - build-web
+      - build-hosted-sites
+      - build-orchestrator
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Install canary smoke database client
+        run: pnpm install --frozen-lockfile --filter @agentbench/database
+
+      - name: Prepare candidate database URLs
+        env:
+          CANONICAL_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CANONICAL_DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          candidate_url="$(node -e 'const url = new URL(process.env.CANONICAL_DATABASE_URL); url.pathname = "/agentbench_development_candidate"; process.stdout.write(url.toString())')"
+          candidate_direct_url="$(node -e 'const url = new URL(process.env.CANONICAL_DATABASE_DIRECT_URL); url.pathname = "/agentbench_development_candidate"; process.stdout.write(url.toString())')"
+          echo "::add-mask::${candidate_url}"
+          echo "::add-mask::${candidate_direct_url}"
+          echo "DATABASE_CANARY_URL=${candidate_url}" >> "${GITHUB_ENV}"
+          echo "DATABASE_CANARY_DIRECT_URL=${candidate_direct_url}" >> "${GITHUB_ENV}"
+
+      - name: Deploy isolated cutover canary
+        env:
+          CANARY_HOST: ${{ vars.CANARY_HOST || '192.168.1.242' }}
+          GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          IMAGE_TAG: ${{ needs.detect-changes.outputs.image_tag }}
+          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
+        run: DATABASE_URL="${DATABASE_CANARY_URL}" bash infra/scripts/deploy-cutover-canary.sh
+
+      - name: Run provider-neutral lifecycle smoke
+        env:
+          START_LOCAL_SERVICES: 'false'
+          HOSTED_SITES_PUBLIC_URL: http://${{ vars.CANARY_HOST || '192.168.1.242' }}:8182
+          HOSTED_ORCHESTRATOR_PUBLIC_URL: http://${{ vars.CANARY_HOST || '192.168.1.242' }}:8182/orchestrator
+          AGENTBENCH_WEB_URL: http://${{ vars.CANARY_HOST || '192.168.1.242' }}:3182
+          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
+        run: DATABASE_DIRECT_URL="${DATABASE_CANARY_DIRECT_URL}" bash tests/e2e/hosted-lifecycle-full-pass.sh
+
+      - name: Record retained canary
+        env:
+          CANARY_HOST: ${{ vars.CANARY_HOST || '192.168.1.242' }}
+        run: |
+          {
+            echo "## Development cutover canary"
+            echo
+            echo "- Compose project: \`agentbench-cutover-canary\`"
+            echo "- Image tag: \`${GITHUB_SHA::12}\`"
+            echo "- Web: \`http://${CANARY_HOST}:3182\`"
+            echo "- Gateway: \`http://${CANARY_HOST}:8182\`"
+            echo "- Lifecycle smoke: passed"
+            echo "- Teardown: dispatch this feature branch with \`canary_action=destroy\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  destroy-cutover-canary:
+    if: needs.validate-ref.outputs.deployment_mode == 'canary' && needs.validate-ref.outputs.canary_action == 'destroy'
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-dev
+    environment: development
+    needs:
+      - validate-ref
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Remove isolated cutover canary
+        env:
+          CANARY_ACTION: destroy
+        run: bash infra/scripts/deploy-cutover-canary.sh
 
   smoke-development:
     if: github.ref == 'refs/heads/develop'
