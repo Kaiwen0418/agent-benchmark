@@ -100,34 +100,21 @@ Completion criteria: transport changes do not require lifecycle changes, and inc
 
 Status: In Progress ([#211](https://github.com/Kaiwen0418/agent-benchmark/issues/211))
 
-- Introduce domain-owned Drizzle repositories using standard PostgreSQL
-  connections while Supabase PostgreSQL remains the initial host.
-- Migrate model-catalog maintenance, Web control-plane persistence, and
-  orchestrator persistence in independently deployable slices.
-- Preserve lifecycle stored functions, locking, idempotency, public read
-  projections, and immutable migration history until equivalent integration
-  coverage exists.
-- Replace Supabase Auth schema coupling with application-owned Auth.js tables
-  before moving the database host.
-- Add self-hosted PostgreSQL, PgBouncer, backups, restore verification, metrics,
-  and a rollback-tested development cutover before production migration.
-- Keep runtime and migration contracts provider-neutral so a later managed
-  PostgreSQL deployment changes infrastructure and secrets rather than
-  application repositories.
+| Milestone | Status | Exit criteria |
+| --- | --- | --- |
+| DB.1 Portable persistence foundation | Complete | Domain-owned Drizzle repositories, portable lifecycle functions, clean-PostgreSQL CI, self-hosted PostgreSQL/PgBouncer, transfer validation, and backup/restore verification work without Supabase APIs. |
+| DB.2 Development traffic cutover | In Progress ([#212](https://github.com/Kaiwen0418/agent-benchmark/issues/212)-[#216](https://github.com/Kaiwen0418/agent-benchmark/issues/216)) | Database-aware readiness, provider-neutral smoke, independent Web CD, isolated candidate canary, final write freeze, traffic cutover, observation, and rollback drill pass in development. |
+| DB.3 Application-owned identity | Planned ([#217](https://github.com/Kaiwen0418/agent-benchmark/issues/217)) | Auth.js owns portable identity/session tables, required historical ownership is migrated, guest behavior remains valid, and Supabase Auth runtime coupling is removable. |
+| DB.4 Production and cloud portability | Planned ([#218](https://github.com/Kaiwen0418/agent-benchmark/issues/218), [#219](https://github.com/Kaiwen0418/agent-benchmark/issues/219)) | Production cutover passes integrity, browser/lifecycle E2E, backup/restore, observation, and rollback; later cloud modules preserve standard image and PostgreSQL contracts. |
 
 Completion criteria: a clean standard PostgreSQL deployment can restore and
 serve all application data without Supabase APIs, browsers have no direct
 database access, and development plus production cutovers have validated
 integrity, backup, restore, and rollback procedures.
 
-Current progress: the portable Drizzle baseline, lifecycle/outbox/DLQ routines,
-self-hosted development PostgreSQL/PgBouncer, direct catalog publication,
-clean-database CI, and logical backup/restore verification are complete.
-Candidate-database transfer, row-count validation, development snapshot
-migration, local Web read validation, and candidate backup/restore are also
-complete. Remaining work is executing development application traffic cutover, off-host
-backup retention and monitoring, Auth.js identity ownership, then production
-migration and rollback validation.
+Current progress: DB.1 and the development candidate snapshot are complete.
+DB.2 is the active release gate. DB.3 must complete before DB.4 production
+cutover; Terraform remains non-blocking until the runtime topology is stable.
 
 ## P1: Benchmark Quality
 

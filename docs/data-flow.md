@@ -8,7 +8,7 @@ This document describes the current runtime path. It does not treat planned Redi
 sequenceDiagram
   participant U as User Browser
   participant W as apps/web
-  participant D as PostgreSQL (currently Supabase-hosted)
+  participant D as PostgreSQL
   participant A as orchestrator API
   participant R as Redis Streams
   participant K as partition worker
@@ -71,7 +71,7 @@ sequenceDiagram
   participant O as orchestrator API
   participant S as Redis Stream
   participant K as partition worker
-  participant D as PostgreSQL (currently Supabase-hosted)
+  participant D as PostgreSQL
   participant W as apps/web
 
   A->>H: task action with session token
@@ -103,7 +103,7 @@ flowchart LR
   Stream --> Group["hosted-orchestrator consumer group"]
   Group --> Worker["partition owner"]
   Worker --> Handler["typed command handler"]
-  Handler --> DB[("Supabase")]
+  Handler --> DB[("PostgreSQL")]
   Handler --> Result["24h command result key"]
   Result --> Reply["short-lived response list"]
   Reply --> API
@@ -122,7 +122,7 @@ sequenceDiagram
   participant O as orchestrator API
   participant R as Redis Stream
   participant K as partition worker
-  participant D as Supabase
+  participant D as PostgreSQL
   participant W as apps/web
 
   A->>H: terminal task action
@@ -179,10 +179,10 @@ when Redis is unavailable.
 Recovery boundaries:
 
 - process-local Map loss is expected and recoverable from Redis
-- Redis session loss uses orchestrator recovery from the latest successful Supabase app-state snapshot
+- Redis session loss uses orchestrator recovery from the latest successful PostgreSQL app-state snapshot
 - Redis Stream loss can discard commands that had not produced durable database effects
 - duplicate terminal commands recover from PostgreSQL constraints and transactional functions
 - Web callback loss recovers through `hosted_callback_outbox`
-- there is no distributed transaction spanning Redis, Supabase, hosted-sites, and Web
+- there is no distributed transaction spanning Redis, PostgreSQL, hosted-sites, and Web
 
 The exact current RPO, concurrency gaps, and degraded behavior are documented in [Consistency and Failure](./consistency-and-failure.md).
