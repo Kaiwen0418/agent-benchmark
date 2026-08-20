@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@agentbench/shared";
 import {
   compactCommandPayload,
   pruneCommandDeadLetters,
   redactCommandErrorMessage,
   redactCommandPayload,
   scrubCommandDeadLetters,
+  type CommandDeadLetterMaintenancePersistence,
 } from "../../src/command-dead-letter.js";
 
 test("redacts sensitive command payload keys recursively", () => {
@@ -58,17 +57,18 @@ test("replaces oversized command payloads with compact diagnostics", () => {
 });
 
 test("prunes command dead letters across a bounded number of batches", async () => {
-  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const calls: Record<string, unknown>[] = [];
   const batchResults = [500, 500, 37];
-  const supabase = {
-    rpc(name: string, args: Record<string, unknown>) {
-      calls.push({ name, args });
-      return Promise.resolve({ data: batchResults.shift() ?? 0, error: null });
+  const persistence: CommandDeadLetterMaintenancePersistence = {
+    prune: async (input) => {
+      calls.push(input);
+      return batchResults.shift() ?? 0;
     },
-  } as unknown as SupabaseClient<Database>;
+    scrub: async () => 0,
+  };
 
   const deleted = await pruneCommandDeadLetters(
-    supabase,
+    persistence,
     {
       deadRetentionMs: 90 * 24 * 60 * 60 * 1_000,
       resolvedRetentionMs: 30 * 24 * 60 * 60 * 1_000,
@@ -82,26 +82,24 @@ test("prunes command dead letters across a bounded number of batches", async () 
   assert.equal(deleted, 1_037);
   assert.equal(calls.length, 3);
   assert.deepEqual(calls[0], {
-    name: "prune_orchestrator_command_dead_letters_v2",
-    args: {
-      p_dead_before: "2026-04-10T00:00:00.000Z",
-      p_resolved_before: "2026-06-09T00:00:00.000Z",
-      p_limit: 500,
-      p_max_rows: 10_000,
-    },
+    deadBefore: "2026-04-10T00:00:00.000Z",
+    resolvedBefore: "2026-06-09T00:00:00.000Z",
+    limit: 500,
+    maxRows: 10_000,
   });
 });
 
 test("stops command dead-letter pruning at the configured sweep budget", async () => {
   let calls = 0;
-  const supabase = {
-    rpc() {
+  const persistence: CommandDeadLetterMaintenancePersistence = {
+    async prune() {
       calls += 1;
-      return Promise.resolve({ data: 100, error: null });
+      return 100;
     },
-  } as unknown as SupabaseClient<Database>;
+    scrub: async () => 0,
+  };
 
-  const deleted = await pruneCommandDeadLetters(supabase, {
+  const deleted = await pruneCommandDeadLetters(persistence, {
     deadRetentionMs: 1,
     resolvedRetentionMs: 1,
     batchSize: 100,
@@ -114,17 +112,15 @@ test("stops command dead-letter pruning at the configured sweep budget", async (
 });
 
 test("scrubs historical command dead letters in bounded batches", async () => {
-  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
-  const supabase = {
-    rpc(name: string, args: Record<string, unknown>) {
-      calls.push({ name, args });
-      return Promise.resolve({ data: 500, error: null });
+  const calls: number[] = [];
+  const persistence: CommandDeadLetterMaintenancePersistence = {
+    prune: async () => 0,
+    scrub: async (limit) => {
+      calls.push(limit);
+      return 500;
     },
-  } as unknown as SupabaseClient<Database>;
+  };
 
-  assert.equal(await scrubCommandDeadLetters(supabase, 500), 500);
-  assert.deepEqual(calls, [{
-    name: "scrub_orchestrator_command_dead_letters",
-    args: { p_limit: 500 },
-  }]);
+  assert.equal(await scrubCommandDeadLetters(persistence, 500), 500);
+  assert.deepEqual(calls, [500]);
 });

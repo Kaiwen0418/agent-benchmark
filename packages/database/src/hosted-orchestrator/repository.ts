@@ -2,10 +2,12 @@ import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import type { AgentBenchDatabase } from "../client";
 import {
   benchmarkAttempts,
+  hostedCallbackOutbox,
   hostedWebAccessLogs,
   hostedWebEvents,
   hostedWebResults,
   hostedWebSessions,
+  orchestratorCommandDeadLetters,
 } from "../schema/index";
 import type { JsonValue } from "../schema/model-catalog";
 
@@ -277,6 +279,159 @@ export function createHostedOrchestratorRepository(db: AgentBenchDatabase) {
         attemptRunId: row.attempt_run_id,
         expiredSessionIds: row.expired_session_ids,
       } : null;
+    },
+
+    async reconcileCallbackOutbox() {
+      const result = await db.execute<{ reconciled: number }>(sql`
+        select public.reconcile_hosted_callback_outbox() as reconciled
+      `);
+      return Number(result.rows[0]?.reconciled ?? 0);
+    },
+
+    async claimCallbackOutbox(limit: number) {
+      const result = await db.execute<{
+        id: string;
+        attempt_id: string;
+        run_id: string;
+        event_type: string;
+        payload: JsonValue;
+        status: "pending" | "delivering" | "delivered" | "dead";
+        attempts: number;
+        next_attempt_at: string;
+        locked_at: string | null;
+        delivered_at: string | null;
+        last_error: string | null;
+        created_at: string;
+        updated_at: string;
+      }>(sql`select * from public.claim_hosted_callback_outbox(${limit}::integer)`);
+      return result.rows.map((row) => ({
+        id: row.id,
+        attemptId: row.attempt_id,
+        runId: row.run_id,
+        eventType: row.event_type,
+        payload: row.payload,
+        status: row.status,
+        attempts: row.attempts,
+        nextAttemptAt: row.next_attempt_at,
+        lockedAt: row.locked_at,
+        deliveredAt: row.delivered_at,
+        lastError: row.last_error,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    },
+
+    async markCallbackDelivered(id: string, deliveredAt: string) {
+      await db.update(hostedCallbackOutbox).set({
+        status: "delivered",
+        deliveredAt,
+        lockedAt: null,
+        lastError: null,
+        updatedAt: deliveredAt,
+      }).where(and(
+        eq(hostedCallbackOutbox.id, id),
+        eq(hostedCallbackOutbox.status, "delivering"),
+      ));
+    },
+
+    async markCallbackFailed(input: {
+      id: string;
+      status: "pending" | "dead";
+      nextAttemptAt: string;
+      lastError: string;
+      updatedAt: string;
+    }) {
+      await db.update(hostedCallbackOutbox).set({
+        status: input.status,
+        nextAttemptAt: input.nextAttemptAt,
+        lockedAt: null,
+        lastError: input.lastError,
+        updatedAt: input.updatedAt,
+      }).where(and(
+        eq(hostedCallbackOutbox.id, input.id),
+        eq(hostedCallbackOutbox.status, "delivering"),
+      ));
+    },
+
+    async upsertCommandDeadLetter(input: typeof orchestratorCommandDeadLetters.$inferInsert) {
+      await db.insert(orchestratorCommandDeadLetters).values(input).onConflictDoUpdate({
+        target: orchestratorCommandDeadLetters.commandId,
+        set: {
+          stream: input.stream,
+          messageId: input.messageId,
+          partition: input.partition,
+          partitionKey: input.partitionKey,
+          payloadType: input.payloadType,
+          payload: input.payload,
+          errorCode: input.errorCode,
+          errorMessage: input.errorMessage,
+          attempts: input.attempts,
+          status: input.status,
+          scrubbedAt: input.scrubbedAt,
+          updatedAt: input.updatedAt,
+        },
+      });
+    },
+
+    listCommandDeadLetters(input: {
+      limit: number;
+      status?: "dead" | "replayed" | "resolved";
+    }) {
+      const condition = input.status
+        ? eq(orchestratorCommandDeadLetters.status, input.status)
+        : undefined;
+      return db.select().from(orchestratorCommandDeadLetters)
+        .where(condition)
+        .orderBy(desc(orchestratorCommandDeadLetters.createdAt))
+        .limit(input.limit);
+    },
+
+    async findCommandDeadLetter(id: string) {
+      const [row] = await db.select().from(orchestratorCommandDeadLetters)
+        .where(eq(orchestratorCommandDeadLetters.id, id))
+        .limit(1);
+      return row ?? null;
+    },
+
+    async markCommandDeadLetterReplayed(input: {
+      id: string;
+      replayCommandId: string;
+      replayedAt: string;
+    }) {
+      const [row] = await db.update(orchestratorCommandDeadLetters).set({
+        status: "replayed",
+        replayCommandId: input.replayCommandId,
+        replayedAt: input.replayedAt,
+        updatedAt: input.replayedAt,
+      }).where(and(
+        eq(orchestratorCommandDeadLetters.id, input.id),
+        eq(orchestratorCommandDeadLetters.status, "dead"),
+      )).returning({ id: orchestratorCommandDeadLetters.id });
+      return Boolean(row);
+    },
+
+    async pruneCommandDeadLetters(input: {
+      deadBefore: string;
+      resolvedBefore: string;
+      limit: number;
+      maxRows: number;
+    }) {
+      const result = await db.execute<{ deleted: number }>(sql`
+        select public.prune_orchestrator_command_dead_letters_v2(
+          ${input.deadBefore}::timestamptz,
+          ${input.resolvedBefore}::timestamptz,
+          ${input.limit}::integer,
+          ${input.maxRows}::integer
+        ) as deleted
+      `);
+      return Number(result.rows[0]?.deleted ?? 0);
+    },
+
+    async scrubCommandDeadLetters(limit: number) {
+      const result = await db.execute<{ scrubbed: number }>(sql`
+        select public.scrub_orchestrator_command_dead_letters(${limit}::integer) as scrubbed
+      `);
+      return Number(result.rows[0]?.scrubbed ?? 0);
     },
   };
 }

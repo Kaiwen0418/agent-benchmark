@@ -11,7 +11,6 @@ export default defineConfig({
   schema: "./src/schema/index.ts",
   out: "./drizzle/migrations",
   schemaFilter: ["public"],
-  tablesFilter: ["model_catalog", "model_catalog_sync_runs"],
   dbCredentials: {
     url: databaseUrl,
   },

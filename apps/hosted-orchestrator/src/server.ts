@@ -38,6 +38,7 @@ import {
   pruneCommandDeadLetters,
   redactCommandErrorMessage,
   scrubCommandDeadLetters,
+  type CommandDeadLetterMaintenancePersistence,
 } from "./command-dead-letter.js";
 import {
   invalidateRunSessionProjectionCache,
@@ -250,6 +251,16 @@ function getSupabaseAdmin() {
 
 const callbackOutbox = createCallbackOutboxProcessor({
   getSupabaseAdmin,
+  getPersistence: () => {
+    const repository = getHostedOrchestratorRepository();
+    return repository ? {
+      reconcile: () => repository.reconcileCallbackOutbox(),
+      claim: (limit: number) => repository.claimCallbackOutbox(limit),
+      markDelivered: (id: string, deliveredAt: string) =>
+        repository.markCallbackDelivered(id, deliveredAt),
+      markFailed: (input) => repository.markCallbackFailed(input),
+    } : null;
+  },
   webBaseUrl: agentbenchWebUrl || null,
   sharedSecret: runnerSharedSecret ?? null,
 });
@@ -1736,11 +1747,31 @@ async function dispatchWriteCommand(type: string, input: Record<string, unknown>
 }
 
 async function persistCommandDeadLetter(deadLetter: CommandDeadLetter) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const repository = getHostedOrchestratorRepository();
+  const supabase = repository ? null : getSupabaseAdmin();
+  if (!repository && !supabase) {
     throw new Error("Command DLQ persistence requires a database connection.");
   }
   const timestamp = now();
+  if (repository) {
+    await repository.upsertCommandDeadLetter({
+      commandId: deadLetter.commandId,
+      stream: deadLetter.stream,
+      messageId: deadLetter.messageId,
+      partition: deadLetter.partition,
+      partitionKey: deadLetter.partitionKey,
+      payloadType: deadLetter.payloadType,
+      payload: compactCommandPayload(deadLetter.payload, commandDeadLetterMaxPayloadBytes),
+      errorCode: deadLetter.errorCode,
+      errorMessage: redactCommandErrorMessage(deadLetter.errorMessage),
+      attempts: deadLetter.attempts,
+      status: "dead",
+      scrubbedAt: timestamp,
+      updatedAt: timestamp,
+    });
+    return;
+  }
+  if (!supabase) throw new Error("Command DLQ persistence requires a database connection.");
   const { error } = await supabase.from("orchestrator_command_dead_letters").upsert(
     {
       command_id: deadLetter.commandId,
@@ -1854,14 +1885,45 @@ async function sweepExpiredSessions() {
   return expiredRows.length;
 }
 
-async function pruneExpiredCommandDeadLetters() {
+function getCommandDeadLetterMaintenancePersistence(): CommandDeadLetterMaintenancePersistence | null {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    return {
+      prune: (input) => repository.pruneCommandDeadLetters(input),
+      scrub: (limit) => repository.scrubCommandDeadLetters(limit),
+    };
+  }
   const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  if (!supabase) return null;
+  return {
+    async prune(input) {
+      const { data, error } = await supabase.rpc("prune_orchestrator_command_dead_letters_v2", {
+        p_dead_before: input.deadBefore,
+        p_resolved_before: input.resolvedBefore,
+        p_limit: input.limit,
+        p_max_rows: input.maxRows,
+      });
+      if (error) throw error;
+      return data ?? 0;
+    },
+    async scrub(limit) {
+      const { data, error } = await supabase.rpc("scrub_orchestrator_command_dead_letters", {
+        p_limit: limit,
+      });
+      if (error) throw error;
+      return data ?? 0;
+    },
+  };
+}
+
+async function pruneExpiredCommandDeadLetters() {
+  const persistence = getCommandDeadLetterMaintenancePersistence();
+  if (!persistence) {
     return 0;
   }
 
   try {
-    return await pruneCommandDeadLetters(supabase, {
+    return await pruneCommandDeadLetters(persistence, {
       deadRetentionMs: commandDeadRetentionMs,
       resolvedRetentionMs: commandResolvedRetentionMs,
       batchSize: commandDeadLetterPruneBatchSize,
@@ -1875,13 +1937,13 @@ async function pruneExpiredCommandDeadLetters() {
 }
 
 async function scrubHistoricalCommandDeadLetters() {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const persistence = getCommandDeadLetterMaintenancePersistence();
+  if (!persistence) {
     return 0;
   }
 
   try {
-    return await scrubCommandDeadLetters(supabase, commandDeadLetterPruneBatchSize);
+    return await scrubCommandDeadLetters(persistence, commandDeadLetterPruneBatchSize);
   } catch (error) {
     console.error("[hosted-orchestrator] failed to scrub command dead letters", error);
     return 0;
@@ -1962,26 +2024,50 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/commands/dead-letters") {
-      const supabase = getSupabaseAdmin();
-      if (!supabase) {
+      const repository = getHostedOrchestratorRepository();
+      const supabase = repository ? null : getSupabaseAdmin();
+      if (!repository && !supabase) {
         sendJson(response, 503, { error: "database_unavailable" });
         return;
       }
       const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") ?? 50) || 50, 100));
       const status = url.searchParams.get("status");
-      let query = supabase
-        .from("orchestrator_command_dead_letters")
-        .select("id, command_id, partition, partition_key, payload_type, error_code, error_message, attempts, status, replay_command_id, replayed_at, created_at")
-        .order("created_at", { ascending: false })
-        .limit(limit);
-      if (status === "dead" || status === "replayed" || status === "resolved") {
-        query = query.eq("status", status);
+      if (repository) {
+        const rows = await repository.listCommandDeadLetters({
+          limit,
+          ...(status === "dead" || status === "replayed" || status === "resolved" ? { status } : {}),
+        });
+        sendJson(response, 200, { deadLetters: rows.map((row) => ({
+          id: row.id,
+          command_id: row.commandId,
+          partition: row.partition,
+          partition_key: row.partitionKey,
+          payload_type: row.payloadType,
+          error_code: row.errorCode,
+          error_message: row.errorMessage,
+          attempts: row.attempts,
+          status: row.status,
+          replay_command_id: row.replayCommandId,
+          replayed_at: row.replayedAt,
+          created_at: row.createdAt,
+        })) });
+      } else {
+        if (!supabase) {
+          sendJson(response, 503, { error: "database_unavailable" });
+          return;
+        }
+        let query = supabase
+          .from("orchestrator_command_dead_letters")
+          .select("id, command_id, partition, partition_key, payload_type, error_code, error_message, attempts, status, replay_command_id, replayed_at, created_at")
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (status === "dead" || status === "replayed" || status === "resolved") {
+          query = query.eq("status", status);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+        sendJson(response, 200, { deadLetters: data ?? [] });
       }
-      const { data, error } = await query;
-      if (error) {
-        throw error;
-      }
-      sendJson(response, 200, { deadLetters: data ?? [] });
       return;
     }
 
@@ -2079,20 +2165,32 @@ const server = createServer(async (request, response) => {
 
     const replayDeadLetterMatch = url.pathname.match(/^\/api\/commands\/dead-letters\/([^/]+)\/replay$/);
     if (request.method === "POST" && replayDeadLetterMatch) {
-      const supabase = getSupabaseAdmin();
-      if (!supabase) {
+      const repository = getHostedOrchestratorRepository();
+      const supabase = repository ? null : getSupabaseAdmin();
+      if (!repository && !supabase) {
         sendJson(response, 503, { error: "database_unavailable" });
         return;
       }
       const deadLetterId = decodeURIComponent(replayDeadLetterMatch[1]);
-      const { data: deadLetter, error: loadError } = await supabase
-        .from("orchestrator_command_dead_letters")
-        .select("id, command_id, partition_key, payload_type, payload, status")
-        .eq("id", deadLetterId)
-        .maybeSingle();
-      if (loadError) {
-        throw loadError;
-      }
+      const deadLetter = repository
+        ? await repository.findCommandDeadLetter(deadLetterId).then((row) => row ? ({
+            id: row.id,
+            command_id: row.commandId,
+            partition_key: row.partitionKey,
+            payload_type: row.payloadType,
+            payload: row.payload,
+            status: row.status,
+          }) : null)
+        : await (async () => {
+            if (!supabase) return null;
+            const { data, error } = await supabase
+              .from("orchestrator_command_dead_letters")
+              .select("id, command_id, partition_key, payload_type, payload, status")
+              .eq("id", deadLetterId)
+              .maybeSingle();
+            if (error) throw error;
+            return data;
+          })();
       if (!deadLetter) {
         sendJson(response, 404, { error: "dead_letter_not_found" });
         return;
@@ -2116,13 +2214,27 @@ const server = createServer(async (request, response) => {
         return;
       }
       const replayedAt = now();
-      const { error: updateError } = await supabase
-        .from("orchestrator_command_dead_letters")
-        .update({ status: "replayed", replay_command_id: replayCommandId, replayed_at: replayedAt, updated_at: replayedAt })
-        .eq("id", deadLetter.id)
-        .eq("status", "dead");
-      if (updateError) {
-        throw updateError;
+      if (repository) {
+        const updated = await repository.markCommandDeadLetterReplayed({
+          id: deadLetter.id,
+          replayCommandId,
+          replayedAt,
+        });
+        if (!updated) {
+          sendJson(response, 409, { error: "dead_letter_replay_conflict" });
+          return;
+        }
+      } else {
+        if (!supabase) {
+          sendJson(response, 503, { error: "database_unavailable" });
+          return;
+        }
+        const { error } = await supabase
+          .from("orchestrator_command_dead_letters")
+          .update({ status: "replayed", replay_command_id: replayCommandId, replayed_at: replayedAt, updated_at: replayedAt })
+          .eq("id", deadLetter.id)
+          .eq("status", "dead");
+        if (error) throw error;
       }
       sendJson(response, 200, { replayCommandId, response: replay });
       return;

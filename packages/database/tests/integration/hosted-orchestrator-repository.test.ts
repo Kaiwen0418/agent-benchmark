@@ -7,10 +7,12 @@ import {
   benchmarkCases,
   benchmarkRuns,
   createDatabaseClient,
+  hostedCallbackOutbox,
   hostedWebAccessLogs,
   hostedWebEvents,
   hostedWebResults,
   hostedWebSessions,
+  orchestratorCommandDeadLetters,
   postgresErrorCode,
   resolveDatabaseUrl,
 } from "../../src/index.js";
@@ -273,6 +275,78 @@ test("hosted orchestrator initializes attempts and sessions atomically", async (
     });
     assert.equal(timeout?.transitioned, true);
     assert.deepEqual(timeout?.expiredSessionIds, [created.sessions[1]!.id]);
+    await client.db.insert(hostedCallbackOutbox).values({
+      attemptId: created.attempt.id,
+      runId: runs[0]!.id,
+      payload: { status: "completed", score: 1, artifacts: [] },
+      nextAttemptAt: "2020-01-01T00:00:00.000Z",
+    });
+    assert.equal(await repository.reconcileCallbackOutbox(), 0);
+    const claimedCallbacks = await repository.claimCallbackOutbox(20);
+    assert.equal(claimedCallbacks.length, 1);
+    assert.equal(claimedCallbacks[0]?.status, "delivering");
+    assert.equal(claimedCallbacks[0]?.attempts, 1);
+    await repository.markCallbackFailed({
+      id: claimedCallbacks[0]!.id,
+      status: "pending",
+      nextAttemptAt: "2020-01-01T00:00:00.000Z",
+      lastError: "retry fixture",
+      updatedAt: "2026-08-17T12:02:00.000Z",
+    });
+    const [reclaimedCallback] = await repository.claimCallbackOutbox(20);
+    assert.equal(reclaimedCallback?.attempts, 2);
+    await repository.markCallbackDelivered(
+      reclaimedCallback!.id,
+      "2026-08-17T12:03:00.000Z",
+    );
+    const [deliveredCallback] = await client.db.select().from(hostedCallbackOutbox)
+      .where(eq(hostedCallbackOutbox.id, reclaimedCallback!.id));
+    assert.equal(deliveredCallback?.status, "delivered");
+    assert.equal(deliveredCallback?.lastError, null);
+    const deadLetterInput = {
+      commandId: `command-${crypto.randomUUID()}`,
+      stream: "agentbench:commands:0",
+      messageId: "1-0",
+      partition: 0,
+      partitionKey: "attempt-1",
+      payloadType: "attempt.timeout",
+      payload: { attemptId: created.attempt.id },
+      errorCode: "handler_failed",
+      errorMessage: "redacted fixture",
+      attempts: 1,
+      status: "dead" as const,
+      scrubbedAt: "2026-08-17T12:04:00.000Z",
+      updatedAt: "2026-08-17T12:04:00.000Z",
+    };
+    await repository.upsertCommandDeadLetter(deadLetterInput);
+    await repository.upsertCommandDeadLetter({ ...deadLetterInput, attempts: 2 });
+    const deadLetters = await repository.listCommandDeadLetters({ limit: 10, status: "dead" });
+    const persistedDeadLetter = deadLetters.find((row) => row.commandId === deadLetterInput.commandId);
+    assert.equal(persistedDeadLetter?.attempts, 2);
+    assert.equal(
+      (await repository.findCommandDeadLetter(persistedDeadLetter!.id))?.payloadType,
+      "attempt.timeout",
+    );
+    assert.equal(await repository.markCommandDeadLetterReplayed({
+      id: persistedDeadLetter!.id,
+      replayCommandId: "replay-1",
+      replayedAt: "2026-08-17T12:05:00.000Z",
+    }), true);
+    assert.equal(await repository.markCommandDeadLetterReplayed({
+      id: persistedDeadLetter!.id,
+      replayCommandId: "replay-2",
+      replayedAt: "2026-08-17T12:06:00.000Z",
+    }), false);
+    const [replayedDeadLetter] = await client.db.select().from(orchestratorCommandDeadLetters)
+      .where(eq(orchestratorCommandDeadLetters.id, persistedDeadLetter!.id));
+    assert.equal(replayedDeadLetter?.status, "replayed");
+    assert.equal(await repository.pruneCommandDeadLetters({
+      deadBefore: "2026-01-01T00:00:00.000Z",
+      resolvedBefore: "2026-01-01T00:00:00.000Z",
+      limit: 500,
+      maxRows: 10_000,
+    }), 2);
+    assert.equal(await repository.scrubCommandDeadLetters(500), 3);
     assert.equal((await repository.findHostedAttempt(runs[0]!.id, benchmarkCase.id))?.id, created.attempt.id);
     await assert.rejects(
       repository.createAttemptWithSessions(

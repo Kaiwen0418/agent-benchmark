@@ -34,6 +34,12 @@ bash scripts/check-test-layout.sh
 echo "== Hosted app consistency =="
 pnpm hosted-app:check
 
+echo "== Portable PostgreSQL baseline =="
+bash scripts/test-portable-postgres.sh
+
+echo "== PostgreSQL backup and restore =="
+bash scripts/test-postgres-backup-restore.sh
+
 echo "== Lifecycle Postgres integration =="
 bash scripts/test-lifecycle-postgres.sh
 

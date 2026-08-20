@@ -211,6 +211,9 @@ importers:
 
   packages/test-cases:
     dependencies:
+      '@agentbench/database':
+        specifier: workspace:*
+        version: link:../database
       zod:
         specifier: ^3.24.1
         version: 3.25.76

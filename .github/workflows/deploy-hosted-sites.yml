@@ -264,16 +264,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
-        with:
-          version: 2.75.0
-
-      - name: Apply development database migrations
-        env:
-          TEST_SUPABASE_DB_URL: ${{ secrets.TEST_SUPABASE_DB_URL }}
-        run: bash scripts/db-migrate.sh test
-
       - name: Setup pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
@@ -286,10 +276,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Apply development database migrations
+        env:
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: bash scripts/db-migrate.sh test
+
       - name: Publish benchmark catalog
         env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
         run: pnpm catalog:publish
 
   migrate-production:
@@ -378,8 +372,7 @@ jobs:
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
           HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
           HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8081' }}
         run: bash infra/scripts/deploy-hosted-stack.sh
 
@@ -455,7 +448,6 @@ jobs:
           RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
           HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
           HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8080' }}
         run: bash infra/scripts/deploy-hosted-stack.sh

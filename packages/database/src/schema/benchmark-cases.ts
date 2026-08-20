@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   index,
   jsonb,
   pgTable,
@@ -8,6 +9,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { JsonValue } from "./model-catalog";
 
 export type BenchmarkProvider = "native" | "hosted-web" | "webarena";
@@ -19,13 +21,17 @@ export const benchmarkCases = pgTable("benchmark_cases", {
   description: text("description").notNull(),
   category: text("category").notNull(),
   difficulty: text("difficulty").notNull(),
-  provider: text("provider").$type<BenchmarkProvider>().default("native"),
+  provider: text("provider").$type<BenchmarkProvider>().notNull().default("native"),
   currentRevisionId: uuid("current_revision_id"),
   metadata: jsonb("metadata").$type<JsonValue>().notNull().default({}),
   isPublic: boolean("is_public").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
 }, (table) => [
   index("benchmark_cases_provider_public_idx").on(table.provider, table.isPublic),
+  check(
+    "benchmark_cases_metadata_is_display_only",
+    sql`not (${table.metadata} ?| array['sessions', 'questionVariants', 'taskConfig'])`,
+  ),
 ]);
 
 export const benchmarkCaseRevisions = pgTable("benchmark_case_revisions", {

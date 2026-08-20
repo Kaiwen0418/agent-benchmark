@@ -6,7 +6,7 @@ This document defines who may read, mutate, and recover each state family. Owner
 
 | Data | Domain owner | Writers | Readers | Authority and notes |
 | --- | --- | --- | --- | --- |
-| `profiles`, Supabase Auth identity | Web control plane | Supabase Auth / Web through Drizzle | Web | User identity and plan data; quota reads use direct PostgreSQL |
+| `profiles`, future Auth.js identity | Web control plane | Web through Drizzle | Web | User identity and plan data; quota reads use direct PostgreSQL |
 | `benchmark_cases` | Web control plane | release/admin workflow | Web, orchestrator service-role code | Case identity, visibility, display fields, and current revision pointer |
 | `public_benchmark_cases` | Web control plane | database projection | anonymous/authenticated clients, Web | Display-safe discovery only |
 | `benchmark_case_revisions` | benchmark release workflow | `publish_benchmark_case_catalog` | orchestrator, Web service-role recovery | Immutable private manifest, including optional capability coverage, scenario graph, and deterministic fault schedule, plus synchronized public case identity |

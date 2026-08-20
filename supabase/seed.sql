@@ -1940,20 +1940,3 @@ select public.publish_benchmark_case_catalog(
 }$catalog$::jsonb,
   '3b9ac858657f78fbc53cadf82dfc40b2756dfdc316766fa411301608266c9a8e'
 );
-
-insert into public.runners (id, name, status, capacity, current_load, last_heartbeat)
-values (
-  '7e8a6df3-17c3-4ddb-9877-d0bd8a0f1001',
-  'mock-runner-eu-1',
-  'online',
-  2,
-  0,
-  now()
-)
-on conflict (id) do update
-set
-  name = excluded.name,
-  status = excluded.status,
-  capacity = excluded.capacity,
-  current_load = excluded.current_load,
-  last_heartbeat = excluded.last_heartbeat;

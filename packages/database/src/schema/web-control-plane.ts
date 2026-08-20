@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   integer,
   index,
   jsonb,
@@ -9,6 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { benchmarkCases } from "./benchmark-cases";
 import type { JsonValue } from "./model-catalog";
 
@@ -28,8 +30,10 @@ export type BenchmarkExecutionMode = "internal" | "external-agent";
 
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey(),
-  dailyRunLimit: integer("daily_run_limit").default(3),
-});
+  dailyRunLimit: integer("daily_run_limit").notNull().default(3),
+}, (table) => [
+  check("profiles_daily_run_limit_check", sql`${table.dailyRunLimit} >= 0`),
+]);
 
 export const benchmarkRuns = pgTable("benchmark_runs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -59,6 +63,15 @@ export const benchmarkRuns = pgTable("benchmark_runs", {
   index("idx_benchmark_runs_user_id_created_at").on(table.userId, table.createdAt),
   index("idx_benchmark_runs_guest_id_created_at").on(table.guestId, table.createdAt),
   index("idx_benchmark_runs_status").on(table.status),
+  index("idx_benchmark_runs_public_leaderboard")
+    .on(table.score.desc(), table.completedAt)
+    .where(sql`${table.status} in ('completed', 'failed', 'timeout') and ${table.isPublic} = true and ${table.score} is not null`),
+  check(
+    "benchmark_runs_status_check",
+    sql`${table.status} in ('queued', 'waiting_for_agent', 'agent_connected', 'starting', 'running', 'scoring', 'completed', 'failed', 'cancelled', 'timeout')`,
+  ),
+  check("benchmark_runs_score_check", sql`${table.score} is null or (${table.score} >= 0 and ${table.score} <= 1)`),
+  check("benchmark_runs_identity_check", sql`${table.userId} is not null or ${table.guestId} is not null`),
 ]);
 
 export const runEvents = pgTable("run_events", {

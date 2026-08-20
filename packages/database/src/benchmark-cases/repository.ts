@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { AgentBenchDatabase } from "../client";
 import {
   benchmarkCaseRevisions,
@@ -51,6 +51,13 @@ export type BenchmarkCaseReadRepository = {
   revisionExists: (caseId: string, revisionId: string) => Promise<boolean>;
   findRevisionById: (revisionId: string) => Promise<BenchmarkCaseRevisionRecord | null>;
   findByIdOrSlug: (identity: string) => Promise<BenchmarkCaseRecord | null>;
+};
+
+export type BenchmarkCaseCatalogPublication = {
+  benchmarkCase: JsonValue;
+  revision: string;
+  manifest: JsonValue;
+  contentHash: string;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -156,6 +163,24 @@ export function createBenchmarkCaseReadRepository(
           : eq(benchmarkCases.slug, identity))
         .limit(1);
       return row ?? null;
+    },
+  };
+}
+
+export function createBenchmarkCaseCatalogRepository(db: AgentBenchDatabase) {
+  return {
+    async publish(input: BenchmarkCaseCatalogPublication) {
+      const result = await db.execute<{ revision_id: string }>(sql`
+        select public.publish_benchmark_case_catalog(
+          ${JSON.stringify(input.benchmarkCase)}::jsonb,
+          ${input.revision}::text,
+          ${JSON.stringify(input.manifest)}::jsonb,
+          ${input.contentHash}::text
+        ) as revision_id
+      `);
+      const revisionId = result.rows[0]?.revision_id;
+      if (!revisionId) throw new Error(`Catalog publication returned no revision for ${input.revision}.`);
+      return revisionId;
     },
   };
 }

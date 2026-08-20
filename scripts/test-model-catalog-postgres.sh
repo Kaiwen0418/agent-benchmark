@@ -174,7 +174,70 @@ create table public.hosted_web_access_logs (
   created_at timestamptz not null default now()
 );
 
--- Production lifecycle semantics are covered by test-hosted-lifecycle-postgres.sh.
+create table public.hosted_callback_outbox (
+  id uuid primary key default gen_random_uuid(),
+  attempt_id uuid not null references public.benchmark_attempts(id) on delete cascade,
+  run_id uuid not null,
+  event_type text not null default 'run_completion',
+  payload jsonb not null,
+  status text not null default 'pending',
+  attempts integer not null default 0,
+  next_attempt_at timestamptz not null default now(),
+  locked_at timestamptz,
+  delivered_at timestamptz,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (attempt_id, event_type)
+);
+
+create function public.reconcile_hosted_callback_outbox()
+returns integer language sql as $$ select 0 $$;
+
+create function public.claim_hosted_callback_outbox(p_limit integer default 20)
+returns setof public.hosted_callback_outbox language sql as $$
+  update public.hosted_callback_outbox
+  set status = 'delivering', attempts = attempts + 1, locked_at = now(), updated_at = now()
+  where id in (
+    select id from public.hosted_callback_outbox
+    where status = 'pending' and next_attempt_at <= now()
+    order by next_attempt_at, created_at
+    limit greatest(1, least(p_limit, 100))
+  )
+  returning *
+$$;
+
+create table public.orchestrator_command_dead_letters (
+  id uuid primary key default gen_random_uuid(),
+  command_id text not null unique,
+  stream text not null,
+  message_id text not null,
+  partition integer not null,
+  partition_key text,
+  payload_type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  error_code text not null,
+  error_message text not null,
+  attempts integer not null,
+  status text not null default 'dead',
+  replay_command_id text,
+  replayed_at timestamptz,
+  scrubbed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create function public.prune_orchestrator_command_dead_letters_v2(
+  p_dead_before timestamptz,
+  p_resolved_before timestamptz,
+  p_limit integer default 1000,
+  p_max_rows integer default 10000
+) returns integer language sql as $$ select least(p_limit, 2) $$;
+
+create function public.scrub_orchestrator_command_dead_letters(p_limit integer default 500)
+returns integer language sql as $$ select least(p_limit, 3) $$;
+
+-- Production lifecycle semantics are covered by test-lifecycle-postgres.sh.
 -- These fixtures verify parameter and result mapping through the Drizzle adapter.
 create function public.complete_hosted_attempt_session(
   p_attempt_id uuid,
