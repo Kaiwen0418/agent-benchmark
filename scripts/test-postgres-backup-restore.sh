@@ -38,7 +38,7 @@ docker exec -i "${CONTAINER}" pg_restore -U postgres -d restored \
   --no-owner --no-acl <"${BACKUP_FILE}"
 
 PSQL=(docker exec -i "${CONTAINER}" psql -U postgres -d restored)
-[[ "$("${PSQL[@]}" -Atqc "select count(*) from information_schema.tables where table_schema = 'public'")" == "16" ]]
+[[ "$("${PSQL[@]}" -Atqc "select count(*) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'")" == "16" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.benchmark_cases")" == "2" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.benchmark_case_revisions")" == "2" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from information_schema.routines where routine_schema = 'public'")" == "12" ]]
