@@ -8,17 +8,24 @@ on:
       - main
     paths:
       - '.github/workflows/deploy-hosted-sites.yml'
+      - 'apps/web/**'
       - 'apps/hosted-sites/**'
       - 'apps/hosted-orchestrator/**'
+      - 'packages/database/**'
+      - 'packages/protocol/**'
       - 'packages/scoring/**'
       - 'packages/shared/**'
+      - 'packages/test-cases/**'
       - 'supabase/migrations/**'
       - 'infra/docker/hosted-sites.Dockerfile'
       - 'infra/docker/hosted-orchestrator.Dockerfile'
+      - 'infra/docker/web.Dockerfile'
+      - 'infra/docker/docker-compose.web.yml'
       - 'infra/docker/docker-compose.server.yml'
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'
       - 'infra/scripts/deploy-hosted-stack.sh'
+      - 'infra/scripts/deploy-web-stack.sh'
       - 'infra/scripts/registry-retry.sh'
       - 'infra/scripts/verify-orchestrator-worker-recovery.sh'
       - 'infra/scripts/validate-orchestrator-partitions.sh'
@@ -67,6 +74,7 @@ jobs:
     needs: validate-ref
     runs-on: ubuntu-latest
     outputs:
+      web: ${{ steps.changes.outputs.web }}
       hosted_sites: ${{ steps.changes.outputs.hosted_sites }}
       orchestrator: ${{ steps.changes.outputs.orchestrator }}
       infra: ${{ steps.changes.outputs.infra }}
@@ -90,6 +98,7 @@ jobs:
 
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             printf '%s\n' \
+              'web=true' \
               'hosted_sites=true' \
               'orchestrator=true' \
               'infra=true' \
@@ -104,6 +113,7 @@ jobs:
           fi
 
           cat "${CHANGES_FILE}" >> "${GITHUB_OUTPUT}"
+          web="$(sed -n 's/^web=//p' "${CHANGES_FILE}")"
           hosted_sites="$(sed -n 's/^hosted_sites=//p' "${CHANGES_FILE}")"
           orchestrator="$(sed -n 's/^orchestrator=//p' "${CHANGES_FILE}")"
           infra="$(sed -n 's/^infra=//p' "${CHANGES_FILE}")"
@@ -116,6 +126,7 @@ jobs:
             echo
             echo "| Target | Changed |"
             echo "| --- | --- |"
+            echo "| web | ${web} |"
             echo "| hosted-sites | ${hosted_sites} |"
             echo "| hosted-orchestrator | ${orchestrator} |"
             echo "| nginx | ${infra} |"
@@ -200,6 +211,49 @@ jobs:
         with:
           context: .
           file: infra/docker/hosted-sites.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ needs.detect-changes.outputs.image_tag }}
+            ${{ steps.meta.outputs.image }}:latest-${{ needs.validate-ref.outputs.image_channel }}
+
+  build-web:
+    needs:
+      - validate-ref
+      - detect-changes
+      - verify
+    if: needs.detect-changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Set image metadata
+        id: meta
+        shell: bash
+        run: |
+          OWNER="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          echo "image=${REGISTRY}/${OWNER}/agentbench-web" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Web image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: infra/docker/web.Dockerfile
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:${{ needs.detect-changes.outputs.image_tag }}
@@ -334,6 +388,10 @@ jobs:
     if: |
       always() &&
       github.ref == 'refs/heads/develop' &&
+      (needs.detect-changes.outputs.hosted_sites == 'true' ||
+       needs.detect-changes.outputs.orchestrator == 'true' ||
+       needs.detect-changes.outputs.infra == 'true' ||
+       needs.detect-changes.outputs.topology == 'true') &&
       needs.detect-changes.result == 'success' &&
       needs.migrate-development.result == 'success' &&
       (needs.build-hosted-sites.result == 'success' || needs.build-hosted-sites.result == 'skipped') &&
@@ -375,6 +433,45 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8081' }}
         run: bash infra/scripts/deploy-hosted-stack.sh
+
+  deploy-web-development:
+    if: |
+      always() &&
+      github.ref == 'refs/heads/develop' &&
+      needs.detect-changes.outputs.web == 'true' &&
+      needs.detect-changes.result == 'success' &&
+      needs.migrate-development.result == 'success' &&
+      needs.build-web.result == 'success'
+    runs-on:
+      - self-hosted
+      - linux
+      - agentbench-dev
+    environment: development
+    needs:
+      - detect-changes
+      - build-web
+      - migrate-development
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Deploy development Web
+        env:
+          DEPLOYMENT_ENVIRONMENT: development
+          WEB_COMPOSE_PROJECT_NAME: agentbench-development-web
+          IMAGE_CHANNEL: develop
+          IMAGE_TAG: ${{ needs.detect-changes.outputs.image_tag }}
+          WEB_CHANGED: 'true'
+          GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
+          HOSTED_SITES_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
+          HOSTED_ORCHESTRATOR_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
+          AGENTBENCH_WEB_PORT: ${{ vars.AGENTBENCH_WEB_PORT || '3000' }}
+        run: bash infra/scripts/deploy-web-stack.sh
 
   smoke-development:
     if: github.ref == 'refs/heads/develop'
