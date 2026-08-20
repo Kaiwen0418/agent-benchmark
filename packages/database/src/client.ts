@@ -6,6 +6,7 @@ export type AgentBenchDatabase = NodePgDatabase<typeof schema>;
 
 export type DatabaseClient = {
   db: AgentBenchDatabase;
+  ping: () => Promise<void>;
   close: () => Promise<void>;
 };
 
@@ -55,6 +56,9 @@ export function createDatabaseClient(options: {
 
   return {
     db: drizzle(pool, { schema }),
+    ping: async () => {
+      await pool.query("select 1");
+    },
     close: () => pool.end(),
   };
 }

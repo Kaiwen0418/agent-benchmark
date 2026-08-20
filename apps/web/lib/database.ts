@@ -61,6 +61,12 @@ export function getWebDatabaseClient() {
   return client;
 }
 
+export async function checkWebDatabaseReadiness(
+  client: Pick<DatabaseClient, "ping"> = getWebDatabaseClient(),
+) {
+  await client.ping();
+}
+
 export function getWebModelCatalogRepository(): ModelCatalogReadRepository {
   return createModelCatalogReadRepository(getWebDatabaseClient().db);
 }
