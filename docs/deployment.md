@@ -65,6 +65,67 @@ a source with active runs. After transfer, run lifecycle smoke against the
 candidate before changing `DATABASE_URL`; retain both the source and the
 pre-cutover target until rollback validation is complete.
 
+#### Controlled development cutover
+
+Do not begin this procedure until the isolated canary has passed against the
+candidate using the exact release commit. Record the operator, release SHA,
+source and target database names, freeze time, backup paths, and rollback start
+time in the deployment issue. Never record connection URLs or credentials.
+
+1. Disable alternate development ingress and set the GitHub `development`
+   Environment variable `RUN_CREATION_MODE=frozen`. Redeploy Web and verify that
+   `POST /api/runs` returns `503 run_creation_frozen` with `Retry-After`, while
+   existing connection and completion routes remain available.
+2. Wait for active runs to finish and for the callback outbox to drain. Run the
+   preflight verifier against the source database; it fails if active runs,
+   pending callbacks, database identity drift, or required schema drift exists.
+3. Stop every old development writer, including legacy Web deployments,
+   hosted-orchestrator API/workers, model-catalog synchronization, and any
+   manually started process. Keep read-only source access for rollback.
+4. Create and verify a final source backup, recreate an empty candidate, apply
+   migrations, and run `scripts/db-transfer-data.sh`. Repeat the preflight
+   verifier against the candidate and verify a candidate backup through an
+   isolated restore before changing runtime secrets.
+5. Update `DATABASE_URL` and `DATABASE_DIRECT_URL` together in the GitHub
+   `development` Environment. Keep `RUN_CREATION_MODE=frozen`, deploy the Web
+   and hosted projects from the same commit, then route the owned development
+   hostname to the self-hosted Web port. Do not reopen the legacy Web endpoint.
+6. Run the provider-neutral lifecycle smoke, browser E2E, quota and leaderboard
+   checks. Then run post-cutover verification to record database connections,
+   callback backlog, Redis pending/lag, service health, and container health.
+7. Set `RUN_CREATION_MODE=open`, redeploy Web, and observe the same evidence at
+   the start and end of the rollback window. Retain the source database, final
+   source backup, and verified candidate backup until that window closes.
+
+Preflight example:
+
+```bash
+CUTOVER_PHASE=preflight \
+DATABASE_DIRECT_URL="$CANDIDATE_DATABASE_DIRECT_URL" \
+EXPECTED_DATABASE_NAME=agentbench_development_candidate \
+  infra/scripts/verify-development-cutover.sh
+```
+
+Post-cutover evidence example, run on the development Docker host before new
+run admission is reopened:
+
+```bash
+CUTOVER_PHASE=postcutover \
+DATABASE_DIRECT_URL="$DEVELOPMENT_DATABASE_DIRECT_URL" \
+EXPECTED_DATABASE_NAME=agentbench_development \
+AGENTBENCH_WEB_URL=https://develop-web.example.com \
+HOSTED_SITES_PUBLIC_URL=https://develop-hosted.example.com \
+HOSTED_ORCHESTRATOR_PUBLIC_URL=https://develop-hosted.example.com/orchestrator \
+  infra/scripts/verify-development-cutover.sh | tee cutover-evidence.txt
+```
+
+For the rollback drill, freeze new runs again, drain active work, restore both
+database secrets to the retained source, redeploy both application projects,
+restore the previous development route, run lifecycle smoke, and record elapsed
+time. A rollback is incomplete until source database identity, callbacks,
+Redis lag, and all containers pass the same post-cutover verifier. Never remove
+the self-hosted PostgreSQL volume as part of application rollback.
+
 ## Self-hosted Web
 
 The complete Next.js Web control plane can run as a standalone container using
@@ -243,6 +304,7 @@ Required variables in each GitHub Environment:
 - `GATEWAY_HTTP_PORT`
 - optional `AGENTBENCH_WEB_PORT` (development self-hosted Web, default `3000`)
 - optional `CANARY_HOST` (self-hosted runner LAN address; defaults to `192.168.1.242`)
+- optional `RUN_CREATION_MODE` (`open` normally, `frozen` during a controlled cutover)
 
 Required secrets in each GitHub Environment:
 
@@ -273,6 +335,7 @@ Each Vercel Web project must independently configure:
 - optional `GUEST_RUN_LIMIT`
 - optional `RUN_CONNECT_RATE_LIMIT` (defaults to 5 requests per run and client
   address per minute on each Web instance)
+- optional `RUN_CREATION_MODE` (`open` or `frozen`)
 
 Optional GitHub Environment secrets enable first-party model discovery:
 

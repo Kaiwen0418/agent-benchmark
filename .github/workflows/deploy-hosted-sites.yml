@@ -507,6 +507,7 @@ jobs:
           HOSTED_SITES_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
           HOSTED_ORCHESTRATOR_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
           AGENTBENCH_WEB_PORT: ${{ vars.AGENTBENCH_WEB_PORT || '3000' }}
+          RUN_CREATION_MODE: ${{ vars.RUN_CREATION_MODE || 'open' }}
         run: bash infra/scripts/deploy-web-stack.sh
 
   deploy-cutover-canary:
