@@ -188,9 +188,15 @@ Manual dispatches from any other branch fail before accessing a self-hosted runn
 
 The hosted deployment workflow builds images, pushes them to GHCR, and runs the server deployment through a self-hosted GitHub Actions runner on Linux. This infrastructure agent is unrelated to the removed benchmark execution runner. The server pulls the requested image tag and recreates the Compose services.
 
-When orchestrator code or topology changes, development deployment runs worker fault injection before the generated four-app lifecycle smoke. Each worker is stopped independently; the verifier requires the public API to remain reachable with `503` and the exact missing partition set, queues a `maintenance.cleanup` command into that worker's Redis Stream, restarts the worker, and requires both full readiness and a persisted `statusCode: 200` command result. A trap restarts the stopped worker if verification is interrupted.
+When orchestrator code or topology changes, development deployment runs worker fault injection before the generated suite lifecycle smoke. Each worker is stopped independently; the verifier requires the public API to remain reachable with `503` and the exact missing partition set, queues a `maintenance.cleanup` command into that worker's Redis Stream, restarts the worker, and requires both full readiness and a persisted `statusCode: 200` command result. A trap restarts the stopped worker if verification is interrupted.
 
-The following lifecycle smoke then runs against the public development URLs. It verifies ordered completion, duplicate completion idempotency, one result per completed session, and one aggregate score per attempt. Production deployment performs baseline health checks but does not run fault injection or create smoke-test runs.
+The following lifecycle smoke creates a run through the public Web API, drives
+the suite through authenticated orchestrator APIs, and uses direct PostgreSQL
+only for read-only persistence assertions. It verifies ordered completion,
+duplicate completion idempotency, one result per completed session, and one
+aggregate score per attempt without Supabase REST credentials. Production
+deployment performs baseline health checks but does not run fault injection or
+create smoke-test runs.
 
 The deployment job summary records the previous and deployed orchestrator image references, tested workers, missing partitions, recovered command IDs, and rollback source SHA. To roll back, rerun the hosted deployment workflow at the recorded source SHA or pin the API and both worker services to that SHA's immutable image tag and recreate all three together. Never roll back only one orchestrator role.
 
