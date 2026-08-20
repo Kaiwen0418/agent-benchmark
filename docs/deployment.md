@@ -145,13 +145,17 @@ Do not publish a fixed host port for each hosted-sites replica. Nginx should rea
 
 `deploy-hosted-sites.yml` classifies each push before building or pulling images:
 
+- `apps/web/**` builds and deploys only the standalone Web image and Compose project.
 - `apps/hosted-sites/**` builds, pulls, and recreates only hosted-sites and the session-cache client path.
 - `apps/hosted-orchestrator/**` builds one image, then pulls and recreates only the orchestrator API and both command workers.
-- shared scoring/runtime packages rebuild both images.
+- shared packages rebuild only their actual image consumers; database changes rebuild Web and orchestrator but not hosted-sites.
 - Nginx changes recreate only the gateway.
 - Compose topology changes pre-pull every required target image, then reconcile all services.
 
-Hosted-sites and orchestrator use independent image tags. Targeted deploys preserve the currently running replica counts, so scaling one service does not restart or resize the other. The orchestrator API and workers always use the same immutable image tag within one environment.
+Web, hosted-sites, and orchestrator use independent image tags and Compose
+projects where appropriate. Targeted deploys preserve the currently running
+replica counts, so scaling one service does not restart or resize another. The
+orchestrator API and workers always use the same immutable image tag within one environment.
 
 Before replacing any running service, the deploy script authenticates to GHCR and pulls every required target image with bounded exponential-backoff retries. Transient registry/network failures such as timeouts, DNS failures, connection resets, 429s, and 5xx responses retry. Permanent authentication failures and missing manifests fail promptly. If the retry budget is exhausted, the script exits before `docker compose up`, leaving the previous healthy stack serving traffic.
 
@@ -207,6 +211,7 @@ Required variables in each GitHub Environment:
 - `HOSTED_SITES_PUBLIC_URL`
 - `HOSTED_ORCHESTRATOR_PUBLIC_URL`
 - `GATEWAY_HTTP_PORT`
+- optional `AGENTBENCH_WEB_PORT` (development self-hosted Web, default `3000`)
 
 Required secrets in each GitHub Environment:
 
