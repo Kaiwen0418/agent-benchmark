@@ -36,6 +36,35 @@ The backup directory and dump are created with owner-only permissions. Copy
 verified backups to storage outside the database host and apply an independent
 retention policy. Restore verification never modifies the application database.
 
+### Development data cutover
+
+Migrate into a newly created candidate database rather than overwriting the
+current target. Apply Drizzle migrations to the candidate, freeze source writes,
+finish or terminate every active run, and then run:
+
+```bash
+SOURCE_DATABASE_URL=<current-direct-url> \
+TARGET_DATABASE_URL=<empty-candidate-direct-url> \
+  scripts/db-transfer-data.sh
+```
+
+Use PostgreSQL 17 client tools. On the database host, set
+`POSTGRES_TOOLS_CONTAINER=agentbench-database-postgres-1` to execute the client
+tools inside the pinned database container instead of installing them on the
+host.
+
+The transfer uses a serializable logical snapshot, restores all application
+tables in one target transaction, rebuilds the cyclic current-revision foreign
+key, projects legacy Supabase profile rows onto the portable quota-only profile
+schema, and requires exact per-table row counts. Legacy profile identity fields
+remain only in the protected pre-cutover backup until Auth.js migration is
+implemented. Historical runs without either identity receive a deterministic,
+non-authenticating `legacy-migration:<run-id>` guest identifier so the portable
+identity invariant remains enforced. The transfer rejects a non-empty target or
+a source with active runs. After transfer, run lifecycle smoke against the
+candidate before changing `DATABASE_URL`; retain both the source and the
+pre-cutover target until rollback validation is complete.
+
 ## Self-hosted Web
 
 The complete Next.js Web control plane can run as a standalone container using

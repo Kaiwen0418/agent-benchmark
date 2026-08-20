@@ -40,6 +40,9 @@ bash scripts/test-portable-postgres.sh
 echo "== PostgreSQL backup and restore =="
 bash scripts/test-postgres-backup-restore.sh
 
+echo "== PostgreSQL data transfer =="
+bash scripts/test-postgres-data-transfer.sh
+
 echo "== Lifecycle Postgres integration =="
 bash scripts/test-lifecycle-postgres.sh
 

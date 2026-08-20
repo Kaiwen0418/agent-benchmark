@@ -8,7 +8,7 @@ This roadmap starts from the architecture that is already running. Completed wor
 - `apps/web` runs on Vercel and owns run creation, quota, live observability, replay, and artifacts.
 - The hosted stack runs behind Nginx and Cloudflare Tunnel on a private Linux host.
 - Redis is split into a hosted-session cache endpoint and an orchestrator command-Streams endpoint.
-- PostgreSQL is the durable lifecycle, audit, and scoring store. A self-hosted development target is provisioned behind PgBouncer, but application and data cutover is pending; production remains on Supabase-hosted PostgreSQL.
+- PostgreSQL is the durable lifecycle, audit, and scoring store. A self-hosted development candidate is provisioned behind PgBouncer with a validated data snapshot, but application traffic cutover is pending; production remains on Supabase-hosted PostgreSQL.
 - Hosted-orchestrator is the sole hosted lifecycle database owner; hosted-sites has no database credential and Web uses orchestrator APIs or public read models for hosted data.
 - Complete private suite manifests live only in immutable `benchmark_case_revisions`; public case metadata is display-safe.
 - Hosted attempts store only revision identity, generation seed, active-session pointer, sequence pointer, and completed session ids; generated per-session task config lives on `hosted_web_sessions.metadata`.
@@ -123,7 +123,9 @@ integrity, backup, restore, and rollback procedures.
 Current progress: the portable Drizzle baseline, lifecycle/outbox/DLQ routines,
 self-hosted development PostgreSQL/PgBouncer, direct catalog publication,
 clean-database CI, and logical backup/restore verification are complete.
-Remaining work is development application/data cutover validation, off-host
+Candidate-database transfer, row-count validation, development snapshot
+migration, local Web read validation, and candidate backup/restore are also
+complete. Remaining work is executing development application traffic cutover, off-host
 backup retention and monitoring, Auth.js identity ownership, then production
 migration and rollback validation.
 

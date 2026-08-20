@@ -81,7 +81,7 @@ Local and server Compose run `session-redis` and `orchestrator-redis` as distinc
 
 ### PostgreSQL
 
-PostgreSQL stores durable control-plane and audit data: runs, attempts, hosted sessions, events, results, aggregate scores, access logs, and artifacts. It stores app state snapshots in session metadata for recovery, but it is not the primary per-request state store. A self-hosted development target is provisioned behind PgBouncer, but application and data cutover is still pending. Production remains on Supabase-hosted PostgreSQL until the production migration is validated.
+PostgreSQL stores durable control-plane and audit data: runs, attempts, hosted sessions, events, results, aggregate scores, access logs, and artifacts. It stores app state snapshots in session metadata for recovery, but it is not the primary per-request state store. A self-hosted development candidate is provisioned behind PgBouncer and contains a validated development data snapshot, but application traffic cutover is still pending. Production remains on Supabase-hosted PostgreSQL until the production migration is validated.
 
 `model_catalog` is a Web-owned operational catalog, not benchmark truth. It
 combines canonical IDs from provider APIs with discovery-only aggregator
@@ -99,8 +99,8 @@ Typed catalog releases are stored in immutable `benchmark_case_revisions`. A cas
 
 ### Database portability transition
 
-A standard self-hosted PostgreSQL development target is provisioned while
-application and data cutover remain pending. Production temporarily remains on
+A standard self-hosted PostgreSQL development candidate is provisioned and its
+data snapshot is validated while application traffic cutover remains pending. Production temporarily remains on
 Supabase-hosted PostgreSQL. `packages/database` owns
 provider-neutral connection construction, schema definitions, and repositories;
 service-specific repository exports preserve the ownership rules in this
