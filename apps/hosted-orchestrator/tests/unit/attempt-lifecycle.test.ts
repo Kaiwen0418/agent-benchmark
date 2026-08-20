@@ -5,12 +5,14 @@ import { buildHostedAttemptReadModel, type Database } from "@agentbench/shared";
 import {
   createAttemptLifecycle,
   type AttemptLifecycleAdvanceSession,
+  type AttemptLifecyclePersistence,
   type AttemptLifecycleSession,
 } from "../../src/attempt-lifecycle.js";
 import { createConsistencyDigest, type HostedWebScoreResult } from "@agentbench/scoring";
 
 function createLifecycle(overrides?: {
   getSupabaseAdmin?: () => SupabaseClient<Database> | null;
+  getPersistence?: () => AttemptLifecyclePersistence | null;
   loadAttemptMetadata?: (attemptId: string | null) => Promise<Record<string, unknown>>;
   loadAttemptSessions?: (attemptId: string) => Promise<AttemptLifecycleAdvanceSession[]>;
   loadLatestSessionResult?: (sessionId: string) => Promise<HostedWebScoreResult | null>;
@@ -21,6 +23,7 @@ function createLifecycle(overrides?: {
   return createAttemptLifecycle({
     now: () => "2026-06-01T00:00:00.000Z",
     getSupabaseAdmin: overrides?.getSupabaseAdmin ?? (() => null),
+    getPersistence: overrides?.getPersistence,
     loadAttemptMetadata: overrides?.loadAttemptMetadata ?? (async () => ({})),
     loadAttemptSessions: overrides?.loadAttemptSessions ?? (async () => []),
     loadAttemptReadModel: async (attemptId) =>
@@ -65,6 +68,20 @@ function makeScoreResult(overrides?: Partial<HostedWebScoreResult>): HostedWebSc
     score: 1,
     summary: "ok",
     evaluators: [],
+    ...overrides,
+  };
+}
+
+function makePersistence(
+  overrides: Partial<AttemptLifecyclePersistence> = {},
+): AttemptLifecyclePersistence {
+  return {
+    findAttempt: async () => ({ status: "running", suiteSlug: "hosted-web-suite-v1", metadata: {} }),
+    listAttemptResults: async () => [],
+    listAttemptSessions: async () => [],
+    listAttemptEvents: async () => [],
+    completeHostedAttemptSession: async () => null,
+    timeoutHostedAttempt: async () => null,
     ...overrides,
   };
 }
@@ -157,6 +174,107 @@ test("complete-session returns existing result when session already completed", 
 
   assert.equal(result.duplicate, true);
   assert.equal(result.result.summary, "already done");
+});
+
+test("complete-session uses provider-neutral lifecycle persistence", async () => {
+  let completionInput: Parameters<AttemptLifecyclePersistence["completeHostedAttemptSession"]>[0] | null = null;
+  const persistence = makePersistence({
+    findAttempt: async () => ({
+      status: "running",
+      suiteSlug: "hosted-web-suite-v1",
+      metadata: { activeSessionId: "session-1" },
+    }),
+    listAttemptSessions: async () => [{
+      id: "session-1",
+      runId: "run-1",
+      app: "shopping-lite",
+      taskSlug: "shopping-constrained-checkout",
+      weight: 1,
+      required: true,
+      sequenceIndex: 0,
+      status: "active",
+      metadata: {},
+    }],
+    completeHostedAttemptSession: async (input) => {
+      completionInput = input;
+      return {
+        transitioned: true,
+        duplicate: false,
+        conflict: null,
+        result: makeScoreResult(),
+        complete: true,
+        aggregate: {
+          status: "passed",
+          score: 1,
+          summary: "All required hosted sessions for hosted-web-suite-v1 passed.",
+          breakdown: {
+            aggregation: "weighted-required-suite",
+            sessions: [{
+              sessionId: "session-1",
+              app: "shopping-lite",
+              taskSlug: "shopping-constrained-checkout",
+              score: 1,
+              status: "passed",
+              weight: 1,
+              required: true,
+            }],
+          },
+        },
+      };
+    },
+  });
+  const lifecycle = createLifecycle({ getPersistence: () => persistence });
+
+  const completed = await lifecycle.executeCompleteSessionCommand({
+    type: "complete-session",
+    session: makeSession(),
+    result: makeScoreResult(),
+  });
+
+  assert.equal(completed.attemptResult.complete, true);
+  assert.equal(completed.attemptResult.aggregate?.score, 1);
+  assert.equal(completionInput?.attemptId, "attempt-1");
+  assert.equal((completionInput?.attemptUpdate as { complete?: boolean }).complete, true);
+});
+
+test("timeout uses provider-neutral lifecycle persistence", async () => {
+  let forwardedRunId: string | null = null;
+  const persistence = makePersistence({
+    listAttemptSessions: async () => [{
+      id: "session-1",
+      runId: "run-1",
+      app: "shopping-lite",
+      taskSlug: "shopping-constrained-checkout",
+      weight: 1,
+      required: true,
+      sequenceIndex: 0,
+      status: "active",
+      metadata: {},
+    }],
+    timeoutHostedAttempt: async () => ({
+      transitioned: true,
+      attemptRunId: "run-1",
+      expiredSessionIds: ["session-1"],
+    }),
+  });
+  const lifecycle = createLifecycle({
+    getPersistence: () => persistence,
+    forwardTimeoutCompletion: async ({ runId }) => {
+      forwardedRunId = runId;
+    },
+  });
+
+  const timedOut = await lifecycle.executeTimeoutAttemptCommand({
+    type: "timeout-attempt",
+    attemptId: "attempt-1",
+    runId: "run-1",
+    expiredSessionId: "session-1",
+    expiredTaskSlug: "shopping-constrained-checkout",
+  });
+
+  assert.equal(timedOut.ok, true);
+  assert.equal(timedOut.runId, "run-1");
+  assert.equal(forwardedRunId, "run-1");
 });
 
 test("complete-session recovers the first aggregate score from an atomic duplicate", async () => {

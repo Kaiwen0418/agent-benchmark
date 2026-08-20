@@ -11,6 +11,7 @@ cleanup() {
 trap cleanup EXIT
 
 docker run -d --rm --name "${CONTAINER}" \
+  -p 127.0.0.1::5432 \
   -e POSTGRES_PASSWORD=postgres \
   postgres:17-alpine >/dev/null
 
@@ -27,8 +28,292 @@ create role anon;
 create role authenticated;
 create role service_role bypassrls;
 
+create table public.benchmark_cases (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  title text not null,
+  description text not null,
+  category text not null,
+  difficulty text not null,
+  provider text default 'native',
+  current_revision_id uuid,
+  metadata jsonb not null default '{}'::jsonb,
+  is_public boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table public.benchmark_case_revisions (
+  id uuid primary key default gen_random_uuid(),
+  case_id uuid not null references public.benchmark_cases(id) on delete restrict,
+  revision text not null,
+  content_hash text not null,
+  manifest jsonb not null,
+  created_at timestamptz not null default now(),
+  unique (case_id, id),
+  unique (case_id, revision),
+  unique (case_id, content_hash)
+);
+
 create table public.benchmark_runs (
-  id uuid primary key default gen_random_uuid()
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid,
+  guest_id text,
+  case_id uuid not null references public.benchmark_cases(id) on delete restrict,
+  runner_id uuid,
+  execution_mode text not null default 'internal',
+  status text not null default 'queued',
+  score numeric,
+  live_view_url text,
+  error_message text,
+  started_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  metadata jsonb not null default '{}'::jsonb,
+  agent_name text,
+  agent_version text,
+  base_model text,
+  browser_environment jsonb not null default '{}'::jsonb,
+  is_public boolean not null default true
+);
+
+create table public.profiles (
+  id uuid primary key,
+  daily_run_limit integer default 3
+);
+
+create table public.benchmark_attempts (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  case_id uuid not null references public.benchmark_cases(id) on delete restrict,
+  case_revision_id uuid references public.benchmark_case_revisions(id) on delete restrict,
+  provider text not null,
+  suite_slug text not null,
+  suite_version text not null,
+  status text not null default 'created',
+  aggregate_score numeric,
+  scoring_summary jsonb not null default '{}'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  completed_at timestamptz
+);
+
+create unique index idx_benchmark_attempts_unique_hosted_run_case
+  on public.benchmark_attempts (run_id, case_id, provider)
+  where provider = 'hosted-web';
+
+create table public.hosted_web_sessions (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  case_id uuid not null references public.benchmark_cases(id) on delete restrict,
+  attempt_id uuid references public.benchmark_attempts(id) on delete cascade,
+  provider text not null default 'hosted-web',
+  app text not null,
+  task_slug text not null,
+  task_version text not null default 'v1',
+  sequence_index integer not null default 0,
+  weight numeric not null default 1,
+  required boolean not null default true,
+  seed_version text not null,
+  start_url text not null,
+  session_token_hash text not null unique,
+  status text not null default 'created',
+  metadata jsonb not null default '{}'::jsonb,
+  created_by_user_id uuid,
+  created_by_guest_id text,
+  first_seen_ip inet,
+  last_seen_ip inet,
+  first_seen_user_agent text,
+  last_seen_user_agent text,
+  access_count integer not null default 0,
+  last_accessed_at timestamptz,
+  created_at timestamptz not null default now(),
+  activated_at timestamptz,
+  completed_at timestamptz,
+  expires_at timestamptz
+);
+
+create table public.hosted_web_results (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.hosted_web_sessions(id) on delete cascade,
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  attempt_id uuid references public.benchmark_attempts(id) on delete cascade,
+  app text,
+  task_slug text,
+  status text not null,
+  score numeric not null,
+  weight numeric not null default 1,
+  summary text not null,
+  final_state jsonb not null default '{}'::jsonb,
+  evaluators jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (session_id)
+);
+
+create table public.hosted_web_events (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.hosted_web_sessions(id) on delete cascade,
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  attempt_id uuid references public.benchmark_attempts(id) on delete cascade,
+  type text not null,
+  name text,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table public.hosted_web_access_logs (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid references public.hosted_web_sessions(id) on delete cascade,
+  attempt_id uuid references public.benchmark_attempts(id) on delete cascade,
+  run_id uuid references public.benchmark_runs(id) on delete cascade,
+  event text not null,
+  ip inet,
+  user_agent text,
+  referer text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table public.hosted_callback_outbox (
+  id uuid primary key default gen_random_uuid(),
+  attempt_id uuid not null references public.benchmark_attempts(id) on delete cascade,
+  run_id uuid not null,
+  event_type text not null default 'run_completion',
+  payload jsonb not null,
+  status text not null default 'pending',
+  attempts integer not null default 0,
+  next_attempt_at timestamptz not null default now(),
+  locked_at timestamptz,
+  delivered_at timestamptz,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (attempt_id, event_type)
+);
+
+create function public.reconcile_hosted_callback_outbox()
+returns integer language sql as $$ select 0 $$;
+
+create function public.claim_hosted_callback_outbox(p_limit integer default 20)
+returns setof public.hosted_callback_outbox language sql as $$
+  update public.hosted_callback_outbox
+  set status = 'delivering', attempts = attempts + 1, locked_at = now(), updated_at = now()
+  where id in (
+    select id from public.hosted_callback_outbox
+    where status = 'pending' and next_attempt_at <= now()
+    order by next_attempt_at, created_at
+    limit greatest(1, least(p_limit, 100))
+  )
+  returning *
+$$;
+
+create table public.orchestrator_command_dead_letters (
+  id uuid primary key default gen_random_uuid(),
+  command_id text not null unique,
+  stream text not null,
+  message_id text not null,
+  partition integer not null,
+  partition_key text,
+  payload_type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  error_code text not null,
+  error_message text not null,
+  attempts integer not null,
+  status text not null default 'dead',
+  replay_command_id text,
+  replayed_at timestamptz,
+  scrubbed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create function public.prune_orchestrator_command_dead_letters_v2(
+  p_dead_before timestamptz,
+  p_resolved_before timestamptz,
+  p_limit integer default 1000,
+  p_max_rows integer default 10000
+) returns integer language sql as $$ select least(p_limit, 2) $$;
+
+create function public.scrub_orchestrator_command_dead_letters(p_limit integer default 500)
+returns integer language sql as $$ select least(p_limit, 3) $$;
+
+-- Production lifecycle semantics are covered by test-lifecycle-postgres.sh.
+-- These fixtures verify parameter and result mapping through the Drizzle adapter.
+create function public.complete_hosted_attempt_session(
+  p_attempt_id uuid,
+  p_session_id uuid,
+  p_completed_at timestamptz,
+  p_result jsonb,
+  p_attempt_update jsonb
+) returns jsonb language sql as $$
+  select jsonb_build_object(
+    'attemptId', p_attempt_id,
+    'sessionId', p_session_id,
+    'completedAt', p_completed_at,
+    'result', p_result,
+    'attemptUpdate', p_attempt_update
+  )
+$$;
+
+create function public.timeout_hosted_attempt(
+  p_attempt_id uuid,
+  p_timeout_at timestamptz,
+  p_timed_out_session_id uuid,
+  p_scoring_summary jsonb
+) returns table (transitioned boolean, attempt_run_id uuid, expired_session_ids uuid[])
+language sql as $$
+  select true, p_attempt_id, array[p_timed_out_session_id]
+$$;
+
+create table public.run_events (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table public.artifacts (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.benchmark_runs(id) on delete cascade,
+  type text not null,
+  storage_path text,
+  url text,
+  created_at timestamptz not null default now()
+);
+
+-- The production objects are security-barrier views. Tables with the same
+-- projected columns keep this repository test independent from orchestrator
+-- fixture setup while exercising PostgreSQL/Drizzle type mapping.
+create table public.public_hosted_run_summaries (
+  run_id uuid,
+  case_id uuid,
+  benchmark_title text,
+  suite_slug text,
+  suite_version text,
+  observed_user_agent text
+);
+
+create table public.public_hosted_run_tasks (
+  run_id uuid,
+  app text,
+  task_slug text,
+  status text,
+  score numeric,
+  summary text,
+  created_at timestamptz
+);
+
+create table public.public_hosted_run_consistency_checks (
+  run_id uuid,
+  sequence_index bigint,
+  name text,
+  source_task_slug text,
+  target_task_slug text,
+  status text,
+  score numeric,
+  required boolean,
+  failure_reason text
 );
 SQL
 
@@ -72,5 +357,9 @@ if "${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "
   echo "model catalog accepted an invalid lifecycle status" >&2
   exit 1
 fi
+
+POSTGRES_PORT="$(docker port "${CONTAINER}" 5432/tcp | sed -E 's/.*:([0-9]+)$/\1/')"
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:${POSTGRES_PORT}/postgres" \
+  pnpm --filter @agentbench/database test:integration
 
 echo "model catalog postgres tests passed"

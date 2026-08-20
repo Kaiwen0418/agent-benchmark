@@ -1,5 +1,104 @@
 # Deployment and Scaling
 
+## Self-hosted PostgreSQL
+
+PostgreSQL and PgBouncer run as a dedicated Compose project so application
+image deployments cannot recreate the database volume. Copy
+`infra/docker/.env.database.example` to a protected host-local environment file
+and start the database project:
+
+```bash
+docker compose --env-file /path/to/database.env \
+  -f infra/docker/docker-compose.database.yml up -d
+```
+
+PostgreSQL direct access is bound to host loopback on port `5432` for migrations
+and maintenance. PgBouncer exposes transaction-pooled application access on
+port `6432` at `DATABASE_LISTEN_ADDRESS`. Restrict that listener to the private
+LAN with the host firewall. The `postgres-data` named volume is persistent and
+must be included in backup and restore procedures; never remove it during an
+application rollback.
+
+The PostgreSQL image creates `AGENTBENCH_DATABASE_USER` and
+`AGENTBENCH_DATABASE_NAME` only while initializing a new volume. Changing the
+password variable later does not rotate an existing role automatically.
+
+Create a compressed logical backup and verify it by restoring into an isolated
+temporary database on the same server:
+
+```bash
+infra/scripts/backup-postgres.sh /path/to/database.env /path/to/backups
+infra/scripts/verify-postgres-backup.sh \
+  /path/to/database.env /path/to/backups/agentbench-<timestamp>.dump
+```
+
+The backup directory and dump are created with owner-only permissions. Copy
+verified backups to storage outside the database host and apply an independent
+retention policy. Restore verification never modifies the application database.
+
+### Development data cutover
+
+Migrate into a newly created candidate database rather than overwriting the
+current target. Apply Drizzle migrations to the candidate, freeze source writes,
+finish or terminate every active run, and then run:
+
+```bash
+SOURCE_DATABASE_URL=<current-direct-url> \
+TARGET_DATABASE_URL=<empty-candidate-direct-url> \
+  scripts/db-transfer-data.sh
+```
+
+Use PostgreSQL 17 client tools. On the database host, set
+`POSTGRES_TOOLS_CONTAINER=agentbench-database-postgres-1` to execute the client
+tools inside the pinned database container instead of installing them on the
+host.
+
+The transfer uses a serializable logical snapshot, restores all application
+tables in one target transaction, rebuilds the cyclic current-revision foreign
+key, projects legacy Supabase profile rows onto the portable quota-only profile
+schema, and requires exact per-table row counts. Legacy profile identity fields
+remain only in the protected pre-cutover backup until Auth.js migration is
+implemented. Historical runs without either identity receive a deterministic,
+non-authenticating `legacy-migration:<run-id>` guest identifier so the portable
+identity invariant remains enforced. The transfer rejects a non-empty target or
+a source with active runs. After transfer, run lifecycle smoke against the
+candidate before changing `DATABASE_URL`; retain both the source and the
+pre-cutover target until rollback validation is complete.
+
+## Self-hosted Web
+
+The complete Next.js Web control plane can run as a standalone container using
+standard PostgreSQL persistence. Copy
+`infra/docker/.env.web.example` to a protected environment file outside source
+control, then start the dedicated Compose project from the repository root:
+
+```bash
+docker compose --env-file /path/to/web.env \
+  -f infra/docker/docker-compose.web.yml up -d --build
+```
+
+The service listens on `AGENTBENCH_WEB_PORT` (port `3000` by default) and
+exposes `GET /api/health` for container and gateway health checks. The
+`.runner-artifacts` directory is mounted as the `web-artifacts` named volume.
+Cloudflare or the public reverse proxy should target this port and preserve
+`Host`, `X-Forwarded-Host`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
+
+The Web Compose project is intentionally separate from the hosted runtime
+Compose project. This keeps image pulls, restarts, and rollbacks independent.
+Web requires only the pooled `DATABASE_URL` for persistence; it no longer needs
+Supabase URL or service-role variables. The separately deployed orchestrator
+also accepts `DATABASE_URL` and uses it for migrated repositories, currently
+immutable benchmark revision reads, attempt/session/result reads, and atomic
+attempt/session initialization plus session recovery/snapshot persistence. It
+also uses Drizzle for hosted access/event telemetry and expiry discovery. It
+uses the same connection for lifecycle reads and atomic PostgreSQL completion
+and timeout functions. With `DATABASE_URL` configured, every orchestrator
+persistence path uses Drizzle and Supabase credentials are not required at
+runtime. The Supabase fallback remains temporarily for deployments awaiting
+cutover. `DATABASE_POOL_MAX` defaults to `10` per
+orchestrator API/worker process, so size PgBouncer and PostgreSQL for the sum of
+all replicas rather than for one container.
+
 ## Local Docker Stack
 
 The default stack is defined by:
@@ -25,7 +124,7 @@ Run multiple hosted-sites and orchestrator API replicas locally:
 docker-compose up -d --build --scale hosted-sites=4 --scale hosted-orchestrator=2
 ```
 
-Redis workloads are configured independently. Hosted-sites uses `HOSTED_SESSION_REDIS_URL=redis://session-redis:6379` for the session cache. Orchestrator API/workers use `ORCHESTRATOR_REDIS_URL=redis://orchestrator-redis:6379` for command Streams, locks, response envelopes, and short-lived run-session read projections. `HOSTED_SESSION_PROJECTION_CACHE_TTL_SECONDS` defaults to 10 seconds. Supabase remains the durable persistence store; orchestrator workers are its hosted-data writers.
+Redis workloads are configured independently. Hosted-sites uses `HOSTED_SESSION_REDIS_URL=redis://session-redis:6379` for the session cache. Orchestrator API/workers use `ORCHESTRATOR_REDIS_URL=redis://orchestrator-redis:6379` for command Streams, locks, response envelopes, and short-lived run-session read projections. `HOSTED_SESSION_PROJECTION_CACHE_TTL_SECONDS` defaults to 10 seconds. PostgreSQL is the durable persistence store; orchestrator workers own hosted-data writes through Drizzle repositories.
 
 The local Compose topology runs two workers: partitions `0-7` and `8-15`. Do not use `--scale` on a worker service because replicas would claim the same partitions. To add workers, define additional worker services and redistribute all partitions into disjoint sets. Readiness returns `503` while any partition has no active lease.
 
@@ -62,7 +161,7 @@ The production deployment is split into:
 
 - web on Vercel
 - hosted-sites, orchestrator API/workers, session Redis, orchestrator Redis, and Nginx on a private Linux host
-- Supabase for durable application data
+- PostgreSQL for durable application data
 - GHCR for hosted runtime images
 - Cloudflare Tunnel for environment-specific public ingress and TLS
 
@@ -101,21 +200,22 @@ Required variables in each GitHub Environment:
 - `AGENTBENCH_WEB_URL`
 - `HOSTED_SITES_PUBLIC_URL`
 - `HOSTED_ORCHESTRATOR_PUBLIC_URL`
-- `SUPABASE_URL`
 - `GATEWAY_HTTP_PORT`
 
 Required secrets in each GitHub Environment:
 
 - `GHCR_PAT` with `read:packages`
 - `RUNNER_SHARED_SECRET`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL` using a pooled PostgreSQL endpoint
 
 Migration-only database secrets:
 
-- development: `TEST_SUPABASE_DB_URL`
-- production: `PROD_SUPABASE_DB_URL`
+- development: `DATABASE_DIRECT_URL` for self-hosted PostgreSQL
+- production before cutover: `PROD_SUPABASE_DB_URL`
 
-These URLs must identify different database targets. Migrations are explicit and never infer a target from the Supabase CLI linked project.
+The development direct URL is loopback-only from the self-hosted runner. The
+production compatibility URL is removed after production migration and rollback
+validation. Migration commands never infer a target from linked CLI state.
 
 Optional web deployment secret:
 
@@ -123,8 +223,8 @@ Optional web deployment secret:
 
 Each Vercel Web project must independently configure:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL` using a pooled PostgreSQL endpoint
+- optional `DATABASE_POOL_MAX` (defaults to `3` connections per Web instance)
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
@@ -141,10 +241,15 @@ Optional GitHub Environment secrets enable first-party model discovery:
 - `MOONSHOT_API_KEY`
 - `DEEPSEEK_API_KEY`
 
+The model-catalog workflow also requires `DATABASE_DIRECT_URL`. Production may
+temporarily fall back to `PROD_SUPABASE_DB_URL` before its cutover. This job uses direct PostgreSQL
+through Drizzle and does not require `SUPABASE_URL` or
+`SUPABASE_SERVICE_ROLE_KEY`.
+
 The daily model-catalog workflow checks out the matching branch and invokes
-`packages/model-catalog-sync` with `SUPABASE_URL`,
-`SUPABASE_SERVICE_ROLE_KEY`, and any provider keys from the selected GitHub
-Environment. It writes directly to Supabase and does not call Vercel.
+`packages/model-catalog-sync` with `DATABASE_DIRECT_URL` and any provider keys
+from the selected GitHub Environment. It writes directly to PostgreSQL and does
+not call Vercel or Supabase REST.
 OpenRouter and LiteLLM require no credential and provide supplemental discovery
 for all supported providers, including Z.AI/GLM. First-party provider APIs
 override aggregator display identity when available. Sources execute
@@ -153,11 +258,15 @@ without deleting or downgrading existing catalog rows. Trigger the workflow
 once after applying the model-catalog migration; normal hosted Compose and Web
 deployments are unaffected.
 
-Development values must point to the test hosted hostname and development Supabase target; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
+Development values must point to the test hosted hostname and development database; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
 
-All Supabase variables are server-only. Web browser bundles communicate through same-origin API routes and do not require or receive Supabase environment variables.
+Web browser bundles communicate through same-origin API routes and never receive
+database credentials. `DATABASE_URL` is server-only and serves every Web
+Drizzle repository. For Supabase-hosted PostgreSQL use its transaction-pool endpoint, not
+the direct database endpoint; a self-hosted deployment will point the same
+variable at PgBouncer.
 
-The self-hosted GitHub Actions runners must have `self-hosted` and `linux`, plus `agentbench-dev` for development or `agentbench-prod` for production. They need Docker access, Docker Compose, enough disk space for images, and network access to GHCR and Supabase.
+The self-hosted GitHub Actions runners must have `self-hosted` and `linux`, plus `agentbench-dev` for development or `agentbench-prod` for production. They need Docker access, Docker Compose, enough disk space for images, and network access to GHCR and their environment's PostgreSQL endpoint.
 
 The development project must never operate on production containers. `COMPOSE_PROJECT_NAME`, image channel, runner label, gateway port, public URLs, and database URL are treated as one validated environment mapping by the deployment script.
 

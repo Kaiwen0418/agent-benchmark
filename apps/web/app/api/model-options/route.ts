@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { searchModelCatalog } from "@/lib/model-catalog";
-import { SupabaseServiceUnavailableError } from "@/lib/supabase/admin";
+import { DatabaseServiceUnavailableError } from "@/lib/database";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error("[web] model catalog search failed", error);
-    const message = error instanceof SupabaseServiceUnavailableError
+    const message = error instanceof DatabaseServiceUnavailableError
       ? error.message
       : "Model suggestions are temporarily unavailable.";
     return NextResponse.json(

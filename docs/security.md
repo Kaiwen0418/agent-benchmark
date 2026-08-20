@@ -28,6 +28,8 @@ flowchart LR
 - Require the shared service secret for internal Web and orchestrator writes.
 - Keep Supabase service-role keys server-side.
 - Browser components must use same-origin Web APIs and must not import Supabase clients or browser-facing Supabase environment variables.
+- Browser components must not import `@agentbench/database` or receive
+  `DATABASE_URL`; only server modules may create PostgreSQL pools.
 - The current Web authentication seam is guest-only. Future Auth.js integration
   replaces `getCurrentUser()` without restoring browser-facing Supabase keys.
 - Use RLS for user-owned read paths.

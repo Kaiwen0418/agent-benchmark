@@ -6,12 +6,12 @@ import type {
   BenchmarkRun,
   CompleteRunInput,
   QuotaStatus,
+  RunEvent,
   SubmitRunMetadataInput,
 } from "@agentbench/protocol";
 import type { Database } from "@agentbench/shared";
 import path from "node:path";
 import fs from "node:fs";
-import { createSupabaseAdminClient } from "./supabase/admin";
 import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
 import { completableRunStatuses, terminalRunStatuses } from "./run-lifecycle";
 import { hostedWebCatalogReleases } from "@agentbench/test-cases/release";
@@ -20,17 +20,20 @@ import type { PublicConsistencyCheck } from "./public-result-consistency";
 import { groupLeaderboardVersions, type LeaderboardVersionCandidate } from "./leaderboard-versions";
 import { isCalibrationControlsEnabled, type CalibrationRunSelection } from "./calibration";
 import { getModelCatalogOption } from "./model-catalog";
+import {
+  getPublicResultRepository,
+  getWebBenchmarkCaseRepository,
+  getWebControlPlaneRepository,
+} from "./database";
+import type {
+  BenchmarkRunRecord,
+  BenchmarkRunUpdate,
+} from "@agentbench/database/web-control-plane";
+import type { JsonValue } from "@agentbench/database";
 
 const PRODUCTION_GUEST_RUN_LIMIT = 1;
 const DEVELOPMENT_GUEST_RUN_LIMIT = 10;
 const DEFAULT_USER_DAILY_RUN_LIMIT = 3;
-const benchmarkCaseSelect = "id, slug, title, description, category, difficulty, provider, current_revision_id, metadata, is_public, created_at";
-const benchmarkRunSelect = "id, user_id, guest_id, case_id, runner_id, execution_mode, status, score, live_view_url, error_message, started_at, completed_at, created_at, metadata, agent_name, agent_version, base_model, model_provider, model_id, reasoning_effort, model_catalog_verified_at, browser_environment, is_public";
-
-function getSupabase() {
-  return createSupabaseAdminClient();
-}
-
 function getGuestRunLimit() {
   const configuredLimit = Number(process.env.GUEST_RUN_LIMIT);
   if (Number.isInteger(configuredLimit) && configuredLimit > 0) {
@@ -155,18 +158,8 @@ export function resolveLocalArtifactFile(runId: string, storagePath: string) {
 }
 
 export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
-    .from("benchmark_cases")
-    .select(benchmarkCaseSelect)
-    .order("created_at", { ascending: false });
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to list benchmark cases");
-  }
-
-  return data.map((item) => ({
+  const rows = await getWebBenchmarkCaseRepository().listAll();
+  return rows.map((item) => ({
     id: item.id,
     slug: item.slug,
     title: item.title,
@@ -174,10 +167,12 @@ export async function listBenchmarkCases(): Promise<BenchmarkCase[]> {
     category: item.category,
     difficulty: item.difficulty,
     provider: item.provider ?? "native",
-    currentRevisionId: item.current_revision_id,
-    metadata: item.metadata ?? {},
-    isPublic: item.is_public,
-    createdAt: item.created_at,
+    currentRevisionId: item.currentRevisionId,
+    metadata: item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
+      ? item.metadata
+      : {},
+    isPublic: item.isPublic,
+    createdAt: item.createdAt,
   }));
 }
 
@@ -199,24 +194,11 @@ export type CalibrationBenchmarkRevision = {
 // unauthenticated clients. `difficulty` is exposed as the suite tag and the
 // backend orders rows so the default suite (hard, when published) is first.
 export async function listPublicHostedBenchmarkCases(): Promise<PublicBenchmarkCase[]> {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
-    .from("benchmark_cases")
-    .select("id, slug, title, description, difficulty, created_at")
-    .eq("is_public", true)
-    .eq("provider", "hosted-web")
-    .order("difficulty", { ascending: false })
-    .order("created_at", { ascending: true });
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to list public benchmark cases");
-  }
-
+  const rows = await getWebBenchmarkCaseRepository().listPublicHosted();
   const releases = hostedWebCatalogReleases();
   const releaseByCaseId = new Map(releases.map((release) => [release.benchmarkCase.id, release]));
 
-  return data.map((item) => {
+  return rows.map((item) => {
     const release = releaseByCaseId.get(item.id);
     return {
       id: item.id,
@@ -237,46 +219,18 @@ export async function listCalibrationBenchmarkRevisions(
     return [];
   }
 
-  const supabase = getSupabase();
-  const [caseRows, revisionRows] = await Promise.all([
-    supabase
-      .from("benchmark_cases")
-      .select("id, current_revision_id")
-      .in("id", caseIds)
-      .eq("is_public", true)
-      .eq("provider", "hosted-web"),
-    supabase
-      .from("benchmark_case_revisions")
-      .select("id, case_id, revision, manifest, created_at")
-      .in("case_id", caseIds)
-      .order("created_at", { ascending: false }),
-  ]);
-
-  if (caseRows.error || !caseRows.data) {
-    throw caseRows.error ?? new Error("Failed to load benchmark case revisions");
-  }
-  if (revisionRows.error || !revisionRows.data) {
-    throw revisionRows.error ?? new Error("Failed to load benchmark case revisions");
-  }
-
-  const currentByCaseId = new Map(
-    caseRows.data.map((row) => [row.id, row.current_revision_id]),
-  );
-
-  return revisionRows.data.flatMap((row) => {
-    if (!currentByCaseId.has(row.case_id)) {
-      return [];
-    }
+  const rows = await getWebBenchmarkCaseRepository().listCalibrationRevisions(caseIds);
+  return rows.flatMap((row) => {
     const manifest = hostedSuiteMetadataSchema.safeParse(row.manifest);
     if (!manifest.success) {
       return [];
     }
     return [{
-      caseId: row.case_id,
+      caseId: row.caseId,
       revisionId: row.id,
       revision: row.revision,
       version: manifest.data.suiteVersion,
-      current: currentByCaseId.get(row.case_id) === row.id,
+      current: row.currentRevisionId === row.id,
     }];
   });
 }
@@ -285,74 +239,29 @@ async function isAvailableCalibrationRevision(
   caseId: string,
   caseRevisionId: string,
 ) {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("benchmark_case_revisions")
-    .select("id")
-    .eq("id", caseRevisionId)
-    .eq("case_id", caseId)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-  return Boolean(data);
+  return getWebBenchmarkCaseRepository().revisionExists(caseId, caseRevisionId);
 }
 
-export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {  const supabase = getSupabase();
-
-  const byId = await supabase
-    .from("benchmark_cases")
-    .select(benchmarkCaseSelect)
-    .eq("id", caseId)
-    .maybeSingle();
-
-  if (byId.error) {
-    throw byId.error;
-  }
-
-  if (byId.data) {
-    return {
-      id: byId.data.id,
-      slug: byId.data.slug,
-      title: byId.data.title,
-      description: byId.data.description,
-      category: byId.data.category,
-      difficulty: byId.data.difficulty,
-      provider: byId.data.provider ?? "native",
-      currentRevisionId: byId.data.current_revision_id,
-      metadata: byId.data.metadata ?? {},
-      isPublic: byId.data.is_public,
-      createdAt: byId.data.created_at,
-    };
-  }
-
-  const bySlug = await supabase
-    .from("benchmark_cases")
-    .select(benchmarkCaseSelect)
-    .eq("slug", caseId)
-    .maybeSingle();
-
-  if (bySlug.error) {
-    throw bySlug.error;
-  }
-
-  if (!bySlug.data) {
+export async function getBenchmarkCase(caseId: string): Promise<BenchmarkCase | null> {
+  const row = await getWebBenchmarkCaseRepository().findByIdOrSlug(caseId);
+  if (!row) {
     return null;
   }
 
   return {
-    id: bySlug.data.id,
-    slug: bySlug.data.slug,
-    title: bySlug.data.title,
-    description: bySlug.data.description,
-    category: bySlug.data.category,
-    difficulty: bySlug.data.difficulty,
-    provider: bySlug.data.provider ?? "native",
-    currentRevisionId: bySlug.data.current_revision_id,
-    metadata: bySlug.data.metadata ?? {},
-    isPublic: bySlug.data.is_public,
-    createdAt: bySlug.data.created_at,
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    description: row.description,
+    category: row.category,
+    difficulty: row.difficulty,
+    provider: row.provider ?? "native",
+    currentRevisionId: row.currentRevisionId,
+    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? row.metadata
+      : {},
+    isPublic: row.isPublic,
+    createdAt: row.createdAt,
   };
 }
 
@@ -430,6 +339,58 @@ function mapRunRow(row: {
   };
 }
 
+function mapDatabaseRunRow(row: BenchmarkRunRecord): BenchmarkRun {
+  return mapRunRow({
+    id: row.id,
+    user_id: row.userId,
+    guest_id: row.guestId,
+    case_id: row.caseId,
+    runner_id: row.runnerId,
+    execution_mode: row.executionMode,
+    status: row.status,
+    score: row.score,
+    live_view_url: row.liveViewUrl,
+    error_message: row.errorMessage,
+    started_at: row.startedAt,
+    completed_at: row.completedAt,
+    created_at: row.createdAt,
+    metadata: row.metadata as Database["public"]["Tables"]["benchmark_runs"]["Row"]["metadata"],
+    agent_name: row.agentName,
+    agent_version: row.agentVersion,
+    base_model: row.baseModel,
+    model_provider: row.modelProvider,
+    model_id: row.modelId,
+    reasoning_effort: row.reasoningEffort,
+    model_catalog_verified_at: row.modelCatalogVerifiedAt,
+    browser_environment: row.browserEnvironment as Database["public"]["Tables"]["benchmark_runs"]["Row"]["browser_environment"],
+    is_public: row.isPublic,
+  });
+}
+
+function toDatabaseRunUpdate(
+  update: Database["public"]["Tables"]["benchmark_runs"]["Update"],
+): BenchmarkRunUpdate {
+  return {
+    agentName: update.agent_name,
+    agentVersion: update.agent_version,
+    baseModel: update.base_model,
+    modelProvider: update.model_provider,
+    modelId: update.model_id,
+    reasoningEffort: update.reasoning_effort,
+    modelCatalogVerifiedAt: update.model_catalog_verified_at,
+    browserEnvironment: update.browser_environment as JsonValue | undefined,
+    metadata: update.metadata as JsonValue | undefined,
+    startedAt: update.started_at,
+    status: update.status,
+  };
+}
+
+function toEventPayload(value: JsonValue): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
+}
+
 export async function createBenchmarkRun(params: {
   caseId: string;
   userId: string | null;
@@ -440,7 +401,6 @@ export async function createBenchmarkRun(params: {
   browserEnvironment: NonNullable<BenchmarkRun["browserEnvironment"]>;
   calibration?: CalibrationRunSelection;
 }): Promise<BenchmarkRun> {
-  const supabase = getSupabase();
   const canonicalIdentity = params.agent
     ? await canonicalizeAgentIdentity(params.agent)
     : undefined;
@@ -468,302 +428,113 @@ export async function createBenchmarkRun(params: {
       : undefined,
   });
 
-  const { data, error } = await supabase
-    .from("benchmark_runs")
-    .insert({
-      case_id: benchmarkCase.id,
-      user_id: params.userId,
-      guest_id: params.guestId,
-      execution_mode: params.executionMode,
-      status: initialStatus,
-      is_public: params.isPublic,
-      ...initialMetadata,
-    })
-    .select(benchmarkRunSelect)
-    .single();
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to create benchmark run");
-  }
-
-  await supabase.from("run_events").insert({
-    run_id: data.id,
-    type: "run.created",
-    payload: {
+  const data = await getWebControlPlaneRepository().createRun({
+    caseId: benchmarkCase.id,
+    userId: params.userId,
+    guestId: params.guestId,
+    executionMode: params.executionMode,
+    status: initialStatus,
+    isPublic: params.isPublic,
+    ...toDatabaseRunUpdate(initialMetadata),
+  }, {
       status: initialStatus,
       executionMode: params.executionMode,
       agent: canonicalIdentity?.agent ?? null,
       calibration: Boolean(params.calibration),
-    },
-  });
+  } as JsonValue);
 
-  return mapRunRow(data);
+  return mapDatabaseRunRow(data);
 }
 
 export async function listBenchmarkRuns(): Promise<BenchmarkRun[]> {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
-    .from("benchmark_runs")
-    .select(benchmarkRunSelect)
-    .order("created_at", { ascending: false });
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to list benchmark runs");
-  }
-
-  return data.map(mapRunRow);
+  const rows = await getWebControlPlaneRepository().listRuns();
+  return rows.map(mapDatabaseRunRow);
 }
 
 export async function getBenchmarkRun(runId: string): Promise<BenchmarkRun | null> {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
-    .from("benchmark_runs")
-    .select(benchmarkRunSelect)
-    .eq("id", runId)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
-  return data ? mapRunRow(data) : null;
+  const row = await getWebControlPlaneRepository().findRun(runId);
+  return row ? mapDatabaseRunRow(row) : null;
 }
 
-export async function listRunEvents(runId: string) {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
-    .from("run_events")
-    .select("id, run_id, type, payload, created_at")
-    .eq("run_id", runId)
-    .order("created_at", { ascending: true });
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to list run events");
-  }
-
-  return data.map((item) => ({
+export async function listRunEvents(runId: string): Promise<RunEvent[]> {
+  const rows = await getWebControlPlaneRepository().listEvents(runId);
+  return rows.map((item) => ({
     id: item.id,
-    runId: item.run_id,
-    type: item.type,
-    payload: item.payload,
-    createdAt: item.created_at,
+    runId: item.runId,
+    type: item.type as RunEvent["type"],
+    payload: toEventPayload(item.payload),
+    createdAt: item.createdAt,
   }));
 }
 
 export async function listArtifacts(runId: string): Promise<Artifact[]> {
-  const supabase = getSupabase();
-
-  const { data, error } = await supabase
-    .from("artifacts")
-    .select("id, run_id, type, storage_path, url, created_at")
-    .eq("run_id", runId)
-    .order("created_at", { ascending: true });
-
-  if (error || !data) {
-    throw error ?? new Error("Failed to list artifacts");
-  }
-
-  return data.map((item) => ({
+  const rows = await getWebControlPlaneRepository().listArtifacts(runId);
+  return rows.map((item) => ({
     id: item.id,
-    runId: item.run_id,
+    runId: item.runId,
     type: item.type,
-    storagePath: item.storage_path,
-    url: toLocalArtifactUrl(runId, item.storage_path, item.url),
-    createdAt: item.created_at,
+    storagePath: item.storagePath,
+    url: toLocalArtifactUrl(runId, item.storagePath, item.url),
+    createdAt: item.createdAt,
   }));
 }
 
 export async function getRunStreamFingerprint(runId: string) {
-  const supabase = getSupabase();
-
-  const [runResult, eventResult, artifactResult] = await Promise.all([
-    supabase
-      .from("benchmark_runs")
-      .select("id, status, score, error_message, started_at, completed_at, runner_id")
-      .eq("id", runId)
-      .maybeSingle(),
-    supabase
-      .from("run_events")
-      .select("id")
-      .eq("run_id", runId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("artifacts")
-      .select("id")
-      .eq("run_id", runId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
-
-  if (runResult.error) {
-    throw runResult.error;
-  }
-  if (eventResult.error) {
-    throw eventResult.error;
-  }
-  if (artifactResult.error) {
-    throw artifactResult.error;
-  }
-
-  return {
-    run: runResult.data
-      ? {
-          id: runResult.data.id,
-          status: runResult.data.status,
-          score: runResult.data.score,
-          errorMessage: runResult.data.error_message,
-          completedAt: runResult.data.completed_at,
-          startedAt: runResult.data.started_at,
-          runnerId: runResult.data.runner_id,
-        }
-      : null,
-    lastEventId: eventResult.data?.id ?? null,
-    lastArtifactId: artifactResult.data?.id ?? null,
-  };
+  return getWebControlPlaneRepository().streamFingerprint(runId);
 }
 
 export async function appendRunEvent(runId: string, input: AppendRunEventInput) {
-  const supabase = getSupabase();
-
-  const { data: eventRow, error: eventError } = await supabase
-    .from("run_events")
-    .insert({
-      run_id: runId,
-      type: input.type,
-      payload: input.payload,
-    })
-    .select("id, run_id, type, payload, created_at")
-    .single();
-
-  if (eventError || !eventRow) {
-    throw eventError ?? new Error("Failed to append run event");
-  }
-
-  let run: BenchmarkRun | null = null;
-  if (
-    input.type === "agent.connected" ||
-    input.type === "run.running" ||
-    input.type === "run.completed" ||
-    input.type === "run.failed"
-  ) {
-    const nextStatus =
-      input.type === "agent.connected"
-        ? "agent_connected"
-        : input.type === "run.running"
+  const nextStatus: BenchmarkRun["status"] | null =
+    input.type === "agent.connected"
+      ? "agent_connected"
+      : input.type === "run.running"
         ? "running"
         : input.type === "run.completed"
           ? "completed"
-          : "failed";
-
-    const patch: Database["public"]["Tables"]["benchmark_runs"]["Update"] = { status: nextStatus };
-    if (nextStatus === "running" && typeof input.payload.liveViewUrl === "string") {
-      patch.live_view_url = input.payload.liveViewUrl;
-    }
-    if (nextStatus === "completed" || nextStatus === "failed") {
-      patch.completed_at = new Date().toISOString();
-    }
-
-    const { data: runRow, error: runError } = await supabase
-      .from("benchmark_runs")
-      .update(patch)
-      .eq("id", runId)
-      .select(benchmarkRunSelect)
-      .single();
-
-    if (runError) {
-      throw runError;
-    }
-
-    run = mapRunRow(runRow);
-  }
+          : input.type === "run.failed"
+            ? "failed"
+            : null;
+  const transition = nextStatus
+    ? {
+        status: nextStatus,
+        ...(nextStatus === "running" && typeof input.payload.liveViewUrl === "string"
+          ? { liveViewUrl: input.payload.liveViewUrl }
+          : {}),
+        ...(nextStatus === "completed" || nextStatus === "failed"
+          ? { completedAt: new Date().toISOString() }
+          : {}),
+      }
+    : undefined;
+  const result = await getWebControlPlaneRepository().appendEvent({
+    runId,
+    type: input.type,
+    payload: input.payload as JsonValue,
+    transition,
+  });
 
   return {
     event: {
-      id: eventRow.id,
-      runId: eventRow.run_id,
-      type: eventRow.type,
-      payload: eventRow.payload,
-      createdAt: eventRow.created_at,
+      id: result.event.id,
+      runId: result.event.runId,
+      type: result.event.type as RunEvent["type"],
+      payload: toEventPayload(result.event.payload),
+      createdAt: result.event.createdAt,
     },
-    run,
+    run: result.run ? mapDatabaseRunRow(result.run) : null,
   };
 }
 
 export async function completeBenchmarkRun(runId: string, input: CompleteRunInput) {
-  const supabase = getSupabase();
-
-  const { data: existingRun, error: existingRunError } = await supabase
-    .from("benchmark_runs")
-    .select(benchmarkRunSelect)
-    .eq("id", runId)
-    .maybeSingle();
-  if (existingRunError) {
-    throw existingRunError;
-  }
-  if (!existingRun) {
-    return null;
-  }
-  if (terminalRunStatuses.has(existingRun.status)) {
-    return mapRunRow(existingRun);
-  }
-
-  const completedAt = new Date().toISOString();
-  const { data, error } = await supabase
-    .from("benchmark_runs")
-    .update({
-      status: input.status,
-      score: input.score ?? null,
-      error_message: input.errorMessage ?? null,
-      completed_at: completedAt,
-    })
-    .eq("id", runId)
-    .in("status", [...completableRunStatuses])
-    .select(benchmarkRunSelect)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
-  if (!data) {
-    const { data: winner, error: winnerError } = await supabase
-      .from("benchmark_runs")
-      .select(benchmarkRunSelect)
-      .eq("id", runId)
-      .maybeSingle();
-    if (winnerError) {
-      throw winnerError;
-    }
-    return winner ? mapRunRow(winner) : null;
-  }
-
-  if (input.artifacts.length > 0) {
-    await supabase.from("artifacts").insert(
-      input.artifacts.map((artifact) => ({
-        run_id: runId,
-        type: artifact.type,
-        storage_path: artifact.storagePath,
-        url: artifact.url,
-      })),
-    );
-  }
-
-  await supabase.from("run_events").insert({
-    run_id: runId,
-    type: input.status === "completed" ? "run.completed" : "run.failed",
-    payload: {
-      score: input.score ?? null,
-      errorMessage: input.errorMessage ?? null,
-    },
+  const row = await getWebControlPlaneRepository().completeRun({
+    runId,
+    status: input.status,
+    score: input.score ?? null,
+    errorMessage: input.errorMessage ?? null,
+    completedAt: new Date().toISOString(),
+    artifacts: input.artifacts,
+    completableStatuses: [...completableRunStatuses],
   });
-
-  return mapRunRow(data);
+  return row ? mapDatabaseRunRow(row) : null;
 }
 
 export async function submitBenchmarkRunMetadata(
@@ -771,15 +542,12 @@ export async function submitBenchmarkRunMetadata(
   input: SubmitRunMetadataInput,
   browserEnvironment: Record<string, unknown>,
 ) {
-  const supabase = getSupabase();
-  const existing = await supabase.from("benchmark_runs").select("metadata, status, started_at").eq("id", runId).maybeSingle();
-  if (existing.error) {
-    throw existing.error;
-  }
-  if (!existing.data) {
+  const repository = getWebControlPlaneRepository();
+  const existing = await repository.findRun(runId);
+  if (!existing) {
     return null;
   }
-  if (["completed", "failed", "cancelled", "timeout"].includes(existing.data.status)) {
+  if (terminalRunStatuses.has(existing.status)) {
     throw new Error("Run metadata is locked after the run reaches a terminal state.");
   }
 
@@ -788,44 +556,35 @@ export async function submitBenchmarkRunMetadata(
     ...input,
     ...canonicalIdentity.agent,
   };
-  const currentMetadata = existing.data.metadata && typeof existing.data.metadata === "object" && !Array.isArray(existing.data.metadata)
-    ? existing.data.metadata
+  const currentMetadata = existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+    ? existing.metadata
     : {};
   const now = new Date().toISOString();
-  const wasWaiting = existing.data.status === "waiting_for_agent";
-  const { data, error } = await supabase
-    .from("benchmark_runs")
-    .update(buildRunMetadataUpdate({
+  const update = buildRunMetadataUpdate({
       currentMetadata,
-      currentStatus: existing.data.status,
-      startedAt: existing.data.started_at,
+      currentStatus: existing.status,
+      startedAt: existing.startedAt,
       input: canonicalInput,
       modelCatalogVerifiedAt: canonicalIdentity.catalogVerifiedAt,
       browserEnvironment,
       now,
-    }))
-    .eq("id", runId)
-    .select(benchmarkRunSelect)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-  if (data && wasWaiting) {
-    await supabase.from("run_events").insert({
-      run_id: runId,
-      type: "agent.connected",
-      payload: {
+    });
+  const row = await repository.updateRunMetadata({
+    runId,
+    update: toDatabaseRunUpdate(update),
+    terminalStatuses: [...terminalRunStatuses],
+    connectedEvent: existing.status === "waiting_for_agent"
+      ? {
         agentName: canonicalInput.name,
         agentVersion: canonicalInput.version,
         baseModel: canonicalInput.baseModel,
         modelProvider: canonicalInput.model?.provider ?? null,
         modelId: canonicalInput.model?.id ?? null,
         reasoningEffort: canonicalInput.model?.reasoningEffort ?? null,
-      },
-    });
-  }
-  return data ? mapRunRow(data) : null;
+      }
+      : null,
+  });
+  return row ? mapDatabaseRunRow(row) : null;
 }
 
 export type LeaderboardEntry = {
@@ -860,61 +619,41 @@ export type PublicBenchmarkResult = {
 };
 
 export async function getPublicBenchmarkResult(runId: string): Promise<PublicBenchmarkResult | null> {
-  const supabase = getSupabase();
-
-  const { data: row, error } = await supabase
-    .from("benchmark_runs")
-    .select(benchmarkRunSelect)
-    .eq("id", runId)
-    .in("status", ["completed", "failed"])
-    .eq("is_public", true)
-    .maybeSingle();
-  if (error) throw error;
+  const repository = getPublicResultRepository();
+  const row = await repository.findRun(runId);
   if (!row) return null;
 
-  const run = mapRunRow(row);
-  const [
-    { data: benchmark, error: benchmarkError },
-    { data: summary, error: summaryError },
-    { data: results, error: resultsError },
-    { data: consistencyChecks, error: consistencyError },
-  ] = await Promise.all([
-    supabase.from("benchmark_cases").select("title, description").eq("id", run.caseId).maybeSingle(),
-    supabase.from("public_hosted_run_summaries").select("suite_slug, suite_version").eq("run_id", runId).maybeSingle(),
-    supabase.from("public_hosted_run_tasks").select("app, task_slug, status, score, summary, created_at").eq("run_id", runId).order("created_at", { ascending: true }),
-    supabase
-      .from("public_hosted_run_consistency_checks")
-      .select("sequence_index, name, source_task_slug, target_task_slug, status, score, required, failure_reason")
-      .eq("run_id", runId)
-      .order("sequence_index", { ascending: true }),
+  const run = mapDatabaseRunRow(row);
+  const [benchmark, summary, results, consistencyChecks] = await Promise.all([
+    repository.findCase(run.caseId),
+    repository.findSummary(runId),
+    repository.listTasks(runId),
+    repository.listConsistencyChecks(runId),
   ]);
-  if (benchmarkError || summaryError || resultsError || consistencyError) {
-    throw benchmarkError ?? summaryError ?? resultsError ?? consistencyError;
-  }
   if (!benchmark) return null;
 
   return {
     run,
     benchmark,
-    suite: summary && summary.suite_slug && summary.suite_version
-      ? { slug: summary.suite_slug, version: summary.suite_version }
+    suite: summary?.suiteSlug && summary.suiteVersion
+      ? { slug: summary.suiteSlug, version: summary.suiteVersion }
       : null,
-    tasks: (results ?? []).map((result) => ({
+    tasks: results.map((result) => ({
       app: result.app ?? "hosted-app",
-      taskSlug: result.task_slug ?? "hosted-task",
+      taskSlug: result.taskSlug ?? "hosted-task",
       status: result.status!,
       score: result.score!,
       summary: result.summary!,
     })),
-    consistencyChecks: (consistencyChecks ?? []).map((check) => ({
-      sequenceIndex: check.sequence_index ?? 0,
+    consistencyChecks: consistencyChecks.map((check) => ({
+      sequenceIndex: check.sequenceIndex ?? 0,
       name: check.name ?? "Cross-app consistency check",
-      sourceTaskSlug: check.source_task_slug ?? "source task",
-      targetTaskSlug: check.target_task_slug ?? "target task",
+      sourceTaskSlug: check.sourceTaskSlug ?? "source task",
+      targetTaskSlug: check.targetTaskSlug ?? "target task",
       status: check.status === "passed" ? "passed" : "failed",
       score: check.score ?? 0,
       required: check.required !== false,
-      failureReason: check.failure_reason,
+      failureReason: check.failureReason,
     })),
   };
 }
@@ -927,20 +666,12 @@ export type LeaderboardVersion = {
 };
 
 export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersion[]> {
-  const supabase = getSupabase();
+  const repository = getPublicResultRepository();
 
   // Start from the published catalog so every public suite appears in the
   // selector (even before it has public runs). The backend ordering puts the
   // default suite first; the frontend just picks boards[0].
-  const { data: cases, error: casesError } = await supabase
-    .from("benchmark_cases")
-    .select("id, slug, difficulty, metadata")
-    .eq("is_public", true)
-    .eq("provider", "hosted-web");
-
-  if (casesError || !cases) {
-    throw casesError ?? new Error("Failed to load benchmark case tags");
-  }
+  const cases = await repository.listPublishedCases();
 
   const releases = hostedWebCatalogReleases();
   const releaseByCaseId = new Map(releases.map((release) => [release.benchmarkCase.id, release]));
@@ -968,37 +699,20 @@ export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersio
 
   // Also surface any historical versions that have public runs but are no
   // longer in the current catalog release.
-  const { data: publicRuns, error: runError } = await supabase
-    .from("benchmark_runs")
-    .select("id")
-    .in("status", ["completed", "failed", "timeout"])
-    .eq("is_public", true)
-    .not("score", "is", null)
-    .limit(1000);
-
-  if (runError || !publicRuns) {
-    throw runError ?? new Error("Failed to load leaderboard versions");
-  }
+  const publicRuns = await repository.listTerminalRunIds(1000);
 
   if (publicRuns.length > 0) {
-    const { data: attempts, error: attemptError } = await supabase
-      .from("public_hosted_run_summaries")
-      .select("suite_slug, suite_version")
-      .in("run_id", publicRuns.map((run) => run.id));
-
-    if (attemptError || !attempts) {
-      throw attemptError ?? new Error("Failed to load leaderboard versions");
-    }
+    const attempts = await repository.listSummaries(publicRuns.map((run) => run.id));
 
     for (const attempt of attempts) {
-      if (!attempt.suite_version || !attempt.suite_slug) continue;
-      const key = `${attempt.suite_slug}:${attempt.suite_version}`;
+      if (!attempt.suiteVersion || !attempt.suiteSlug) continue;
+      const key = `${attempt.suiteSlug}:${attempt.suiteVersion}`;
       if (seen.has(key)) continue;
       seen.add(key);
       versions.push({
-        version: attempt.suite_version,
-        slug: attempt.suite_slug,
-        tag: tagBySuiteSlug.get(attempt.suite_slug) ?? "",
+        version: attempt.suiteVersion,
+        slug: attempt.suiteSlug,
+        tag: tagBySuiteSlug.get(attempt.suiteSlug) ?? "",
       });
     }
   }
@@ -1007,84 +721,42 @@ export async function listPublicLeaderboardVersions(): Promise<LeaderboardVersio
 }
 
 export async function listPublicLeaderboard(limit = 20, suiteVersions?: string[], suiteSlug?: string): Promise<LeaderboardEntry[]> {
-  const supabase = getSupabase();
+  const repository = getPublicResultRepository();
 
   let versionRunIds: string[] | null = null;
   if (suiteVersions && suiteVersions.length > 0) {
-    let versionAttemptsQuery = supabase
-      .from("public_hosted_run_summaries")
-      .select("run_id")
-      .in("suite_version", suiteVersions)
-      .limit(1000);
-
-    if (suiteSlug) {
-      versionAttemptsQuery = versionAttemptsQuery.eq("suite_slug", suiteSlug);
-    }
-
-    const { data: versionAttempts, error: versionError } = await versionAttemptsQuery;
-
-    if (versionError || !versionAttempts) {
-      throw versionError ?? new Error("Failed to load leaderboard version");
-    }
-    versionRunIds = [...new Set(versionAttempts.map((attempt) => attempt.run_id).filter((id): id is string => Boolean(id)))];
+    versionRunIds = await repository.listRunIdsBySuite(suiteVersions, suiteSlug);
     if (versionRunIds.length === 0) {
       return [];
     }
   }
 
-  let runsQuery = supabase
-    .from("benchmark_runs")
-    .select("id, case_id, status, score, started_at, completed_at, agent_name, agent_version, base_model, reasoning_effort, browser_environment")
-    .in("status", ["completed", "failed", "timeout"])
-    .eq("is_public", true)
-    .not("score", "is", null)
-    .order("score", { ascending: false });
-
-  if (versionRunIds) {
-    runsQuery = runsQuery.in("id", versionRunIds);
-  }
-
   const fetchLimit = Math.max(limit, Math.min(limit * 5, 100));
-
-  const { data: runs, error } = await runsQuery.limit(fetchLimit);
-
-  if (error || !runs) {
-    throw error ?? new Error("Failed to load leaderboard");
-  }
-
-  const { data: summaries, error: summaryError } = runs.length > 0
-    ? await supabase
-      .from("public_hosted_run_summaries")
-      .select("run_id, benchmark_title, suite_version, observed_user_agent")
-      .in("run_id", runs.map((run) => run.id))
-    : { data: [], error: null };
-  if (summaryError) {
-    throw summaryError;
-  }
-
-  const summaryByRun = new Map((summaries ?? []).map((item) => [item.run_id, item]));
+  const runs = await repository.listLeaderboardRuns(versionRunIds, fetchLimit);
+  const summaries = await repository.listSummaries(runs.map((run) => run.id));
+  const summaryByRun = new Map(summaries.map((item) => [item.runId, item]));
   const entries = runs.map((run) => {
-    const browser = run.browser_environment && typeof run.browser_environment === "object" && !Array.isArray(run.browser_environment)
-      ? run.browser_environment as Record<string, unknown>
+    const browser = run.browserEnvironment && typeof run.browserEnvironment === "object" && !Array.isArray(run.browserEnvironment)
+      ? run.browserEnvironment as Record<string, unknown>
       : {};
     const summary = summaryByRun.get(run.id);
-    const observedBrowser = parseBrowserEnvironment(summary?.observed_user_agent ?? null);
-    const durationMs = run.started_at && run.completed_at
-      ? Math.max(0, new Date(run.completed_at).getTime() - new Date(run.started_at).getTime())
+    const observedBrowser = parseBrowserEnvironment(summary?.observedUserAgent ?? null);
+    const durationMs = run.startedAt && run.completedAt
+      ? Math.max(0, new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime())
       : null;
     return {
       runId: run.id,
       rank: 0,
       status: run.status as LeaderboardEntry["status"],
       score: Number(run.score),
-      completedAt: run.completed_at!,
+      completedAt: run.completedAt!,
       durationMs,
-      benchmark: summary?.benchmark_title ?? "Hosted benchmark",
-      suiteVersion: summary?.suite_version ?? null,
-      agentName: run.agent_name ?? "Unreported agent",
-      agentVersion: run.agent_version ?? "unknown",
-      baseModel: run.base_model ?? "Unreported model",
-      reasoningEffort: run.reasoning_effort,
+      benchmark: summary?.benchmarkTitle ?? "Hosted benchmark",
+      suiteVersion: summary?.suiteVersion ?? null,
+      agentName: run.agentName ?? "Unreported agent",
+      agentVersion: run.agentVersion ?? "unknown",
+      baseModel: run.baseModel ?? "Unreported model",
+      reasoningEffort: run.reasoningEffort,
       browser: observedBrowser?.browser ?? (typeof browser.browser === "string" ? browser.browser : null),
       platform: observedBrowser?.platform ?? (typeof browser.platform === "string" ? browser.platform : null),
     };
@@ -1106,33 +778,13 @@ export async function getQuotaStatus(params: {
   userId: string | null;
   guestId: string | null;
 }): Promise<QuotaStatus> {
+  const repository = getWebControlPlaneRepository();
   if (params.userId) {
-    const supabase = getSupabase();
-    let limit = DEFAULT_USER_DAILY_RUN_LIMIT;
-    let used = 0;
-
-    const [profileResult, countResult] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("daily_run_limit")
-          .eq("id", params.userId)
-          .maybeSingle(),
-        supabase
-          .from("benchmark_runs")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", params.userId)
-          .gte("created_at", startOfUtcDay()),
+    const [configuredLimit, used] = await Promise.all([
+      repository.findUserDailyLimit(params.userId),
+      repository.countRunsSince({ userId: params.userId }, startOfUtcDay()),
     ]);
-
-    if (profileResult.data?.daily_run_limit) {
-      limit = profileResult.data.daily_run_limit;
-    }
-
-    if (countResult.error) {
-      throw countResult.error;
-    }
-
-    used = countResult.count ?? 0;
+    const limit = configuredLimit ?? DEFAULT_USER_DAILY_RUN_LIMIT;
 
     return {
       mode: "user",
@@ -1146,18 +798,9 @@ export async function getQuotaStatus(params: {
 
   const guestId = params.guestId;
   const limit = getGuestRunLimit();
-  let used = 0;
-  if (guestId) {
-    const countResult = await getSupabase()
-      .from("benchmark_runs")
-      .select("*", { count: "exact", head: true })
-      .eq("guest_id", guestId)
-      .gte("created_at", startOfUtcDay());
-    if (countResult.error) {
-      throw countResult.error;
-    }
-    used = countResult.count ?? 0;
-  }
+  const used = guestId
+    ? await repository.countRunsSince({ guestId }, startOfUtcDay())
+    : 0;
 
   return {
     mode: "guest",

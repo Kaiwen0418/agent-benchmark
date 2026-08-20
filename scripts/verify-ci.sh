@@ -34,6 +34,15 @@ bash scripts/check-test-layout.sh
 echo "== Hosted app consistency =="
 pnpm hosted-app:check
 
+echo "== Portable PostgreSQL baseline =="
+bash scripts/test-portable-postgres.sh
+
+echo "== PostgreSQL backup and restore =="
+bash scripts/test-postgres-backup-restore.sh
+
+echo "== PostgreSQL data transfer =="
+bash scripts/test-postgres-data-transfer.sh
+
 echo "== Lifecycle Postgres integration =="
 bash scripts/test-lifecycle-postgres.sh
 
@@ -57,6 +66,7 @@ pnpm --filter @agentbench/test-cases test
 pnpm catalog:check
 
 echo "== Model catalog synchronization =="
+pnpm --filter @agentbench/database test
 pnpm --filter @agentbench/model-catalog-sync test
 pnpm --filter @agentbench/model-catalog-sync build
 

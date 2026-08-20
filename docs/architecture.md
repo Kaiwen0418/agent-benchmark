@@ -13,7 +13,7 @@ flowchart LR
   Gateway --> Sites["apps/hosted-sites replicas"]
   Gateway --> OrchestratorAPI
   Sites <--> SessionRedis[("Redis session runtime")]
-  Web <--> DB[("Supabase")]
+  Web <--> DB[("PostgreSQL")]
   Sites -->|"commands and recovery"| OrchestratorAPI
   OrchestratorAPI --> Streams[("Redis command Streams")]
   Streams --> Workers["orchestrator workers"]
@@ -64,7 +64,7 @@ Attempt timeout and session completion cross the database boundary through trans
 
 Terminal attempt transitions enqueue Web completion in `hosted_callback_outbox` within the same database transaction. Orchestrator workers deliver claimed rows, while maintenance retries failures and reconciles missing rows. The Web receiver applies terminal completion once.
 
-Redis command failures retain their retry count and final error outside the worker process. After three failed handler executions, workers persist a redacted Supabase dead-letter record before acknowledging the Stream message. Authenticated internal routes expose inspection and replay; replay always receives a new command ID. Commands whose credentials were removed during redaction must be reissued by their source instead.
+Redis command failures retain their retry count and final error outside the worker process. After three failed handler executions, workers persist a redacted PostgreSQL dead-letter record before acknowledging the Stream message. Authenticated internal routes expose inspection and replay; replay always receives a new command ID. Commands whose credentials were removed during redaction must be reissued by their source instead.
 
 The deployment profile matters:
 
@@ -79,15 +79,16 @@ Redis has two separate workload contracts. `HOSTED_SESSION_REDIS_URL` points hos
 
 Local and server Compose run `session-redis` and `orchestrator-redis` as distinct services by default. The server Compose file keeps an explicit `redis-compat` profile for one-instance operator experiments, but production deployments do not use `REDIS_URL` fallback. The Redis services still do not configure AOF, independent memory policies, replication, or failover. Redis therefore provides runtime coordination, not a durable system of record. See [Consistency and Failure](./consistency-and-failure.md) for the exact guarantees and [Roadmap](./roadmap.md) for planned hardening.
 
-### Supabase
+### PostgreSQL
 
-Supabase stores durable control-plane and audit data: runs, attempts, hosted sessions, events, results, aggregate scores, access logs, and artifacts. It stores app state snapshots in session metadata for recovery, but it is not the primary per-request state store.
+PostgreSQL stores durable control-plane and audit data: runs, attempts, hosted sessions, events, results, aggregate scores, access logs, and artifacts. It stores app state snapshots in session metadata for recovery, but it is not the primary per-request state store. A self-hosted development candidate is provisioned behind PgBouncer and contains a validated development data snapshot, but application traffic cutover is still pending. Production remains on Supabase-hosted PostgreSQL until the production migration is validated.
 
 `model_catalog` is a Web-owned operational catalog, not benchmark truth. It
 combines canonical IDs from provider APIs with discovery-only aggregator
 signals. The environment-scoped GitHub maintenance workflow runs
-`packages/model-catalog-sync` and writes directly to Supabase; synchronization
-does not traverse the Web deployment. A selected entry is revalidated by Web
+`packages/model-catalog-sync` and writes directly to PostgreSQL through the
+provider-neutral Drizzle repository in `packages/database`; synchronization
+does not traverse the Web deployment or Supabase REST API. A selected entry is revalidated by Web
 before its provider, model ID, reasoning effort, and catalog verification
 timestamp are written to a run. Free-text model names remain valid but do not
 receive a canonical provider/ID.
@@ -95,6 +96,40 @@ receive a canonical provider/ID.
 `benchmark_cases` stores case identity, display fields, visibility, and the current revision pointer. Private suite manifests and evaluator inputs exist only in immutable `benchmark_case_revisions`. Anonymous and authenticated database clients discover cases through `public_benchmark_cases`, which projects display-safe suite and session fields from the current revision. Service-role code must not return the private manifest through a public API or read model.
 
 Typed catalog releases are stored in immutable `benchmark_case_revisions`. A case points to the release selected for new attempts, while every attempt retains its own revision foreign key and generated question snapshot. The orchestrator, not Web input, is authoritative for loading and validating the private manifest during initialization.
+
+### Database portability transition
+
+A standard self-hosted PostgreSQL development candidate is provisioned and its
+data snapshot is validated while application traffic cutover remains pending. Production temporarily remains on
+Supabase-hosted PostgreSQL. `packages/database` owns
+provider-neutral connection construction, schema definitions, and repositories;
+service-specific repository exports preserve the ownership rules in this
+document. Runtime consumers use `DATABASE_URL`, maintenance and migration jobs
+prefer `DATABASE_DIRECT_URL`, and neither contract depends on a Supabase HTTP
+endpoint or service-role JWT.
+
+The migrated consumers are `packages/model-catalog-sync`, Web's model-catalog
+search and identity validation path, Web's benchmark case and immutable
+revision reads, Web-owned run lifecycle persistence (`benchmark_runs`,
+`run_events`, `artifacts`, and quota reads from `profiles`), and public
+result/leaderboard projections. The control-plane
+repository uses PostgreSQL transactions for run creation plus its initial event,
+terminal completion plus artifacts/events, and metadata connection transitions.
+Web no longer uses PostgREST or the Supabase SDK. Hosted-orchestrator now uses
+Drizzle for immutable benchmark revision reads, ordinary attempt/session/result
+read models, transactional attempt plus session initialization, core session
+recovery/snapshot persistence, and hosted access/event telemetry, with a temporary Supabase
+fallback for deployments that have not configured `DATABASE_URL`. Lifecycle
+reads and atomic completion/timeout function calls also use the Drizzle adapter;
+the callback outbox uses Drizzle while retaining its PostgreSQL reconciliation
+and `SKIP LOCKED` claim functions. Command DLQ persistence, replay CAS, listing,
+scrubbing, and bounded pruning also use Drizzle. Supabase clients remain only as
+temporary compatibility fallbacks when `DATABASE_URL` is absent. The benchmark repository exposes a display-safe
+public projection separately from the private calibration manifest projection.
+Existing Supabase migrations remain immutable production history. New standard
+PostgreSQL environments use the complete Drizzle baseline plus custom lifecycle,
+outbox, DLQ, immutable-revision, and public-read-model routines. Clean-database
+CI verifies that baseline without Supabase roles, RLS, or Auth schema objects.
 
 ### Nginx and Cloudflare
 
@@ -104,7 +139,7 @@ Nginx is the only gateway inside the hosted Compose network. It load-balances ho
 
 | Environment | Source branch | Web | Hosted Compose project | Gateway port | Database target |
 | --- | --- | --- | --- | --- | --- |
-| Development | `develop` | Vercel test project | `agentbench-development` | `8081` | development Supabase branch/database |
+| Development | `develop` | Vercel test project pending self-hosted Web cutover | `agentbench-development` | `8081` | Supabase until self-hosted PostgreSQL cutover |
 | Production | `main` | Vercel production project | `agentbench-production` | `8080` | production Supabase database |
 
 GitHub `development` and `production` Environments hold separate variables and secrets. Hosted deployments run on separately labelled self-hosted runners. Database migrations must succeed before the matching Compose deployment starts. Pull requests to `main` are accepted only from `develop` or `hotfix/*` by the required CI check.
@@ -119,7 +154,7 @@ GitHub `development` and `production` Environments hold separate variables and s
 | Shared mutable session state | Redis |
 | Runtime command transport and worker coordination | Redis Streams |
 | Durable hosted writes | `apps/hosted-orchestrator` |
-| Durable records and audit history | Supabase |
+| Durable records and audit history | PostgreSQL |
 | Per-session evaluation functions | hosted app definitions / `packages/scoring` |
 | Public hosted edge and TLS | Cloudflare Tunnel |
 | Hosted service routing | Nginx |
@@ -127,7 +162,7 @@ GitHub `development` and `production` Environments hold separate variables and s
 ## Failure Model
 
 - A hosted-sites replica may disappear between requests; another replica can continue from Redis when no concurrent session write was lost.
-- Redis failure degrades session availability. Hosted-sites can recover the latest successfully persisted app-state snapshot through read-only Supabase access; commands or snapshots that had not reached Supabase are outside that recovery point.
+- Redis failure degrades session availability. Hosted-sites can recover the latest successfully persisted app-state snapshot through the authenticated orchestrator API; the orchestrator reads PostgreSQL. Commands or snapshots that had not reached PostgreSQL are outside that recovery point.
 - Orchestrator failure prevents attempt progression and aggregate completion, but hosted task pages can still render from Redis.
 - Web callback failure delays live observability or final run completion; persisted hosted results remain available for reconciliation.
 - Cloudflare Tunnel or Nginx failure makes hosted URLs unavailable without changing durable run state.

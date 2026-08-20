@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { DiscoveredModel } from "../../src/sources.js";
 import {
-  createModelCatalogClient,
+  createModelCatalogPersistence,
   deduplicateDiscoveredModels,
   mergeCatalogModel,
 } from "../../src/sync.js";
@@ -114,20 +114,9 @@ test("deduplicates aggregator routes before a database upsert", () => {
   assert.equal(result[0]?.benchmarkPopularity, 20);
 });
 
-test("direct synchronization requires environment-scoped Supabase credentials", () => {
-  const previousUrl = process.env.SUPABASE_URL;
-  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  delete process.env.SUPABASE_URL;
-  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-  try {
-    assert.throws(
-      () => createModelCatalogClient(),
-      /SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required/,
-    );
-  } finally {
-    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
-    else process.env.SUPABASE_URL = previousUrl;
-    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
-  }
+test("direct synchronization requires an environment-scoped PostgreSQL URL", () => {
+  assert.throws(
+    () => createModelCatalogPersistence({}),
+    /DATABASE_URL or DATABASE_DIRECT_URL is required/,
+  );
 });

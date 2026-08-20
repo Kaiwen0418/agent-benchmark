@@ -16,8 +16,8 @@ if rg -n "${forbidden_prefix}${forbidden_suffix}" . \
 fi
 
 while IFS= read -r client_file; do
-  if rg -n '@supabase|lib/supabase|SUPABASE_SERVICE_ROLE_KEY' "${client_file}"; then
-    echo "Client module imports a Supabase or service-role boundary: ${client_file}" >&2
+  if rg -n '@supabase|lib/supabase|@agentbench/database|SUPABASE_SERVICE_ROLE_KEY|DATABASE_URL' "${client_file}"; then
+    echo "Client module imports a database or privileged credential boundary: ${client_file}" >&2
     exit 1
   fi
 done < <(rg -l '^"use client";' apps/web --glob '*.{ts,tsx}')
@@ -25,14 +25,21 @@ done < <(rg -l '^"use client";' apps/web --glob '*.{ts,tsx}')
 service_role_web_files="$(rg -l 'SUPABASE_SERVICE_ROLE_KEY' apps/web --glob '*.{ts,tsx}' || true)"
 while IFS= read -r service_role_file; do
   [[ -z "${service_role_file}" ]] && continue
-  case "${service_role_file}" in
-    apps/web/lib/supabase/admin.ts | apps/web/tests/unit/supabase-admin.test.ts)
+  echo "Supabase service-role credentials are no longer permitted in Web: ${service_role_file}" >&2
+  exit 1
+done <<< "${service_role_web_files}"
+
+database_url_web_files="$(rg -l 'DATABASE_URL' apps/web --glob '*.{ts,tsx}' || true)"
+while IFS= read -r database_url_file; do
+  [[ -z "${database_url_file}" ]] && continue
+  case "${database_url_file}" in
+    apps/web/lib/database.ts | apps/web/tests/unit/database.test.ts)
       ;;
     *)
-      echo "Service-role credentials referenced outside the Web admin boundary: ${service_role_file}" >&2
+      echo "PostgreSQL credentials referenced outside the Web database boundary: ${database_url_file}" >&2
       exit 1
       ;;
   esac
-done <<< "${service_role_web_files}"
+done <<< "${database_url_web_files}"
 
 echo "web secret boundary checks passed"

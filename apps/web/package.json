@@ -11,10 +11,10 @@
     "test": "node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)"
   },
   "dependencies": {
+    "@agentbench/database": "workspace:*",
     "@agentbench/protocol": "workspace:*",
     "@agentbench/shared": "workspace:*",
     "@agentbench/test-cases": "workspace:*",
-    "@supabase/supabase-js": "^2.110.0",
     "@tanstack/react-query": "^5.101.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.474.0",

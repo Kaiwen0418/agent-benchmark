@@ -11,6 +11,8 @@ import {
 } from "@agentbench/shared";
 import type { HostedWebScoreResult } from "@agentbench/scoring";
 import { hostedAttemptConnectionSnapshotSchema } from "@agentbench/protocol";
+import { postgresErrorCode, type JsonValue } from "@agentbench/database";
+import type { HostedSessionRecord } from "@agentbench/database/hosted-orchestrator";
 import { createAttemptHandlers } from "./attempt-handlers.js";
 import { resolveHostedSitesUrls } from "./service-urls.js";
 import {
@@ -21,6 +23,7 @@ import {
 import {
   createAttemptLifecycle,
   type AttemptLifecycleAdvanceSession,
+  type AttemptLifecyclePersistence,
   type AttemptLifecycleSession,
   type HostedSessionStatus,
 } from "./attempt-lifecycle.js";
@@ -35,6 +38,7 @@ import {
   pruneCommandDeadLetters,
   redactCommandErrorMessage,
   scrubCommandDeadLetters,
+  type CommandDeadLetterMaintenancePersistence,
 } from "./command-dead-letter.js";
 import {
   invalidateRunSessionProjectionCache,
@@ -43,6 +47,10 @@ import {
   type ProjectionCacheRedis,
   type RunSessionProjection,
 } from "./run-session-projection-cache.js";
+import {
+  getHostedOrchestratorRepository,
+  getOrchestratorBenchmarkCaseRepository,
+} from "./database.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -100,6 +108,33 @@ type PersistedSessionRow = Pick<
   metadata: HostedWebSessionMetadata | null;
 };
 
+function persistedSessionFromDatabase(row: HostedSessionRecord): PersistedSessionRow {
+  return {
+    id: row.id,
+    run_id: row.runId,
+    case_id: row.caseId,
+    attempt_id: row.attemptId,
+    app: row.app,
+    task_slug: row.taskSlug,
+    task_version: row.taskVersion,
+    sequence_index: row.sequenceIndex,
+    weight: row.weight,
+    required: row.required,
+    seed_version: row.seedVersion,
+    status: row.status,
+    metadata: row.metadata as HostedWebSessionMetadata,
+    start_url: row.startUrl,
+    expires_at: row.expiresAt,
+    created_at: row.createdAt,
+    access_count: row.accessCount,
+    last_accessed_at: row.lastAccessedAt,
+    first_seen_ip: row.firstSeenIp,
+    last_seen_ip: row.lastSeenIp,
+    first_seen_user_agent: row.firstSeenUserAgent,
+    last_seen_user_agent: row.lastSeenUserAgent,
+  };
+}
+
 type AttemptOverviewSession = HostedAttemptReadModel["sessions"][number] & {
   token: string;
   app: string;
@@ -124,6 +159,10 @@ function envNumber(name: string, fallback: number) {
 
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function toDatabaseJson(value: unknown): JsonValue {
+  return JSON.parse(JSON.stringify(value)) as JsonValue;
 }
 
 const cleanupSweepIntervalMs = envNumber("HOSTED_SESSION_SWEEP_INTERVAL_MS", 60_000);
@@ -158,6 +197,16 @@ function tokenFromStartUrl(startUrl: string) {
   } catch {
     return null;
   }
+}
+
+function normalizeHostedSessionStatus(status: string): HostedSessionStatus {
+  return status === "created" ||
+    status === "active" ||
+    status === "completed" ||
+    status === "failed" ||
+    status === "expired"
+    ? status
+    : "created";
 }
 
 const DEFAULT_SESSION_TIME_LIMIT_MINUTES = 10;
@@ -202,6 +251,16 @@ function getSupabaseAdmin() {
 
 const callbackOutbox = createCallbackOutboxProcessor({
   getSupabaseAdmin,
+  getPersistence: () => {
+    const repository = getHostedOrchestratorRepository();
+    return repository ? {
+      reconcile: () => repository.reconcileCallbackOutbox(),
+      claim: (limit: number) => repository.claimCallbackOutbox(limit),
+      markDelivered: (id: string, deliveredAt: string) =>
+        repository.markCallbackDelivered(id, deliveredAt),
+      markFailed: (input) => repository.markCallbackFailed(input),
+    } : null;
+  },
   webBaseUrl: agentbenchWebUrl || null,
   sharedSecret: runnerSharedSecret ?? null,
 });
@@ -304,6 +363,11 @@ async function loadAttemptMetadata(attemptId: string | null) {
     return {};
   }
 
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const metadata = await repository.findAttemptMetadata(attemptId);
+    return extractMetadata(metadata as Record<string, unknown> | null);
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return {};
@@ -314,6 +378,24 @@ async function loadAttemptMetadata(attemptId: string | null) {
 }
 
 async function loadAttemptSessions(attemptId: string): Promise<AttemptLifecycleAdvanceSession[]> {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const rows = await repository.listAttemptSessions(attemptId);
+    return rows.map((row) => ({
+      id: row.id,
+      status: normalizeHostedSessionStatus(row.status),
+      sequenceIndex: row.sequenceIndex,
+      token: tokenFromStartUrl(row.startUrl) ?? makeId("missing"),
+      startPath: (() => {
+        try {
+          return new URL(row.startUrl).pathname;
+        } catch {
+          return defaultStartPathForApp(row.app);
+        }
+      })(),
+      app: row.app,
+    }));
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return [];
@@ -353,6 +435,44 @@ async function loadAttemptSessions(attemptId: string): Promise<AttemptLifecycleA
 }
 
 async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptReadModel<AttemptOverviewSession>> {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const [metadata, rows] = await Promise.all([
+      loadAttemptMetadata(attemptId),
+      repository.listAttemptSessions(attemptId),
+    ]);
+    return buildHostedAttemptReadModel({
+      attemptId,
+      metadata,
+      sessions: rows.map((row) => {
+        const rowMetadata = extractMetadata(row.metadata as Record<string, unknown> | null);
+        const timeLimitMinutes = timeLimitMinutesFromMetadata(rowMetadata);
+        const token = tokenFromStartUrl(row.startUrl) ?? makeId("missing");
+        const startPath = (() => {
+          try {
+            return new URL(row.startUrl).pathname;
+          } catch {
+            return defaultStartPathForApp(row.app);
+          }
+        })();
+        return {
+          id: row.id,
+          token,
+          app: row.app,
+          taskSlug: row.taskSlug,
+          title: typeof rowMetadata.title === "string" ? rowMetadata.title : null,
+          goal: typeof rowMetadata.goal === "string"
+            ? rowMetadata.goal
+            : defaultGoalForSession(row.app, row.taskSlug),
+          sequenceIndex: row.sequenceIndex,
+          status: normalizeHostedSessionStatus(row.status),
+          startPath,
+          expiresAt: row.expiresAt,
+          timeLimitMinutes,
+        };
+      }),
+    });
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return buildHostedAttemptReadModel({
@@ -415,6 +535,17 @@ async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptRea
 }
 
 async function loadLatestSessionResult(sessionId: string) {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const row = await repository.findLatestSessionResult(sessionId);
+    if (!row) return null;
+    return {
+      status: row.status,
+      score: row.score,
+      summary: row.summary,
+      evaluators: Array.isArray(row.evaluators) ? row.evaluators : [],
+    } as HostedWebScoreResult;
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return null;
@@ -497,7 +628,7 @@ function hostedSessionProgressPayload(params: {
     sessionId: string;
     app: string;
     taskSlug: string;
-    status: string;
+    status: HostedSessionStatus;
     sequenceIndex: number;
     expiresAt: string | null;
     timeLimitMinutes: number | null;
@@ -553,12 +684,63 @@ async function recoverInitializedAttempt(params: {
   caseId: string;
   expectedSessionCount: number;
 }) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const repository = getHostedOrchestratorRepository();
+  const supabase = repository ? null : getSupabaseAdmin();
+  if (!repository && !supabase) {
     throw new Error("Hosted attempt recovery requires a database connection.");
   }
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (repository) {
+      const attemptRow = await repository.findHostedAttempt(params.runId, params.caseId);
+      if (attemptRow) {
+        const sessionRows = await repository.listAttemptSessions(attemptRow.id);
+        if (sessionRows.length === params.expectedSessionCount) {
+          return {
+            attemptId: attemptRow.id,
+            suiteSlug: attemptRow.suiteSlug,
+            suiteVersion: attemptRow.suiteVersion,
+            metadata: extractMetadata(attemptRow.metadata as Record<string, unknown> | null),
+            sessions: sessionRows.map((row) => {
+              const metadata = extractMetadata(row.metadata as Record<string, unknown> | null);
+              const token = tokenFromStartUrl(row.startUrl);
+              const startPath = typeof metadata.startPath === "string"
+                ? metadata.startPath
+                : new URL(row.startUrl).pathname;
+              if (!token || typeof metadata.goal !== "string") {
+                throw new Error(`Hosted session ${row.id} cannot be recovered.`);
+              }
+              return {
+                sessionId: row.id,
+                attemptId: row.attemptId,
+                token,
+                app: row.app,
+                taskSlug: row.taskSlug,
+                taskVersion: row.taskVersion,
+                sequenceIndex: row.sequenceIndex,
+                weight: row.weight,
+                required: row.required,
+                startUrl: row.startUrl,
+                viewerStartUrl: buildViewerStartUrl(
+                  row.id,
+                  startPath,
+                  row.expiresAt ?? new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString(),
+                ),
+                goal: metadata.goal,
+                title: typeof metadata.title === "string" ? metadata.title : null,
+                status: row.status,
+              };
+            }),
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      continue;
+    }
+
+    if (!supabase) {
+      throw new Error("Hosted attempt recovery requires a database connection.");
+    }
     const { data: attemptRow, error: attemptError } = await supabase
       .from("benchmark_attempts")
       .select("id, suite_slug, suite_version, metadata")
@@ -706,6 +888,20 @@ async function findExistingInitializedAttempt(
   if (!params.runId || !params.caseId) {
     return null;
   }
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const attempt = await repository.findHostedAttempt(params.runId, params.caseId);
+    if (!attempt) return null;
+    if (attempt.caseRevisionId !== params.caseRevisionId) {
+      throw new Error("Existing hosted attempt is bound to a different benchmark revision.");
+    }
+    const revision = await loadBenchmarkCaseRevision(params.caseId, params.caseRevisionId);
+    return recoverInitializedAttempt({
+      runId: params.runId,
+      caseId: params.caseId,
+      expectedSessionCount: revision.sessions.length,
+    });
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     throw new Error("Hosted attempt initialization requires a database connection.");
@@ -769,14 +965,30 @@ type InitializeAttemptParams = {
 };
 
 async function loadBenchmarkCaseRevision(caseId: string, caseRevisionId: string | null) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const repository = getOrchestratorBenchmarkCaseRepository();
+  const supabase = repository ? null : getSupabaseAdmin();
+  if (!repository && !supabase) {
     throw new Error("Hosted attempt initialization requires a database connection.");
   }
   return resolveBenchmarkCaseRevision({
     caseId,
     caseRevisionId,
     loadRevision: async (revisionId) => {
+      if (repository) {
+        const row = await repository.findRevisionById(revisionId);
+        return row
+          ? {
+              id: row.id,
+              case_id: row.caseId,
+              revision: row.revision,
+              content_hash: row.contentHash,
+              manifest: row.manifest,
+            }
+          : null;
+      }
+      if (!supabase) {
+        throw new Error("Hosted attempt initialization requires a database connection.");
+      }
       const { data, error } = await supabase
         .from("benchmark_case_revisions")
         .select("id, case_id, revision, content_hash, manifest")
@@ -789,8 +1001,9 @@ async function loadBenchmarkCaseRevision(caseId: string, caseRevisionId: string 
 }
 
 async function initializeAttempt(params: InitializeAttemptParams) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase || !params.runId || !params.caseId) {
+  const repository = getHostedOrchestratorRepository();
+  const supabase = repository ? null : getSupabaseAdmin();
+  if ((!repository && !supabase) || !params.runId || !params.caseId) {
     throw new Error("Hosted attempt initialization requires database-backed run and case ids.");
   }
   const runId = params.runId;
@@ -817,33 +1030,6 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     ...(revision.capabilityMatrix ? { capabilityMatrix: revision.capabilityMatrix } : {}),
     ...(revision.scenarioGraph ? { scenarioGraph: revision.scenarioGraph } : {}),
   };
-
-  const { data: attemptRow, error: attemptError } = await supabase
-    .from("benchmark_attempts")
-    .insert({
-      run_id: runId,
-      case_id: caseId,
-      case_revision_id: revision.id,
-      provider: "hosted-web",
-      suite_slug: revision.suiteSlug,
-      suite_version: revision.suiteVersion,
-      status: "running",
-      metadata,
-      started_at: now(),
-    })
-    .select("id, suite_slug, suite_version, metadata")
-    .single();
-
-  if (attemptError || !attemptRow) {
-    if (attemptError?.code === "23505") {
-      return recoverInitializedAttempt({
-        runId,
-        caseId,
-        expectedSessionCount: generatedSessions.length,
-      });
-    }
-    throw attemptError ?? new Error("Failed to create hosted attempt");
-  }
 
   const suiteTimeLimitMinutes = revision.timeLimitMinutesPerTestcase;
   const orderedSessions = [...generatedSessions].sort((left, right) => left.sequenceIndex - right.sequenceIndex);
@@ -877,7 +1063,6 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     return {
       run_id: runId,
       case_id: caseId,
-      attempt_id: attemptRow.id,
       provider: "hosted-web",
       app: session.app,
       task_slug: session.taskSlug,
@@ -896,17 +1081,107 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     };
   });
 
-  const { data: createdRows, error: sessionError } = await supabase
-    .from("hosted_web_sessions")
-    .insert(
-      rows.map(({ token, ...row }) => row),
-    )
-    .select(
-      "id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, start_url, status, metadata",
-    );
+  let attemptRow: { id: string; suite_slug: string; suite_version: string; metadata: unknown };
+  let createdRows: Array<{
+    id: string;
+    attempt_id: string | null;
+    app: string;
+    task_slug: string;
+    task_version: string;
+    sequence_index: number;
+    weight: number;
+    required: boolean;
+    start_url: string;
+    status: string;
+    metadata: unknown;
+  }>;
+  try {
+    if (repository) {
+      const created = await repository.createAttemptWithSessions({
+        attempt: {
+          runId,
+          caseId,
+          caseRevisionId: revision.id,
+          provider: "hosted-web",
+          suiteSlug: revision.suiteSlug,
+          suiteVersion: revision.suiteVersion,
+          status: "running",
+          metadata: toDatabaseJson(metadata),
+          startedAt: now(),
+        },
+        sessions: rows.map(({ token: _token, ...row }) => ({
+          runId: row.run_id,
+          caseId: row.case_id,
+          provider: "hosted-web",
+          app: row.app,
+          taskSlug: row.task_slug,
+          taskVersion: row.task_version,
+          sequenceIndex: row.sequence_index,
+          weight: row.weight,
+          required: row.required,
+          seedVersion: row.seed_version,
+          startUrl: row.start_url,
+          sessionTokenHash: row.session_token_hash,
+          status: row.status,
+          metadata: toDatabaseJson(row.metadata),
+          activatedAt: row.activated_at,
+          expiresAt: row.expires_at,
+        })),
+      });
+      attemptRow = {
+        id: created.attempt.id,
+        suite_slug: created.attempt.suiteSlug,
+        suite_version: created.attempt.suiteVersion,
+        metadata: created.attempt.metadata,
+      };
+      createdRows = created.sessions.map((row) => ({
+        id: row.id,
+        attempt_id: row.attemptId,
+        app: row.app,
+        task_slug: row.taskSlug,
+        task_version: row.taskVersion,
+        sequence_index: row.sequenceIndex,
+        weight: row.weight,
+        required: row.required,
+        start_url: row.startUrl,
+        status: normalizeHostedSessionStatus(row.status),
+        metadata: row.metadata,
+      }));
+    } else {
+      if (!supabase) throw new Error("Hosted attempt initialization requires a database connection.");
+      const { data: insertedAttempt, error: attemptError } = await supabase
+        .from("benchmark_attempts")
+        .insert({
+          run_id: runId,
+          case_id: caseId,
+          case_revision_id: revision.id,
+          provider: "hosted-web",
+          suite_slug: revision.suiteSlug,
+          suite_version: revision.suiteVersion,
+          status: "running",
+          metadata,
+          started_at: now(),
+        })
+        .select("id, suite_slug, suite_version, metadata")
+        .single();
+      if (attemptError || !insertedAttempt) throw attemptError ?? new Error("Failed to create hosted attempt");
+      attemptRow = insertedAttempt;
 
-  if (sessionError || !createdRows) {
-    throw sessionError ?? new Error("Failed to create hosted sessions");
+      const { data: insertedSessions, error: sessionError } = await supabase
+        .from("hosted_web_sessions")
+        .insert(rows.map(({ token, ...row }) => ({ ...row, attempt_id: attemptRow.id })))
+        .select("id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, start_url, status, metadata");
+      if (sessionError || !insertedSessions) throw sessionError ?? new Error("Failed to create hosted sessions");
+      createdRows = insertedSessions.map((row) => ({
+        ...row,
+        status: normalizeHostedSessionStatus(row.status),
+      }));
+    }
+  } catch (error) {
+    if (postgresErrorCode(error) === "23505") {
+      return recoverInitializedAttempt({ runId, caseId, expectedSessionCount: generatedSessions.length });
+    }
+    throw error;
   }
   await invalidateRunSessionProjection(runId);
 
@@ -937,7 +1212,7 @@ async function initializeAttempt(params: InitializeAttemptParams) {
           : null,
         goal: metadata.goal,
         title: typeof metadata.title === "string" ? metadata.title : null,
-        status: row.status,
+        status: normalizeHostedSessionStatus(row.status),
         expiresAt: seed.expires_at,
         timeLimitMinutes: suiteTimeLimitMinutes,
       };
@@ -953,7 +1228,9 @@ async function initializeAttempt(params: InitializeAttemptParams) {
     completedSessionIds: [],
   };
 
-  await supabase.from("benchmark_attempts").update({ metadata: mergedMetadata }).eq("id", attemptRow.id);
+  if (!repository) {
+    await supabase?.from("benchmark_attempts").update({ metadata: mergedMetadata }).eq("id", attemptRow.id);
+  }
 
   await Promise.all(
     sessions.map((session) =>
@@ -968,7 +1245,7 @@ async function initializeAttempt(params: InitializeAttemptParams) {
           suiteSlug: revision.suiteSlug,
           sequenceIndex: session.sequenceIndex,
           weight: session.weight,
-          status: session.status === "scoring" ? "active" : session.status,
+          status: session.status,
           startPath: new URL(session.startUrl).pathname,
           persisted: true,
         },
@@ -1017,6 +1294,11 @@ async function initializeAttempt(params: InitializeAttemptParams) {
 }
 
 async function loadSessionByToken(token: string) {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const row = await repository.findSessionByTokenHash(hashToken(token));
+    return row ? persistedSessionFromDatabase(row) : null;
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return null;
@@ -1038,6 +1320,15 @@ async function loadSessionByToken(token: string) {
 }
 
 async function recoverHostedSession(params: { token?: string; sessionId?: string }) {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const row = params.token
+      ? await repository.findSessionByTokenHash(hashToken(params.token))
+      : params.sessionId
+        ? await repository.findSessionById(params.sessionId)
+        : null;
+    return row ? persistedSessionFromDatabase(row) : null;
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return null;
@@ -1063,6 +1354,13 @@ async function recoverHostedSession(params: { token?: string; sessionId?: string
 }
 
 async function persistHostedSessionSnapshot(token: string, metadata: Record<string, unknown>) {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    return Boolean(await repository.updateActiveSessionMetadata(
+      hashToken(token),
+      toDatabaseJson(metadata),
+    ));
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return false;
@@ -1086,6 +1384,30 @@ async function persistHostedSessionAccess(
   token: string,
   input: Record<string, unknown>,
 ) {
+  const nullableString = (value: unknown) => (typeof value === "string" ? value : null);
+  const accessCount =
+    typeof input.accessCount === "number" && Number.isFinite(input.accessCount)
+      ? Math.max(0, Math.trunc(input.accessCount))
+      : 0;
+  const accessedAt = nullableString(input.accessedAt) ?? now();
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const session = await repository.findSessionByTokenHash(hashToken(token));
+    if (!session) return false;
+    return repository.recordSessionAccess({
+      session,
+      accessCount,
+      accessedAt,
+      firstSeenIp: nullableString(input.firstSeenIp),
+      lastSeenIp: nullableString(input.lastSeenIp),
+      firstSeenUserAgent: nullableString(input.firstSeenUserAgent),
+      lastSeenUserAgent: nullableString(input.lastSeenUserAgent),
+      event: typeof input.event === "string" ? input.event : "session.access",
+      ip: nullableString(input.ip),
+      userAgent: nullableString(input.userAgent),
+      referer: nullableString(input.referer),
+    });
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return false;
@@ -1095,13 +1417,6 @@ async function persistHostedSessionAccess(
   if (!session) {
     return false;
   }
-
-  const nullableString = (value: unknown) => (typeof value === "string" ? value : null);
-  const accessCount =
-    typeof input.accessCount === "number" && Number.isFinite(input.accessCount)
-      ? Math.max(0, Math.trunc(input.accessCount))
-      : 0;
-  const accessedAt = nullableString(input.accessedAt) ?? now();
 
   const { error: sessionError } = await supabase
     .from("hosted_web_sessions")
@@ -1139,6 +1454,20 @@ async function persistHostedSessionAccess(
 }
 
 async function persistHostedEvent(token: string, payload: Record<string, unknown>) {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    const session = await repository.findSessionByTokenHash(hashToken(token));
+    if (!session || session.status !== "active") return false;
+    const type = typeof payload.type === "string" ? payload.type : "hosted.event";
+    return Boolean(await repository.appendHostedEvent({
+      sessionId: session.id,
+      runId: session.runId,
+      attemptId: session.attemptId,
+      type,
+      name: typeof payload.name === "string" ? payload.name : type,
+      payload: toDatabaseJson(payload),
+    }));
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return false;
@@ -1166,12 +1495,16 @@ async function persistHostedEvent(token: string, payload: Record<string, unknown
 }
 
 async function pruneExpiredAccessLogs() {
+  const cutoffIso = new Date(Date.now() - accessLogRetentionMs).toISOString();
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    return repository.pruneAccessLogsBefore(cutoffIso);
+  }
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return 0;
   }
 
-  const cutoffIso = new Date(Date.now() - accessLogRetentionMs).toISOString();
   const { data, error } = await supabase
     .from("hosted_web_access_logs")
     .delete()
@@ -1186,9 +1519,66 @@ async function pruneExpiredAccessLogs() {
   return data?.length ?? 0;
 }
 
+function getAttemptLifecyclePersistence(): AttemptLifecyclePersistence | null {
+  const repository = getHostedOrchestratorRepository();
+  if (!repository) return null;
+  return {
+    async findAttempt(attemptId) {
+      const row = await repository.findAttempt(attemptId);
+      return row ? { status: row.status, suiteSlug: row.suiteSlug, metadata: row.metadata } : null;
+    },
+    async listAttemptResults(attemptId) {
+      return (await repository.listAttemptResults(attemptId)).map((row) => ({
+        sessionId: row.sessionId,
+        app: row.app,
+        taskSlug: row.taskSlug,
+        score: row.score,
+        status: row.status,
+        weight: row.weight,
+        finalState: row.finalState,
+        evaluators: row.evaluators,
+      }));
+    },
+    async listAttemptSessions(attemptId) {
+      return (await repository.listAttemptSessions(attemptId)).map((row) => ({
+        id: row.id,
+        runId: row.runId,
+        app: row.app,
+        taskSlug: row.taskSlug,
+        weight: row.weight,
+        required: row.required,
+        sequenceIndex: row.sequenceIndex,
+        status: row.status,
+        metadata: row.metadata,
+      }));
+    },
+    async listAttemptEvents(attemptId) {
+      return (await repository.listAttemptEvents(attemptId)).map((row) => ({
+        sessionId: row.sessionId,
+        type: row.type,
+        payload: row.payload,
+      }));
+    },
+    completeHostedAttemptSession(input) {
+      return repository.completeHostedAttemptSession({
+        ...input,
+        result: toDatabaseJson(input.result),
+        attemptUpdate: toDatabaseJson(input.attemptUpdate),
+      });
+    },
+    timeoutHostedAttempt(input) {
+      return repository.timeoutHostedAttempt({
+        ...input,
+        scoringSummary: toDatabaseJson(input.scoringSummary),
+      });
+    },
+  };
+}
+
 const attemptLifecycle = createAttemptLifecycle({
   now,
   getSupabaseAdmin,
+  getPersistence: getAttemptLifecyclePersistence,
   loadAttemptMetadata,
   loadAttemptSessions,
   loadAttemptReadModel,
@@ -1357,11 +1747,31 @@ async function dispatchWriteCommand(type: string, input: Record<string, unknown>
 }
 
 async function persistCommandDeadLetter(deadLetter: CommandDeadLetter) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const repository = getHostedOrchestratorRepository();
+  const supabase = repository ? null : getSupabaseAdmin();
+  if (!repository && !supabase) {
     throw new Error("Command DLQ persistence requires a database connection.");
   }
   const timestamp = now();
+  if (repository) {
+    await repository.upsertCommandDeadLetter({
+      commandId: deadLetter.commandId,
+      stream: deadLetter.stream,
+      messageId: deadLetter.messageId,
+      partition: deadLetter.partition,
+      partitionKey: deadLetter.partitionKey,
+      payloadType: deadLetter.payloadType,
+      payload: compactCommandPayload(deadLetter.payload, commandDeadLetterMaxPayloadBytes),
+      errorCode: deadLetter.errorCode,
+      errorMessage: redactCommandErrorMessage(deadLetter.errorMessage),
+      attempts: deadLetter.attempts,
+      status: "dead",
+      scrubbedAt: timestamp,
+      updatedAt: timestamp,
+    });
+    return;
+  }
+  if (!supabase) throw new Error("Command DLQ persistence requires a database connection.");
   const { error } = await supabase.from("orchestrator_command_dead_letters").upsert(
     {
       command_id: deadLetter.commandId,
@@ -1399,46 +1809,53 @@ const commandBackbone = createCommandBackbone({
 });
 
 async function sweepExpiredSessions() {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const repository = getHostedOrchestratorRepository();
+  const supabase = repository ? null : getSupabaseAdmin();
+  if (!repository && !supabase) {
     return 0;
   }
 
   const sweepStartedAt = now();
-  const { data, error } = await supabase
-    .from("hosted_web_sessions")
-    .select(
-      "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at",
-    )
-    .lt("expires_at", sweepStartedAt)
-    .in("status", ["created", "active", "scoring"])
-    .limit(500);
-
-  if (error) {
-    console.error("[hosted-orchestrator] failed to discover expired sessions", error);
-    return 0;
+  let expiredRows: PersistedSessionRow[];
+  let expiredSessionRecords: HostedSessionRecord[] | null = null;
+  if (repository) {
+    expiredSessionRecords = await repository.listExpiredSessions(sweepStartedAt, 500);
+    expiredRows = expiredSessionRecords.map(persistedSessionFromDatabase);
+  } else {
+    if (!supabase) return 0;
+    const { data, error } = await supabase
+      .from("hosted_web_sessions")
+      .select(
+        "id, run_id, case_id, attempt_id, app, task_slug, task_version, sequence_index, weight, required, seed_version, status, metadata, start_url, expires_at, created_at",
+      )
+      .lt("expires_at", sweepStartedAt)
+      .in("status", ["created", "active", "scoring"])
+      .limit(500);
+    if (error) {
+      console.error("[hosted-orchestrator] failed to discover expired sessions", error);
+      return 0;
+    }
+    expiredRows = (data ?? []) as PersistedSessionRow[];
   }
-
-  const expiredRows = (data ?? []) as PersistedSessionRow[];
   if (expiredRows.length === 0) {
     return 0;
   }
 
-  const { error: accessLogError } = await supabase.from("hosted_web_access_logs").insert(
-    expiredRows.map((row) => ({
-      session_id: row.id,
-      attempt_id: row.attempt_id,
-      run_id: row.run_id,
+  if (repository) {
+    await repository.appendExpiryDetectedLogs(expiredSessionRecords ?? []);
+  } else if (supabase) {
+    const { error: accessLogError } = await supabase.from("hosted_web_access_logs").insert(
+      expiredRows.map((row) => ({
+        session_id: row.id,
+        attempt_id: row.attempt_id,
+        run_id: row.run_id,
         event: "session.expiry_detected",
-      metadata: {
-        app: row.app,
-        taskSlug: row.task_slug,
-      },
-    })),
-  );
-
-  if (accessLogError) {
-    console.error("[hosted-orchestrator] failed to persist expiry sweep logs", accessLogError);
+        metadata: { app: row.app, taskSlug: row.task_slug },
+      })),
+    );
+    if (accessLogError) {
+      console.error("[hosted-orchestrator] failed to persist expiry sweep logs", accessLogError);
+    }
   }
 
   for (const row of expiredRows) {
@@ -1468,14 +1885,45 @@ async function sweepExpiredSessions() {
   return expiredRows.length;
 }
 
-async function pruneExpiredCommandDeadLetters() {
+function getCommandDeadLetterMaintenancePersistence(): CommandDeadLetterMaintenancePersistence | null {
+  const repository = getHostedOrchestratorRepository();
+  if (repository) {
+    return {
+      prune: (input) => repository.pruneCommandDeadLetters(input),
+      scrub: (limit) => repository.scrubCommandDeadLetters(limit),
+    };
+  }
   const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  if (!supabase) return null;
+  return {
+    async prune(input) {
+      const { data, error } = await supabase.rpc("prune_orchestrator_command_dead_letters_v2", {
+        p_dead_before: input.deadBefore,
+        p_resolved_before: input.resolvedBefore,
+        p_limit: input.limit,
+        p_max_rows: input.maxRows,
+      });
+      if (error) throw error;
+      return data ?? 0;
+    },
+    async scrub(limit) {
+      const { data, error } = await supabase.rpc("scrub_orchestrator_command_dead_letters", {
+        p_limit: limit,
+      });
+      if (error) throw error;
+      return data ?? 0;
+    },
+  };
+}
+
+async function pruneExpiredCommandDeadLetters() {
+  const persistence = getCommandDeadLetterMaintenancePersistence();
+  if (!persistence) {
     return 0;
   }
 
   try {
-    return await pruneCommandDeadLetters(supabase, {
+    return await pruneCommandDeadLetters(persistence, {
       deadRetentionMs: commandDeadRetentionMs,
       resolvedRetentionMs: commandResolvedRetentionMs,
       batchSize: commandDeadLetterPruneBatchSize,
@@ -1489,13 +1937,13 @@ async function pruneExpiredCommandDeadLetters() {
 }
 
 async function scrubHistoricalCommandDeadLetters() {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
+  const persistence = getCommandDeadLetterMaintenancePersistence();
+  if (!persistence) {
     return 0;
   }
 
   try {
-    return await scrubCommandDeadLetters(supabase, commandDeadLetterPruneBatchSize);
+    return await scrubCommandDeadLetters(persistence, commandDeadLetterPruneBatchSize);
   } catch (error) {
     console.error("[hosted-orchestrator] failed to scrub command dead letters", error);
     return 0;
@@ -1576,26 +2024,50 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/commands/dead-letters") {
-      const supabase = getSupabaseAdmin();
-      if (!supabase) {
+      const repository = getHostedOrchestratorRepository();
+      const supabase = repository ? null : getSupabaseAdmin();
+      if (!repository && !supabase) {
         sendJson(response, 503, { error: "database_unavailable" });
         return;
       }
       const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") ?? 50) || 50, 100));
       const status = url.searchParams.get("status");
-      let query = supabase
-        .from("orchestrator_command_dead_letters")
-        .select("id, command_id, partition, partition_key, payload_type, error_code, error_message, attempts, status, replay_command_id, replayed_at, created_at")
-        .order("created_at", { ascending: false })
-        .limit(limit);
-      if (status === "dead" || status === "replayed" || status === "resolved") {
-        query = query.eq("status", status);
+      if (repository) {
+        const rows = await repository.listCommandDeadLetters({
+          limit,
+          ...(status === "dead" || status === "replayed" || status === "resolved" ? { status } : {}),
+        });
+        sendJson(response, 200, { deadLetters: rows.map((row) => ({
+          id: row.id,
+          command_id: row.commandId,
+          partition: row.partition,
+          partition_key: row.partitionKey,
+          payload_type: row.payloadType,
+          error_code: row.errorCode,
+          error_message: row.errorMessage,
+          attempts: row.attempts,
+          status: row.status,
+          replay_command_id: row.replayCommandId,
+          replayed_at: row.replayedAt,
+          created_at: row.createdAt,
+        })) });
+      } else {
+        if (!supabase) {
+          sendJson(response, 503, { error: "database_unavailable" });
+          return;
+        }
+        let query = supabase
+          .from("orchestrator_command_dead_letters")
+          .select("id, command_id, partition, partition_key, payload_type, error_code, error_message, attempts, status, replay_command_id, replayed_at, created_at")
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (status === "dead" || status === "replayed" || status === "resolved") {
+          query = query.eq("status", status);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+        sendJson(response, 200, { deadLetters: data ?? [] });
       }
-      const { data, error } = await query;
-      if (error) {
-        throw error;
-      }
-      sendJson(response, 200, { deadLetters: data ?? [] });
       return;
     }
 
@@ -1637,34 +2109,54 @@ const server = createServer(async (request, response) => {
       const runId = decodeURIComponent(runSessionsMatch[1]!);
       let sessions = await readCachedRunSessionProjection(runId);
       if (!sessions) {
-        const supabase = getSupabaseAdmin();
-        if (!supabase) {
+        const repository = getHostedOrchestratorRepository();
+        const supabase = repository ? null : getSupabaseAdmin();
+        if (!repository && !supabase) {
           sendJson(response, 503, { error: "database_unavailable" });
           return;
         }
-        const { data, error } = await supabase
-          .from("hosted_web_sessions")
-          .select("id, task_slug, status, sequence_index, expires_at, metadata")
-          .eq("run_id", runId)
-          .order("sequence_index", { ascending: true });
-        if (error) {
-          sendJson(response, 500, { error: "session_read_failed" });
-          return;
-        }
-        sessions = (data ?? []).map((item) => {
-          const metadata = extractMetadata(item.metadata as Record<string, unknown> | null);
-          return {
-            sessionId: item.id,
-            taskSlug: item.task_slug ?? "hosted-task",
-            status: item.status ?? "created",
-            sequenceIndex: item.sequence_index ?? 0,
-            expiresAt: item.expires_at ?? null,
-            timeLimitMinutes:
-              typeof metadata.timeLimitMinutesPerTestcase === "number"
+        if (repository) {
+          sessions = (await repository.listRunSessions(runId)).map((item) => {
+            const metadata = extractMetadata(item.metadata as Record<string, unknown> | null);
+            return {
+              sessionId: item.id,
+              taskSlug: item.taskSlug,
+              status: item.status,
+              sequenceIndex: item.sequenceIndex,
+              expiresAt: item.expiresAt,
+              timeLimitMinutes: typeof metadata.timeLimitMinutesPerTestcase === "number"
                 ? metadata.timeLimitMinutesPerTestcase
                 : null,
-          };
-        });
+            };
+          });
+        } else {
+          if (!supabase) {
+            sendJson(response, 503, { error: "database_unavailable" });
+            return;
+          }
+          const { data, error } = await supabase
+            .from("hosted_web_sessions")
+            .select("id, task_slug, status, sequence_index, expires_at, metadata")
+            .eq("run_id", runId)
+            .order("sequence_index", { ascending: true });
+          if (error) {
+            sendJson(response, 500, { error: "session_read_failed" });
+            return;
+          }
+          sessions = (data ?? []).map((item) => {
+            const metadata = extractMetadata(item.metadata as Record<string, unknown> | null);
+            return {
+              sessionId: item.id,
+              taskSlug: item.task_slug ?? "hosted-task",
+              status: item.status ?? "created",
+              sequenceIndex: item.sequence_index ?? 0,
+              expiresAt: item.expires_at ?? null,
+              timeLimitMinutes: typeof metadata.timeLimitMinutesPerTestcase === "number"
+                ? metadata.timeLimitMinutesPerTestcase
+                : null,
+            };
+          });
+        }
         await cacheRunSessionProjection(runId, sessions);
       }
       sendJson(response, 200, { sessions });
@@ -1673,20 +2165,32 @@ const server = createServer(async (request, response) => {
 
     const replayDeadLetterMatch = url.pathname.match(/^\/api\/commands\/dead-letters\/([^/]+)\/replay$/);
     if (request.method === "POST" && replayDeadLetterMatch) {
-      const supabase = getSupabaseAdmin();
-      if (!supabase) {
+      const repository = getHostedOrchestratorRepository();
+      const supabase = repository ? null : getSupabaseAdmin();
+      if (!repository && !supabase) {
         sendJson(response, 503, { error: "database_unavailable" });
         return;
       }
       const deadLetterId = decodeURIComponent(replayDeadLetterMatch[1]);
-      const { data: deadLetter, error: loadError } = await supabase
-        .from("orchestrator_command_dead_letters")
-        .select("id, command_id, partition_key, payload_type, payload, status")
-        .eq("id", deadLetterId)
-        .maybeSingle();
-      if (loadError) {
-        throw loadError;
-      }
+      const deadLetter = repository
+        ? await repository.findCommandDeadLetter(deadLetterId).then((row) => row ? ({
+            id: row.id,
+            command_id: row.commandId,
+            partition_key: row.partitionKey,
+            payload_type: row.payloadType,
+            payload: row.payload,
+            status: row.status,
+          }) : null)
+        : await (async () => {
+            if (!supabase) return null;
+            const { data, error } = await supabase
+              .from("orchestrator_command_dead_letters")
+              .select("id, command_id, partition_key, payload_type, payload, status")
+              .eq("id", deadLetterId)
+              .maybeSingle();
+            if (error) throw error;
+            return data;
+          })();
       if (!deadLetter) {
         sendJson(response, 404, { error: "dead_letter_not_found" });
         return;
@@ -1710,13 +2214,27 @@ const server = createServer(async (request, response) => {
         return;
       }
       const replayedAt = now();
-      const { error: updateError } = await supabase
-        .from("orchestrator_command_dead_letters")
-        .update({ status: "replayed", replay_command_id: replayCommandId, replayed_at: replayedAt, updated_at: replayedAt })
-        .eq("id", deadLetter.id)
-        .eq("status", "dead");
-      if (updateError) {
-        throw updateError;
+      if (repository) {
+        const updated = await repository.markCommandDeadLetterReplayed({
+          id: deadLetter.id,
+          replayCommandId,
+          replayedAt,
+        });
+        if (!updated) {
+          sendJson(response, 409, { error: "dead_letter_replay_conflict" });
+          return;
+        }
+      } else {
+        if (!supabase) {
+          sendJson(response, 503, { error: "database_unavailable" });
+          return;
+        }
+        const { error } = await supabase
+          .from("orchestrator_command_dead_letters")
+          .update({ status: "replayed", replay_command_id: replayCommandId, replayed_at: replayedAt, updated_at: replayedAt })
+          .eq("id", deadLetter.id)
+          .eq("status", "dead");
+        if (error) throw error;
       }
       sendJson(response, 200, { replayCommandId, response: replay });
       return;

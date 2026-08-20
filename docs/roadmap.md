@@ -8,7 +8,7 @@ This roadmap starts from the architecture that is already running. Completed wor
 - `apps/web` runs on Vercel and owns run creation, quota, live observability, replay, and artifacts.
 - The hosted stack runs behind Nginx and Cloudflare Tunnel on a private Linux host.
 - Redis is split into a hosted-session cache endpoint and an orchestrator command-Streams endpoint.
-- Supabase is the durable lifecycle, audit, and scoring store.
+- PostgreSQL is the durable lifecycle, audit, and scoring store. A self-hosted development candidate is provisioned behind PgBouncer with a validated data snapshot, but application traffic cutover is pending; production remains on Supabase-hosted PostgreSQL.
 - Hosted-orchestrator is the sole hosted lifecycle database owner; hosted-sites has no database credential and Web uses orchestrator APIs or public read models for hosted data.
 - Complete private suite manifests live only in immutable `benchmark_case_revisions`; public case metadata is display-safe.
 - Hosted attempts store only revision identity, generation seed, active-session pointer, sequence pointer, and completed session ids; generated per-session task config lives on `hosted_web_sessions.metadata`.
@@ -79,9 +79,9 @@ P0 completion criterion: after any single-process failure or command retry, the 
 
 - Emit structured logs with request ID, command ID, run ID, attempt ID, session ID, partition, and deployment environment.
 - Export command lag, pending/reclaimed entries, processing latency, callback backlog, active attempts, timeouts, and cleanup duration.
-- Separate liveness from readiness; readiness should cover Redis, partition ownership, and required Supabase access.
+- Separate liveness from readiness; readiness should cover Redis, partition ownership, and required PostgreSQL access.
 - Define alert thresholds and an operator runbook for queue backlog, callback failure, migration failure, disk pressure, and Redis recovery.
-- Test backup/restore and disaster recovery for Supabase records and Redis-backed active sessions.
+- Test backup/restore and disaster recovery for PostgreSQL records and Redis-backed active sessions.
 - Deployment retries transient registry/network failures before replacing containers, and Redis session/command workloads are independently addressed for capacity and failure analysis.
 
 Completion criteria: an operator can identify a stuck attempt and its last durable command without reading unstructured container logs.
@@ -95,6 +95,26 @@ Completion criteria: an operator can identify a stuck attempt and its last durab
 - Remove duplicated app-specific defaults from the orchestrator; hosted app definitions and benchmark case metadata should own task semantics.
 
 Completion criteria: transport changes do not require lifecycle changes, and incompatible command payloads fail validation before entering Redis Streams.
+
+## P1: Database Portability
+
+Status: In Progress ([#211](https://github.com/Kaiwen0418/agent-benchmark/issues/211))
+
+| Milestone | Status | Exit criteria |
+| --- | --- | --- |
+| DB.1 Portable persistence foundation | Complete | Domain-owned Drizzle repositories, portable lifecycle functions, clean-PostgreSQL CI, self-hosted PostgreSQL/PgBouncer, transfer validation, and backup/restore verification work without Supabase APIs. |
+| DB.2 Development traffic cutover | In Progress ([#212](https://github.com/Kaiwen0418/agent-benchmark/issues/212)-[#216](https://github.com/Kaiwen0418/agent-benchmark/issues/216)) | Database-aware readiness, provider-neutral smoke, independent Web CD, isolated candidate canary, final write freeze, traffic cutover, observation, and rollback drill pass in development. |
+| DB.3 Application-owned identity | Planned ([#217](https://github.com/Kaiwen0418/agent-benchmark/issues/217)) | Auth.js owns portable identity/session tables, required historical ownership is migrated, guest behavior remains valid, and Supabase Auth runtime coupling is removable. |
+| DB.4 Production and cloud portability | Planned ([#218](https://github.com/Kaiwen0418/agent-benchmark/issues/218), [#219](https://github.com/Kaiwen0418/agent-benchmark/issues/219)) | Production cutover passes integrity, browser/lifecycle E2E, backup/restore, observation, and rollback; later cloud modules preserve standard image and PostgreSQL contracts. |
+
+Completion criteria: a clean standard PostgreSQL deployment can restore and
+serve all application data without Supabase APIs, browsers have no direct
+database access, and development plus production cutovers have validated
+integrity, backup, restore, and rollback procedures.
+
+Current progress: DB.1 and the development candidate snapshot are complete.
+DB.2 is the active release gate. DB.3 must complete before DB.4 production
+cutover; Terraform remains non-blocking until the runtime topology is stable.
 
 ## P1: Benchmark Quality
 
