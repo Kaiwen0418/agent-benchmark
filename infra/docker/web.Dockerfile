@@ -28,8 +28,8 @@ RUN addgroup --system --gid 1001 nodejs \
   && mkdir -p .runner-artifacts \
   && chown nextjs:nodejs .runner-artifacts
 
-COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/standalone ./standalone
+COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/static ./standalone/apps/web/.next/static
 
 USER nextjs
 
