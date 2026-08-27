@@ -6,15 +6,34 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./benchmark-cases": "./src/benchmark-cases/index.ts",
-    "./hosted-orchestrator": "./src/hosted-orchestrator/index.ts",
-    "./model-catalog": "./src/model-catalog/index.ts",
-    "./public-results": "./src/public-results/index.ts",
-    "./web-control-plane": "./src/web-control-plane/index.ts"
+    ".": {
+      "agentbench-runtime": "./dist/index.js",
+      "default": "./src/index.ts"
+    },
+    "./benchmark-cases": {
+      "agentbench-runtime": "./dist/benchmark-cases/index.js",
+      "default": "./src/benchmark-cases/index.ts"
+    },
+    "./hosted-orchestrator": {
+      "agentbench-runtime": "./dist/hosted-orchestrator/index.js",
+      "default": "./src/hosted-orchestrator/index.ts"
+    },
+    "./model-catalog": {
+      "agentbench-runtime": "./dist/model-catalog/index.js",
+      "default": "./src/model-catalog/index.ts"
+    },
+    "./public-results": {
+      "agentbench-runtime": "./dist/public-results/index.js",
+      "default": "./src/public-results/index.ts"
+    },
+    "./web-control-plane": {
+      "agentbench-runtime": "./dist/web-control-plane/index.js",
+      "default": "./src/web-control-plane/index.ts"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:runtime": "esbuild src/index.ts src/benchmark-cases/index.ts src/hosted-orchestrator/index.ts src/model-catalog/index.ts src/public-results/index.ts src/web-control-plane/index.ts --bundle --platform=node --format=esm --packages=external --outdir=dist --outbase=src",
     "test": "pnpm run build && node --import tsx --test tests/unit/*.test.ts",
     "test:integration": "node --import tsx --test tests/integration/*.test.ts"
   },
@@ -26,6 +45,7 @@
     "@types/node": "^22.20.0",
     "@types/pg": "^8.21.0",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.28.1",
     "tsx": "^4.23.0",
     "typescript": "^5.7.3"
   }
