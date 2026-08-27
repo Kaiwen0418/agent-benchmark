@@ -16,6 +16,9 @@ bash scripts/test-deploy-classifier.sh
 echo "== Web deployment workflow =="
 bash scripts/test-web-deploy-workflow.sh
 
+echo "== Service Dockerfiles =="
+bash scripts/test-service-dockerfiles.sh
+
 echo "== Cutover canary =="
 bash scripts/test-cutover-canary.sh
 
