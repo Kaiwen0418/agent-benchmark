@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ORCHESTRATOR_DOCKERFILE="${ROOT_DIR}/infra/docker/hosted-orchestrator.Dockerfile"
+WEB_DOCKERFILE="${ROOT_DIR}/infra/docker/web.Dockerfile"
 
 database_copy_count="$(grep -c '^COPY packages/database ./packages/database$' "${ORCHESTRATOR_DOCKERFILE}")"
 if [[ "${database_copy_count}" != "2" ]]; then
@@ -21,5 +22,12 @@ for required_line in "${required_lines[@]}"; do
     exit 1
   fi
 done
+
+if ! grep -Fqx \
+  'COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/static ./standalone/apps/web/.next/static' \
+  "${WEB_DOCKERFILE}"; then
+  echo "Web image must copy static assets into the standalone application tree." >&2
+  exit 1
+fi
 
 echo "Service Dockerfile tests passed"

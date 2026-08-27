@@ -102,5 +102,13 @@ if [[ "${ready}" != "true" ]]; then
   exit 1
 fi
 
+home_html="$(curl -fsS "http://127.0.0.1:${AGENTBENCH_WEB_PORT}/")"
+static_asset_path="$(grep -oE '/_next/static/[^"[:space:]]+' <<< "${home_html}" | sed -n '1p')"
+if [[ -z "${static_asset_path}" ]]; then
+  echo "Web home page does not reference a Next.js static asset." >&2
+  exit 1
+fi
+curl -fsS "http://127.0.0.1:${AGENTBENCH_WEB_PORT}${static_asset_path}" >/dev/null
+
 compose ps
 echo "Web deployment passed: environment=${DEPLOYMENT_ENVIRONMENT} image=${WEB_IMAGE}:${WEB_IMAGE_TAG} port=${AGENTBENCH_WEB_PORT}"
