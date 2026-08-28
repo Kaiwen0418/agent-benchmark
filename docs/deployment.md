@@ -119,12 +119,40 @@ HOSTED_ORCHESTRATOR_PUBLIC_URL=https://develop-hosted.example.com/orchestrator \
   infra/scripts/verify-development-cutover.sh | tee cutover-evidence.txt
 ```
 
-For the rollback drill, freeze new runs again, drain active work, restore both
-database secrets to the retained source, redeploy both application projects,
-restore the previous development route, run lifecycle smoke, and record elapsed
-time. A rollback is incomplete until source database identity, callbacks,
-Redis lag, and all containers pass the same post-cutover verifier. Never remove
-the self-hosted PostgreSQL volume as part of application rollback.
+#### Rollback and recovery drill
+
+Run the drill against an isolated restored database rather than renaming or
+overwriting the canonical database. Start the RTO timer before restoring or
+redirecting any service, and include diagnosis and repair time in the recorded
+result.
+
+1. Freeze new runs, drain active work and callback delivery, and record the
+   canonical row counts before changing runtime configuration.
+2. Restore the verified backup into a newly created database. A restore using
+   `--no-owner --no-privileges` does not recreate runtime ownership: set the
+   restored database owner to the application role and transfer or grant the
+   required ownership on the `public` and `drizzle` schemas, tables, sequences,
+   views, and functions before starting an application process.
+3. Use the direct PostgreSQL route to apply the current Drizzle migrations,
+   then publish the benchmark catalog. Do not treat a successful connection or
+   health response as proof that the restored schema is current.
+4. If application traffic reaches PostgreSQL through PgBouncer, explicitly add
+   the isolated database to its `[databases]` allow-list and reload PgBouncer,
+   or provision an equivalent protected pooled route. Keep a copy of the
+   original configuration and never expose the direct PostgreSQL listener.
+5. Redirect Web and every orchestrator API/worker replica together. Verify the
+   database name from each process, then run health checks, the post-cutover
+   verifier, and a full lifecycle smoke against the restored database.
+6. Freeze admission again, restore every replica to the canonical database,
+   remove the temporary PgBouncer mapping, and stop the RTO timer only after
+   canonical identity, callbacks, Redis lag, and all containers pass the same
+   checks.
+7. Record the restored snapshot counts, smoke run identity, RTO, failures and
+   repairs in the deployment issue. Remove the isolated database and temporary
+   secret-bearing environment files only after canonical verification; retain
+   the verified backup for the full rollback window.
+
+Never remove the self-hosted PostgreSQL volume as part of application rollback.
 
 ## Self-hosted Web
 
