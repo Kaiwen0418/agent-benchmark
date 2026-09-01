@@ -18,6 +18,10 @@ import {
   createPublicResultReadRepository,
   type PublicResultReadRepository,
 } from "@agentbench/database/public-results";
+import {
+  createAuthIdentityRepository,
+  type AuthIdentityRepository,
+} from "@agentbench/database/auth-identity";
 
 type DatabaseGlobal = typeof globalThis & {
   agentbenchWebDatabase?: DatabaseClient;
@@ -40,6 +44,10 @@ export class DatabaseServiceUnavailableError extends Error {
     super(message, options);
     this.name = "DatabaseServiceUnavailableError";
   }
+}
+
+export function isWebDatabaseConfigured() {
+  return Boolean(process.env.DATABASE_URL);
 }
 
 export function getWebDatabaseClient() {
@@ -81,4 +89,8 @@ export function getWebControlPlaneRepository(): WebControlPlaneRepository {
 
 export function getPublicResultRepository(): PublicResultReadRepository {
   return createPublicResultReadRepository(getWebDatabaseClient().db);
+}
+
+export function getAuthIdentityRepository(): AuthIdentityRepository {
+  return createAuthIdentityRepository(getWebDatabaseClient().db);
 }

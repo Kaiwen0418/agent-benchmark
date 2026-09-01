@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { benchmarkCases } from "./benchmark-cases";
+import { authUsers } from "./auth-identity";
 import type { JsonValue } from "./model-catalog";
 
 export type BenchmarkRunStatus =
@@ -29,7 +30,7 @@ export type BenchmarkRunStatus =
 export type BenchmarkExecutionMode = "internal" | "external-agent";
 
 export const profiles = pgTable("profiles", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().references(() => authUsers.id, { onDelete: "cascade" }),
   dailyRunLimit: integer("daily_run_limit").notNull().default(3),
 }, (table) => [
   check("profiles_daily_run_limit_check", sql`${table.dailyRunLimit} >= 0`),
@@ -37,7 +38,7 @@ export const profiles = pgTable("profiles", {
 
 export const benchmarkRuns = pgTable("benchmark_runs", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id"),
+  userId: uuid("user_id").references(() => authUsers.id, { onDelete: "set null" }),
   guestId: text("guest_id"),
   caseId: uuid("case_id").notNull().references(() => benchmarkCases.id, { onDelete: "restrict" }),
   runnerId: uuid("runner_id"),

@@ -23,16 +23,22 @@ flowchart LR
 
 ## Controls
 
-- Store only SHA-256 session-token hashes in Supabase.
+- Store only SHA-256 hosted-session-token hashes in PostgreSQL.
 - Keep raw tokens in URLs/Redis only for their active lifetime.
 - Require the shared service secret for internal Web and orchestrator writes.
-- Keep Supabase service-role keys server-side.
+- Keep database, Auth.js, OAuth, and internal-service credentials server-side.
 - Browser components must use same-origin Web APIs and must not import Supabase clients or browser-facing Supabase environment variables.
 - Browser components must not import `@agentbench/database` or receive
   `DATABASE_URL`; only server modules may create PostgreSQL pools.
-- The current Web authentication seam is guest-only. Future Auth.js integration
-  replaces `getCurrentUser()` without restoring browser-facing Supabase keys.
-- Use RLS for user-owned read paths.
+- Auth.js owns users, provider accounts, database sessions, and verification
+  tokens in PostgreSQL. GitHub email linking is accepted only after the GitHub
+  email API confirms the exact address is verified.
+- Guest cookies are HTTP-only and HMAC-signed before they can be explicitly
+  claimed by an authenticated account. Authentication never claims guest runs
+  automatically.
+- Account deletion removes provider/session/profile data and replaces run and
+  hosted-session ownership with per-record anonymous identifiers so benchmark
+  evidence remains reproducible without retaining an account link.
 - Validate app/state shape when decoding Redis payloads.
 - Reject a session token on routes for another app.
 - Use no-store headers on session and control-plane responses.

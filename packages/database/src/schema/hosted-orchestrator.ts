@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { benchmarkCaseRevisions, benchmarkCases } from "./benchmark-cases";
+import { authUsers } from "./auth-identity";
 import { benchmarkRuns } from "./web-control-plane";
 import type { JsonValue } from "./model-catalog";
 
@@ -76,7 +77,7 @@ export const hostedWebSessions = pgTable("hosted_web_sessions", {
   sessionTokenHash: text("session_token_hash").notNull(),
   status: text("status").$type<HostedSessionStatus>().notNull().default("created"),
   metadata: jsonb("metadata").$type<JsonValue>().notNull().default({}),
-  createdByUserId: uuid("created_by_user_id"),
+  createdByUserId: uuid("created_by_user_id").references(() => authUsers.id, { onDelete: "set null" }),
   createdByGuestId: text("created_by_guest_id"),
   firstSeenIp: inet("first_seen_ip"),
   lastSeenIp: inet("last_seen_ip"),

@@ -3,6 +3,7 @@ import {
   getCurrentUser,
   getOrCreateGuestId,
   GUEST_COOKIE_NAME,
+  guestCookieOptions,
   isDevQuotaBypassed,
 } from "@/lib/auth";
 import { getQuotaStatus } from "@/lib/db";
@@ -39,14 +40,8 @@ export async function GET(request: Request) {
 
   const response = NextResponse.json({ quota });
 
-  if (guest?.isNew) {
-    response.cookies.set(GUEST_COOKIE_NAME, guest.guestId, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-    });
+  if (guest?.shouldSetCookie) {
+    response.cookies.set(GUEST_COOKIE_NAME, guest.cookieValue, guestCookieOptions);
   }
 
   return response;

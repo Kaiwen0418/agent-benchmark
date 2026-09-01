@@ -42,8 +42,31 @@ DATABASE_DIRECT_URL="${source_url}" pnpm catalog:publish >/dev/null
 
 DATABASE_COMMAND_URL="${source_url}" "${database_executor}" \
   psql -X -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
+insert into public.auth_users (id, name, email, email_verified)
+values (
+  '00000000-0000-0000-0000-000000000010',
+  'Transfer User',
+  'transfer@example.test',
+  now()
+);
+
+insert into public.profiles (id, daily_run_limit)
+values ('00000000-0000-0000-0000-000000000010', 7);
+
 insert into public.benchmark_runs (id, guest_id, case_id, status, score, completed_at)
 select '00000000-0000-0000-0000-000000000001', 'transfer-test', id, 'completed', 1, now()
+from public.benchmark_cases
+order by slug
+limit 1;
+
+insert into public.benchmark_runs (id, user_id, case_id, status, score, completed_at)
+select
+  '00000000-0000-0000-0000-000000000011',
+  '00000000-0000-0000-0000-000000000010',
+  id,
+  'completed',
+  1,
+  now()
 from public.benchmark_cases
 order by slug
 limit 1;
@@ -56,9 +79,11 @@ POSTGRES_TOOLS_CONTAINER="${CONTAINER}" \
 SOURCE_DATABASE_URL="${transfer_source_url}" TARGET_DATABASE_URL="${transfer_target_url}" \
   bash scripts/db-transfer-data.sh >/dev/null
 
-[[ "$(docker exec "${CONTAINER}" psql -U postgres -d target_database -X -Atqc "select count(*) from public.benchmark_runs")" == "1" ]]
+[[ "$(docker exec "${CONTAINER}" psql -U postgres -d target_database -X -Atqc "select count(*) from public.benchmark_runs")" == "2" ]]
 [[ "$(docker exec "${CONTAINER}" psql -U postgres -d target_database -X -Atqc "select count(*) from public.run_events")" == "1" ]]
 [[ "$(docker exec "${CONTAINER}" psql -U postgres -d target_database -X -Atqc "select count(*) from public.benchmark_case_revisions")" == "2" ]]
+[[ "$(docker exec "${CONTAINER}" psql -U postgres -d target_database -X -Atqc "select email from public.auth_users")" == "transfer@example.test" ]]
+[[ "$(docker exec "${CONTAINER}" psql -U postgres -d target_database -X -Atqc "select daily_run_limit from public.profiles")" == "7" ]]
 
 if POSTGRES_TOOLS_CONTAINER="${CONTAINER}" \
   SOURCE_DATABASE_URL="${transfer_source_url}" TARGET_DATABASE_URL="${transfer_target_url}" \
