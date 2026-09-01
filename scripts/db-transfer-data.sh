@@ -32,6 +32,10 @@ else
 fi
 
 tables=(
+  auth_users
+  auth_accounts
+  auth_sessions
+  auth_verification_tokens
   profiles
   benchmark_cases
   benchmark_case_revisions

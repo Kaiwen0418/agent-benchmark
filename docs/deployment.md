@@ -333,12 +333,16 @@ Required variables in each GitHub Environment:
 - optional `AGENTBENCH_WEB_PORT` (development self-hosted Web, default `3000`)
 - optional `CANARY_HOST` (self-hosted runner LAN address; defaults to `192.168.1.242`)
 - optional `RUN_CREATION_MODE` (`open` normally, `frozen` during a controlled cutover)
+- optional `AUTH_SIGN_IN_MODE` (`frozen` by default; set to `open` only after
+  Auth.js migrations and OAuth callback verification pass)
 
 Required secrets in each GitHub Environment:
 
 - `GHCR_PAT` with `read:packages`
 - `RUNNER_SHARED_SECRET`
 - `DATABASE_URL` using a pooled PostgreSQL endpoint
+- `AUTH_SECRET` generated from at least 32 random bytes
+- `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET` for the environment-specific GitHub OAuth App
 
 Migration-only database secrets:
 
@@ -364,6 +368,16 @@ Each Vercel Web project must independently configure:
 - optional `RUN_CONNECT_RATE_LIMIT` (defaults to 5 requests per run and client
   address per minute on each Web instance)
 - optional `RUN_CREATION_MODE` (`open` or `frozen`)
+- `AUTH_SECRET`, `AUTH_GITHUB_ID`, and `AUTH_GITHUB_SECRET`
+- optional `AUTH_SIGN_IN_MODE` (`frozen` by default)
+
+The GitHub OAuth callback is `<web-origin>/api/auth/callback/github`. Development
+and production use separate OAuth Apps and secrets. Apply the Auth.js database
+migration before opening sign-in. During a database cutover or rollback drill,
+set `AUTH_SIGN_IN_MODE=frozen`: existing database sessions continue to resolve,
+but no new provider account or session can be created. Auth.js stores provider
+identity only; GitHub access, refresh, and ID tokens are discarded during
+account linking.
 
 Optional GitHub Environment secrets enable first-party model discovery:
 

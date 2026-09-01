@@ -3,6 +3,7 @@ import test from "node:test";
 import { eq } from "drizzle-orm";
 import {
   artifacts,
+  authUsers,
   benchmarkCases,
   benchmarkRuns,
   createDatabaseClient,
@@ -119,6 +120,7 @@ test("web control-plane repository persists run lifecycle atomically", async () 
     assert.ok(fingerprint.lastArtifactId);
 
     const userId = crypto.randomUUID();
+    await client.db.insert(authUsers).values({ id: userId });
     await client.db.insert(profiles).values({ id: userId, dailyRunLimit: 7 });
     await client.db.insert(benchmarkRuns).values({
       caseId: benchmarkCase.id,
@@ -133,7 +135,7 @@ test("web control-plane repository persists run lifecycle atomically", async () 
     await client.db.delete(runEvents).where(eq(runEvents.runId, run.id));
     await client.db.delete(artifacts).where(eq(artifacts.runId, run.id));
     await client.db.delete(benchmarkRuns).where(eq(benchmarkRuns.caseId, benchmarkCase.id));
-    await client.db.delete(profiles).where(eq(profiles.id, userId));
+    await client.db.delete(authUsers).where(eq(authUsers.id, userId));
     await client.db.delete(benchmarkCases).where(eq(benchmarkCases.id, benchmarkCase.id));
   } finally {
     await client.close();

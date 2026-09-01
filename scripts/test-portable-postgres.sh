@@ -58,7 +58,9 @@ assert_query() {
   fi
 }
 
-assert_query "portable table count" "16" "select count(*) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'"
+assert_query "portable table count" "20" "select count(*) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'"
+assert_query "Auth.js table count" "4" "select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('auth_users', 'auth_accounts', 'auth_sessions', 'auth_verification_tokens')"
+assert_query "Auth.js ownership foreign key count" "5" "select count(*) from information_schema.table_constraints where constraint_schema = 'public' and constraint_type = 'FOREIGN KEY' and constraint_name in ('auth_accounts_user_id_auth_users_id_fk', 'auth_sessions_user_id_auth_users_id_fk', 'profiles_id_auth_users_id_fk', 'benchmark_runs_user_id_auth_users_id_fk', 'hosted_web_sessions_created_by_user_id_auth_users_id_fk')"
 assert_query "published benchmark case count" "2" "select count(*) from public.benchmark_cases"
 assert_query "published revision count" "2" "select count(*) from public.benchmark_case_revisions"
 assert_query "row-level security table count" "0" "select count(*) from pg_class where relnamespace = 'public'::regnamespace and relrowsecurity"

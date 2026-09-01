@@ -319,6 +319,8 @@ SQL
 
 "${PSQL[@]}" -v ON_ERROR_STOP=1 \
   < "${ROOT_DIR}/supabase/migrations/20260723000033_model_catalog.sql" >/dev/null
+"${PSQL[@]}" -v ON_ERROR_STOP=1 \
+  < "${ROOT_DIR}/supabase/migrations/20260901000035_authjs_identity.sql" >/dev/null
 
 seed_valid="$("${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "
   select count(*) = 4

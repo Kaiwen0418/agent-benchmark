@@ -4,6 +4,7 @@ const footerLinks = [
     links: [
       { label: "Playground", href: "#playground" },
       { label: "Leaderboard", href: "#leaderboard" },
+      { label: "Account", href: "/account" },
       { label: "Benchmarks", href: "#docs" },
       { label: "Pricing", href: "#" },
     ],
