@@ -14,7 +14,7 @@ docker run -d --rm --name "${CONTAINER}" \
   postgres:17-alpine >/dev/null
 
 for _ in $(seq 1 30); do
-  if docker exec "${CONTAINER}" pg_isready -U postgres >/dev/null 2>&1; then
+  if docker exec "${CONTAINER}" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
     postgres_ready=true
     break
   fi
@@ -25,7 +25,7 @@ if [[ "${postgres_ready:-false}" != "true" ]]; then
   exit 1
 fi
 
-PSQL=(docker exec -i "${CONTAINER}" psql -X -v ON_ERROR_STOP=1 -U postgres)
+PSQL=(docker exec -i "${CONTAINER}" psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres)
 
 "${PSQL[@]}" <<'SQL' >/dev/null
 create schema auth;
