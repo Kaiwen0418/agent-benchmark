@@ -66,4 +66,14 @@ if [ "${result}" != "t" ]; then
   exit 1
 fi
 
+if command -v sha256sum >/dev/null 2>&1; then
+  backup_sha256="$(sha256sum "${BACKUP_FILE}" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+  backup_sha256="$(shasum -a 256 "${BACKUP_FILE}" | awk '{print $1}')"
+else
+  echo "sha256sum or shasum is required to record restore evidence." >&2
+  exit 1
+fi
+
+echo "backup_sha256=${backup_sha256}"
 echo "PostgreSQL backup restore verification passed."

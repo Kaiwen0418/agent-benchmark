@@ -5,6 +5,8 @@ SOURCE_DATABASE_URL="${SOURCE_DATABASE_URL:-}"
 TARGET_DATABASE_URL="${TARGET_DATABASE_URL:-}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATABASE_EXECUTOR="${ROOT_DIR}/scripts/lib/exec-postgres-url.py"
+# shellcheck source=lib/application-tables.sh
+source "${ROOT_DIR}/scripts/lib/application-tables.sh"
 
 if [ -z "${SOURCE_DATABASE_URL}" ] || [ -z "${TARGET_DATABASE_URL}" ]; then
   echo "SOURCE_DATABASE_URL and TARGET_DATABASE_URL are required." >&2
@@ -31,29 +33,6 @@ else
   done
 fi
 
-tables=(
-  auth_users
-  auth_accounts
-  auth_sessions
-  auth_verification_tokens
-  profiles
-  benchmark_cases
-  benchmark_case_revisions
-  model_catalog
-  model_catalog_sync_runs
-  benchmark_runs
-  run_events
-  artifacts
-  benchmark_attempts
-  hosted_web_sessions
-  hosted_web_results
-  benchmark_attempt_scores
-  hosted_web_events
-  hosted_web_access_logs
-  hosted_callback_outbox
-  orchestrator_command_dead_letters
-)
-
 archive="$(mktemp -t agentbench-data-transfer.XXXXXX)"
 cleanup() {
   rm -f "${archive}"
@@ -63,14 +42,14 @@ trap cleanup EXIT
 count_query() {
   local query=""
   local table
-  for table in "${tables[@]}"; do
+  for table in "${APPLICATION_TABLES[@]}"; do
     query+="select '${table}' as table_name, count(*)::text as row_count from public.${table};"
   done
   printf '%s' "${query}"
 }
 
 target_total_query="select "
-for table in "${tables[@]}"; do
+for table in "${APPLICATION_TABLES[@]}"; do
   target_total_query+="(select count(*) from public.${table}) + "
 done
 target_total_query="${target_total_query% + };"
@@ -97,7 +76,7 @@ dump_args=(
   --no-privileges
   --serializable-deferrable
 )
-for table in "${tables[@]}"; do
+for table in "${APPLICATION_TABLES[@]}"; do
   dump_args+=(--table="public.${table}")
 done
 
@@ -154,7 +133,7 @@ if [ "${source_counts}" != "${target_counts}" ]; then
 fi
 
 analyze_query=""
-for table in "${tables[@]}"; do
+for table in "${APPLICATION_TABLES[@]}"; do
   analyze_query+="analyze public.${table};"
 done
 DATABASE_COMMAND_URL="${TARGET_DATABASE_URL}" "${DATABASE_EXECUTOR}" \
