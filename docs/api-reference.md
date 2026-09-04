@@ -2,14 +2,16 @@
 
 ## Authentication
 
-Public Web requests currently use an HTTP-only guest cookie. The
-`getCurrentUser()` seam remains guest-only until Auth.js is integrated.
-Service-to-service writes require
+Public Web requests use either an Auth.js database session or a signed,
+HTTP-only guest cookie. Signing in does not implicitly transfer guest runs;
+authenticated users must explicitly claim a run created by their current guest
+identity. Service-to-service writes require
 `x-runner-secret: <RUNNER_SHARED_SECRET>`. The header and environment variable
 retain a legacy name; they now authenticate hosted services, not a runner
 component.
 
-Hosted task requests use an opaque session token in `?session=<token>` or in the telemetry body. Only the SHA-256 token hash is stored in Supabase.
+Hosted task requests use an opaque session token in `?session=<token>` or in the
+telemetry body. Only the SHA-256 token hash is stored in PostgreSQL.
 
 ## Web API (`apps/web`)
 
