@@ -359,6 +359,7 @@ Optional web deployment secret:
 
 Each Vercel Web project must independently configure:
 
+- `AUTH_URL` set to that environment's public Web origin
 - `DATABASE_URL` using a pooled PostgreSQL endpoint
 - optional `DATABASE_POOL_MAX` (defaults to `3` connections per Web instance)
 - `RUNNER_SHARED_SECRET`
@@ -378,6 +379,11 @@ set `AUTH_SIGN_IN_MODE=frozen`: existing database sessions continue to resolve,
 but no new provider account or session can be created. Auth.js stores provider
 identity only; GitHub access, refresh, and ID tokens are discarded during
 account linking.
+
+The self-hosted Web deployment derives `AUTH_URL` from the environment-scoped
+`AGENTBENCH_WEB_URL`; it must never use the container bind address. Verify
+`GET /api/auth/providers` reports the public callback URL before changing
+`AUTH_SIGN_IN_MODE` to `open`.
 
 Optional GitHub Environment secrets enable first-party model discovery:
 

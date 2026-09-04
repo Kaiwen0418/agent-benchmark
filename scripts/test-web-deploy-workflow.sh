@@ -21,13 +21,17 @@ require_text "${WORKFLOW}" "file: infra/docker/web.Dockerfile"
 require_text "${DEPLOY_SCRIPT}" "static_asset_path="
 require_text "${DEPLOY_SCRIPT}" "Web home page does not reference a Next.js static asset."
 require_text "${WORKFLOW}" "WEB_COMPOSE_PROJECT_NAME: agentbench-development-web"
+require_text "${WORKFLOW}" 'AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}'
 require_text "${WORKFLOW}" "RUN_CREATION_MODE: \${{ vars.RUN_CREATION_MODE || 'open' }}"
 require_text "${WORKFLOW}" "run: bash infra/scripts/deploy-web-stack.sh"
 require_text "${DEPLOY_SCRIPT}" 'COMPOSE_FILE="infra/docker/docker-compose.web.yml"'
+require_text "${DEPLOY_SCRIPT}" 'AGENTBENCH_WEB_URL=${AGENTBENCH_WEB_URL}'
+require_text "${ROOT_DIR}/infra/docker/docker-compose.web.yml" 'AUTH_URL: ${AGENTBENCH_WEB_URL}'
 require_text "${DEPLOY_SCRIPT}" 'compose up -d --remove-orphans --no-deps web'
 
 set +e
 invalid_output="$({
+  AGENTBENCH_WEB_URL=https://web.invalid \
   AGENTBENCH_WEB_PORT=3000 \
     DATABASE_URL=postgresql://test-only \
     DEPLOYMENT_ENVIRONMENT=production \
@@ -52,6 +56,7 @@ fi
 
 set +e
 freeze_output="$({
+  AGENTBENCH_WEB_URL=https://web.invalid \
   AGENTBENCH_WEB_PORT=3000 \
     DATABASE_URL=postgresql://test-only \
     DEPLOYMENT_ENVIRONMENT=development \
