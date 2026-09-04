@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { eq } from "drizzle-orm";
 import {
+  authAccounts,
   authSessions,
   authUsers,
   benchmarkCases,
@@ -22,13 +23,22 @@ test("identity repository claims only one guest and anonymizes ownership on dele
   const repository = createAuthIdentityRepository(client.db);
   const firstUserId = crypto.randomUUID();
   const secondUserId = crypto.randomUUID();
+  const replacementUserId = crypto.randomUUID();
   const guestId = crypto.randomUUID();
+  const firstEmail = `first-${crypto.randomUUID()}@example.test`;
+  const providerAccountId = crypto.randomUUID();
 
   try {
     await client.db.insert(authUsers).values([
-      { id: firstUserId, email: `first-${crypto.randomUUID()}@example.test` },
+      { id: firstUserId, email: firstEmail },
       { id: secondUserId, email: `second-${crypto.randomUUID()}@example.test` },
     ]);
+    await client.db.insert(authAccounts).values({
+      userId: firstUserId,
+      type: "oauth",
+      provider: "github",
+      providerAccountId,
+    });
     const [benchmarkCase] = await client.db.insert(benchmarkCases).values({
       slug: `auth-${crypto.randomUUID()}`,
       title: "Auth identity benchmark",
@@ -78,6 +88,10 @@ test("identity repository claims only one guest and anonymizes ownership on dele
 
     assert.deepEqual(await repository.deleteIdentity(firstUserId), { anonymizedRuns: 1 });
     assert.equal((await client.db.select().from(authUsers).where(eq(authUsers.id, firstUserId))).length, 0);
+    assert.equal((await client.db.select().from(authAccounts)
+      .where(eq(authAccounts.userId, firstUserId))).length, 0);
+    assert.equal((await client.db.select().from(authSessions)
+      .where(eq(authSessions.userId, firstUserId))).length, 0);
     const [anonymousRun] = await client.db.select().from(benchmarkRuns).where(eq(benchmarkRuns.id, run.id));
     assert.equal(anonymousRun?.userId, null);
     assert.match(anonymousRun?.guestId ?? "", /^deleted-account:/);
@@ -86,8 +100,19 @@ test("identity repository claims only one guest and anonymizes ownership on dele
     assert.equal(anonymousSession?.createdByUserId, null);
     assert.match(anonymousSession?.createdByGuestId ?? "", /^deleted-account:/);
 
+    await client.db.insert(authUsers).values({ id: replacementUserId, email: firstEmail });
+    await client.db.insert(authAccounts).values({
+      userId: replacementUserId,
+      type: "oauth",
+      provider: "github",
+      providerAccountId,
+    });
+    assert.equal((await client.db.select().from(authUsers)
+      .where(eq(authUsers.id, replacementUserId))).length, 1);
+
     await client.db.delete(benchmarkRuns).where(eq(benchmarkRuns.id, run.id));
     await client.db.delete(benchmarkCases).where(eq(benchmarkCases.id, benchmarkCase.id));
+    await client.db.delete(authUsers).where(eq(authUsers.id, replacementUserId));
     await client.db.delete(authUsers).where(eq(authUsers.id, secondUserId));
   } finally {
     await client.close();

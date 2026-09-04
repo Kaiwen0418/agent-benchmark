@@ -49,7 +49,7 @@ async function deleteAccount(formData: FormData) {
   }
 
   await getAuthIdentityRepository().deleteIdentity(user.id);
-  await signOut({ redirectTo: "/" });
+  await signOut({ redirectTo: "/account?deleted=1" });
 }
 
 const messages: Record<string, string> = {
@@ -64,7 +64,7 @@ const messages: Record<string, string> = {
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; claimed?: string }>;
+  searchParams: Promise<{ error?: string; claimed?: string; deleted?: string }>;
 }) {
   const [params, user, claimableGuestId] = await Promise.all([
     searchParams,
@@ -98,6 +98,11 @@ export default async function AccountPage({
           {params.claimed ? (
             <p className="mt-6 border-l-4 border-[#d7ff00] bg-[#111111] px-4 py-3 text-sm text-white" role="status">
               Claimed {params.claimed} guest run{params.claimed === "1" ? "" : "s"}.
+            </p>
+          ) : null}
+          {params.deleted === "1" ? (
+            <p className="mt-6 border-l-4 border-[#d7ff00] bg-[#111111] px-4 py-3 text-sm text-white" role="status">
+              Account deleted. Signing in again will create a new AgentBench identity.
             </p>
           ) : null}
 
@@ -148,6 +153,7 @@ export default async function AccountPage({
                 <p className="mt-2 text-sm leading-6 text-[#5f594e]">
                   Provider accounts, sessions, and profile data are deleted. Benchmark results are
                   retained without user ownership so public scoring history remains reproducible.
+                  You may sign in again later, but that creates a new AgentBench identity.
                 </p>
                 <label className="mt-4 block max-w-xs text-xs uppercase tracking-[0.18em] text-[#6f685d]">
                   Type DELETE
