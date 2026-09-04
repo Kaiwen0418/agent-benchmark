@@ -507,6 +507,7 @@ jobs:
           HOSTED_SITES_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
           HOSTED_ORCHESTRATOR_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
           AGENTBENCH_WEB_PORT: ${{ vars.AGENTBENCH_WEB_PORT || '3000' }}
+          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
           AUTH_GITHUB_ID: ${{ secrets.AUTH_GITHUB_ID }}
           AUTH_GITHUB_SECRET: ${{ secrets.AUTH_GITHUB_SECRET }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
