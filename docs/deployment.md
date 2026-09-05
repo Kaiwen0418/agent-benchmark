@@ -156,6 +156,61 @@ Never remove the self-hosted PostgreSQL volume as part of application rollback.
 
 ### Production migration preflight
 
+#### Isolated candidate infrastructure
+
+Use `infra/docker/docker-compose.database-production.yml` for the production
+candidate. It owns the `agentbench-production-database` Compose project, a
+separate network and `agentbench-production-database_postgres-data` volume.
+It creates `agentbench_production_candidate`, owned by `agentbench_prod`, with
+a distinct `agentbench_prod_admin` maintenance role. Development database
+variables do not supply its passwords.
+
+Prepare a protected host-local environment file using
+`infra/docker/.env.database-production.example`. Generate separate random
+application and admin passwords; keep the file outside source control with
+mode `600`. Compose refuses empty passwords. Provision with:
+
+```bash
+docker compose --env-file /protected/production-database.env \
+  -f infra/docker/docker-compose.database-production.yml \
+  up -d --wait --wait-timeout 120
+```
+
+The direct and pooled listeners bind only to `127.0.0.1:55432` and
+`127.0.0.1:65432`. These do not conflict with development's `5432/6432`.
+Host-local migrations use the direct listener. A Web or orchestrator container
+cannot reach the host through its own `127.0.0.1`; arrange an explicitly
+protected network route to PgBouncer before deploying a canary. Do not expose
+the PostgreSQL listener through a public tunnel. The candidate database name
+is intentionally fixed until a separate cutover decision; changing an
+initialization variable does not rename an existing database or rotate a role.
+
+Back up this project by explicitly selecting its Compose file and using the
+same environment file. Run from the repository root:
+
+```bash
+DATABASE_COMPOSE_FILE="$PWD/infra/docker/docker-compose.database-production.yml" \
+  bash infra/scripts/backup-postgres.sh \
+  /protected/production-database.env /protected/production-backups
+DATABASE_COMPOSE_FILE="$PWD/infra/docker/docker-compose.database-production.yml" \
+  bash infra/scripts/verify-postgres-backup.sh \
+  /protected/production-database.env /protected/production-backups/agentbench-<timestamp>.dump
+```
+
+The default backup scripts still select the development Compose file; always
+supply `DATABASE_COMPOSE_FILE` for this candidate. Local dumps are not encrypted
+off-host backups. Encrypted off-host retention and measured recovery remain
+production cutover requirements under #218. Retain candidate volumes and
+verified dumps throughout the rollback window; application rollback must not
+run `down --volumes` on a database project.
+
+`scripts/test-production-database.sh` runs this configuration in a uniquely
+named disposable project with random credentials and dynamic loopback ports.
+It checks application-role privileges, PgBouncer password authentication,
+Drizzle migrations, restart persistence, and the real backup/restore scripts.
+
+#### Read-only readiness check
+
 Production migration is a separately approved operation under issue #218. Run
 the read-only preflight before any production write freeze, data transfer,
 secret update, deployment, or routing change:
