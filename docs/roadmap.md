@@ -105,19 +105,20 @@ Status: In Progress ([#211](https://github.com/Kaiwen0418/agent-benchmark/issues
 | Milestone | Status | Exit criteria |
 | --- | --- | --- |
 | DB.1 Portable persistence foundation | Complete | Domain-owned Drizzle repositories, portable lifecycle functions, clean-PostgreSQL CI, self-hosted PostgreSQL/PgBouncer, transfer validation, and backup/restore verification work without Supabase APIs. |
-| DB.2 Development traffic cutover | In Progress ([#212](https://github.com/Kaiwen0418/agent-benchmark/issues/212)-[#216](https://github.com/Kaiwen0418/agent-benchmark/issues/216)) | Database-aware readiness, provider-neutral smoke, independent Web CD, isolated candidate canary, final write freeze, traffic cutover, observation, and rollback drill pass in development. |
-| DB.3 Application-owned identity | In Progress ([#217](https://github.com/Kaiwen0418/agent-benchmark/issues/217)) | Auth.js owns portable identity/session tables, required historical ownership is migrated, guest behavior remains valid, and development OAuth activation plus end-to-end identity verification pass before Supabase Auth runtime coupling is removed. |
-| DB.4 Production and cloud portability | Planned ([#218](https://github.com/Kaiwen0418/agent-benchmark/issues/218), [#219](https://github.com/Kaiwen0418/agent-benchmark/issues/219)) | Production cutover passes integrity, browser/lifecycle E2E, backup/restore, observation, and rollback; later cloud modules preserve standard image and PostgreSQL contracts. |
+| DB.2 Development traffic cutover | Complete ([#212](https://github.com/Kaiwen0418/agent-benchmark/issues/212)-[#216](https://github.com/Kaiwen0418/agent-benchmark/issues/216)) | Database-aware readiness, provider-neutral smoke, independent Web CD, isolated candidate canary, final write freeze, traffic cutover, observation, and rollback drill pass in development. |
+| DB.3 Application-owned identity | Complete ([#217](https://github.com/Kaiwen0418/agent-benchmark/issues/217)) | Auth.js owns portable identity/session tables, required historical ownership is migrated, guest behavior remains valid, and development OAuth activation plus end-to-end identity verification pass before Supabase Auth runtime coupling is removed. |
+| DB.4 Production and cloud portability | In Progress ([#218](https://github.com/Kaiwen0418/agent-benchmark/issues/218), [#219](https://github.com/Kaiwen0418/agent-benchmark/issues/219), [#239](https://github.com/Kaiwen0418/agent-benchmark/issues/239)) | Production cutover passes integrity, browser/lifecycle E2E, backup/restore, observation, and rollback; later cloud modules preserve standard image and PostgreSQL contracts. |
 
 Completion criteria: a clean standard PostgreSQL deployment can restore and
 serve all application data without Supabase APIs, browsers have no direct
 database access, and development plus production cutovers have validated
 integrity, backup, restore, and rollback procedures.
 
-Current progress: DB.1 and the development database traffic cutover are
-complete. DB.2 follow-up work and DB.3 OAuth activation remain active release
-gates before DB.4 production cutover; Terraform remains non-blocking until the
-runtime topology is stable.
+Current progress: the portable persistence foundation, development traffic
+cutover, and Auth.js identity ownership are complete. DB.4 begins with the
+read-only production migration preflight in #239; production mutation and
+cutover remain separately approved work under #218. Terraform remains
+non-blocking until the runtime topology is stable.
 
 ## P1: Benchmark Quality
 

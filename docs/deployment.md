@@ -154,6 +154,34 @@ result.
 
 Never remove the self-hosted PostgreSQL volume as part of application rollback.
 
+### Production migration preflight
+
+Production migration is a separately approved operation under issue #218. Run
+the read-only preflight before any production write freeze, data transfer,
+secret update, deployment, or routing change:
+
+```bash
+SOURCE_DATABASE_URL="$PRODUCTION_SOURCE_DIRECT_URL" \
+TARGET_DATABASE_URL="$PRODUCTION_CANDIDATE_DIRECT_URL" \
+EXPECTED_SOURCE_DATABASE_NAME=postgres \
+EXPECTED_TARGET_DATABASE_NAME=agentbench_production_candidate \
+VERIFIED_BACKUP_FILE=/protected/backups/agentbench-<timestamp>.dump \
+RESTORE_VERIFICATION_FILE=/protected/evidence/restore-<timestamp>.txt \
+  scripts/db-production-preflight.sh | tee /protected/evidence/preflight-<timestamp>.txt
+```
+
+Create `RESTORE_VERIFICATION_FILE` by capturing the output of
+`verify-postgres-backup.sh` after restoring the referenced custom-format dump.
+The receipt includes the dump SHA-256, and preflight rejects evidence produced
+for a different backup.
+The preflight requires explicit database names, refuses an identical endpoint
+or a development/test target, and fails on schema drift, active runs, callback
+backlog, or application rows in the candidate. Its output contains database
+names and counts only; it never prints connection URLs or credentials. Passing
+preflight authorizes no mutation by itself. Provisioning the production target,
+freezing writes, copying data, updating secrets, deploying, and switching
+traffic each remain part of the approved #218 cutover window.
+
 ## Self-hosted Web
 
 The complete Next.js Web control plane can run as a standalone container using

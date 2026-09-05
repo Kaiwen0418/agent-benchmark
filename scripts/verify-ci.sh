@@ -55,6 +55,9 @@ bash scripts/test-postgres-backup-restore.sh
 echo "== PostgreSQL data transfer =="
 bash scripts/test-postgres-data-transfer.sh
 
+echo "== Production PostgreSQL migration preflight =="
+bash scripts/test-production-migration-preflight.sh
+
 echo "== Auth.js legacy identity migration =="
 bash scripts/test-authjs-legacy-migration.sh
 
