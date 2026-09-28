@@ -25,6 +25,8 @@ assert_classification 'packages/shared/src/index.ts' $'web=true\nhosted_sites=tr
 assert_classification '.github/workflows/deploy-hosted-sites.yml' $'web=true\nhosted_sites=true\norchestrator=true\ninfra=false\ntopology=false'
 assert_classification 'infra/nginx/hosted-sites.conf' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=true\ntopology=false'
 assert_classification 'infra/docker/docker-compose.server.yml' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
+assert_classification 'infra/docker/docker-compose.single-vm.yml' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
+assert_classification 'infra/scripts/deploy-single-vm-development.sh' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 assert_classification 'infra/scripts/deploy-hosted-stack.sh' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 assert_classification 'infra/scripts/registry-retry.sh' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 assert_classification 'infra/scripts/verify-orchestrator-worker-recovery.sh' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'

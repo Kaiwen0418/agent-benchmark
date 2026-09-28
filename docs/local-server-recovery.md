@@ -2,7 +2,7 @@
 
 The fresh recovery host is `192.168.1.131`. No historical data was imported.
 The earlier GCP VM and both disks were deleted. The recovery profile uses
-`infra/docker/docker-compose.single-vm.yml`; it is not yet wired into normal CD.
+`infra/docker/docker-compose.single-vm.yml`.
 
 | Environment | Compose project | Database | Web / gateway | Direct / pooled DB |
 | --- | --- | --- | --- | --- |
@@ -38,8 +38,15 @@ Both environments initially freeze OAuth and run creation. The recovery image
 defaults are `latest-develop`, including the production recovery profile; this
 is not a validated main-branch release. Pin verified image revisions, configure
 separate OAuth apps and align CD topology before opening production admission.
-Do not attach the old production/development runner labels to this host until
-deployment workflows and database secrets target the new projects correctly.
+The development runner uses the `agentbench-dev` label. Its account needs
+Docker access and read/write access only to the development environment file so
+immutable image tags can be advanced and rolled back. The
+GitHub Environment variable `SINGLE_VM_ENV_FILE` may override the default
+`/srv/agentbench/secrets/development.env`. Development CD reads database and
+runtime configuration from that protected local file, deploys changed services
+through the unified Compose project, and restores old image tags after a failed
+health check. Production CD remains on its previous path until a separate
+cutover is approved.
 
 Daily local production backup and restore verification use the host's
 `agentbench-backup.timer`. Local dumps do not protect against loss of this host;

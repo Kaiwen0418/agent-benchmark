@@ -31,11 +31,15 @@ on:
       - 'infra/docker/web.Dockerfile'
       - 'infra/docker/docker-compose.web.yml'
       - 'infra/docker/docker-compose.server.yml'
+      - 'infra/docker/docker-compose.single-vm.yml'
       - 'infra/docker/docker-compose.canary.yml'
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'
       - 'infra/scripts/deploy-hosted-stack.sh'
       - 'infra/scripts/deploy-web-stack.sh'
+      - 'infra/scripts/deploy-single-vm-development.sh'
+      - 'infra/scripts/initialize-single-vm-database.sh'
+      - 'infra/scripts/smoke-single-vm-development.sh'
       - 'infra/scripts/deploy-cutover-canary.sh'
       - 'infra/scripts/registry-retry.sh'
       - 'infra/scripts/verify-orchestrator-worker-recovery.sh'
@@ -344,6 +348,9 @@ jobs:
       - self-hosted
       - linux
       - agentbench-dev
+    permissions:
+      contents: read
+      packages: read
     environment: development
     needs:
       - validate-ref
@@ -354,27 +361,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-
-      - name: Setup Node
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Apply development database migrations
+      - name: Apply migrations and publish the development catalog
         env:
-          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
-        run: bash scripts/db-migrate.sh test
-
-      - name: Publish benchmark catalog
-        env:
-          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
-        run: pnpm catalog:publish
+          SINGLE_VM_ENV_FILE: ${{ vars.SINGLE_VM_ENV_FILE || '/srv/agentbench/secrets/development.env' }}
+        run: bash infra/scripts/initialize-single-vm-database.sh "${SINGLE_VM_ENV_FILE}"
 
   migrate-production:
     if: github.ref == 'refs/heads/main'
@@ -425,20 +415,26 @@ jobs:
       always() &&
       github.ref == 'refs/heads/develop' &&
       (needs.detect-changes.outputs.hosted_sites == 'true' ||
+       needs.detect-changes.outputs.web == 'true' ||
        needs.detect-changes.outputs.orchestrator == 'true' ||
        needs.detect-changes.outputs.infra == 'true' ||
        needs.detect-changes.outputs.topology == 'true') &&
       needs.detect-changes.result == 'success' &&
       needs.migrate-development.result == 'success' &&
+      (needs.build-web.result == 'success' || needs.build-web.result == 'skipped') &&
       (needs.build-hosted-sites.result == 'success' || needs.build-hosted-sites.result == 'skipped') &&
       (needs.build-orchestrator.result == 'success' || needs.build-orchestrator.result == 'skipped')
     runs-on:
       - self-hosted
       - linux
       - agentbench-dev
+    permissions:
+      contents: read
+      packages: read
     environment: development
     needs:
       - detect-changes
+      - build-web
       - build-hosted-sites
       - build-orchestrator
       - migrate-development
@@ -448,72 +444,18 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Deploy development stack
+      - name: Deploy the unified development stack
         env:
-          DEPLOYMENT_ENVIRONMENT: development
-          COMPOSE_PROJECT_NAME: agentbench-development
-          IMAGE_CHANNEL: develop
+          SINGLE_VM_ENV_FILE: ${{ vars.SINGLE_VM_ENV_FILE || '/srv/agentbench/secrets/development.env' }}
           IMAGE_TAG: ${{ needs.detect-changes.outputs.image_tag }}
+          WEB_CHANGED: ${{ needs.detect-changes.outputs.web }}
           HOSTED_SITES_CHANGED: ${{ needs.detect-changes.outputs.hosted_sites }}
           ORCHESTRATOR_CHANGED: ${{ needs.detect-changes.outputs.orchestrator }}
           INFRA_CHANGED: ${{ needs.detect-changes.outputs.infra }}
           TOPOLOGY_CHANGED: ${{ needs.detect-changes.outputs.topology }}
-          VERIFY_ORCHESTRATOR_WORKER_RECOVERY: ${{ needs.detect-changes.outputs.orchestrator == 'true' || needs.detect-changes.outputs.topology == 'true' }}
-          ROLLBACK_SOURCE_SHA: ${{ github.event.before }}
-          GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
-          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
-          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
-          HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
-          HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GATEWAY_HTTP_PORT: ${{ vars.GATEWAY_HTTP_PORT || '8081' }}
-        run: bash infra/scripts/deploy-hosted-stack.sh
-
-  deploy-web-development:
-    if: |
-      always() &&
-      github.ref == 'refs/heads/develop' &&
-      needs.detect-changes.outputs.web == 'true' &&
-      needs.detect-changes.result == 'success' &&
-      needs.migrate-development.result == 'success' &&
-      needs.build-web.result == 'success'
-    runs-on:
-      - self-hosted
-      - linux
-      - agentbench-dev
-    environment: development
-    needs:
-      - detect-changes
-      - build-web
-      - migrate-development
-    steps:
-      - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          persist-credentials: false
-
-      - name: Deploy development Web
-        env:
-          DEPLOYMENT_ENVIRONMENT: development
-          WEB_COMPOSE_PROJECT_NAME: agentbench-development-web
-          IMAGE_CHANNEL: develop
-          IMAGE_TAG: ${{ needs.detect-changes.outputs.image_tag }}
-          WEB_CHANGED: 'true'
-          GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
-          HOSTED_SITES_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
-          HOSTED_ORCHESTRATOR_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
-          AGENTBENCH_WEB_PORT: ${{ vars.AGENTBENCH_WEB_PORT || '3000' }}
-          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
-          AUTH_GITHUB_ID: ${{ secrets.AUTH_GITHUB_ID }}
-          AUTH_GITHUB_SECRET: ${{ secrets.AUTH_GITHUB_SECRET }}
-          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-          AUTH_SIGN_IN_MODE: ${{ vars.AUTH_SIGN_IN_MODE || 'frozen' }}
-          RUN_CREATION_MODE: ${{ vars.RUN_CREATION_MODE || 'open' }}
-        run: bash infra/scripts/deploy-web-stack.sh
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash infra/scripts/deploy-single-vm-development.sh "${SINGLE_VM_ENV_FILE}"
 
   deploy-cutover-canary:
     if: needs.validate-ref.outputs.deployment_mode == 'canary' && needs.validate-ref.outputs.canary_action == 'deploy'
@@ -640,13 +582,8 @@ jobs:
 
       - name: Run development lifecycle smoke
         env:
-          START_LOCAL_SERVICES: 'false'
-          HOSTED_SITES_PUBLIC_URL: ${{ vars.HOSTED_SITES_PUBLIC_URL }}
-          HOSTED_ORCHESTRATOR_PUBLIC_URL: ${{ vars.HOSTED_ORCHESTRATOR_PUBLIC_URL }}
-          AGENTBENCH_WEB_URL: ${{ vars.AGENTBENCH_WEB_URL }}
-          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
-          RUNNER_SHARED_SECRET: ${{ secrets.RUNNER_SHARED_SECRET }}
-        run: bash tests/e2e/hosted-lifecycle-full-pass.sh
+          SINGLE_VM_ENV_FILE: ${{ vars.SINGLE_VM_ENV_FILE || '/srv/agentbench/secrets/development.env' }}
+        run: bash infra/scripts/smoke-single-vm-development.sh "${SINGLE_VM_ENV_FILE}"
 
   deploy-production:
     if: |
