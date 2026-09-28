@@ -42,15 +42,15 @@
     "test:integration": "node --import tsx --test tests/integration/*.test.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "@types/node": "^22.20.0",
-    "@types/pg": "^8.21.0",
-    "drizzle-kit": "^0.31.10",
-    "esbuild": "^0.28.1",
-    "tsx": "^4.23.0",
+    "@types/node": "^22.20.4",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.3"
   }
 }
