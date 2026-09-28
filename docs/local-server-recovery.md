@@ -48,6 +48,18 @@ through the unified Compose project, and restores old image tags after a failed
 health check. Production CD remains on its previous path until a separate
 cutover is approved.
 
+After installing the GitHub Actions runner, grant its service account the
+minimum required local access:
+
+```bash
+sudo bash infra/scripts/configure-development-runner-access.sh frodo \
+  /srv/agentbench/secrets/development.env
+```
+
+The script grants directory traversal to a dedicated group and group access to
+the development file only. Keep the production environment file owned by root
+with mode `0600`; verify the runner cannot read it before enabling deployment.
+
 Daily local production backup and restore verification use the host's
 `agentbench-backup.timer`. Local dumps do not protect against loss of this host;
 encrypted off-host backups and a recovery drill remain prerequisites for public
