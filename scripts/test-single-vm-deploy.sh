@@ -25,6 +25,8 @@ done
 for expected in \
   '--user "$(id -u):$(id -g)"' \
   '-e HOME=/tmp' \
+  'corepack enable --install-directory /tmp/bin' \
+  'export PATH="/tmp/bin:${PATH}"' \
   '--store-dir /tmp/pnpm-store'; do
   grep -Fq -- "${expected}" "${database_init}" || {
     echo "Database initialization may leave root-owned runner files: missing ${expected}." >&2
