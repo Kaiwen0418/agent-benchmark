@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { completeRunInputSchema } from "@agentbench/protocol";
 import { completeBenchmarkRun } from "@/lib/db";
 import { requireInternalServiceAuth } from "@/lib/internal-auth";
+import { revalidateTag } from "next/cache";
 
 export async function POST(
   request: Request,
@@ -19,6 +20,10 @@ export async function POST(
 
   if (!run) {
     return NextResponse.json({ error: "Run not found" }, { status: 404 });
+  }
+
+  if (run.isPublic) {
+    revalidateTag("public-leaderboard");
   }
 
   return NextResponse.json({ run });

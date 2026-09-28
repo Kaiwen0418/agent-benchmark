@@ -453,6 +453,7 @@ function applyRunSnapshot(
   const liveFrameUrl = deriveLiveFrameUrl(events, artifacts);
 
   set({
+    benchmark: run.caseId,
     currentRunId: run.id,
     currentExecutionMode: run.executionMode,
     liveViewUrl: run.liveViewUrl ?? `/runs/${run.id}/live`,

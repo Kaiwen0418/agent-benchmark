@@ -66,7 +66,17 @@ test("viewer layout disables navigation and mutations while retaining the read-o
   assert.doesNotMatch(html, /window\.AgentBenchHostedSession/);
 });
 
-test("terminal layout disables forms and does not emit telemetry", () => {
+test("terminal layout disables forms and does not emit telemetry", (t) => {
+  const previousPublicUrl = process.env.AGENTBENCH_WEB_PUBLIC_URL;
+  const previousInternalUrl = process.env.AGENTBENCH_WEB_URL;
+  t.after(() => {
+    if (previousPublicUrl === undefined) delete process.env.AGENTBENCH_WEB_PUBLIC_URL;
+    else process.env.AGENTBENCH_WEB_PUBLIC_URL = previousPublicUrl;
+    if (previousInternalUrl === undefined) delete process.env.AGENTBENCH_WEB_URL;
+    else process.env.AGENTBENCH_WEB_URL = previousInternalUrl;
+  });
+  process.env.AGENTBENCH_WEB_PUBLIC_URL = "https://web-test.example.com";
+  process.env.AGENTBENCH_WEB_URL = "http://web:3000";
   const session = makeSession("workspace", "light");
   session.status = "failed";
   session.runId = "run-1";
@@ -80,7 +90,8 @@ test("terminal layout disables forms and does not emit telemetry", () => {
 
   assert.match(html, /terminal-readonly/);
   assert.match(html, /return to the AgentBench Connection Page to continue/);
-  assert.match(html, /href="http:\/\/localhost:3000\/runs\/run-1\/connect"/);
+  assert.match(html, /href="https:\/\/web-test\.example\.com\/runs\/run-1\/connect"/);
+  assert.doesNotMatch(html, /http:\/\/web:3000/);
   assert.doesNotMatch(html, /abTelemetry/);
 });
 
