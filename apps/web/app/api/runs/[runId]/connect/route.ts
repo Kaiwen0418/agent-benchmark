@@ -6,6 +6,7 @@ import { negativeRunConnectCacheHeaders } from "@/lib/run-connect-cache";
 import { checkRunConnectRateLimit } from "@/lib/connect-rate-limit";
 import { terminalRunStatuses } from "@/lib/run-lifecycle";
 import { DatabaseServiceUnavailableError } from "@/lib/database";
+import { resolvePublicWebOrigin } from "@/lib/public-origin";
 
 export async function GET(
   request: Request,
@@ -59,7 +60,7 @@ export async function GET(
     payload = await buildRunConnectPayload({
       run,
       benchmarkCase,
-      origin: new URL(request.url).origin,
+      origin: resolvePublicWebOrigin(request),
     });
   } catch (error) {
     if (error instanceof HostedWebSessionError) {

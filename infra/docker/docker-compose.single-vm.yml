@@ -1,0 +1,85 @@
+name: ${SINGLE_VM_PROJECT:-agentbench-single-vm}
+
+x-callback: &callback
+  AGENTBENCH_WEB_URL: http://web:3000
+  AGENTBENCH_WEB_PUBLIC_URL: ${AGENTBENCH_WEB_URL}
+
+services:
+  postgres:
+    extends:
+      file: docker-compose.database-production.yml
+      service: postgres
+    environment:
+      AGENTBENCH_DATABASE_NAME: ${SINGLE_VM_DATABASE_NAME:-agentbench_production}
+      AGENTBENCH_DATABASE_USER: ${SINGLE_VM_DATABASE_USER:-agentbench_prod}
+  pgbouncer:
+    extends:
+      file: docker-compose.database-production.yml
+      service: pgbouncer
+    environment:
+      DB_NAME: ${SINGLE_VM_DATABASE_NAME:-agentbench_production}
+      DB_USER: ${SINGLE_VM_DATABASE_USER:-agentbench_prod}
+  web:
+    extends:
+      file: docker-compose.web.yml
+      service: web
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+  hosted-sites:
+    extends:
+      file: docker-compose.server.yml
+      service: hosted-sites
+    environment:
+      <<: *callback
+  hosted-orchestrator:
+    extends:
+      file: docker-compose.server.yml
+      service: hosted-orchestrator
+    environment:
+      <<: *callback
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+  hosted-orchestrator-worker-0:
+    extends:
+      file: docker-compose.server.yml
+      service: hosted-orchestrator-worker-0
+    environment:
+      <<: *callback
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+  hosted-orchestrator-worker-1:
+    extends:
+      file: docker-compose.server.yml
+      service: hosted-orchestrator-worker-1
+    environment:
+      <<: *callback
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+  session-redis:
+    extends:
+      file: docker-compose.server.yml
+      service: session-redis
+    command: [redis-server, --appendonly, 'yes', --maxmemory, 512mb, --maxmemory-policy, noeviction]
+    volumes:
+      - session-data:/data
+  orchestrator-redis:
+    extends:
+      file: docker-compose.server.yml
+      service: orchestrator-redis
+    command: [redis-server, --appendonly, 'yes', --maxmemory, 256mb, --maxmemory-policy, noeviction]
+    volumes:
+      - command-data:/data
+  gateway:
+    extends:
+      file: docker-compose.server.yml
+      service: gateway
+
+volumes:
+  postgres-data:
+  web-artifacts:
+  session-data:
+  command-data:

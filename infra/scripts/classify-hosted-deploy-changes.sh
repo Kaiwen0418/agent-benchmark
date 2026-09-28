@@ -45,8 +45,12 @@ if matches_any '^infra/nginx/'; then
   infra=true
 fi
 if matches_any '^infra/docker/docker-compose\.server\.yml$' \
+  '^infra/docker/docker-compose\.single-vm\.yml$' \
   '^infra/scripts/deploy-hosted-stack\.sh$' \
+  '^infra/scripts/deploy-single-vm-development\.sh$' \
+  '^infra/scripts/initialize-single-vm-database\.sh$' \
   '^infra/scripts/registry-retry\.sh$' \
+  '^infra/scripts/smoke-single-vm-development\.sh$' \
   '^infra/scripts/verify-orchestrator-worker-recovery\.sh$' \
   '^infra/scripts/validate-orchestrator-partitions\.sh$'; then
   topology=true

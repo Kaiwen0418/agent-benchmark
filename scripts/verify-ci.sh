@@ -55,6 +55,12 @@ bash scripts/test-postgres-backup-restore.sh
 echo "== Isolated production database =="
 bash scripts/test-production-database.sh
 
+echo "== Single-VM deployment configuration =="
+bash scripts/test-single-vm-config.sh
+
+echo "== Single-VM deployment workflow =="
+bash scripts/test-single-vm-deploy.sh
+
 echo "== PostgreSQL data transfer =="
 bash scripts/test-postgres-data-transfer.sh
 
