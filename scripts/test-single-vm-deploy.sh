@@ -5,10 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 deploy="${ROOT_DIR}/infra/scripts/deploy-single-vm-development.sh"
 smoke="${ROOT_DIR}/infra/scripts/smoke-single-vm-development.sh"
 runner_access="${ROOT_DIR}/infra/scripts/configure-development-runner-access.sh"
+database_init="${ROOT_DIR}/infra/scripts/initialize-single-vm-database.sh"
 workflow="${ROOT_DIR}/.github/workflows/deploy-hosted-sites.yml"
 bash -n "${deploy}"
 bash -n "${smoke}"
 bash -n "${runner_access}"
+bash -n "${database_init}"
 
 for expected in \
   'chmod 0710 "${current}"' \
@@ -16,6 +18,16 @@ for expected in \
   'usermod --append --groups docker,"${runner_group}"'; do
   grep -Fq "${expected}" "${runner_access}" || {
     echo "Runner access script is missing ${expected}." >&2
+    exit 1
+  }
+done
+
+for expected in \
+  '--user "$(id -u):$(id -g)"' \
+  '-e HOME=/tmp' \
+  '--store-dir /tmp/pnpm-store'; do
+  grep -Fq -- "${expected}" "${database_init}" || {
+    echo "Database initialization may leave root-owned runner files: missing ${expected}." >&2
     exit 1
   }
 done
