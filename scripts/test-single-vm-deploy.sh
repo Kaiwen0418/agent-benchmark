@@ -48,6 +48,18 @@ grep -Fq 'mktemp "${RUNNER_TEMP:-/tmp}/agentbench-development-env-backup.XXXXXX"
   echo "Deploy script must not create rollback files in the protected secrets directory." >&2
   exit 1
 }
+grep -Fq 'cat "${backup}" > "${env_file}"' "${deploy}" || {
+  echo "Deploy rollback must restore content without changing protected file metadata." >&2
+  exit 1
+}
+if grep -Fq 'cp -p' "${deploy}"; then
+  echo "Deploy backup must not try to preserve root-owned environment file metadata." >&2
+  exit 1
+fi
+if grep -Fq 'pull_services=(web hosted-sites' "${deploy}"; then
+  echo "Topology-only deploys must not pull unchanged application images." >&2
+  exit 1
+fi
 
 temporary="$(mktemp -d)"
 trap 'rm -rf "${temporary}"' EXIT

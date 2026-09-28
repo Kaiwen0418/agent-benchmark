@@ -43,7 +43,8 @@ for flag in WEB_CHANGED HOSTED_SITES_CHANGED ORCHESTRATOR_CHANGED INFRA_CHANGED 
 done
 
 backup="$(mktemp "${RUNNER_TEMP:-/tmp}/agentbench-development-env-backup.XXXXXX")"
-cp -p "${env_file}" "${backup}"
+cat "${env_file}" > "${backup}"
+chmod 0600 "${backup}"
 rollback_required=false
 
 set_env_key() {
@@ -63,7 +64,7 @@ rollback() {
   local status=$?
   trap - ERR
   if [[ "${rollback_required}" == true ]]; then
-    cp -p "${backup}" "${env_file}"
+    cat "${backup}" > "${env_file}"
     compose up -d --no-deps --force-recreate web hosted-sites \
       hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1 gateway || true
   fi
@@ -93,7 +94,7 @@ if [[ "${ORCHESTRATOR_CHANGED}" == true ]]; then
   pull_services+=(hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1)
 fi
 if [[ "${INFRA_CHANGED}" == true || "${TOPOLOGY_CHANGED}" == true ]]; then
-  pull_services=(web hosted-sites hosted-orchestrator hosted-orchestrator-worker-0 hosted-orchestrator-worker-1 session-redis orchestrator-redis gateway postgres pgbouncer)
+  pull_services+=(session-redis orchestrator-redis gateway postgres pgbouncer)
 fi
 [[ "${#pull_services[@]}" -eq 0 ]] || registry_retry_command compose-pull compose pull "${pull_services[@]}"
 
