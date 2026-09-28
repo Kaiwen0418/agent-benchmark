@@ -60,6 +60,15 @@ if grep -Fq 'pull_services=(web hosted-sites' "${deploy}"; then
   echo "Topology-only deploys must not pull unchanged application images." >&2
   exit 1
 fi
+for expected in \
+  'wait_for_http()' \
+  'curl --fail --silent --show-error --max-time 5' \
+  'wait_for_http hosted-orchestrator http://127.0.0.1:8081/orchestrator/health'; do
+  grep -Fq "${expected}" "${deploy}" || {
+    echo "Deploy readiness checks are missing ${expected}." >&2
+    exit 1
+  }
+done
 
 temporary="$(mktemp -d)"
 trap 'rm -rf "${temporary}"' EXIT

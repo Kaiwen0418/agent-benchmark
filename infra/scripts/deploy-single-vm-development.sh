@@ -33,6 +33,22 @@ compose() {
   "${COMPOSE[@]}" --env-file "${env_file}" -f "${compose_file}" "$@"
 }
 
+wait_for_http() {
+  local name="$1" url="$2" attempts="${3:-15}" delay_seconds="${4:-2}"
+  local attempt
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    if curl --fail --silent --show-error --max-time 5 "${url}" >/dev/null; then
+      return 0
+    fi
+    if ((attempt < attempts)); then
+      echo "Waiting for ${name} readiness (${attempt}/${attempts})..." >&2
+      sleep "${delay_seconds}"
+    fi
+  done
+  echo "${name} did not become ready after ${attempts} attempts." >&2
+  return 1
+}
+
 WEB_CHANGED="${WEB_CHANGED:-false}"
 HOSTED_SITES_CHANGED="${HOSTED_SITES_CHANGED:-false}"
 ORCHESTRATOR_CHANGED="${ORCHESTRATOR_CHANGED:-false}"
@@ -112,9 +128,9 @@ else
   fi
 fi
 
-curl --fail --silent --show-error http://127.0.0.1:3001/api/health >/dev/null
-curl --fail --silent --show-error http://127.0.0.1:8081/health >/dev/null
-curl --fail --silent --show-error http://127.0.0.1:8081/orchestrator/health >/dev/null
+wait_for_http web http://127.0.0.1:3001/api/health
+wait_for_http hosted-sites http://127.0.0.1:8081/health
+wait_for_http hosted-orchestrator http://127.0.0.1:8081/orchestrator/health
 
 rollback_required=false
 trap - ERR
