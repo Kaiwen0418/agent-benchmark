@@ -42,7 +42,7 @@ for flag in WEB_CHANGED HOSTED_SITES_CHANGED ORCHESTRATOR_CHANGED INFRA_CHANGED 
   [[ "${!flag}" == true || "${!flag}" == false ]] || { echo "${flag} must be true or false." >&2; exit 1; }
 done
 
-backup="$(mktemp "${env_file}.before-deploy.XXXXXX")"
+backup="$(mktemp "${RUNNER_TEMP:-/tmp}/agentbench-development-env-backup.XXXXXX")"
 cp -p "${env_file}" "${backup}"
 rollback_required=false
 

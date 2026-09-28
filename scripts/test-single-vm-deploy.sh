@@ -44,6 +44,10 @@ grep -Fq 'agentbench-local-development' "${deploy}" || {
   echo "Deploy script does not pin the development Compose project." >&2
   exit 1
 }
+grep -Fq 'mktemp "${RUNNER_TEMP:-/tmp}/agentbench-development-env-backup.XXXXXX"' "${deploy}" || {
+  echo "Deploy script must not create rollback files in the protected secrets directory." >&2
+  exit 1
+}
 
 temporary="$(mktemp -d)"
 trap 'rm -rf "${temporary}"' EXIT
