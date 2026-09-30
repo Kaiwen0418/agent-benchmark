@@ -361,6 +361,40 @@ test("hosted orchestrator initializes attempts and sessions atomically", async (
     );
     assert.equal(await repository.findHostedAttempt(runs[1]!.id, benchmarkCase.id), null);
 
+    const cancellable = await repository.createAttemptWithSessions(
+      initialization(runs[1]!.id, [crypto.randomUUID(), crypto.randomUUID()]),
+    );
+    const cancellation = await repository.cancelHostedAttempt({
+      runId: runs[1]!.id,
+      cancelledAt: "2026-08-17T12:07:00.000Z",
+    });
+    assert.equal(cancellation?.attemptFound, true);
+    assert.equal(cancellation?.transitioned, true);
+    assert.equal(cancellation?.attemptId, cancellable.attempt.id);
+    assert.equal(cancellation?.attemptStatus, "cancelled");
+    assert.deepEqual(
+      [...(cancellation?.cancelledSessionIds ?? [])].sort(),
+      cancellable.sessions.map((session) => session.id).sort(),
+    );
+    const repeatedCancellation = await repository.cancelHostedAttempt({
+      runId: runs[1]!.id,
+      cancelledAt: "2026-08-17T12:08:00.000Z",
+    });
+    assert.equal(repeatedCancellation?.transitioned, false);
+    assert.equal(repeatedCancellation?.attemptStatus, "cancelled");
+    assert.deepEqual(
+      [...(repeatedCancellation?.cancelledSessionIds ?? [])].sort(),
+      cancellable.sessions.map((session) => session.id).sort(),
+    );
+    assert.deepEqual(
+      (await repository.listAttemptSessions(cancellable.attempt.id)).map((session) => session.status),
+      ["cancelled", "cancelled"],
+    );
+    assert.equal((await repository.findAttempt(cancellable.attempt.id))?.status, "cancelled");
+    const cancellationCallbacks = await client.db.select().from(hostedCallbackOutbox)
+      .where(eq(hostedCallbackOutbox.attemptId, cancellable.attempt.id));
+    assert.equal(cancellationCallbacks.length, 0);
+
     await client.db.delete(benchmarkRuns).where(eq(benchmarkRuns.id, runs[0]!.id));
     await client.db.delete(benchmarkRuns).where(eq(benchmarkRuns.id, runs[1]!.id));
     await client.db.delete(benchmarkCaseRevisions).where(eq(benchmarkCaseRevisions.id, revision.id));

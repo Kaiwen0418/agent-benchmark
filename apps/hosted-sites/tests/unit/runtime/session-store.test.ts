@@ -26,6 +26,15 @@ function createMemorySessionCache(): SessionCache {
     async delete(token) {
       sessions.delete(token);
     },
+    async cancelByIds(sessionIds) {
+      const targets = new Set(sessionIds);
+      for (const [token, value] of sessions) {
+        const session = JSON.parse(value) as HostedSession;
+        if (targets.has(session.id)) {
+          sessions.set(token, JSON.stringify({ ...session, status: "cancelled", expiresAt: null }));
+        }
+      }
+    },
   };
 }
 
@@ -159,6 +168,16 @@ test("shared cache stays authoritative over stale local sessions", async () => {
   assert.deepEqual(loaded.state.cart, [{ productId: "prod-charger-30w", quantity: 1 }]);
 });
 
+test("a shared-cache miss does not revive stale process-local state", async () => {
+  const sessionCache = createMemorySessionCache();
+  const sessions = new Map<string, HostedSession>();
+  const store = createStore({ sessions, sessionCache });
+  const session = await store.createHostedSession({ app: "wiki-lite" });
+  await sessionCache.delete(session.token);
+
+  assert.equal(await store.getSessionByToken(session.token, {} as IncomingMessage), null);
+});
+
 test("terminal status propagates through the shared cache", async () => {
   const sessionCache = createMemorySessionCache();
   const firstStore = createStore({ sessions: new Map<string, HostedSession>(), sessionCache });
@@ -169,4 +188,16 @@ test("terminal status propagates through the shared cache", async () => {
   const loaded = await secondStore.getSessionByToken(session.token, {} as IncomingMessage);
 
   assert.equal(loaded?.status, "failed");
+});
+
+test("cancelled sessions are rejected across hosted-sites replicas", async () => {
+  const sessionCache = createMemorySessionCache();
+  const firstStore = createStore({ sessions: new Map<string, HostedSession>(), sessionCache });
+  const secondStore = createStore({ sessions: new Map<string, HostedSession>(), sessionCache });
+  const session = await firstStore.createHostedSession({ app: "wiki-lite" });
+
+  await firstStore.cancelSessions([session.id]);
+
+  assert.equal(await secondStore.getSessionByToken(session.token, {} as IncomingMessage), null);
+  assert.equal(await firstStore.getSessionByToken(session.token, {} as IncomingMessage), null);
 });

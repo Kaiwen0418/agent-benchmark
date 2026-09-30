@@ -82,7 +82,7 @@ function statusBadgeTone(status: string) {
   if (status === "completed") {
     return "bg-[#e8f7ec] text-[#1f6b35]";
   }
-  if (status === "failed" || status === "timeout" || status === "expired") {
+  if (status === "failed" || status === "cancelled" || status === "timeout" || status === "expired") {
     return "bg-[#fff1ed] text-[#8a2d1f]";
   }
   if (status === "active" || status === "running") {
@@ -432,6 +432,8 @@ export function RunConnectionCard() {
       ? payload.errorMessage ?? "This hosted suite timed out before the active session was completed."
       : payload.status === "failed"
         ? payload.errorMessage ?? "This run ended in a failed state."
+        : payload.status === "cancelled"
+          ? "This run was cancelled. Its hosted sessions are no longer available."
         : payload.status === "completed"
           ? "This run has already completed."
           : null;

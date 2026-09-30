@@ -8,7 +8,7 @@ import { hostedAttemptConnectionSnapshotSchema } from "@agentbench/protocol";
 import { buildHostedAttemptReadModel } from "@agentbench/shared";
 import { readCalibrationRunSelection } from "./calibration";
 
-type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
+type HostedSessionStatus = "created" | "active" | "completed" | "failed" | "cancelled" | "expired";
 
 export type HostedWebSessionConnection = {
   sessionId: string;
@@ -52,7 +52,7 @@ type HostedWebAttempt = {
 };
 
 function normalizeHostedSessionStatus(status: HostedAttemptConnectionSnapshot["sessions"][number]["status"]): HostedSessionStatus {
-  if (status === "completed" || status === "failed" || status === "expired") {
+  if (status === "completed" || status === "failed" || status === "cancelled" || status === "expired") {
     return status;
   }
   if (status === "active" || status === "scoring") {
@@ -143,7 +143,7 @@ function toAttemptConnection(params: {
     sessions: params.sessions.map((session) => ({
       ...session,
       status:
-        session.status === "completed" || session.status === "failed" || session.status === "expired"
+        session.status === "completed" || session.status === "failed" || session.status === "cancelled" || session.status === "expired"
           ? session.status
           : session.sessionId === activeSession?.sessionId
             ? "active"
@@ -169,6 +169,14 @@ type HostedAttemptTimeoutResponse = {
   runId: string | null;
   ok: boolean;
   summary: string | null;
+};
+
+type HostedAttemptCancelResponse = {
+  runId: string;
+  attemptId: string | null;
+  ok: boolean;
+  status: "created" | "running" | "scoring" | "completed" | "failed" | "cancelled" | "timeout" | "not_initialized";
+  transitioned: boolean;
 };
 
 type HostedAttemptCompleteResponse = {
@@ -209,7 +217,7 @@ function runnerSecretOrThrow() {
   return runnerSecret;
 }
 
-async function fetchHostedOrchestrator<T>(path: string, init?: RequestInit) {
+async function requestHostedOrchestrator(path: string, init?: RequestInit) {
   const baseUrl = getHostedOrchestratorBaseUrl();
   const runnerSecret = runnerSecretOrThrow();
   const requestUrl = resolveHostedUrl(baseUrl, path);
@@ -228,11 +236,29 @@ async function fetchHostedOrchestrator<T>(path: string, init?: RequestInit) {
     return null;
   }
 
-  if (!response.ok) {
+  return response;
+}
+
+async function fetchHostedOrchestrator<T>(path: string, init?: RequestInit) {
+  const response = await requestHostedOrchestrator(path, init);
+
+  if (!response?.ok) {
     return null;
   }
 
   return (await response.json()) as T;
+}
+
+export async function cancelHostedAttemptForRun(runId: string) {
+  const response = await requestHostedOrchestrator(
+    `/api/runs/${encodeURIComponent(runId)}/commands/cancel`,
+    { method: "POST" },
+  );
+  if (!response) return null;
+  return {
+    statusCode: response.status,
+    body: await response.json() as HostedAttemptCancelResponse,
+  };
 }
 
 export async function resolveHostedAttemptAdvance(params: {

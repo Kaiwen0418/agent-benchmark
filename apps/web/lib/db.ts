@@ -537,6 +537,19 @@ export async function completeBenchmarkRun(runId: string, input: CompleteRunInpu
   return row ? mapDatabaseRunRow(row) : null;
 }
 
+export async function cancelBenchmarkRun(
+  runId: string,
+  owner: { userId: string } | { guestId: string },
+) {
+  const row = await getWebControlPlaneRepository().cancelRun({
+    runId,
+    owner,
+    cancelledAt: new Date().toISOString(),
+    cancellableStatuses: [...completableRunStatuses],
+  });
+  return row ? mapDatabaseRunRow(row) : null;
+}
+
 export async function submitBenchmarkRunMetadata(
   runId: string,
   input: SubmitRunMetadataInput,

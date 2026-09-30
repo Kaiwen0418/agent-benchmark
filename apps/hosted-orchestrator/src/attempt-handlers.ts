@@ -3,6 +3,7 @@ import type {
   AttemptLifecycleAdvanceSession,
   AttemptLifecycleSession,
   CompleteSessionCommandResult,
+  CancelAttemptCommandResult,
   ResolveAdvanceCommandResult,
   TimeoutAttemptCommandResult,
 } from "./attempt-lifecycle.js";
@@ -48,6 +49,7 @@ type AttemptHandlersDeps<TReadModel extends HostedAttemptReadModel> = {
     expiredSessionId: string;
     expiredTaskSlug: string;
   }) => Promise<TimeoutAttemptCommandResult>;
+  cancelAttemptCommand: (runId: string) => Promise<CancelAttemptCommandResult>;
   loadAttemptReadModel: (attemptId: string) => Promise<TReadModel>;
   forwardRunEvent: (session: AttemptLifecycleSession, type: string, payload: Record<string, unknown>) => Promise<void>;
   forwardSessionProgress: (runId: string | null, attemptId: string | null) => Promise<void>;
@@ -92,6 +94,17 @@ export type TimeoutAttemptHandlerResponse = {
     runId: string | null;
     ok: boolean;
     summary: string | null;
+  };
+};
+
+export type CancelAttemptHandlerResponse = {
+  statusCode: number;
+  body: {
+    runId: string;
+    attemptId: string | null;
+    ok: boolean;
+    status: CancelAttemptCommandResult["status"];
+    transitioned: boolean;
   };
 };
 
@@ -227,11 +240,26 @@ export function createAttemptHandlers<TReadModel extends HostedAttemptReadModel>
     };
   }
 
+  async function handleCancelAttempt(params: { runId: string }): Promise<CancelAttemptHandlerResponse> {
+    const cancellation = await deps.cancelAttemptCommand(params.runId);
+    return {
+      statusCode: cancellation.ok ? 200 : 409,
+      body: {
+        runId: cancellation.runId,
+        attemptId: cancellation.attemptId,
+        ok: cancellation.ok,
+        status: cancellation.status,
+        transitioned: cancellation.transitioned,
+      },
+    };
+  }
+
   return {
     handleInitializeAttempt,
     handleCompleteSession,
     handleResolveAdvance,
     handleAttemptOverview,
     handleTimeoutAttempt,
+    handleCancelAttempt,
   };
 }

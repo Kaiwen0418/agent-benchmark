@@ -62,6 +62,11 @@ export type TimeoutAttemptCommand = {
   expiredTaskSlug: string;
 };
 
+export type CancelAttemptCommand = {
+  type: "cancel-attempt";
+  runId: string;
+};
+
 export type CompleteSessionCommandResult = {
   command: "complete-session";
   ok: true;
@@ -89,6 +94,15 @@ export type TimeoutAttemptCommandResult = {
   attemptId: string;
   runId: string | null;
   summary: string | null;
+};
+
+export type CancelAttemptCommandResult = {
+  command: "cancel-attempt";
+  ok: boolean;
+  runId: string;
+  attemptId: string | null;
+  status: AttemptStatus | "not_initialized";
+  transitioned: boolean;
 };
 
 export type AttemptLifecyclePersistence = {
@@ -140,6 +154,16 @@ export type AttemptLifecyclePersistence = {
     attemptRunId: string | null;
     expiredSessionIds: string[];
   } | null>;
+  cancelHostedAttempt: (input: {
+    runId: string;
+    cancelledAt: string;
+  }) => Promise<{
+    attemptFound: boolean;
+    transitioned: boolean;
+    attemptId: string | null;
+    attemptStatus: string | null;
+    cancelledSessionIds: string[];
+  } | null>;
 };
 
 type AttemptLifecycleDeps = {
@@ -157,6 +181,7 @@ type AttemptLifecycleDeps = {
     score?: number;
   }) => Promise<void>;
   evictInMemorySessions: (sessionIds: string[]) => void;
+  invalidateHostedSessions?: (sessionIds: string[]) => Promise<void>;
   invalidateRunSessionProjection?: (runId: string) => Promise<void>;
 };
 
@@ -716,6 +741,67 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     });
   }
 
+  async function executeCancelAttemptCommand(command: CancelAttemptCommand) {
+    const persistence = deps.getPersistence?.() ?? null;
+    const supabase = persistence ? null : deps.getSupabaseAdmin();
+    if (!persistence && !supabase) {
+      throw new Error("Attempt cancellation requires database persistence.");
+    }
+
+    const transition = persistence
+      ? await persistence.cancelHostedAttempt({
+          runId: command.runId,
+          cancelledAt: deps.now(),
+        })
+      : await (async () => {
+          const response = await supabase!.rpc("cancel_hosted_attempt", {
+            p_run_id: command.runId,
+            p_cancelled_at: deps.now(),
+          }).maybeSingle();
+          if (response.error) throw response.error;
+          const row = response.data;
+          return row ? {
+            attemptFound: row.attempt_found,
+            transitioned: row.transitioned,
+            attemptId: row.hosted_attempt_id,
+            attemptStatus: row.attempt_status,
+            cancelledSessionIds: row.cancelled_session_ids,
+          } : null;
+        })();
+    if (!transition) {
+      throw new Error(`Attempt cancellation returned no result for run ${command.runId}.`);
+    }
+
+    if (!transition.attemptFound) {
+      return {
+        command: "cancel-attempt",
+        ok: true,
+        runId: command.runId,
+        attemptId: null,
+        status: "not_initialized",
+        transitioned: false,
+      } satisfies CancelAttemptCommandResult;
+    }
+
+    const status = transition.attemptStatus as AttemptStatus;
+    const ok = status === "cancelled";
+    if (ok && transition.cancelledSessionIds.length > 0) {
+      await deps.invalidateHostedSessions?.(transition.cancelledSessionIds);
+    }
+    if (transition.transitioned) {
+      deps.evictInMemorySessions(transition.cancelledSessionIds);
+      await deps.invalidateRunSessionProjection?.(command.runId);
+    }
+    return {
+      command: "cancel-attempt",
+      ok,
+      runId: command.runId,
+      attemptId: transition.attemptId,
+      status,
+      transitioned: transition.transitioned,
+    } satisfies CancelAttemptCommandResult;
+  }
+
   async function resolveAdvance(attemptId: string, currentSessionId: string) {
     const readModel = await deps.loadAttemptReadModel(attemptId);
     if (!readModel.sessions.some((candidate) => candidate.id === currentSessionId)) {
@@ -752,6 +838,7 @@ export function createAttemptLifecycle(deps: AttemptLifecycleDeps) {
     executeCompleteSessionCommand,
     executeResolveAdvanceCommand,
     executeTimeoutAttemptCommand,
+    executeCancelAttemptCommand,
     finalizeSession,
     resolveAdvance,
     timeoutAttemptFromExpiredSession,

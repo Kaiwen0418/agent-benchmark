@@ -19,6 +19,7 @@ export function ConnectAgentCard() {
   const quota = usePlaygroundStore((state) => state.quota);
   const quotaLoading = usePlaygroundStore((state) => state.quotaLoading);
   const runError = usePlaygroundStore((state) => state.runError);
+  const cancelling = usePlaygroundStore((state) => state.cancelling);
   const score = usePlaygroundStore((state) => state.score);
   const setBenchmark = usePlaygroundStore((state) => state.setBenchmark);
   const setCalibrationRevisionId = usePlaygroundStore((state) => state.setCalibrationRevisionId);
@@ -88,11 +89,18 @@ export function ConnectAgentCard() {
 
         <button
           type="button"
-          onClick={stopRun}
-          className="w-full rounded-full bg-[#ff8f6b] px-5 py-3 text-sm font-medium text-[#111111] transition hover:bg-[#ff6b3d]"
+          onClick={() => void stopRun()}
+          disabled={cancelling}
+          className="w-full rounded-full bg-[#ff8f6b] px-5 py-3 text-sm font-medium text-[#111111] transition hover:bg-[#ff6b3d] disabled:cursor-wait disabled:bg-[#d7d0c4]"
         >
-          Stop Run
+          {cancelling ? "Stopping..." : "Stop Run"}
         </button>
+
+        {runError ? (
+          <div className="mt-3 rounded-[1rem] border border-[#ead2ca] bg-[#fff0eb] p-3 text-[13px] leading-6 text-[#8a4334]">
+            {runError}
+          </div>
+        ) : null}
 
         <RunConnectionCard />
       </div>

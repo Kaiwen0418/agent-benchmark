@@ -67,7 +67,7 @@ assert_query "row-level security table count" "0" "select count(*) from pg_class
 assert_query "Supabase compatibility role count" "0" "select count(*) from pg_roles where rolname in ('anon', 'authenticated', 'service_role')"
 assert_query "Supabase auth schema absence" "t" "select to_regnamespace('auth') is null"
 assert_query "portable view count" "4" "select count(*) from information_schema.views where table_schema = 'public'"
-assert_query "portable routine count" "12" "select count(*) from information_schema.routines where routine_schema = 'public'"
+assert_query "portable routine count" "13" "select count(*) from information_schema.routines where routine_schema = 'public'"
 
 if "${PSQL[@]}" -v ON_ERROR_STOP=1 -c \
   "update public.benchmark_case_revisions set revision = 'mutated'" >/dev/null 2>&1; then

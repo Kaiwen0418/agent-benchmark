@@ -606,7 +606,7 @@ export type Database = {
           sequence_index: number;
           session_token_hash: string;
           start_url: string;
-          status: "created" | "active" | "scoring" | "completed" | "failed" | "expired";
+          status: "created" | "active" | "scoring" | "completed" | "failed" | "cancelled" | "expired";
           task_slug: string;
           task_version: string;
           weight: number;
@@ -636,7 +636,7 @@ export type Database = {
           sequence_index?: number;
           session_token_hash: string;
           start_url: string;
-          status?: "created" | "active" | "scoring" | "completed" | "failed" | "expired";
+          status?: "created" | "active" | "scoring" | "completed" | "failed" | "cancelled" | "expired";
           task_slug: string;
           task_version?: string;
           weight?: number;
@@ -666,7 +666,7 @@ export type Database = {
           sequence_index?: number;
           session_token_hash?: string;
           start_url?: string;
-          status?: "created" | "active" | "scoring" | "completed" | "failed" | "expired";
+          status?: "created" | "active" | "scoring" | "completed" | "failed" | "cancelled" | "expired";
           task_slug?: string;
           task_version?: string;
           weight?: number;
@@ -830,6 +830,19 @@ export type Database = {
       };
     };
     Functions: {
+      cancel_hosted_attempt: {
+        Args: {
+          p_cancelled_at: string;
+          p_run_id: string;
+        };
+        Returns: {
+          attempt_found: boolean;
+          attempt_status: string | null;
+          cancelled_session_ids: string[];
+          hosted_attempt_id: string | null;
+          transitioned: boolean;
+        }[];
+      };
       complete_hosted_attempt_session: {
         Args: {
           p_attempt_id: string;

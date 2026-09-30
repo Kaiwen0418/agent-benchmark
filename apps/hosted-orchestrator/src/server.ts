@@ -55,7 +55,10 @@ import { timeoutExpiredAttempts } from "./expiry-sweep.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
-const { publicBaseUrl: hostedSitesPublicBaseUrl } = resolveHostedSitesUrls(process.env);
+const {
+  internalBaseUrl: hostedSitesInternalBaseUrl,
+  publicBaseUrl: hostedSitesPublicBaseUrl,
+} = resolveHostedSitesUrls(process.env);
 const agentbenchWebUrl = process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000";
 const runnerSharedSecret = process.env.RUNNER_SHARED_SECRET;
 const viewerTokenSecret = process.env.HOSTED_VIEWER_SECRET ?? runnerSharedSecret;
@@ -205,6 +208,7 @@ function normalizeHostedSessionStatus(status: string): HostedSessionStatus {
     status === "active" ||
     status === "completed" ||
     status === "failed" ||
+    status === "cancelled" ||
     status === "expired"
     ? status
     : "created";
@@ -350,6 +354,7 @@ function buildLifecycleSessionFromRow(row: PersistedSessionRow, token: string): 
       row.status === "active" ||
       row.status === "completed" ||
       row.status === "failed" ||
+      row.status === "cancelled" ||
       row.status === "expired"
         ? row.status
         : "created",
@@ -419,6 +424,7 @@ async function loadAttemptSessions(attemptId: string): Promise<AttemptLifecycleA
       row.status === "active" ||
       row.status === "completed" ||
       row.status === "failed" ||
+      row.status === "cancelled" ||
       row.status === "expired"
         ? row.status
         : "created",
@@ -524,6 +530,7 @@ async function loadAttemptReadModel(attemptId: string): Promise<HostedAttemptRea
           row.status === "active" ||
           row.status === "completed" ||
           row.status === "failed" ||
+          row.status === "cancelled" ||
           row.status === "expired"
             ? row.status
             : "created",
@@ -594,6 +601,24 @@ async function forwardRunEventForRun(runId: string, type: string, payload: Recor
       payload,
     }),
   }).catch(() => undefined);
+}
+
+async function invalidateHostedSessions(sessionIds: string[]) {
+  if (!runnerSharedSecret || sessionIds.length === 0) {
+    throw new Error("Hosted session invalidation requires RUNNER_SHARED_SECRET.");
+  }
+  const response = await fetch(`${hostedSitesInternalBaseUrl}/api/internal/sessions/cancel`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-runner-secret": runnerSharedSecret,
+    },
+    body: JSON.stringify({ sessionIds }),
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Hosted session invalidation failed with HTTP ${response.status}.`);
+  }
 }
 
 async function forwardCompletion(
@@ -1573,6 +1598,9 @@ function getAttemptLifecyclePersistence(): AttemptLifecyclePersistence | null {
         scoringSummary: toDatabaseJson(input.scoringSummary),
       });
     },
+    cancelHostedAttempt(input) {
+      return repository.cancelHostedAttempt(input);
+    },
   };
 }
 
@@ -1586,6 +1614,7 @@ const attemptLifecycle = createAttemptLifecycle({
   loadLatestSessionResult,
   forwardTimeoutCompletion,
   evictInMemorySessions: () => undefined,
+  invalidateHostedSessions,
   invalidateRunSessionProjection,
 });
 
@@ -1632,6 +1661,11 @@ const attemptHandlers = createAttemptHandlers<HostedAttemptReadModel<AttemptOver
       runId,
       expiredSessionId,
       expiredTaskSlug,
+    }),
+  cancelAttemptCommand: (runId) =>
+    attemptLifecycle.executeCancelAttemptCommand({
+      type: "cancel-attempt",
+      runId,
     }),
   loadAttemptReadModel,
   forwardRunEvent,
@@ -1724,6 +1758,14 @@ async function dispatchWriteCommand(type: string, input: Record<string, unknown>
       expiredTaskSlug: typeof input.expiredTaskSlug === "string" ? input.expiredTaskSlug : "",
     });
     return timedOut;
+  }
+
+  if (type === "attempt.cancel") {
+    const runId = typeof input.runId === "string" ? input.runId : "";
+    if (!runId) {
+      return { statusCode: 400, body: { error: "Missing runId" } };
+    }
+    return attemptHandlers.handleCancelAttempt({ runId });
   }
 
   if (type === "maintenance.cleanup") {
@@ -2382,6 +2424,19 @@ const server = createServer(async (request, response) => {
         expiredTaskSlug,
       }, decodeURIComponent(timeoutMatch[1]), commandIdFromRequest(request));
       sendJson(response, timeout.statusCode, timeout.body);
+      return;
+    }
+
+    const cancelRunMatch = url.pathname.match(/^\/api\/runs\/([^/]+)\/commands\/cancel$/);
+    if (request.method === "POST" && cancelRunMatch) {
+      const runId = decodeURIComponent(cancelRunMatch[1]);
+      const cancellation = await commandBackbone.execute(
+        "attempt.cancel",
+        { runId },
+        runId,
+        commandIdFromRequest(request),
+      );
+      sendJson(response, cancellation.statusCode, cancellation.body);
       return;
     }
 
