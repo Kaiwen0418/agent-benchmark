@@ -318,6 +318,8 @@ create table public.public_hosted_run_consistency_checks (
 SQL
 
 "${PSQL[@]}" -v ON_ERROR_STOP=1 \
+  < "${ROOT_DIR}/supabase/migrations/20260930000036_attempt_cancellation.sql" >/dev/null
+"${PSQL[@]}" -v ON_ERROR_STOP=1 \
   < "${ROOT_DIR}/supabase/migrations/20260723000033_model_catalog.sql" >/dev/null
 "${PSQL[@]}" -v ON_ERROR_STOP=1 \
   < "${ROOT_DIR}/supabase/migrations/20260901000035_authjs_identity.sql" >/dev/null

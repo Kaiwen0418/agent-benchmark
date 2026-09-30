@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import type { AgentBenchDatabase } from "../client";
 import {
   artifacts,
@@ -41,6 +41,12 @@ export type WebControlPlaneRepository = {
     completedAt: string;
     artifacts: Array<{ type: string; storagePath: string | null; url: string | null }>;
     completableStatuses: BenchmarkRunStatus[];
+  }) => Promise<BenchmarkRunRecord | null>;
+  cancelRun: (params: {
+    runId: string;
+    owner: { userId: string } | { guestId: string };
+    cancelledAt: string;
+    cancellableStatuses: BenchmarkRunStatus[];
   }) => Promise<BenchmarkRunRecord | null>;
   updateRunMetadata: (params: {
     runId: string;
@@ -165,6 +171,48 @@ export function createWebControlPlaneRepository(
           runId: params.runId,
           type: params.status === "completed" ? "run.completed" : "run.failed",
           payload: { score: params.score, errorMessage: params.errorMessage },
+        });
+        return winner;
+      });
+    },
+
+    cancelRun(params) {
+      return db.transaction(async (tx) => {
+        const ownerPredicate = "userId" in params.owner
+          ? eq(benchmarkRuns.userId, params.owner.userId)
+          : and(
+              isNull(benchmarkRuns.userId),
+              eq(benchmarkRuns.guestId, params.owner.guestId),
+            );
+        const [existing] = await tx.select().from(benchmarkRuns).where(and(
+          eq(benchmarkRuns.id, params.runId),
+          ownerPredicate,
+        )).limit(1);
+        if (!existing) return null;
+        if (!params.cancellableStatuses.includes(existing.status)) return existing;
+
+        const [winner] = await tx.update(benchmarkRuns).set({
+          status: "cancelled",
+          score: null,
+          errorMessage: null,
+          completedAt: params.cancelledAt,
+        }).where(and(
+          eq(benchmarkRuns.id, params.runId),
+          ownerPredicate,
+          inArray(benchmarkRuns.status, params.cancellableStatuses),
+        )).returning();
+        if (!winner) {
+          const [current] = await tx.select().from(benchmarkRuns).where(and(
+            eq(benchmarkRuns.id, params.runId),
+            ownerPredicate,
+          )).limit(1);
+          return current ?? null;
+        }
+
+        await tx.insert(runEvents).values({
+          runId: params.runId,
+          type: "run.cancelled",
+          payload: { source: "owner" },
         });
         return winner;
       });

@@ -18,6 +18,7 @@ function createLifecycle(overrides?: {
   loadLatestSessionResult?: (sessionId: string) => Promise<HostedWebScoreResult | null>;
   forwardTimeoutCompletion?: (params: { runId: string; summary: string; score?: number }) => Promise<void>;
   evictInMemorySessions?: (sessionIds: string[]) => void;
+  invalidateHostedSessions?: (sessionIds: string[]) => Promise<void>;
   invalidateRunSessionProjection?: (runId: string) => Promise<void>;
 }) {
   return createAttemptLifecycle({
@@ -40,6 +41,7 @@ function createLifecycle(overrides?: {
     loadLatestSessionResult: overrides?.loadLatestSessionResult ?? (async () => null),
     forwardTimeoutCompletion: overrides?.forwardTimeoutCompletion ?? (async () => undefined),
     evictInMemorySessions: overrides?.evictInMemorySessions ?? (() => undefined),
+    invalidateHostedSessions: overrides?.invalidateHostedSessions,
     invalidateRunSessionProjection: overrides?.invalidateRunSessionProjection,
   });
 }
@@ -82,6 +84,7 @@ function makePersistence(
     listAttemptEvents: async () => [],
     completeHostedAttemptSession: async () => null,
     timeoutHostedAttempt: async () => null,
+    cancelHostedAttempt: async () => null,
     ...overrides,
   };
 }
@@ -275,6 +278,114 @@ test("timeout uses provider-neutral lifecycle persistence", async () => {
   assert.equal(timedOut.ok, true);
   assert.equal(timedOut.runId, "run-1");
   assert.equal(forwardedRunId, "run-1");
+});
+
+test("cancel-attempt evicts cancelled sessions and invalidates the run projection", async () => {
+  const evicted: string[][] = [];
+  const hostedInvalidations: string[][] = [];
+  const invalidated: string[] = [];
+  const lifecycle = createLifecycle({
+    getPersistence: () => makePersistence({
+      cancelHostedAttempt: async () => ({
+        attemptFound: true,
+        transitioned: true,
+        attemptId: "attempt-1",
+        attemptStatus: "cancelled",
+        cancelledSessionIds: ["session-1", "session-2"],
+      }),
+    }),
+    evictInMemorySessions: (sessionIds) => evicted.push(sessionIds),
+    invalidateHostedSessions: async (sessionIds) => {
+      hostedInvalidations.push(sessionIds);
+    },
+    invalidateRunSessionProjection: async (runId) => {
+      invalidated.push(runId);
+    },
+  });
+
+  const result = await lifecycle.executeCancelAttemptCommand({
+    type: "cancel-attempt",
+    runId: "run-1",
+  });
+
+  assert.deepEqual(result, {
+    command: "cancel-attempt",
+    ok: true,
+    runId: "run-1",
+    attemptId: "attempt-1",
+    status: "cancelled",
+    transitioned: true,
+  });
+  assert.deepEqual(evicted, [["session-1", "session-2"]]);
+  assert.deepEqual(hostedInvalidations, [["session-1", "session-2"]]);
+  assert.deepEqual(invalidated, ["run-1"]);
+});
+
+test("cancel-attempt is idempotent before initialization and after cancellation", async () => {
+  for (const transition of [
+    {
+      attemptFound: false,
+      transitioned: false,
+      attemptId: null,
+      attemptStatus: null,
+      cancelledSessionIds: [],
+    },
+    {
+      attemptFound: true,
+      transitioned: false,
+      attemptId: "attempt-1",
+      attemptStatus: "cancelled",
+      cancelledSessionIds: [],
+    },
+  ]) {
+    const lifecycle = createLifecycle({
+      getPersistence: () => makePersistence({ cancelHostedAttempt: async () => transition }),
+    });
+    const result = await lifecycle.executeCancelAttemptCommand({ type: "cancel-attempt", runId: "run-1" });
+    assert.equal(result.ok, true);
+    assert.equal(result.transitioned, false);
+  }
+});
+
+test("cancel-attempt rejects an attempt that completed first", async () => {
+  const lifecycle = createLifecycle({
+    getPersistence: () => makePersistence({
+      cancelHostedAttempt: async () => ({
+        attemptFound: true,
+        transitioned: false,
+        attemptId: "attempt-1",
+        attemptStatus: "completed",
+        cancelledSessionIds: [],
+      }),
+    }),
+  });
+
+  const result = await lifecycle.executeCancelAttemptCommand({ type: "cancel-attempt", runId: "run-1" });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, "completed");
+});
+
+test("cancel-attempt retries hosted cache invalidation after a durable cancellation", async () => {
+  const invalidated: string[][] = [];
+  const lifecycle = createLifecycle({
+    getPersistence: () => makePersistence({
+      cancelHostedAttempt: async () => ({
+        attemptFound: true,
+        transitioned: false,
+        attemptId: "attempt-1",
+        attemptStatus: "cancelled",
+        cancelledSessionIds: ["session-1"],
+      }),
+    }),
+    invalidateHostedSessions: async (sessionIds) => {
+      invalidated.push(sessionIds);
+    },
+  });
+
+  const result = await lifecycle.executeCancelAttemptCommand({ type: "cancel-attempt", runId: "run-1" });
+  assert.equal(result.ok, true);
+  assert.equal(result.transitioned, false);
+  assert.deepEqual(invalidated, [["session-1"]]);
 });
 
 test("complete-session recovers the first aggregate score from an atomic duplicate", async () => {

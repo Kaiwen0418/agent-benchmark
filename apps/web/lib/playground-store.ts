@@ -83,6 +83,7 @@ type PlaygroundStore = {
   quota: QuotaStatus | null;
   quotaLoading: boolean;
   runError: string | null;
+  cancelling: boolean;
   streamMode: "idle" | "sse" | "polling";
   setEndpoint: (value: string) => void;
   setApiKey: (value: string) => void;
@@ -95,7 +96,7 @@ type PlaygroundStore = {
   fetchBenchmarks: () => Promise<void>;
   resumeRun: (runId: string) => Promise<void>;
   startRun: (mode?: RunExecutionMode) => Promise<void>;
-  stopRun: () => void;
+  stopRun: () => Promise<void>;
   reset: () => void;
 };
 
@@ -133,6 +134,7 @@ const initialState = {
   quota: null as QuotaStatus | null,
   quotaLoading: false,
   runError: null as string | null,
+  cancelling: false,
   streamMode: "idle" as const,
 };
 
@@ -527,6 +529,22 @@ async function fetchRunSnapshot(runId: string) {
   };
 }
 
+async function requestRunCancellation(runId: string) {
+  const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => ({})) as {
+    run?: BenchmarkRun;
+    message?: string;
+  };
+  if (!response.ok || !payload.run) {
+    throw new Error(payload.message ?? "Unable to stop this run.");
+  }
+  return payload.run;
+}
+
 function startFallbackPolling(
   runId: string,
   set: (partial: Partial<PlaygroundStore>) => void,
@@ -703,9 +721,29 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       });
     }
   },
-  stopRun: () => {
-    clearRunSync();
-    set({ phase: "failed", statusLine: "Stopped", streamMode: "idle" });
+  stopRun: async () => {
+    const runId = get().currentRunId;
+    if (!runId || get().cancelling) return;
+
+    set({ cancelling: true, runError: null });
+    try {
+      const run = await requestRunCancellation(runId);
+      if (get().currentRunId !== runId) return;
+      clearRunSync();
+      set({
+        phase: mapRunStatus(run.status),
+        statusLine: "Run cancelled",
+        cancelling: false,
+        streamMode: "idle",
+      });
+      await get().fetchQuota();
+    } catch (error) {
+      if (get().currentRunId !== runId) return;
+      set({
+        cancelling: false,
+        runError: error instanceof Error ? error.message : "Unable to stop this run.",
+      });
+    }
   },
   reset: () => {
     clearRunSync();

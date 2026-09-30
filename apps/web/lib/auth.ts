@@ -90,6 +90,13 @@ export async function getClaimableGuestId() {
   })?.guestId ?? null;
 }
 
+export async function getCurrentGuestId() {
+  const cookieStore = await cookies();
+  return decodeGuestCookie(cookieStore.get(GUEST_COOKIE_NAME)?.value, {
+    allowLegacy: !process.env.AUTH_SECRET,
+  })?.guestId ?? null;
+}
+
 export const guestCookieOptions = {
   httpOnly: true,
   sameSite: "lax" as const,

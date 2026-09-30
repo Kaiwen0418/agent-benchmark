@@ -6,7 +6,7 @@ export type { HostedAppId, HostedAppStateById } from "./generated-app-types.js";
 export type HostedSessionStatus = HostedAttemptSessionStatus;
 
 export function isTerminalHostedSessionStatus(status: HostedSessionStatus) {
-  return status === "completed" || status === "failed" || status === "expired";
+  return status === "completed" || status === "failed" || status === "cancelled" || status === "expired";
 }
 
 export type HostedAppSessionState = HostedAppStateById[HostedAppId];

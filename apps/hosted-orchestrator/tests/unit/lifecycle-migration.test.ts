@@ -41,6 +41,10 @@ const partialRunNormalizationMigration = readFileSync(
   new URL("../../../../supabase/migrations/20260710000031_finish_scored_partial_runs.sql", import.meta.url),
   "utf8",
 );
+const attemptCancellationMigration = readFileSync(
+  new URL("../../../../supabase/migrations/20260930000036_attempt_cancellation.sql", import.meta.url),
+  "utf8",
+);
 
 test("attempt timeout migration keeps lifecycle writes under one row lock", () => {
   assert.match(migration, /for update;/i);
@@ -123,4 +127,12 @@ test("historical partial scores normalize to completed runs without rewriting ag
   assert.match(partialRunNormalizationMigration, /scoring_summary ->> 'status' = 'failed'/i);
   assert.match(partialRunNormalizationMigration, /hosted_callback_outbox/i);
   assert.doesNotMatch(partialRunNormalizationMigration, /scoring_summary ->> 'status' = 'error'/i);
+});
+
+test("attempt cancellation locks lifecycle state and restricts the RPC to the service role", () => {
+  assert.match(attemptCancellationMigration, /for update;/i);
+  assert.match(attemptCancellationMigration, /status = 'cancelled'/i);
+  assert.match(attemptCancellationMigration, /status in \('created', 'active', 'scoring'\)/i);
+  assert.match(attemptCancellationMigration, /update public\.benchmark_attempts/i);
+  assert.match(attemptCancellationMigration, /grant execute .* to service_role/is);
 });

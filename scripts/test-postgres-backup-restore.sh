@@ -54,7 +54,7 @@ PSQL=(docker exec -i "${CONTAINER}" psql -U postgres -d restored)
 [[ "$("${PSQL[@]}" -Atqc "select daily_run_limit from public.profiles where id = '10000000-0000-4000-8000-000000000001'")" == "9" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.benchmark_cases")" == "2" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.benchmark_case_revisions")" == "2" ]]
-[[ "$("${PSQL[@]}" -Atqc "select count(*) from information_schema.routines where routine_schema = 'public'")" == "12" ]]
+[[ "$("${PSQL[@]}" -Atqc "select count(*) from information_schema.routines where routine_schema = 'public'")" == "13" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from information_schema.views where table_schema = 'public'")" == "4" ]]
 
 echo "PostgreSQL backup and restore tests passed"

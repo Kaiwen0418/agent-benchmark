@@ -106,6 +106,7 @@ const {
   getSessionByToken,
   persistSessionSnapshot,
   markSessionTerminal,
+  cancelSessions,
 } = sessionStore;
 const requestSessionCache = new WeakMap<IncomingMessage, Promise<HostedSession | null>>();
 
@@ -236,6 +237,26 @@ const server = createServer(async (request, response) => {
         pid: process.pid,
         sessionCache: sessionCache ? "redis" : "memory",
       });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/internal/sessions/cancel") {
+      const secretHeader = request.headers["x-runner-secret"];
+      const providedSecret = Array.isArray(secretHeader) ? secretHeader[0] : secretHeader;
+      if (!runnerSharedSecret || providedSecret !== runnerSharedSecret) {
+        sendJson(response, 401, { error: "Unauthorized" });
+        return;
+      }
+      const input = await readJson(request);
+      const sessionIds = Array.isArray(input.sessionIds)
+        ? input.sessionIds.filter((value): value is string => typeof value === "string" && value.length > 0)
+        : [];
+      if (sessionIds.length === 0) {
+        badRequest(response, "Missing sessionIds");
+        return;
+      }
+      await cancelSessions(sessionIds);
+      sendJson(response, 200, { ok: true, cancelled: sessionIds.length });
       return;
     }
 

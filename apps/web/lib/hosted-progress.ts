@@ -37,7 +37,7 @@ export type HostedConnectionProgressPayload<TSession extends HostedSessionProgre
   };
 };
 
-const terminalSessionStatuses = new Set(["completed", "failed", "expired"]);
+const terminalSessionStatuses = new Set(["completed", "failed", "cancelled", "expired"]);
 
 export function isTerminalHostedSessionStatus(status: string) {
   return terminalSessionStatuses.has(status);

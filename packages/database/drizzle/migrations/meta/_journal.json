@@ -22,6 +22,13 @@
       "when": 1788252721536,
       "tag": "0002_authjs_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790773897087,
+      "tag": "0003_attempt_cancellation",
+      "breakpoints": true
     }
   ]
 }

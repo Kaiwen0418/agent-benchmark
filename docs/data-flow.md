@@ -38,6 +38,35 @@ duplicate completion cannot duplicate those dependent records.
 
 Attempt initialization also uses a short Redis lease to reduce duplicate work. PostgreSQL uniqueness on `(run_id, case_id, provider)` remains the correctness boundary when Redis is unavailable or two requests race. See [Hosted Attempt Consistency](./attempt-consistency.md).
 
+### Owner Cancellation
+
+```mermaid
+sequenceDiagram
+  participant U as User Browser
+  participant W as apps/web
+  participant O as orchestrator API
+  participant R as Redis Stream
+  participant K as partition worker
+  participant D as PostgreSQL
+  participant H as hosted-sites
+
+  U->>W: POST /api/runs/:id/cancel
+  W->>W: verify user or signed guest ownership
+  W->>O: attempt.cancel(runId)
+  O->>R: XADD attempt.cancel
+  K->>D: lock attempt; cancel open sessions and attempt
+  D-->>K: durable terminal result
+  K->>H: invalidate cancelled hosted session envelopes
+  K-->>W: cancellation succeeded
+  W->>D: CAS run status + insert run.cancelled
+  W-->>U: cancelled run
+```
+
+The browser closes SSE or fallback polling only after the Web endpoint returns
+the durable cancelled run. If the orchestrator is unavailable, synchronization
+continues so a later completion or retry remains visible. Pre-initialization
+cancellation succeeds because no hosted lifecycle rows exist yet.
+
 ## 2. Hosted Request and Session Lookup
 
 Write-session and viewer tokens follow different paths.
@@ -57,9 +86,9 @@ flowchart TD
   Cache --> Handle
 ```
 
-Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy. Hosted-sites has no database credential. Its authenticated recovery request is resolved by the orchestrator from the latest successfully persisted `metadata.appState` snapshot, which may lag state that had existed only in Redis. Each durable `hosted.session.progress` event includes a short-lived viewer URL for its active session only, allowing the Web iframe to advance without exposing future write-session tokens.
+Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy used only when Redis errors. A normal Redis cache miss recovers through the orchestrator instead of reviving local state. Hosted-sites has no database credential. Its authenticated recovery request is resolved by the orchestrator from the latest successfully persisted `metadata.appState` snapshot, which may lag state that had existed only in Redis. Each durable `hosted.session.progress` event includes a short-lived viewer URL for its active session only, allowing the Web iframe to advance without exposing future write-session tokens.
 
-The current local-Map fallback can serve stale state after a Redis miss, and Redis session writes are not revision-checked. These are known horizontal-scaling gaps, not guarantees supplied by the diagram.
+The Redis-error local-Map fallback can serve stale state, and Redis session writes are not revision-checked. These are known horizontal-scaling gaps, not guarantees supplied by the diagram.
 
 ## 3. Task Mutation, Telemetry, and Snapshot Persistence
 
@@ -172,8 +201,8 @@ and event-stream gaps. Visible active-run pages use a 60-second fallback poll;
 hidden pages and terminal runs do not poll, failed requests back off, and
 concurrent components share one in-flight request per run. The orchestrator
 serves this recovery projection through a short Redis read-through cache and
-invalidates the run key after attempt initialization, session completion, or
-attempt timeout. PostgreSQL remains the source of truth and is used directly
+invalidates the run key after attempt initialization, session completion,
+attempt timeout, or cancellation. PostgreSQL remains the source of truth and is used directly
 when Redis is unavailable.
 
 Recovery boundaries:

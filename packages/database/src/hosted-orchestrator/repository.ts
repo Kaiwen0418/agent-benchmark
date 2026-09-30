@@ -281,6 +281,33 @@ export function createHostedOrchestratorRepository(db: AgentBenchDatabase) {
       } : null;
     },
 
+    async cancelHostedAttempt(input: {
+      runId: string;
+      cancelledAt: string;
+    }) {
+      const queryResult = await db.execute<{
+        attempt_found: boolean;
+        transitioned: boolean;
+        hosted_attempt_id: string | null;
+        attempt_status: string | null;
+        cancelled_session_ids: string[];
+      }>(sql`
+        select attempt_found, transitioned, hosted_attempt_id, attempt_status, cancelled_session_ids
+        from public.cancel_hosted_attempt(
+          ${input.runId}::uuid,
+          ${input.cancelledAt}::timestamptz
+        )
+      `);
+      const row = queryResult.rows[0];
+      return row ? {
+        attemptFound: row.attempt_found,
+        transitioned: row.transitioned,
+        attemptId: row.hosted_attempt_id,
+        attemptStatus: row.attempt_status,
+        cancelledSessionIds: row.cancelled_session_ids,
+      } : null;
+    },
+
     async reconcileCallbackOutbox() {
       const result = await db.execute<{ reconciled: number }>(sql`
         select public.reconcile_hosted_callback_outbox() as reconciled

@@ -27,7 +27,11 @@ const session: AttemptLifecycleSession = {
   persisted: true,
 };
 
-function makeHandlers(duplicate: boolean, forwardedEvents: string[]) {
+function makeHandlers(
+  duplicate: boolean,
+  forwardedEvents: string[],
+  cancellation?: { ok: boolean; status: "cancelled" | "completed"; transitioned: boolean },
+) {
   return createAttemptHandlers({
     initializeAttempt: async () => { throw new Error("not used"); },
     completeSessionCommand: async () => ({
@@ -40,6 +44,14 @@ function makeHandlers(duplicate: boolean, forwardedEvents: string[]) {
     }),
     resolveAdvanceCommand: async () => { throw new Error("not used"); },
     timeoutAttemptCommand: async () => { throw new Error("not used"); },
+    cancelAttemptCommand: async (runId) => ({
+      command: "cancel-attempt" as const,
+      runId,
+      attemptId: "attempt-1",
+      ok: cancellation?.ok ?? true,
+      status: cancellation?.status ?? "cancelled",
+      transitioned: cancellation?.transitioned ?? true,
+    }),
     loadAttemptReadModel: async () => ({}) as HostedAttemptReadModel,
     forwardRunEvent: async (_session, type) => { forwardedEvents.push(type); },
     forwardSessionProgress: async () => { forwardedEvents.push("hosted.session.progress"); },
@@ -65,4 +77,18 @@ test("duplicate completion returns the first result without forwarding another s
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.body, score);
   assert.deepEqual(forwardedEvents, []);
+});
+
+test("attempt cancellation maps lifecycle conflicts to HTTP 409", async () => {
+  const handlers = makeHandlers(false, [], { ok: false, status: "completed", transitioned: false });
+  const response = await handlers.handleCancelAttempt({ runId: "run-1" });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.body, {
+    runId: "run-1",
+    attemptId: "attempt-1",
+    ok: false,
+    status: "completed",
+    transitioned: false,
+  });
 });

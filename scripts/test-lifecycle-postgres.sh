@@ -31,11 +31,13 @@ create role service_role;
 create table public.benchmark_attempts (
   id uuid primary key,
   run_id uuid not null,
+  provider text not null default 'hosted-web',
   status text not null,
   aggregate_score numeric,
   metadata jsonb not null default '{}'::jsonb,
   scoring_summary jsonb not null default '{}'::jsonb,
-  completed_at timestamptz
+  completed_at timestamptz,
+  created_at timestamptz not null default now()
 );
 create table public.hosted_web_sessions (
   id uuid primary key,
@@ -46,7 +48,8 @@ create table public.hosted_web_sessions (
   weight numeric not null default 1,
   status text not null,
   activated_at timestamptz,
-  completed_at timestamptz
+  completed_at timestamptz,
+  expires_at timestamptz
 );
 create table public.hosted_web_results (
   id uuid primary key default gen_random_uuid(),
@@ -85,6 +88,8 @@ SQL
   < "${ROOT_DIR}/supabase/migrations/20260619000016_callback_outbox.sql" >/dev/null
 "${PSQL[@]}" -v ON_ERROR_STOP=1 \
   < "${ROOT_DIR}/supabase/migrations/20260619000017_orchestrator_command_dlq.sql" >/dev/null
+"${PSQL[@]}" -v ON_ERROR_STOP=1 \
+  < "${ROOT_DIR}/supabase/migrations/20260930000036_attempt_cancellation.sql" >/dev/null
 
 "${PSQL[@]}" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
 insert into public.orchestrator_command_dead_letters (
@@ -249,6 +254,36 @@ from public.timeout_hosted_attempt(
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.hosted_callback_outbox where attempt_id = '${ATTEMPT_3}'")" == "1" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.benchmark_attempt_scores where attempt_id = '${ATTEMPT_2}'")" == "1" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.hosted_callback_outbox where attempt_id = '${ATTEMPT_2}'")" == "1" ]]
+
+ATTEMPT_4='10000000-0000-0000-0000-000000000004'
+SESSION_4_A='20000000-0000-0000-0000-000000000006'
+SESSION_4_B='20000000-0000-0000-0000-000000000007'
+SESSION_4_C='20000000-0000-0000-0000-000000000008'
+RUN_4='30000000-0000-0000-0000-000000000004'
+seed_attempt "${ATTEMPT_4}" "${SESSION_4_A}" "${RUN_4}"
+"${PSQL[@]}" -v ON_ERROR_STOP=1 -v attempt_id="${ATTEMPT_4}" -v run_id="${RUN_4}" \
+  -v session_b="${SESSION_4_B}" -v session_c="${SESSION_4_C}" <<'SQL' >/dev/null
+insert into public.hosted_web_sessions (id, run_id, attempt_id, app, task_slug, status)
+values
+  (:'session_b', :'run_id', :'attempt_id', 'notes-lite', 'release-notes', 'created'),
+  (:'session_c', :'run_id', :'attempt_id', 'calendar-lite', 'release-calendar', 'created');
+SQL
+
+cancelled_at='2026-09-30T12:00:00Z'
+cancel_result="$("${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "
+select row_to_json(result)
+from public.cancel_hosted_attempt('${RUN_4}', '${cancelled_at}') result;")"
+repeat_cancel_result="$("${PSQL[@]}" -v ON_ERROR_STOP=1 -Atqc "
+select row_to_json(result)
+from public.cancel_hosted_attempt('${RUN_4}', '2026-09-30T12:01:00Z') result;")"
+[[ "${cancel_result}" == *'"transitioned":true'* ]]
+[[ "${repeat_cancel_result}" == *'"transitioned":false'* ]]
+[[ "${repeat_cancel_result}" == *'"attempt_status":"cancelled"'* ]]
+[[ "$("${PSQL[@]}" -Atqc "select status from public.benchmark_attempts where id = '${ATTEMPT_4}'")" == "cancelled" ]]
+[[ "$("${PSQL[@]}" -Atqc "select completed_at = '${cancelled_at}'::timestamptz from public.benchmark_attempts where id = '${ATTEMPT_4}'")" == "t" ]]
+[[ "$("${PSQL[@]}" -Atqc "select count(*) from public.hosted_web_sessions where attempt_id = '${ATTEMPT_4}' and status = 'cancelled'")" == "3" ]]
+[[ "$("${PSQL[@]}" -Atqc "select count(*) from public.hosted_callback_outbox where attempt_id = '${ATTEMPT_4}'")" == "0" ]]
+[[ "$("${PSQL[@]}" -Atqc "select attempt_found || ':' || transitioned from public.cancel_hosted_attempt('30000000-0000-0000-0000-000000000099', now())")" == "false:false" ]]
 
 claimed="$("${PSQL[@]}" -Atqc "select count(*) from public.claim_hosted_callback_outbox(20)")"
 [[ "${claimed}" == "3" ]]

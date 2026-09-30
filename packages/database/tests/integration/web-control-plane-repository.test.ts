@@ -119,6 +119,48 @@ test("web control-plane repository persists run lifecycle atomically", async () 
     assert.ok(fingerprint.lastEventId);
     assert.ok(fingerprint.lastArtifactId);
 
+    const cancellable = await repository.createRun({
+      caseId: benchmarkCase.id,
+      guestId: "cancellation-owner",
+      executionMode: "external-agent",
+      status: "running",
+    }, { status: "running" });
+    assert.equal(await repository.cancelRun({
+      runId: cancellable.id,
+      owner: { guestId: "another-guest" },
+      cancelledAt: "2026-08-17T10:03:00.000Z",
+      cancellableStatuses: [...completableStatuses],
+    }), null);
+    const cancelled = await repository.cancelRun({
+      runId: cancellable.id,
+      owner: { guestId: "cancellation-owner" },
+      cancelledAt: "2026-08-17T10:04:00.000Z",
+      cancellableStatuses: [...completableStatuses],
+    });
+    assert.equal(cancelled?.status, "cancelled");
+    assert.equal(new Date(cancelled!.completedAt!).toISOString(), "2026-08-17T10:04:00.000Z");
+    const repeatedCancellation = await repository.cancelRun({
+      runId: cancellable.id,
+      owner: { guestId: "cancellation-owner" },
+      cancelledAt: "2026-08-17T10:05:00.000Z",
+      cancellableStatuses: [...completableStatuses],
+    });
+    assert.equal(new Date(repeatedCancellation!.completedAt!).toISOString(), "2026-08-17T10:04:00.000Z");
+    assert.equal(
+      (await repository.listEvents(cancellable.id)).filter((event) => event.type === "run.cancelled").length,
+      1,
+    );
+    const lateCompletion = await repository.completeRun({
+      runId: cancellable.id,
+      status: "completed",
+      score: 1,
+      errorMessage: null,
+      completedAt: "2026-08-17T10:06:00.000Z",
+      artifacts: [],
+      completableStatuses: [...completableStatuses],
+    });
+    assert.equal(lateCompletion?.status, "cancelled");
+
     const userId = crypto.randomUUID();
     await client.db.insert(authUsers).values({ id: userId });
     await client.db.insert(profiles).values({ id: userId, dailyRunLimit: 7 });

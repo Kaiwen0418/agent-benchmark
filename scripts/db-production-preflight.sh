@@ -140,6 +140,7 @@ required_objects_query="select (
   and to_regclass('public.public_hosted_run_tasks') is not null
   and to_regprocedure('public.complete_hosted_attempt_session(uuid,uuid,timestamp with time zone,jsonb,jsonb)') is not null
   and to_regprocedure('public.timeout_hosted_attempt(uuid,timestamp with time zone,uuid,jsonb)') is not null
+  and to_regprocedure('public.cancel_hosted_attempt(uuid,timestamp with time zone)') is not null
 );"
 source_schema_valid="$(database_query "${SOURCE_DATABASE_URL}" "${required_objects_query}")"
 target_schema_valid="$(database_query "${TARGET_DATABASE_URL}" "${required_objects_query}")"

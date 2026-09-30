@@ -23,7 +23,7 @@ export type BenchmarkAttemptStatus =
   | "created" | "running" | "scoring" | "completed"
   | "failed" | "cancelled" | "timeout";
 export type HostedSessionStatus =
-  | "created" | "active" | "scoring" | "completed" | "failed" | "expired";
+  | "created" | "active" | "scoring" | "completed" | "failed" | "cancelled" | "expired";
 export type HostedResultStatus = "passed" | "failed" | "error";
 export type HostedCallbackOutboxStatus = "pending" | "delivering" | "delivered" | "dead";
 export type OrchestratorCommandDeadLetterStatus = "dead" | "replayed" | "resolved";
@@ -94,7 +94,7 @@ export const hostedWebSessions = pgTable("hosted_web_sessions", {
   index("idx_hosted_web_sessions_attempt_id").on(table.attemptId),
   check(
     "hosted_web_sessions_status_check",
-    sql`${table.status} in ('created', 'active', 'scoring', 'completed', 'failed', 'expired')`,
+    sql`${table.status} in ('created', 'active', 'scoring', 'completed', 'failed', 'cancelled', 'expired')`,
   ),
   check("hosted_web_sessions_weight_check", sql`${table.weight} >= 0`),
   check("hosted_web_sessions_access_count_check", sql`${table.accessCount} >= 0`),

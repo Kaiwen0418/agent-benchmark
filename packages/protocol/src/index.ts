@@ -37,6 +37,7 @@ export const runEventTypeSchema = z.enum([
   "score.updated",
   "run.completed",
   "run.failed",
+  "run.cancelled",
 ]);
 
 export type RunEventType = z.infer<typeof runEventTypeSchema>;
@@ -103,7 +104,7 @@ export const hostedAttemptSessionConnectionSchema = z.object({
   viewerStartUrl: z.string().url().optional(),
   goal: z.string(),
   title: z.string().nullable(),
-  status: z.enum(["created", "active", "scoring", "completed", "failed", "expired"]),
+  status: z.enum(["created", "active", "scoring", "completed", "failed", "cancelled", "expired"]),
 });
 
 export const hostedAttemptConnectionSnapshotSchema = z.object({
