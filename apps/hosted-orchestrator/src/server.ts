@@ -51,6 +51,7 @@ import {
   getHostedOrchestratorRepository,
   getOrchestratorBenchmarkCaseRepository,
 } from "./database.js";
+import { timeoutExpiredAttempts } from "./expiry-sweep.js";
 
 const port = Number(process.env.HOSTED_ORCHESTRATOR_PORT ?? 3004);
 const publicBaseUrl = process.env.HOSTED_ORCHESTRATOR_PUBLIC_URL ?? `http://localhost:${port}`;
@@ -1858,31 +1859,22 @@ async function sweepExpiredSessions() {
     }
   }
 
-  for (const row of expiredRows) {
-    const token = tokenFromStartUrl(row.start_url);
-    if (!token || !row.attempt_id) {
-      continue;
-    }
-    const session = buildLifecycleSessionFromRow(row, token);
-    try {
-      await attemptHandlers.handleCompleteSession({
-        session,
-        result: {
-          status: "failed",
-          score: 0,
-          summary: `Hosted session ${row.task_slug} timed out after ${row.metadata?.timeLimitMinutesPerTestcase ?? DEFAULT_SESSION_TIME_LIMIT_MINUTES} minutes.`,
-          evaluators: [],
-        },
-      });
-    } catch (error) {
+  return timeoutExpiredAttempts({
+    sessions: expiredRows.map((row) => ({
+      id: row.id,
+      attemptId: row.attempt_id,
+      runId: row.run_id,
+      taskSlug: row.task_slug,
+      sequenceIndex: row.sequence_index,
+    })),
+    timeoutAttempt: attemptHandlers.handleTimeoutAttempt,
+    onError: (session, error) => {
       console.error(
-        `[hosted-orchestrator] failed to finalize timed-out session ${row.id} (${row.task_slug})`,
+        `[hosted-orchestrator] failed to time out attempt ${session.attemptId} from expired session ${session.id} (${session.taskSlug})`,
         error,
       );
-    }
-  }
-
-  return expiredRows.length;
+    },
+  });
 }
 
 function getCommandDeadLetterMaintenancePersistence(): CommandDeadLetterMaintenancePersistence | null {
