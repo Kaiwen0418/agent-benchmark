@@ -8,12 +8,35 @@ for variable in "${required_variables[@]}"; do
   [[ -n "${!variable:-}" ]] || { echo "Required deployment variable ${variable} is not set." >&2; exit 1; }
 done
 [[ -r "${env_file}" ]] || { echo "Development environment file is not readable." >&2; exit 1; }
-[[ "${IMAGE_TAG}" =~ ^[0-9a-f]{12}$ ]] || { echo "IMAGE_TAG must be a 12-character commit tag." >&2; exit 1; }
+
+# The protected file owns service configuration, while the workflow owns the
+# immutable release inputs for this deployment. Preserve that precedence even
+# if an older environment file contains stale copies of workflow variables.
+deployment_repository_owner="${GITHUB_REPOSITORY_OWNER}"
+deployment_ghcr_token="${GHCR_TOKEN}"
+deployment_ghcr_username="${GHCR_USERNAME}"
+deployment_image_tag="${IMAGE_TAG}"
+deployment_web_changed="${WEB_CHANGED:-false}"
+deployment_hosted_sites_changed="${HOSTED_SITES_CHANGED:-false}"
+deployment_orchestrator_changed="${ORCHESTRATOR_CHANGED:-false}"
+deployment_infra_changed="${INFRA_CHANGED:-false}"
+deployment_topology_changed="${TOPOLOGY_CHANGED:-false}"
 
 set -a
 # shellcheck disable=SC1090
 source "${env_file}"
 set +a
+GITHUB_REPOSITORY_OWNER="${deployment_repository_owner}"
+GHCR_TOKEN="${deployment_ghcr_token}"
+GHCR_USERNAME="${deployment_ghcr_username}"
+IMAGE_TAG="${deployment_image_tag}"
+WEB_CHANGED="${deployment_web_changed}"
+HOSTED_SITES_CHANGED="${deployment_hosted_sites_changed}"
+ORCHESTRATOR_CHANGED="${deployment_orchestrator_changed}"
+INFRA_CHANGED="${deployment_infra_changed}"
+TOPOLOGY_CHANGED="${deployment_topology_changed}"
+
+[[ "${IMAGE_TAG}" =~ ^[0-9a-f]{12}$ ]] || { echo "IMAGE_TAG must be a 12-character commit tag." >&2; exit 1; }
 [[ "${SINGLE_VM_ENVIRONMENT:-}" == development && "${SINGLE_VM_PROJECT:-}" == agentbench-local-development ]] || {
   echo "Refusing to deploy a non-development single-VM environment." >&2
   exit 1
@@ -49,11 +72,6 @@ wait_for_http() {
   return 1
 }
 
-WEB_CHANGED="${WEB_CHANGED:-false}"
-HOSTED_SITES_CHANGED="${HOSTED_SITES_CHANGED:-false}"
-ORCHESTRATOR_CHANGED="${ORCHESTRATOR_CHANGED:-false}"
-INFRA_CHANGED="${INFRA_CHANGED:-false}"
-TOPOLOGY_CHANGED="${TOPOLOGY_CHANGED:-false}"
 for flag in WEB_CHANGED HOSTED_SITES_CHANGED ORCHESTRATOR_CHANGED INFRA_CHANGED TOPOLOGY_CHANGED; do
   [[ "${!flag}" == true || "${!flag}" == false ]] || { echo "${flag} must be true or false." >&2; exit 1; }
 done

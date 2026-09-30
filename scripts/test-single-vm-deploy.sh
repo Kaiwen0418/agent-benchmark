@@ -86,4 +86,40 @@ set -e
   exit 1
 }
 
+fake_bin="${temporary}/bin"
+mkdir -p "${fake_bin}"
+cat > "${fake_bin}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == login ]]; then
+  cat >/dev/null
+fi
+exit 0
+EOF
+cat > "${fake_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "${fake_bin}/docker" "${fake_bin}/curl"
+
+development_env="${temporary}/development.env"
+bash "${ROOT_DIR}/infra/scripts/init-single-vm-env.sh" "${development_env}" \
+  https://web-dev.example.test https://hosted-dev.example.test development >/dev/null
+printf '\nIMAGE_TAG=stale-persisted-tag\nWEB_CHANGED=false\n' >> "${development_env}"
+deployment_tag=0123456789ab
+output="$({
+  PATH="${fake_bin}:${PATH}" \
+  GITHUB_REPOSITORY_OWNER=test GHCR_TOKEN=test GHCR_USERNAME=test IMAGE_TAG="${deployment_tag}" \
+  WEB_CHANGED=true HOSTED_SITES_CHANGED=false ORCHESTRATOR_CHANGED=false \
+    bash "${deploy}" "${development_env}"
+} 2>&1)"
+[[ "${output}" == *"image tag ${deployment_tag}"* ]] || {
+  echo "Protected environment variables overrode workflow deployment inputs." >&2
+  exit 1
+}
+grep -Fq "AGENTBENCH_WEB_IMAGE_TAG=${deployment_tag}" "${development_env}" || {
+  echo "Single-VM deploy did not persist the workflow image tag." >&2
+  exit 1
+}
+
 echo "Single-VM deployment workflow tests passed."
