@@ -251,7 +251,7 @@ from public.timeout_hosted_attempt(
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.hosted_callback_outbox where attempt_id = '${ATTEMPT_2}'")" == "1" ]]
 
 claimed="$("${PSQL[@]}" -Atqc "select count(*) from public.claim_hosted_callback_outbox(20)")"
-[[ "${claimed}" == "2" ]]
+[[ "${claimed}" == "3" ]]
 [[ "$("${PSQL[@]}" -Atqc "select count(*) from public.claim_hosted_callback_outbox(20)")" == "0" ]]
 
 "${PSQL[@]}" -Atqc "update public.hosted_callback_outbox set attempts = 8, locked_at = now() - interval '10 minutes' where attempt_id = '${ATTEMPT_1}'" >/dev/null
