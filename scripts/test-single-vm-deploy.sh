@@ -94,6 +94,12 @@ set -euo pipefail
 if [[ "${1:-}" == login ]]; then
   cat >/dev/null
 fi
+for argument in "$@"; do
+  if [[ "${argument}" == pull ]]; then
+    printf '%s\n' "${AGENTBENCH_WEB_IMAGE_TAG:-unset}" >> "${FAKE_DOCKER_LOG}"
+    break
+  fi
+done
 exit 0
 EOF
 cat > "${fake_bin}/curl" <<'EOF'
@@ -103,12 +109,13 @@ EOF
 chmod +x "${fake_bin}/docker" "${fake_bin}/curl"
 
 development_env="${temporary}/development.env"
+fake_docker_log="${temporary}/docker.log"
 bash "${ROOT_DIR}/infra/scripts/init-single-vm-env.sh" "${development_env}" \
   https://web-dev.example.test https://hosted-dev.example.test development >/dev/null
 printf '\nIMAGE_TAG=stale-persisted-tag\nWEB_CHANGED=false\n' >> "${development_env}"
 deployment_tag=0123456789ab
 output="$({
-  PATH="${fake_bin}:${PATH}" \
+  PATH="${fake_bin}:${PATH}" FAKE_DOCKER_LOG="${fake_docker_log}" \
   GITHUB_REPOSITORY_OWNER=test GHCR_TOKEN=test GHCR_USERNAME=test IMAGE_TAG="${deployment_tag}" \
   WEB_CHANGED=true HOSTED_SITES_CHANGED=false ORCHESTRATOR_CHANGED=false \
     bash "${deploy}" "${development_env}"
@@ -119,6 +126,10 @@ output="$({
 }
 grep -Fq "AGENTBENCH_WEB_IMAGE_TAG=${deployment_tag}" "${development_env}" || {
   echo "Single-VM deploy did not persist the workflow image tag." >&2
+  exit 1
+}
+[[ "$(cat "${fake_docker_log}")" == "${deployment_tag}" ]] || {
+  echo "Docker Compose did not receive the workflow image tag." >&2
   exit 1
 }
 

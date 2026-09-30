@@ -94,6 +94,13 @@ set_env_key() {
   rm -f "${temporary}"
 }
 
+set_compose_env_key() {
+  local key="$1" value="$2"
+  set_env_key "${key}" "${value}"
+  printf -v "${key}" '%s' "${value}"
+  export "${key}"
+}
+
 rollback() {
   local status=$?
   trap - ERR
@@ -109,12 +116,12 @@ rollback() {
 trap rollback ERR
 
 owner="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-set_env_key AGENTBENCH_WEB_IMAGE "ghcr.io/${owner}/agentbench-web"
-set_env_key HOSTED_SITES_IMAGE "ghcr.io/${owner}/agentbench-hosted-sites"
-set_env_key HOSTED_ORCHESTRATOR_IMAGE "ghcr.io/${owner}/agentbench-hosted-orchestrator"
-[[ "${WEB_CHANGED}" == false ]] || set_env_key AGENTBENCH_WEB_IMAGE_TAG "${IMAGE_TAG}"
-[[ "${HOSTED_SITES_CHANGED}" == false ]] || set_env_key HOSTED_SITES_IMAGE_TAG "${IMAGE_TAG}"
-[[ "${ORCHESTRATOR_CHANGED}" == false ]] || set_env_key HOSTED_ORCHESTRATOR_IMAGE_TAG "${IMAGE_TAG}"
+set_compose_env_key AGENTBENCH_WEB_IMAGE "ghcr.io/${owner}/agentbench-web"
+set_compose_env_key HOSTED_SITES_IMAGE "ghcr.io/${owner}/agentbench-hosted-sites"
+set_compose_env_key HOSTED_ORCHESTRATOR_IMAGE "ghcr.io/${owner}/agentbench-hosted-orchestrator"
+[[ "${WEB_CHANGED}" == false ]] || set_compose_env_key AGENTBENCH_WEB_IMAGE_TAG "${IMAGE_TAG}"
+[[ "${HOSTED_SITES_CHANGED}" == false ]] || set_compose_env_key HOSTED_SITES_IMAGE_TAG "${IMAGE_TAG}"
+[[ "${ORCHESTRATOR_CHANGED}" == false ]] || set_compose_env_key HOSTED_ORCHESTRATOR_IMAGE_TAG "${IMAGE_TAG}"
 rollback_required=true
 
 # shellcheck source=registry-retry.sh
