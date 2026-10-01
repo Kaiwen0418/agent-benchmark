@@ -48,6 +48,8 @@ if matches_any '^infra/docker/docker-compose\.server\.yml$' \
   '^infra/docker/docker-compose\.single-vm\.yml$' \
   '^infra/scripts/deploy-hosted-stack\.sh$' \
   '^infra/scripts/deploy-single-vm-development\.sh$' \
+  '^infra/scripts/deploy-single-vm-production\.sh$' \
+  '^infra/scripts/deploy-single-vm\.sh$' \
   '^infra/scripts/initialize-single-vm-database\.sh$' \
   '^infra/scripts/registry-retry\.sh$' \
   '^infra/scripts/smoke-single-vm-development\.sh$' \
