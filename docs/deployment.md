@@ -315,6 +315,34 @@ Do not publish a fixed host port for each hosted-sites replica. Nginx should rea
 
 ## Path-Specific CD
 
+### Production single-VM activation
+
+Production defaults to the legacy hosted-only deployment until the GitHub
+`production` Environment variable `PRODUCTION_DEPLOYMENT_MODE` is explicitly
+set to `single-vm`. Leave it unset (or `legacy`) during migration preparation.
+Unknown mode values fail before database migration. The single-VM path requires
+`SINGLE_VM_ENV_FILE` to identify a protected host-local production runtime file
+readable by the production runner; it never falls back to the development file.
+
+Enable this mode only after the final source backup, empty-candidate transfer,
+identity/integrity checks, isolated restore, canary, and rollback evidence have
+passed under #218. Keep admission and OAuth frozen in the runtime file until
+post-cutover verification is complete. Changing this mode does not transfer
+data, freeze Vercel, create DNS records, or remove the old Compose project.
+Stop old hosted writers before starting the unified production applications;
+the two projects cannot share gateway port 8080. Retain the old configuration
+and source database throughout the rollback window.
+
+The unified production deployment pins `agentbench-single-vm`, database
+`agentbench_production`, and loopback Web/gateway listeners `3000/8080`.
+Development remains `agentbench-local-development` on `3001/8081`.
+Production migration and catalog publication use the local database configuration
+through `initialize-single-vm-database.sh`, not Supabase credentials. Deployment
+waits for the Web image build as well as hosted images, preserves unchanged image
+tags, and restores the runtime file on startup/readiness failure. This is an
+application-image rollback, not a database rollback; never remove database
+volumes or assume it reverses schema/data changes.
+
 `deploy-hosted-sites.yml` classifies each push before building or pulling images:
 
 - `apps/web/**` builds and deploys only the standalone Web image and Compose project.
