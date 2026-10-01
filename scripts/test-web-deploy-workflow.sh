@@ -28,6 +28,14 @@ require_text "${DEPLOY_SCRIPT}" 'AGENTBENCH_WEB_URL=${AGENTBENCH_WEB_URL}'
 require_text "${ROOT_DIR}/infra/docker/docker-compose.web.yml" 'AUTH_URL: ${AGENTBENCH_WEB_URL}'
 require_text "${DEPLOY_SCRIPT}" 'compose up -d --remove-orphans --no-deps web'
 
+smoke_job="$(sed -n '/^  smoke-development:/,/^  deploy-production:/p' "${WORKFLOW}")"
+smoke_pnpm_line="$(grep -n -- '- name: Setup pnpm' <<< "${smoke_job}" | cut -d: -f1)"
+smoke_node_line="$(grep -n -- '- name: Setup Node' <<< "${smoke_job}" | cut -d: -f1)"
+if [[ -z "${smoke_pnpm_line}" || -z "${smoke_node_line}" || "${smoke_pnpm_line}" -ge "${smoke_node_line}" ]]; then
+  echo "Development smoke must install pnpm before setup-node enables package-manager caching." >&2
+  exit 1
+fi
+
 set +e
 invalid_output="$({
   AGENTBENCH_WEB_URL=https://web.invalid \
