@@ -36,7 +36,7 @@ export type CalibrationRevisionOption = {
   current: boolean;
 };
 
-export type RunPhase = "idle" | "booting" | "running" | "completed" | "failed";
+export type RunPhase = "idle" | "booting" | "running" | "completed" | "failed" | "cancelled";
 export type PanelTab = "events" | "files" | "screenshots" | "score";
 
 export type TimelineEntry = {
@@ -296,7 +296,11 @@ function mapRunStatus(status: RunStatus): RunPhase {
     return "completed";
   }
 
-  if (status === "failed" || status === "cancelled" || status === "timeout") {
+  if (status === "cancelled") {
+    return "cancelled";
+  }
+
+  if (status === "failed" || status === "timeout") {
     return "failed";
   }
 
@@ -406,6 +410,7 @@ function mapArtifacts(artifacts: Artifact[]): ArtifactEntry[] {
 }
 
 function deriveScore(run: BenchmarkRun, hostedScore: number | null, events: RunEvent[]) {
+  if (run.status === "cancelled") return run.score ?? null;
   if (typeof run.score === "number") {
     return run.score;
   }
@@ -624,7 +629,7 @@ function startRunStream(
     const state = getState();
     source.close();
 
-    if (state.currentRunId !== runId || state.phase === "completed" || state.phase === "failed") {
+    if (state.currentRunId !== runId || state.phase === "completed" || state.phase === "failed" || state.phase === "cancelled") {
       return;
     }
 
@@ -732,6 +737,7 @@ export const usePlaygroundStore = create<PlaygroundStore>((set, get) => ({
       clearRunSync();
       set({
         phase: mapRunStatus(run.status),
+        score: run.score ?? null,
         statusLine: "Run cancelled",
         cancelling: false,
         streamMode: "idle",

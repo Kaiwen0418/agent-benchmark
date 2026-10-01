@@ -32,7 +32,7 @@ export function ConnectAgentCard() {
   const reset = usePlaygroundStore((state) => state.reset);
 
   const isRunning = phase === "booting" || phase === "running";
-  const isDone = phase === "completed" || phase === "failed";
+  const isDone = phase === "completed" || phase === "failed" || phase === "cancelled";
   const isQuotaBlocked = Boolean(quota && quota.remaining <= 0);
   const selectedBenchmark = benchmarks.find((item) => item.id === benchmark);
   const selectedRevision = calibrationRevisions.find((revision) => (
@@ -115,7 +115,7 @@ export function ConnectAgentCard() {
           <div>
             <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Connect Agent</div>
             <h3 className="mt-1.5 text-[1.2rem] font-medium text-[#111111]">
-              {selectedBenchmark?.label ?? "Run complete"}
+              {selectedBenchmark?.label ?? (phase === "cancelled" ? "Run cancelled" : phase === "failed" ? "Run failed" : "Run complete")}
             </h3>
           </div>
           <div className="rounded-full bg-[#d7ff00] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-[#111111]">
@@ -138,7 +138,9 @@ export function ConnectAgentCard() {
         ) : null}
 
         <div className="mt-4 rounded-[1.6rem] border border-[#d7d0c4] bg-white p-5 shadow-[0_14px_40px_rgba(17,17,17,0.05)]">
-          <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">Run Complete</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-[#70695e]">
+            {phase === "cancelled" ? "Run Cancelled" : phase === "failed" ? "Run Failed" : "Run Complete"}
+          </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
             <div className="rounded-[1rem] bg-[#d7ff00] p-3">
               <div className="text-[10px] uppercase tracking-[0.18em] text-[#4b5520]">Score</div>

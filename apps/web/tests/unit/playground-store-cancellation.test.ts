@@ -35,15 +35,40 @@ test("Stop Run ends synchronization only after durable cancellation succeeds", a
 
   try {
     usePlaygroundStore.getState().reset();
-    usePlaygroundStore.setState({ currentRunId: cancelledRun.id, phase: "running", streamMode: "sse" });
+    usePlaygroundStore.setState({ currentRunId: cancelledRun.id, phase: "running", streamMode: "sse", score: 0.5 });
     await usePlaygroundStore.getState().stopRun();
 
     const state = usePlaygroundStore.getState();
-    assert.equal(state.phase, "failed");
+    assert.equal(state.phase, "cancelled");
+    assert.equal(state.score, null);
     assert.equal(state.streamMode, "idle");
     assert.equal(state.statusLine, "Run cancelled");
     assert.equal(state.cancelling, false);
     assert.deepEqual(requests, [`POST /api/runs/${cancelledRun.id}/cancel`, "GET /api/quota"]);
+  } finally {
+    globalThis.fetch = previousFetch;
+    usePlaygroundStore.getState().reset();
+  }
+});
+
+test("resuming a cancelled run does not promote partial event scores to a final score", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/events")) return Response.json({ events: [
+      { type: "score.updated", payload: { score: 0.5 } },
+    ] });
+    if (url.endsWith("/artifacts")) return Response.json({ artifacts: [] });
+    return Response.json({ run: cancelledRun });
+  };
+
+  try {
+    usePlaygroundStore.getState().reset();
+    await usePlaygroundStore.getState().resumeRun(cancelledRun.id);
+    const state = usePlaygroundStore.getState();
+    assert.equal(state.phase, "cancelled");
+    assert.equal(state.score, null);
+    assert.equal(state.streamMode, "idle");
   } finally {
     globalThis.fetch = previousFetch;
     usePlaygroundStore.getState().reset();

@@ -52,6 +52,14 @@ export function LiveMacScreenContent() {
       };
     }
 
+    if (phase === "cancelled") {
+      return {
+        title: "Run cancelled",
+        body: "This run was stopped. Its hosted sessions are no longer available.",
+        accent: "cancelled",
+      };
+    }
+
     if (phase === "failed") {
       return {
         title: "Run failed",
@@ -61,10 +69,10 @@ export function LiveMacScreenContent() {
     }
 
     return browserSlides[Math.min(liveSlide, browserSlides.length - 1)];
-  }, [liveSlide, phase]);
+  }, [liveSlide, phase, score]);
 
   const embeddedLiveViewUrl = useMemo(() => {
-    if (!liveViewUrl) {
+    if (!liveViewUrl || phase === "cancelled") {
       return null;
     }
 
@@ -77,7 +85,7 @@ export function LiveMacScreenContent() {
     } catch {
       return `${liveViewUrl}${liveViewUrl.includes("?") ? "&" : "?"}embed=1`;
     }
-  }, [liveViewUrl]);
+  }, [liveViewUrl, phase]);
 
   return (
     <div className="relative h-full overflow-hidden rounded-[1.05rem] bg-[#080808] text-white">
@@ -89,7 +97,7 @@ export function LiveMacScreenContent() {
             className="absolute left-0 top-0 h-[300%] w-[300%] origin-top-left scale-[0.333333] border-0 bg-[#111111]"
           />
         </div>
-      ) : liveFrameUrl ? (
+      ) : liveFrameUrl && phase !== "cancelled" ? (
         <img
           src={liveFrameUrl}
           alt="Live browser frame"
@@ -107,7 +115,7 @@ export function LiveMacScreenContent() {
                 ? "bg-[#d7ff00]"
                 : phase === "failed"
                   ? "bg-[#ff8f6b]"
-                  : phase === "idle"
+                  : phase === "idle" || phase === "cancelled"
                     ? "bg-[#8d867b]"
                     : "bg-[#6df6a4]"
             }`}
@@ -116,7 +124,7 @@ export function LiveMacScreenContent() {
         </div>
       </div>
 
-      {!(embeddedLiveViewUrl || liveFrameUrl) ? (
+      {phase === "cancelled" || !(embeddedLiveViewUrl || liveFrameUrl) ? (
         <div className="absolute inset-x-0 top-1/2 z-10 -translate-y-1/2 px-4 text-center">
           <div className="mx-auto max-w-[11rem] rounded-[1rem] border border-white/10 bg-black/45 px-4 py-3">
             <div className="text-[10px] uppercase tracking-[0.18em] text-[#d7ff00]">{slide.title}</div>
