@@ -30,6 +30,7 @@ test("active runs fall back safely when the current session is unavailable", () 
 test("hosted connection progress updates active session without reloading connection payload", () => {
   const payload = {
     hostedWeb: {
+      orchestratorUrl: "/one",
       activeSessionId: "session-1",
       progress: {
         currentIndex: 0,
@@ -51,9 +52,54 @@ test("hosted connection progress updates active session without reloading connec
   ]);
 
   assert.equal(next.hostedWeb.activeSessionId, "session-2");
+  assert.equal(next.hostedWeb.orchestratorUrl, "/two");
   assert.equal(next.hostedWeb.progress.currentIndex, 1);
   assert.equal(next.hostedWeb.progress.completed, 1);
   assert.equal(next.hostedWeb.sessions[1]?.startUrl, "/two");
+  assert.equal(payload.hostedWeb.orchestratorUrl, "/one");
+});
+
+test("hosted connection progress clears the action URL when no session is active", () => {
+  const payload = {
+    hostedWeb: {
+      orchestratorUrl: "/one",
+      activeSessionId: "session-1",
+      progress: { currentIndex: 0, total: 2, completed: 0 },
+      sessions: [
+        { sessionId: "session-1", sequenceIndex: 0, status: "active", startUrl: "/one" },
+        { sessionId: "session-2", sequenceIndex: 1, status: "created", startUrl: "/two" },
+      ],
+    },
+  };
+  for (const status of ["created", "completed", "failed", "cancelled", "expired"]) {
+    const next = applyHostedSessionProgress(payload, [
+      { sessionId: "session-1", sequenceIndex: 0, status: "completed" },
+      { sessionId: "session-2", sequenceIndex: 1, status },
+    ]);
+    assert.equal(next.hostedWeb.orchestratorUrl, null);
+    assert.equal(next.hostedWeb.activeSessionId, null);
+    assert.equal(next.hostedWeb.progress.currentIndex, null);
+  }
+});
+
+test("progress uses allocated session URLs, not URLs supplied by progress events", () => {
+  const payload = {
+    hostedWeb: {
+      orchestratorUrl: "/one",
+      activeSessionId: "session-1",
+      progress: { currentIndex: 0, total: 2, completed: 0 },
+      sessions: [
+        { sessionId: "session-1", sequenceIndex: 0, status: "active", startUrl: "/one" },
+        { sessionId: "session-2", sequenceIndex: 1, status: "created", startUrl: "/two" },
+      ],
+    },
+  };
+  const snapshots = [
+    { sessionId: "session-1", sequenceIndex: 0, status: "completed" },
+    { sessionId: "session-2", sequenceIndex: 1, status: "active", startUrl: "/untrusted" },
+  ];
+  const next = applyHostedSessionProgress(payload, snapshots);
+  assert.equal(next.hostedWeb.orchestratorUrl, "/two");
 });
 
 test("hosted connection progress detects terminal suites", () => {

@@ -25,8 +25,9 @@ export type HostedProgressEvent = {
   payload: Record<string, unknown>;
 };
 
-export type HostedConnectionProgressPayload<TSession extends HostedSessionProgressSnapshot> = {
+export type HostedConnectionProgressPayload<TSession extends HostedSessionProgressSnapshot & { startUrl: string }> = {
   hostedWeb: {
+    orchestratorUrl: string | null;
     activeSessionId: string | null;
     progress: {
       currentIndex: number | null;
@@ -84,7 +85,7 @@ export function deriveHostedSessionProgressFromEvents(events: HostedProgressEven
 }
 
 export function applyHostedSessionProgress<
-  TSession extends HostedSessionProgressSnapshot,
+  TSession extends HostedSessionProgressSnapshot & { startUrl: string },
   TPayload extends HostedConnectionProgressPayload<TSession>,
 >(
   payload: TPayload,
@@ -101,6 +102,7 @@ export function applyHostedSessionProgress<
     ...payload,
     hostedWeb: {
       ...payload.hostedWeb,
+      orchestratorUrl: activeSession?.startUrl ?? null,
       activeSessionId: activeSession?.sessionId ?? null,
       progress: {
         currentIndex: activeSession?.sequenceIndex ?? null,
