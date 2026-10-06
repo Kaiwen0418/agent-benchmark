@@ -505,24 +505,38 @@ Optional GitHub Environment secrets enable first-party model discovery:
 - `MOONSHOT_API_KEY`
 - `DEEPSEEK_API_KEY`
 
-The model-catalog workflow also requires `DATABASE_DIRECT_URL`. Production may
-temporarily fall back to `PROD_SUPABASE_DB_URL` before its cutover. This job uses direct PostgreSQL
-through Drizzle and does not require `SUPABASE_URL` or
-`SUPABASE_SERVICE_ROLE_KEY`.
+The model-catalog workflow uses `agentbench-dev` and `agentbench-prod`
+self-hosted runners, selected only from `develop` and `main`. Each GitHub
+Environment must set `SINGLE_VM_ENV_FILE` to its protected host runtime file.
+The file is root-owned, non-executable, and readable by the runner group but
+not by others (normally mode `660`). `exec-model-catalog-sync.py` validates
+the environment, Compose project, database, port and matching credentials,
+then constructs `DATABASE_DIRECT_URL` using loopback port `55433` for
+development or `55432` for production. No public database listener or GitHub
+database secret is needed. There is no legacy Supabase fallback.
 
 The daily model-catalog workflow checks out the matching branch and invokes
 `packages/model-catalog-sync` with `DATABASE_DIRECT_URL` and any provider keys
-from the selected GitHub Environment. It writes directly to PostgreSQL and does
+from the selected GitHub Environment. Only database connection settings are
+derived from the runtime file; Auth.js and shared service secrets are not
+forwarded. It writes directly to PostgreSQL and does
 not call Vercel or Supabase REST.
 OpenRouter and LiteLLM require no credential and provide supplemental discovery
 for all supported providers, including Z.AI/GLM. First-party provider APIs
 override aggregator display identity when available. Sources execute
-sequentially to avoid conflicting upserts; an unavailable source is recorded
+sequentially in one environment-approved job to avoid conflicting upserts;
+source execution failures do not prevent later sources from running, but mark
+the overall job failed. An unavailable source is recorded
 without deleting or downgrading existing catalog rows. Trigger the workflow
 once after applying the model-catalog migration; normal hosted Compose and Web
-deployments are unaffected.
+deployments are unaffected. Retry with `gh workflow run model-catalog-sync.yml
+--ref develop` (or `--ref main` after production approval). Existing upserts are
+idempotent; inspect the workflow result and environment-scoped
+`model_catalog_sync_runs` before retrying.
 
-Development values must point to the test hosted hostname and development database; production values must point to the production hosted hostname and database. The matching GitHub Environment `AGENTBENCH_WEB_URL` points back to that Vercel project.
+Development values must point to the test hosted hostname and development database;
+production values must point to the production hosted hostname and database.
+The matching `AGENTBENCH_WEB_URL` points to that environment's self-hosted Web.
 
 Web browser bundles communicate through same-origin API routes and never receive
 database credentials. `DATABASE_URL` is server-only and serves every Web
