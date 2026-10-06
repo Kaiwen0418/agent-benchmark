@@ -115,10 +115,13 @@ database access, and development plus production cutovers have validated
 integrity, backup, restore, and rollback procedures.
 
 Current progress: the portable persistence foundation, development traffic
-cutover, and Auth.js identity ownership are complete. DB.4 begins with the
-read-only production migration preflight in #239; production mutation and
-cutover remain separately approved work under #218. Terraform remains
-non-blocking until the runtime topology is stable.
+cutover, and Auth.js identity ownership are complete. Production now serves
+self-hosted Web and PostgreSQL following release [#270](https://github.com/Kaiwen0418/agent-benchmark/pull/270),
+with 143 historical runs restored and single-VM CD verified. DB.4 remains in
+progress: verify production OAuth end to end, finish private model-catalog
+maintenance in [#272](https://github.com/Kaiwen0418/agent-benchmark/issues/272),
+and complete observation and rollback exit evidence under #218. Terraform
+remains non-blocking until the runtime topology is stable.
 
 ## P1: Benchmark Quality
 
