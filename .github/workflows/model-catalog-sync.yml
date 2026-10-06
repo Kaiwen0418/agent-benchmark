@@ -32,22 +32,12 @@ jobs:
 
   sync:
     if: github.event_name == 'workflow_dispatch' && (github.ref_name == 'develop' || github.ref_name == 'main')
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
+      - ${{ github.ref_name == 'main' && 'agentbench-prod' || 'agentbench-dev' }}
     environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        source:
-          - openrouter
-          - litellm
-          - openai
-          - anthropic
-          - google
-          - xai
-          - kimi
-          - deepseek
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -66,9 +56,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Sync ${{ matrix.source }}
+      - name: Sync sources sequentially against private PostgreSQL
         env:
-          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL || (github.ref_name == 'main' && secrets.PROD_SUPABASE_DB_URL || secrets.TEST_SUPABASE_DB_URL) }}
+          SINGLE_VM_ENV_FILE: ${{ vars.SINGLE_VM_ENV_FILE }}
+          SYNC_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'development' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -77,5 +68,10 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
           set -euo pipefail
-          test -n "${DATABASE_DIRECT_URL}"
-          pnpm --filter @agentbench/model-catalog-sync sync "${{ matrix.source }}"
+          test -n "${SINGLE_VM_ENV_FILE}"
+          failed=0
+          for source in openrouter litellm openai anthropic google xai kimi deepseek; do
+            python3 scripts/lib/exec-model-catalog-sync.py \
+              "${SINGLE_VM_ENV_FILE}" "${SYNC_ENVIRONMENT}" "${source}" || failed=1
+          done
+          exit "${failed}"
