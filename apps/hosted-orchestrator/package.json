@@ -11,6 +11,7 @@
     "start": "node dist/apps/hosted-orchestrator/src/server.js"
   },
   "dependencies": {
+    "@agentbench/database": "workspace:*",
     "@agentbench/protocol": "workspace:*",
     "@agentbench/scoring": "workspace:*",
     "@agentbench/shared": "workspace:*",

@@ -4,7 +4,7 @@
 
 - Node.js and pnpm
 - Docker with Docker Compose
-- Supabase CLI and a Supabase project
+- PostgreSQL 17, either local or through the database Compose profile
 
 ## Install
 
@@ -15,13 +15,13 @@ cp apps/web/.env.example apps/web/.env.local
 
 Configure these values in `apps/web/.env.local`:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL` (a pooled PostgreSQL connection)
 - `RUNNER_SHARED_SECRET`
 - `HOSTED_SITES_URL`
 - `HOSTED_ORCHESTRATOR_URL`
 
-Supabase variables are server-only. Browser components use same-origin `/api/*` routes and must not initialize a Supabase client.
+Database variables are server-only. Browser components use same-origin `/api/*`
+routes and must not initialize a database client.
 
 Copy the database target example and configure the root `.env.local`:
 
@@ -29,10 +29,10 @@ Copy the database target example and configure the root `.env.local`:
 cp .env.database.example .env.local
 ```
 
-- Local development and the deployed test environment use `TEST_SUPABASE_DB_URL`.
-- Production uses a separate `PROD_SUPABASE_DB_URL`.
-- Migration commands never infer their target from the currently linked Supabase project.
-- The migration script URL-encodes credentials in memory, including raw `%` and `@` characters, without printing the password.
+- Local development and the deployed test environment use `DATABASE_DIRECT_URL`.
+- Runtime services use the corresponding pooled `DATABASE_URL`.
+- Production continues to use `PROD_SUPABASE_DB_URL` only until its migration cutover.
+- Migration commands never infer their target from linked provider state.
 
 Preview and apply test migrations:
 

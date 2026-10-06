@@ -1,6 +1,13 @@
-import type { Json } from "@agentbench/shared";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@agentbench/shared";
+import {
+  createDatabaseClient,
+  resolveDatabaseUrl,
+  type DatabaseEnvironment,
+} from "@agentbench/database";
+import {
+  createModelCatalogRepository,
+  type JsonValue,
+  type ModelCatalogRepository,
+} from "@agentbench/database/model-catalog";
 import {
   MissingModelSourceCredentialError,
   modelCatalogSources,
@@ -17,7 +24,7 @@ type ExistingCatalogRow = {
   status: "active" | "preview" | "legacy" | "deprecated";
   reasoning_efforts: string[];
   released_at: string | null;
-  source_refs: Json;
+  source_refs: JsonValue;
   source_priority: number;
   benchmark_popularity: number;
   verified_at: string | null;
@@ -29,7 +36,7 @@ type SourceRef = {
   lastSeenAt: string;
 };
 
-function sourceRefs(value: Json): SourceRef[] {
+function sourceRefs(value: JsonValue): SourceRef[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): SourceRef[] => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
@@ -42,7 +49,7 @@ function sourceRefs(value: Json): SourceRef[] {
   });
 }
 
-function mergeSourceRefs(existing: Json, discovered: DiscoveredModel, now: string) {
+function mergeSourceRefs(existing: JsonValue, discovered: DiscoveredModel, now: string) {
   const refs = sourceRefs(existing).filter((item) => item.source !== discovered.source);
   refs.push({
     source: discovered.source,
@@ -116,52 +123,33 @@ export function deduplicateDiscoveredModels(discovered: DiscoveredModel[]) {
   return [...byKey.values()];
 }
 
-export function createModelCatalogClient() {
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRoleKey) {
-    throw new Error(
-      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for model catalog sync.",
-    );
-  }
-  return createClient<Database>(url, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
+export function createModelCatalogPersistence(
+  environment: DatabaseEnvironment = process.env,
+) {
+  const client = createDatabaseClient({
+    connectionString: resolveDatabaseUrl(environment, { preferDirect: true }),
+    applicationName: "agentbench-model-catalog-sync",
+    max: 2,
   });
+  return {
+    repository: createModelCatalogRepository(client.db),
+    close: client.close,
+  };
 }
 
-export async function syncModelCatalogSource(
+async function syncModelCatalogSourceWithRepository(
   source: ModelCatalogSourceName,
-  supabase: SupabaseClient<Database> = createModelCatalogClient(),
+  repository: ModelCatalogRepository,
 ) {
-  const { data: syncRun, error: syncRunError } = await supabase
-    .from("model_catalog_sync_runs")
-    .insert({ source, status: "running" })
-    .select("id")
-    .single();
-  if (syncRunError || !syncRun) {
-    throw syncRunError ?? new Error("Failed to start model catalog sync.");
-  }
+  const syncRun = await repository.startSync(source);
 
   try {
     const discovered = deduplicateDiscoveredModels(await modelCatalogSources[source]());
     const providers = [...new Set(discovered.map((item) => item.provider))];
-    const { data: existingRows, error: existingError } = providers.length > 0
-      ? await supabase
-        .from("model_catalog")
-        .select(
-          "provider, model_id, display_name, aliases, family, status, reasoning_efforts, released_at, source_refs, source_priority, benchmark_popularity, verified_at",
-        )
-        .in("provider", providers)
-      : { data: [], error: null };
-    if (existingError) {
-      throw existingError;
-    }
+    const existingRows = await repository.listByProviders(providers);
 
     const existingByKey = new Map(
-      (existingRows ?? []).map((row) => [`${row.provider}:${row.model_id}`, row]),
+      existingRows.map((row) => [`${row.provider}:${row.model_id}`, row]),
     );
     const now = new Date().toISOString();
     const merged = discovered.map((item) => mergeCatalogModel(
@@ -172,26 +160,15 @@ export async function syncModelCatalogSource(
 
     for (let index = 0; index < merged.length; index += 250) {
       const batch = merged.slice(index, index + 250);
-      const { error } = await supabase
-        .from("model_catalog")
-        .upsert(batch, { onConflict: "provider,model_id" });
-      if (error) {
-        throw error;
-      }
+      await repository.upsert(batch);
     }
 
-    const { error: completionError } = await supabase
-      .from("model_catalog_sync_runs")
-      .update({
-        status: "completed",
-        discovered_count: discovered.length,
-        upserted_count: merged.length,
-        completed_at: now,
-      })
-      .eq("id", syncRun.id);
-    if (completionError) {
-      throw completionError;
-    }
+    await repository.finishSync(syncRun.id, {
+      status: "completed",
+      discoveredCount: discovered.length,
+      upsertedCount: merged.length,
+      completedAt: now,
+    });
 
     return {
       source,
@@ -202,14 +179,11 @@ export async function syncModelCatalogSource(
   } catch (error) {
     const skipped = error instanceof MissingModelSourceCredentialError;
     const message = error instanceof Error ? error.message.slice(0, 1_000) : "Unknown sync error";
-    await supabase
-      .from("model_catalog_sync_runs")
-      .update({
-        status: skipped ? "skipped" : "failed",
-        error_message: message,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", syncRun.id);
+    await repository.finishSync(syncRun.id, {
+      status: skipped ? "skipped" : "failed",
+      errorMessage: message,
+      completedAt: new Date().toISOString(),
+    });
 
     if (skipped) {
       return {
@@ -221,5 +195,21 @@ export async function syncModelCatalogSource(
       };
     }
     throw error;
+  }
+}
+
+export async function syncModelCatalogSource(
+  source: ModelCatalogSourceName,
+  repository?: ModelCatalogRepository,
+) {
+  if (repository) {
+    return syncModelCatalogSourceWithRepository(source, repository);
+  }
+
+  const persistence = createModelCatalogPersistence();
+  try {
+    return await syncModelCatalogSourceWithRepository(source, persistence.repository);
+  } finally {
+    await persistence.close();
   }
 }

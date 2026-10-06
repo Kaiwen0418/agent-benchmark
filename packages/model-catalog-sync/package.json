@@ -9,9 +9,9 @@
     "test": "node --import tsx --test $(find tests/unit -type f -name '*.test.ts' | sort)"
   },
   "dependencies": {
+    "@agentbench/database": "workspace:*",
     "@agentbench/protocol": "workspace:*",
-    "@agentbench/shared": "workspace:*",
-    "@supabase/supabase-js": "^2.110.0"
+    "@agentbench/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",

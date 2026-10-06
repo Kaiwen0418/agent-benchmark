@@ -81,6 +81,8 @@ function deriveLiveFrameUrl(payload: StreamPayload) {
 }
 
 function deriveScore(payload: StreamPayload, fallback: number | null) {
+  if (payload.run?.status === "cancelled") return payload.run.score ?? null;
+
   if (typeof payload.run?.score === "number") {
     return payload.run.score;
   }
@@ -146,6 +148,7 @@ function deriveSessionStatusLabel(deadline: { status: string; expiresAt?: string
 
   if (deadline.status === "completed") return { text: "Completed", urgent: false };
   if (deadline.status === "failed") return { text: "Failed", urgent: true };
+  if (deadline.status === "cancelled") return { text: "Cancelled", urgent: false };
   if (deadline.status === "created") return { text: "Pending", urgent: false };
 
   return { text: deadline.status, urgent: false };
@@ -223,7 +226,9 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
       ? errorMessage ?? "This hosted suite timed out."
       : status === "failed"
         ? errorMessage ?? "This run failed."
-        : null;
+        : status === "cancelled"
+          ? "This run was cancelled. Its hosted sessions are no longer available."
+          : null;
   const latestHostedEvent = hostedEvents[hostedEvents.length - 1] ?? null;
 
   if (embedded) {
@@ -285,7 +290,7 @@ export function LiveRunViewer(props: LiveRunViewerProps) {
         {terminalSummary ? (
           <section className="mb-6 rounded-[1.4rem] border border-[#6b2d22] bg-[#201311] p-5">
             <div className="text-xs uppercase tracking-[0.18em] text-[#ffb7aa]">
-              {status === "timeout" ? "Run timed out" : "Run failed"}
+              {status === "cancelled" ? "Run cancelled" : status === "timeout" ? "Run timed out" : "Run failed"}
             </div>
             <p className="mt-2 text-sm leading-7 text-[#ffd8d1]">{terminalSummary}</p>
           </section>

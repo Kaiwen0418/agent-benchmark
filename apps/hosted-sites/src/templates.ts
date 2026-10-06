@@ -33,9 +33,9 @@ export function layout(params: {
   const uiVariant = readUiVariant(params.session.metadata);
   const uiTheme = readUiTheme(params.session.metadata);
   const isViewer = params.session.accessMode === "viewer";
-  const isTerminal = params.session.status === "completed" || params.session.status === "failed" || params.session.status === "expired";
+  const isTerminal = params.session.status === "completed" || params.session.status === "failed" || params.session.status === "cancelled" || params.session.status === "expired";
   const connectionUrl = params.session.runId
-    ? `${(process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000").replace(/\/$/, "")}/runs/${encodeURIComponent(params.session.runId)}/connect`
+    ? `${(process.env.AGENTBENCH_WEB_PUBLIC_URL ?? process.env.AGENTBENCH_WEB_URL ?? "http://localhost:3000").replace(/\/$/, "")}/runs/${encodeURIComponent(params.session.runId)}/connect`
     : null;
   const taskHomePath = params.session.startPath ?? params.defaultStartPathForApp(params.session.app);
   const taskHomeSeparator = taskHomePath.includes("?") ? "&" : "?";

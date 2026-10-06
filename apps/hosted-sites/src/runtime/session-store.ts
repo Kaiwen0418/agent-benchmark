@@ -68,6 +68,10 @@ export function createSessionStore(deps: SessionStoreDeps) {
     return Boolean(session.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
   }
 
+  function isUnavailable(session: HostedSession) {
+    return session.status === "expired" || session.status === "cancelled";
+  }
+
   function buildSessionMetadata(session: HostedSession) {
     return {
       ...session.metadata,
@@ -105,6 +109,16 @@ export function createSessionStore(deps: SessionStoreDeps) {
     } catch (error) {
       console.error("[hosted-sites] failed to delete cached session", error);
     }
+  }
+
+  async function cancelSessions(sessionIds: string[]) {
+    const targets = new Set(sessionIds);
+    for (const [token, session] of deps.sessions) {
+      if (targets.has(session.id)) {
+        deps.sessions.delete(token);
+      }
+    }
+    await deps.sessionCache?.cancelByIds(sessionIds);
   }
 
   function hydrateSessionFromMetadata(params: {
@@ -152,6 +166,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
         params.row.status === "active" ||
         params.row.status === "completed" ||
         params.row.status === "failed" ||
+        params.row.status === "cancelled" ||
         params.row.status === "expired"
           ? params.row.status
           : "created",
@@ -165,7 +180,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
       createdAt: params.row.created_at,
       events: [],
       state: appState,
-      persisted: params.row.status !== "expired",
+      persisted: params.row.status !== "expired" && params.row.status !== "cancelled",
     } as HostedSession;
   }
 
@@ -252,6 +267,7 @@ export function createSessionStore(deps: SessionStoreDeps) {
       recovered.status === "active" ||
       recovered.status === "completed" ||
       recovered.status === "failed" ||
+      recovered.status === "cancelled" ||
       recovered.status === "expired"
     ) {
       session.status = recovered.status;
@@ -345,15 +361,20 @@ export function createSessionStore(deps: SessionStoreDeps) {
         row: recovered,
         accessMode: "viewer",
       });
-      return isExpired(viewerSession) || viewerSession.status === "expired" ? null : viewerSession;
+      return isExpired(viewerSession) || isUnavailable(viewerSession) ? null : viewerSession;
     }
 
+    let sessionCacheUnavailable = false;
     if (deps.sessionCache) {
       try {
         const cached = await deps.sessionCache.get(token);
         if (cached) {
           cached.scorePreviewMode = deps.scorePreviewMode;
           deps.sessions.set(token, cached);
+          if (cached.status === "cancelled") {
+            deps.sessions.delete(cached.token);
+            return null;
+          }
           if (isExpired(cached) || cached.status === "expired") {
             await markSessionExpired(cached, request);
             return null;
@@ -362,13 +383,18 @@ export function createSessionStore(deps: SessionStoreDeps) {
           return cached;
         }
       } catch (error) {
+        sessionCacheUnavailable = true;
         console.error("[hosted-sites] failed to read cached session", error);
       }
     }
 
-    const existing = deps.sessions.get(token);
+    const existing = !deps.sessionCache || sessionCacheUnavailable ? deps.sessions.get(token) : null;
     if (existing) {
       await refreshPersistedSessionControlState(existing);
+      if (existing.status === "cancelled") {
+        await deleteCachedSession(existing.token);
+        return null;
+      }
       if (isExpired(existing) || existing.status === "expired") {
         await markSessionExpired(existing, request);
         return null;
@@ -383,6 +409,9 @@ export function createSessionStore(deps: SessionStoreDeps) {
     }
 
     const hydrated = hydrateSessionFromMetadata({ token, row: recovered });
+    if (hydrated.status === "cancelled") {
+      return null;
+    }
     if (isExpired(hydrated) || hydrated.status === "expired") {
       await markSessionExpired(hydrated, request);
       return null;
@@ -404,5 +433,6 @@ export function createSessionStore(deps: SessionStoreDeps) {
     getSessionByToken,
     persistSessionSnapshot,
     markSessionTerminal,
+    cancelSessions,
   };
 }

@@ -68,8 +68,7 @@ jobs:
 
       - name: Sync ${{ matrix.source }}
         env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL || (github.ref_name == 'main' && secrets.PROD_SUPABASE_DB_URL || secrets.TEST_SUPABASE_DB_URL) }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -78,6 +77,5 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
           set -euo pipefail
-          test -n "${SUPABASE_URL}"
-          test -n "${SUPABASE_SERVICE_ROLE_KEY}"
+          test -n "${DATABASE_DIRECT_URL}"
           pnpm --filter @agentbench/model-catalog-sync sync "${{ matrix.source }}"

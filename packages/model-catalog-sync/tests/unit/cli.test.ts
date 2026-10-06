@@ -17,7 +17,7 @@ test("accepts every registered model catalog source", () => {
   }
 });
 
-test("rejects missing and unknown source names before accessing Supabase", () => {
+test("rejects missing and unknown source names before accessing PostgreSQL", () => {
   assert.throws(() => parseModelCatalogSource(undefined), /Unknown model catalog source/);
   assert.throws(() => parseModelCatalogSource("unknown"), /Unknown model catalog source/);
 });

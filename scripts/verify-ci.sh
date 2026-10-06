@@ -13,6 +13,18 @@ bash scripts/test-model-catalog-sync-workflow.sh
 echo "== Deployment classifier =="
 bash scripts/test-deploy-classifier.sh
 
+echo "== Web deployment workflow =="
+bash scripts/test-web-deploy-workflow.sh
+
+echo "== Service Dockerfiles =="
+bash scripts/test-service-dockerfiles.sh
+
+echo "== Cutover canary =="
+bash scripts/test-cutover-canary.sh
+
+echo "== Development cutover =="
+bash scripts/test-development-cutover.sh
+
 echo "== Registry retry helper =="
 bash scripts/test-registry-retry.sh
 
@@ -33,6 +45,30 @@ bash scripts/check-test-layout.sh
 
 echo "== Hosted app consistency =="
 pnpm hosted-app:check
+
+echo "== Portable PostgreSQL baseline =="
+bash scripts/test-portable-postgres.sh
+
+echo "== PostgreSQL backup and restore =="
+bash scripts/test-postgres-backup-restore.sh
+
+echo "== Isolated production database =="
+bash scripts/test-production-database.sh
+
+echo "== Single-VM deployment configuration =="
+bash scripts/test-single-vm-config.sh
+
+echo "== Single-VM deployment workflow =="
+bash scripts/test-single-vm-deploy.sh
+
+echo "== PostgreSQL data transfer =="
+bash scripts/test-postgres-data-transfer.sh
+
+echo "== Production PostgreSQL migration preflight =="
+bash scripts/test-production-migration-preflight.sh
+
+echo "== Auth.js legacy identity migration =="
+bash scripts/test-authjs-legacy-migration.sh
 
 echo "== Lifecycle Postgres integration =="
 bash scripts/test-lifecycle-postgres.sh
@@ -57,6 +93,7 @@ pnpm --filter @agentbench/test-cases test
 pnpm catalog:check
 
 echo "== Model catalog synchronization =="
+pnpm --filter @agentbench/database test
 pnpm --filter @agentbench/model-catalog-sync test
 pnpm --filter @agentbench/model-catalog-sync build
 

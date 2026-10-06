@@ -5,12 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKFLOW="${ROOT_DIR}/.github/workflows/model-catalog-sync.yml"
 
 grep -Eq 'pnpm --filter @agentbench/model-catalog-sync sync' "${WORKFLOW}"
-grep -Eq 'SUPABASE_URL:.*vars\.SUPABASE_URL' "${WORKFLOW}"
-grep -Eq 'SUPABASE_SERVICE_ROLE_KEY:.*secrets\.SUPABASE_SERVICE_ROLE_KEY' "${WORKFLOW}"
+grep -Eq 'DATABASE_DIRECT_URL:.*secrets\.DATABASE_DIRECT_URL' "${WORKFLOW}"
 grep -Eq 'max-parallel: 1' "${WORKFLOW}"
 
-if grep -Eq 'AGENTBENCH_WEB_URL|MODEL_CATALOG_SYNC_SECRET|curl .*model-catalog' "${WORKFLOW}"; then
-  echo "model catalog workflow must write directly to Supabase without a Web callback" >&2
+if grep -Eq 'SUPABASE_URL:|SUPABASE_SERVICE_ROLE_KEY:|AGENTBENCH_WEB_URL|MODEL_CATALOG_SYNC_SECRET|curl .*model-catalog' "${WORKFLOW}"; then
+  echo "model catalog workflow must write directly to PostgreSQL without Supabase REST or a Web callback" >&2
   exit 1
 fi
 

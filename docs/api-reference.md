@@ -2,14 +2,16 @@
 
 ## Authentication
 
-Public Web requests currently use an HTTP-only guest cookie. The
-`getCurrentUser()` seam remains guest-only until Auth.js is integrated.
-Service-to-service writes require
+Public Web requests use either an Auth.js database session or a signed,
+HTTP-only guest cookie. Signing in does not implicitly transfer guest runs;
+authenticated users must explicitly claim a run created by their current guest
+identity. Service-to-service writes require
 `x-runner-secret: <RUNNER_SHARED_SECRET>`. The header and environment variable
 retain a legacy name; they now authenticate hosted services, not a runner
 component.
 
-Hosted task requests use an opaque session token in `?session=<token>` or in the telemetry body. Only the SHA-256 token hash is stored in Supabase.
+Hosted task requests use an opaque session token in `?session=<token>` or in the
+telemetry body. Only the SHA-256 token hash is stored in PostgreSQL.
 
 ## Web API (`apps/web`)
 
@@ -18,6 +20,7 @@ Hosted task requests use an opaque session token in `?session=<token>` or in the
 | `GET` | `/api/quota` | Current guest/user quota | user or guest cookie |
 | `POST` | `/api/runs` | Create a benchmark run | user or guest cookie |
 | `GET` | `/api/runs/:runId` | Read one run | run visibility rules |
+| `POST` | `/api/runs/:runId/cancel` | Cancel an owned active run and hosted attempt | owning user or guest cookie |
 | `GET` | `/api/runs/:runId/connect` | Allocate/read hosted attempt connection payload | run visibility rules |
 | `GET` | `/api/runs/:runId/events` | List run events | run visibility rules |
 | `POST` | `/api/runs/:runId/events` | Append internal hosted event | shared secret |
@@ -63,7 +66,7 @@ usable as free text.
 
 Catalog synchronization is not exposed as a Web API. The environment-scoped
 GitHub maintenance workflow executes `packages/model-catalog-sync` directly
-against Supabase. Missing optional provider credentials produce a recorded
+against PostgreSQL through the Drizzle model-catalog repository. Missing optional provider credentials produce a recorded
 `skipped` run.
 
 ### Connect Run
@@ -90,6 +93,15 @@ retrying `404` and `410` responses. A `429` response includes `Retry-After`,
 not retry before that delay expires. Shared edge caches retain `404` responses
 for 60 seconds and terminal `410` responses for one hour. Successful,
 rate-limited, and transient-error responses are never shared-cacheable.
+
+### Cancel Run
+
+`POST /api/runs/:runId/cancel` first asks the orchestrator to atomically cancel
+the hosted attempt and every open session, then compare-and-sets the Web-owned
+run to `cancelled`. Cancelling before attempt initialization and repeating an
+already successful cancellation are idempotent. Another owner receives `404`;
+a competing terminal transition returns `409`; orchestrator unavailability
+returns `503` and clients keep their existing progress synchronization active.
 
 ### Event Stream
 
@@ -120,6 +132,7 @@ generated task configuration, final state, and matched values remain private.
 | `GET` | `/api/sessions/:token/score` | Evaluate current session state |
 | `POST` | `/api/sessions/:token/complete` | Evaluate and submit session completion |
 | `GET` | `/api/sessions/advance?session=...` | Resolve the next task URL from the opaque session token |
+| `POST` | `/api/internal/sessions/cancel` | Replace cancelled session envelopes in shared Redis | shared secret |
 
 ### Create Session
 
@@ -187,6 +200,7 @@ Write endpoints append a command to Redis Streams and wait for the worker result
 | `POST` | `/api/attempts/:id/commands/resolve-advance` | Validate current session and return next URL |
 | `POST` | `/api/attempts/:id/commands/complete-session` | Persist result, advance, aggregate if complete |
 | `POST` | `/api/attempts/:id/commands/timeout` | Mark attempt timeout and complete the run |
+| `POST` | `/api/runs/:runId/commands/cancel` | Atomically cancel an attempt and its open sessions |
 | `POST` | `/api/sessions/:token/commands/snapshot` | Persist the current session metadata snapshot |
 | `POST` | `/api/sessions/:token/commands/access` | Persist session access counters and an access-log row |
 | `POST` | `/api/sessions/:token/commands/event` | Persist one hosted event |
@@ -208,6 +222,16 @@ The orchestrator loads the service-role-only manifest identified by `caseRevisio
 ### Complete Session Command
 
 The body contains `sessionToken`, `result`, and optional `finalState`. `result` contains `status`, `score`, `summary`, `evaluators`, and `breakdown`. Duplicate completion is idempotent and returns the latest persisted result.
+
+### Cancel Attempt Command
+
+Cancellation resolves the hosted attempt by `runId`. The PostgreSQL function
+locks the attempt, changes `created`, `active`, and `scoring` sessions to
+`cancelled`, clears active pointers, and makes the attempt terminal in one
+transaction. It does not enqueue a completion callback because Web initiated
+the cancellation and persists its own run transition after success. After the
+transaction, the worker calls hosted-sites' authenticated internal invalidation
+endpoint so every replica observes cancelled envelopes through session Redis.
 
 ### Session Persistence Commands
 

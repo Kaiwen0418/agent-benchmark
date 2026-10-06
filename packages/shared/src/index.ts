@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 
 export type { Database, Json } from "./database.types.js";
 
-export type HostedAttemptSessionStatus = "created" | "active" | "completed" | "failed" | "expired";
+export type HostedAttemptSessionStatus = "created" | "active" | "completed" | "failed" | "cancelled" | "expired";
 
 export type HostedWebSessionPersistenceStatus =
   | HostedAttemptSessionStatus

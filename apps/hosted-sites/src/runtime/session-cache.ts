@@ -7,6 +7,8 @@ export type SessionCache = {
   get: (token: string) => Promise<HostedSession | null>;
   set: (session: HostedSession) => Promise<void>;
   delete: (token: string) => Promise<void>;
+  cancelByIds: (sessionIds: string[]) => Promise<void>;
+  close?: () => Promise<void>;
 };
 
 type RedisSessionCacheOptions = {
@@ -30,6 +32,7 @@ function isHostedSessionStatus(value: unknown) {
     value === "active" ||
     value === "completed" ||
     value === "failed" ||
+    value === "cancelled" ||
     value === "expired"
   );
 }
@@ -133,6 +136,7 @@ export function decodeRedisHostedSession(value: string) {
 export function createRedisSessionCache(options: RedisSessionCacheOptions): SessionCache {
   const client = createClient({ url: options.url });
   const keyPrefix = options.keyPrefix ?? "hosted-sites:session:";
+  const sessionIdKeyPrefix = `${keyPrefix}id:`;
   let connectPromise: Promise<unknown> | null = null;
 
   client.on("error", (error) => {
@@ -152,6 +156,18 @@ export function createRedisSessionCache(options: RedisSessionCacheOptions): Sess
     return `${keyPrefix}${token}`;
   }
 
+  function keyForSessionId(sessionId: string) {
+    return `${sessionIdKeyPrefix}${sessionId}`;
+  }
+
+  async function writeSession(session: HostedSession) {
+    const ttl = ttlSecondsForSession(session, options.defaultTtlMs);
+    await client.multi()
+      .set(keyForToken(session.token), encodeRedisHostedSession(session), { EX: ttl })
+      .set(keyForSessionId(session.id), session.token, { EX: ttl })
+      .exec();
+  }
+
   return {
     async get(token) {
       await ensureConnected();
@@ -164,14 +180,44 @@ export function createRedisSessionCache(options: RedisSessionCacheOptions): Sess
 
     async set(session) {
       await ensureConnected();
-      await client.set(keyForToken(session.token), encodeRedisHostedSession(session), {
-        EX: ttlSecondsForSession(session, options.defaultTtlMs),
-      });
+      await writeSession(session);
     },
 
     async delete(token) {
       await ensureConnected();
       await client.del(keyForToken(token));
+    },
+
+    async cancelByIds(sessionIds) {
+      await ensureConnected();
+      const remaining = new Set(sessionIds);
+      for (const sessionId of sessionIds) {
+        const token = await client.get(keyForSessionId(sessionId));
+        if (!token) continue;
+        const value = await client.get(keyForToken(token));
+        if (!value) continue;
+        const session = decodeRedisHostedSession(value);
+        await writeSession({ ...session, status: "cancelled", expiresAt: null });
+        remaining.delete(sessionId);
+      }
+
+      if (remaining.size === 0) return;
+      for await (const keys of client.scanIterator({ MATCH: `${keyPrefix}*`, COUNT: 100 })) {
+        for (const key of keys) {
+          if (key.startsWith(sessionIdKeyPrefix)) continue;
+          const value = await client.get(key);
+          if (!value) continue;
+          const session = decodeRedisHostedSession(value);
+          if (!remaining.has(session.id)) continue;
+          await writeSession({ ...session, status: "cancelled", expiresAt: null });
+          remaining.delete(session.id);
+        }
+        if (remaining.size === 0) return;
+      }
+    },
+
+    async close() {
+      if (client.isOpen) await client.close();
     },
   };
 }

@@ -5,23 +5,20 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${ROOT_DIR}/apps/web/.env.local"
 HOSTED_PORT="${HOSTED_SITES_PORT:-$((3100 + (RANDOM % 1000)))}"
 ORCHESTRATOR_PORT="${HOSTED_ORCHESTRATOR_PORT:-$((4100 + (RANDOM % 1000)))}"
+WEB_PORT="${AGENTBENCH_WEB_PORT:-$((5100 + (RANDOM % 1000)))}"
 HOSTED_BASE_URL="${HOSTED_SITES_PUBLIC_URL:-http://127.0.0.1:${HOSTED_PORT}}"
 ORCHESTRATOR_BASE_URL="${HOSTED_ORCHESTRATOR_PUBLIC_URL:-http://127.0.0.1:${ORCHESTRATOR_PORT}}"
-WEB_URL="${AGENTBENCH_WEB_URL:-http://127.0.0.1:3999}"
+WEB_URL="${AGENTBENCH_WEB_URL:-http://127.0.0.1:${WEB_PORT}}"
 SMOKE_MODE="${SMOKE_MODE:-timeout}"
 START_LOCAL_SERVICES="${START_LOCAL_SERVICES:-true}"
 GENERATION_SEED="${GENERATION_SEED:-}"
 BENCHMARK_CASE_SLUG="${BENCHMARK_CASE_SLUG:-hosted-web-suite}"
 
-if [[ -f "${ENV_FILE}" && -z "${SUPABASE_URL:-}" && -z "${SUPABASE_SERVICE_ROLE_KEY:-}" && -z "${RUNNER_SHARED_SECRET:-}" ]]; then
+if [[ -f "${ENV_FILE}" && -z "${DATABASE_URL:-}" && -z "${RUNNER_SHARED_SECRET:-}" ]]; then
   set -a
   source "${ENV_FILE}"
   set +a
 fi
-
-: "${SUPABASE_URL:?SUPABASE_URL is required}"
-: "${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}"
-: "${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET is required}"
 
 if [[ "${SMOKE_MODE}" != "full-pass" && "${SMOKE_MODE}" != "timeout" ]]; then
   echo "SMOKE_MODE must be full-pass or timeout." >&2
@@ -36,6 +33,11 @@ if [[ ! "${BENCHMARK_CASE_SLUG}" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
   exit 2
 fi
 
+: "${DATABASE_URL:=${DATABASE_DIRECT_URL:-}}"
+: "${DATABASE_URL:?DATABASE_URL or DATABASE_DIRECT_URL is required}"
+: "${DATABASE_DIRECT_URL:=${DATABASE_URL}}"
+: "${RUNNER_SHARED_SECRET:?RUNNER_SHARED_SECRET is required}"
+
 cleanup() {
   terminate_tree() {
     local parent="$1"
@@ -48,7 +50,7 @@ cleanup() {
     kill "${parent}" >/dev/null 2>&1 || true
   }
 
-  for pid in "${ORCHESTRATOR_PID:-}" "${HOSTED_PID:-}"; do
+  for pid in "${WEB_PID:-}" "${ORCHESTRATOR_PID:-}" "${HOSTED_PID:-}"; do
     if [[ -n "${pid}" ]]; then
       terminate_tree "${pid}"
       wait "${pid}" 2>/dev/null || true
@@ -59,12 +61,19 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "${START_LOCAL_SERVICES}" == "true" ]]; then
+  DATABASE_URL="${DATABASE_URL}" \
+  HOSTED_ORCHESTRATOR_URL="${ORCHESTRATOR_BASE_URL}" \
+  HOSTED_SITES_URL="${HOSTED_BASE_URL}" \
+  RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
+  pnpm --filter web exec next dev --hostname 127.0.0.1 --port "${WEB_PORT}" \
+    >/tmp/agentbench-web-smoke.log 2>&1 &
+  WEB_PID=$!
+
   HOSTED_ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT}" \
   HOSTED_ORCHESTRATOR_PUBLIC_URL="${ORCHESTRATOR_BASE_URL}" \
   HOSTED_SITES_URL="${HOSTED_BASE_URL}" \
   AGENTBENCH_WEB_URL="${WEB_URL}" \
-  SUPABASE_URL="${SUPABASE_URL}" \
-  SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}" \
+  DATABASE_URL="${DATABASE_URL}" \
   RUNNER_SHARED_SECRET="${RUNNER_SHARED_SECRET}" \
   pnpm --filter hosted-orchestrator exec tsx src/server.ts >/tmp/agentbench-hosted-orchestrator-smoke.log 2>&1 &
   ORCHESTRATOR_PID=$!
@@ -80,12 +89,15 @@ if [[ "${START_LOCAL_SERVICES}" == "true" ]]; then
 fi
 
 for _ in $(seq 1 30); do
-  if curl -fsS "${HOSTED_BASE_URL}/health" >/dev/null && curl -fsS "${ORCHESTRATOR_BASE_URL}/health" >/dev/null; then
+  if curl -fsS "${WEB_URL}/api/health" >/dev/null \
+    && curl -fsS "${HOSTED_BASE_URL}/health" >/dev/null \
+    && curl -fsS "${ORCHESTRATOR_BASE_URL}/health" >/dev/null; then
     break
   fi
   sleep 1
 done
 
+curl -fsS "${WEB_URL}/api/health" >/dev/null
 curl -fsS "${HOSTED_BASE_URL}/health" >/dev/null
 curl -fsS "${ORCHESTRATOR_BASE_URL}/health" >/dev/null
 
@@ -96,7 +108,9 @@ BENCHMARK_CASE_SLUG="${BENCHMARK_CASE_SLUG}" \
 ROOT_DIR="${ROOT_DIR}" \
 HOSTED_BASE_URL="${HOSTED_BASE_URL}" \
 ORCHESTRATOR_BASE_URL="${ORCHESTRATOR_BASE_URL}" \
-node <<'NODE'
+WEB_URL="${WEB_URL}" \
+DATABASE_DIRECT_URL="${DATABASE_DIRECT_URL}" \
+pnpm --filter @agentbench/database exec node <<'NODE'
 const { existsSync } = await import("node:fs");
 const { pathToFileURL } = await import("node:url");
 
@@ -106,9 +120,12 @@ const benchmarkCaseSlug = process.env.BENCHMARK_CASE_SLUG || "hosted-web-suite";
 const rootDir = process.env.ROOT_DIR;
 const hostedBaseUrl = process.env.HOSTED_BASE_URL;
 const orchestratorBaseUrl = process.env.ORCHESTRATOR_BASE_URL;
+const webUrl = process.env.WEB_URL;
 const runnerSecret = process.env.RUNNER_SHARED_SECRET;
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const databaseUrl = process.env.DATABASE_DIRECT_URL;
+const { Client } = await import("pg");
+const database = new Client({ connectionString: databaseUrl, application_name: "agentbench-lifecycle-smoke" });
+await database.connect();
 
 function isRecoverableFault(status, body) {
   return [409, 503].includes(status) && body.includes(">Retry</a>");
@@ -138,35 +155,8 @@ async function orchestratorRequest(path, init = {}) {
   });
 }
 
-async function supabaseRequest(table, searchParams, init = {}) {
-  const query = new URLSearchParams(searchParams);
-  return checkedFetch(`${supabaseUrl}/rest/v1/${table}?${query}`, {
-    ...init,
-    headers: {
-      apikey: supabaseServiceRoleKey,
-      Authorization: `Bearer ${supabaseServiceRoleKey}`,
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-  });
-}
-
-async function selectRows(table, searchParams) {
-  return (await supabaseRequest(table, searchParams)).json();
-}
-
-async function insertRow(table, value) {
-  const rows = await (
-    await supabaseRequest(table, { select: "id" }, {
-      method: "POST",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify(value),
-    })
-  ).json();
-  if (!Array.isArray(rows) || rows.length !== 1) {
-    throw new Error(`Expected one inserted ${table} row.`);
-  }
-  return rows[0];
+async function selectRows(text, values = []) {
+  return (await database.query(text, values)).rows;
 }
 
 async function postForm(path, token, values) {
@@ -317,34 +307,54 @@ async function loadAttemptState(attemptId) {
 }
 
 async function main() {
-  const benchmarkCases = await selectRows("benchmark_cases", {
-    select: "id,slug,title,description,current_revision_id",
-    slug: `eq.${benchmarkCaseSlug}`,
-    limit: "1",
-  });
-  if (!Array.isArray(benchmarkCases) || benchmarkCases.length !== 1) {
+  const publicCases = await (await checkedFetch(`${webUrl}/api/benchmark-cases`)).json();
+  const publicBenchmarkCase = Array.isArray(publicCases.cases)
+    ? publicCases.cases.find((candidate) => candidate.slug === benchmarkCaseSlug)
+    : null;
+  if (!publicBenchmarkCase) {
     throw new Error(`benchmark case not found: ${benchmarkCaseSlug}`);
   }
+  const benchmarkCases = await selectRows(
+    `select id, slug, title, description, current_revision_id
+       from benchmark_cases
+      where id = $1 and slug = $2
+      limit 1`,
+    [publicBenchmarkCase.id, benchmarkCaseSlug],
+  );
+  if (benchmarkCases.length !== 1) throw new Error("public benchmark case is not persisted");
   const benchmarkCase = benchmarkCases[0];
   const caseRevisionId = requireString(benchmarkCase.current_revision_id, "current benchmark revision");
-  const revisions = await selectRows("benchmark_case_revisions", {
-    select: "id,case_id,manifest",
-    id: `eq.${caseRevisionId}`,
-    case_id: `eq.${benchmarkCase.id}`,
-    limit: "1",
-  });
-  if (!Array.isArray(revisions) || revisions.length !== 1) {
+  const revisions = await selectRows(
+    `select id, case_id, manifest
+       from benchmark_case_revisions
+      where id = $1 and case_id = $2
+      limit 1`,
+    [caseRevisionId, benchmarkCase.id],
+  );
+  if (revisions.length !== 1) {
     throw new Error("current benchmark revision not found");
   }
   const revision = revisions[0];
   const revisionManifest = requireObject(revision.manifest, "benchmark revision manifest");
   const suite = normalizedSessions({ ...benchmarkCase, metadata: revisionManifest });
 
-  const run = await insertRow("benchmark_runs", {
-      case_id: benchmarkCase.id,
-      execution_mode: "external-agent",
-      status: "queued",
-  });
+  const createdRun = await (
+    await checkedFetch(`${webUrl}/api/runs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "AgentBench lifecycle smoke",
+      },
+      body: JSON.stringify({
+        caseId: benchmarkCase.id,
+        executionMode: "external-agent",
+        isPublic: false,
+        ...(generationSeed ? { caseRevisionId, generationSeed } : {}),
+      }),
+    })
+  ).json();
+  const run = requireObject(createdRun.run, "created benchmark run");
+  requireString(run.id, "created benchmark run id");
 
   const initialized = await (
     await orchestratorRequest("/api/attempts/init", {
@@ -363,12 +373,14 @@ async function main() {
   if (initialized.sessions.length !== suite.sessions.length) {
     throw new Error(`Expected ${suite.sessions.length} initialized sessions, got ${initialized.sessions.length}.`);
   }
-  const attempts = await selectRows("benchmark_attempts", {
-    select: "id,case_revision_id,metadata",
-    id: `eq.${initialized.attemptId}`,
-    limit: "1",
-  });
-  if (!Array.isArray(attempts) || attempts.length !== 1 || attempts[0].case_revision_id !== caseRevisionId) {
+  const attempts = await selectRows(
+    `select id, case_revision_id, metadata
+       from benchmark_attempts
+      where id = $1
+      limit 1`,
+    [initialized.attemptId],
+  );
+  if (attempts.length !== 1 || attempts[0].case_revision_id !== caseRevisionId) {
     throw new Error("Initialized attempt did not retain the selected benchmark revision.");
   }
   const attemptMetadata = requireObject(attempts[0].metadata, "attempt metadata");
@@ -383,11 +395,13 @@ async function main() {
   const sessions = [...initialized.sessions].sort(
     (left, right) => left.sequenceIndex - right.sequenceIndex,
   );
-  const sessionRows = await selectRows("hosted_web_sessions", {
-    select: "id,sequence_index,metadata",
-    attempt_id: `eq.${initialized.attemptId}`,
-  });
-  if (!Array.isArray(sessionRows) || sessionRows.length !== sessions.length) {
+  const sessionRows = await selectRows(
+    `select id, sequence_index, metadata
+       from hosted_web_sessions
+      where attempt_id = $1`,
+    [initialized.attemptId],
+  );
+  if (sessionRows.length !== sessions.length) {
     throw new Error("Hosted session metadata rows were not persisted for every initialized session.");
   }
   const initialState = await loadAttemptState(initialized.attemptId);
@@ -466,10 +480,10 @@ async function main() {
     }
   }
 
-  const resultRows = await selectRows("hosted_web_results", {
-    select: "session_id",
-    attempt_id: `eq.${initialized.attemptId}`,
-  });
+  const resultRows = await selectRows(
+    "select session_id from hosted_web_results where attempt_id = $1",
+    [initialized.attemptId],
+  );
   if (
     resultRows.length !== completedSessions.length ||
     new Set(resultRows.map((row) => row.session_id)).size !== resultRows.length
@@ -477,10 +491,10 @@ async function main() {
     throw new Error("Hosted result rows are not unique per completed session.");
   }
 
-  const scoreRows = await selectRows("benchmark_attempt_scores", {
-    select: "id,status,score",
-    attempt_id: `eq.${initialized.attemptId}`,
-  });
+  const scoreRows = await selectRows(
+    "select id, status, score from benchmark_attempt_scores where attempt_id = $1",
+    [initialized.attemptId],
+  );
   if (scoreRows.length !== 1) {
     throw new Error(`Expected one aggregate attempt score, got ${scoreRows.length}.`);
   }
@@ -515,9 +529,11 @@ async function main() {
   );
 }
 
-main().then(() => {
+main().then(async () => {
+  await database.end();
   process.exit(0);
-}).catch((error) => {
+}).catch(async (error) => {
+  await database.end().catch(() => undefined);
   console.error(error);
   process.exit(1);
 });

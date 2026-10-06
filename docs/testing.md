@@ -49,8 +49,9 @@ pnpm verify:ci
 rather than live network calls and verify CLI source validation and merge
 precedence independently from Web. `scripts/test-model-catalog-postgres.sh`
 applies the catalog migration to an isolated PostgreSQL 17 container and
-verifies seed data, structured run columns, lifecycle constraints, and the
-direct-read RLS boundary.
+verifies seed data, structured run columns, lifecycle constraints, the
+direct-read RLS boundary, and real Drizzle repository operations against plain
+PostgreSQL.
 
 ## Adding Tests
 

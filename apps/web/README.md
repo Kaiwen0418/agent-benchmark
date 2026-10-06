@@ -48,4 +48,9 @@ Default startup uses Docker runtime for backend services:
 
 For normal `Start Agent Session` testing, `web + hosted-sites + hosted-orchestrator` is the default path.
 
-The Web control plane always requires Supabase server credentials. It has no process-local database or run fallback. Missing credentials and unavailable database requests return `503 service_unavailable`; attempt connection failures are shown as a retryable modal in the playground.
+The Web control plane requires a PostgreSQL `DATABASE_URL`. It has no
+process-local database or run fallback. Missing configuration and unavailable
+database requests return `503 service_unavailable`; attempt connection failures
+are shown as a retryable modal in the playground. Supabase credentials are not
+required by Web; authentication remains behind the guest-only Auth.js seam
+until that integration is enabled.

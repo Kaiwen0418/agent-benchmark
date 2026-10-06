@@ -4,6 +4,7 @@ import {
   getCurrentUser,
   getOrCreateGuestId,
   GUEST_COOKIE_NAME,
+  guestCookieOptions,
   isDevQuotaBypassed,
 } from "@/lib/auth";
 import {
@@ -14,8 +15,26 @@ import {
 } from "@/lib/db";
 import { captureBrowserEnvironment } from "@/lib/run-metadata";
 import { isCalibrationControlsEnabled } from "@/lib/calibration";
+import { isRunCreationAllowed } from "@/lib/run-admission";
 
 export async function POST(request: Request) {
+  if (!isRunCreationAllowed()) {
+    return NextResponse.json(
+      {
+        error: "run_creation_frozen",
+        message: "New benchmark runs are temporarily paused for database maintenance.",
+        retryable: true,
+      },
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store",
+          "Retry-After": "300",
+        },
+      },
+    );
+  }
+
   const json = await request.json().catch(() => null);
   const parsedInput = createRunInputSchema.safeParse(json);
   if (!parsedInput.success) {
@@ -87,14 +106,8 @@ export async function POST(request: Request) {
       { status: 403 },
     );
 
-    if (guest?.isNew) {
-      response.cookies.set(GUEST_COOKIE_NAME, guest.guestId, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24 * 365,
-        path: "/",
-      });
+    if (guest?.shouldSetCookie) {
+      response.cookies.set(GUEST_COOKIE_NAME, guest.cookieValue, guestCookieOptions);
     }
 
     return response;
@@ -147,14 +160,8 @@ export async function POST(request: Request) {
   };
   const response = NextResponse.json({ run, quota: nextQuota }, { status: 201 });
 
-  if (guest?.isNew) {
-    response.cookies.set(GUEST_COOKIE_NAME, guest.guestId, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 365,
-      path: "/",
-    });
+  if (guest?.shouldSetCookie) {
+    response.cookies.set(GUEST_COOKIE_NAME, guest.cookieValue, guestCookieOptions);
   }
 
   return response;

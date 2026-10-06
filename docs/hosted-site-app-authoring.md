@@ -253,6 +253,12 @@ Do not create one business-table set per app.
 
 ## Verification
 
+Lifecycle smoke requires `DATABASE_URL` (pooled runtime connection), optional
+`DATABASE_DIRECT_URL` (defaults to `DATABASE_URL` for read-only persistence
+assertions), and `RUNNER_SHARED_SECRET`. When `START_LOCAL_SERVICES=false`, also
+set the public Web, hosted-sites, and orchestrator URLs. The smoke creates its
+run through the Web API and does not write lifecycle tables directly.
+
 ```bash
 pnpm --filter hosted-sites test
 pnpm --filter hosted-sites build

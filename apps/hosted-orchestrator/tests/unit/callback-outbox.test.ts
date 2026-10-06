@@ -2,7 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@agentbench/shared";
-import { createCallbackOutboxProcessor } from "../../src/callback-outbox.js";
+import {
+  createCallbackOutboxProcessor,
+  type CallbackOutboxPersistence,
+  type CallbackOutboxRow,
+} from "../../src/callback-outbox.js";
 
 type OutboxRow = Database["public"]["Tables"]["hosted_callback_outbox"]["Row"];
 
@@ -70,6 +74,48 @@ test("callback outbox marks successful delivery", async () => {
   assert.equal(requests[0]?.url, "https://web.example/api/runs/run-1/complete");
   assert.equal((requests[0]?.init?.headers as Record<string, string>)["x-runner-secret"], "secret");
   assert.equal(updates[0]?.status, "delivered");
+});
+
+test("callback outbox uses provider-neutral persistence", async () => {
+  const row: CallbackOutboxRow = {
+    id: "outbox-native",
+    attemptId: "attempt-1",
+    runId: "run-1",
+    eventType: "run_completion",
+    payload: { status: "completed", score: 1, artifacts: [] },
+    status: "delivering",
+    attempts: 1,
+    nextAttemptAt: "2026-06-19T00:00:00.000Z",
+    lockedAt: "2026-06-19T00:00:00.000Z",
+    deliveredAt: null,
+    lastError: null,
+    createdAt: "2026-06-19T00:00:00.000Z",
+    updatedAt: "2026-06-19T00:00:00.000Z",
+  };
+  let delivered: { id: string; at: string } | null = null;
+  const persistence: CallbackOutboxPersistence = {
+    reconcile: async () => 2,
+    claim: async () => [row],
+    markDelivered: async (id, at) => { delivered = { id, at }; },
+    markFailed: async () => { throw new Error("not expected"); },
+  };
+  const processor = createCallbackOutboxProcessor({
+    getSupabaseAdmin: () => { throw new Error("Supabase fallback must not be used"); },
+    getPersistence: () => persistence,
+    webBaseUrl: "https://web.example",
+    sharedSecret: null,
+    now: () => new Date("2026-06-19T01:00:00.000Z"),
+    fetchFn: async () => new Response(null, { status: 200 }),
+  });
+
+  assert.deepEqual(await processor.process(20, true), {
+    reconciled: 2,
+    claimed: 1,
+    delivered: 1,
+    retried: 0,
+    dead: 0,
+  });
+  assert.deepEqual(delivered, { id: "outbox-native", at: "2026-06-19T01:00:00.000Z" });
 });
 
 test("callback outbox reschedules failed delivery with bounded backoff", async () => {

@@ -10,6 +10,7 @@ export function TopNav() {
   const items = [
     { href: "#leaderboard", label: "Leaderboard" },
     { href: "#docs", label: "Docs" },
+    { href: "/account", label: "Account" },
   ];
   const [visibleProgress, setVisibleProgress] = useState(0);
 

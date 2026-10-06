@@ -9,6 +9,7 @@ Database invariants:
 - Hosted-web permits one `benchmark_attempts` row per `(run_id, case_id, provider)`.
 - Every hosted session references that attempt.
 - A uniqueness conflict is an idempotent hit. The caller reloads the existing attempt instead of returning another session set.
+- Cancellation locks the attempt and atomically terminates every open session; repeated cancellation is a no-op and cannot enqueue duplicate callbacks.
 
 ## Initialization Protocol
 

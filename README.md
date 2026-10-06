@@ -17,7 +17,7 @@ AgentBench is an interactive benchmark platform for observing and scoring tool-u
 
 ## Quick Start
 
-Requirements: Node.js, pnpm, Docker, and a configured Supabase project.
+Requirements: Node.js, pnpm, Docker, and PostgreSQL 17.
 
 ```bash
 pnpm install
@@ -43,7 +43,7 @@ See [Getting Started](./docs/getting-started.md) for environment setup and devel
 pnpm hooks:install
 ```
 
-The hook runs `pnpm verify:ci`, the same coverage-gated tests, local service smoke, deployment classifier tests, and production builds used by GitHub Actions. The database-backed lifecycle smoke remains explicit because it creates Supabase run data:
+The hook runs `pnpm verify:ci`, the same coverage-gated tests, local service smoke, deployment classifier tests, and production builds used by GitHub Actions. The database-backed lifecycle smoke remains explicit because it creates run data:
 
 ```bash
 pnpm smoke:lifecycle
@@ -60,7 +60,7 @@ flowchart LR
   Gateway --> Sites["apps/hosted-sites replicas"]
   Gateway --> Orchestrator["orchestrator API"]
   Sites <--> SessionRedis[("Redis session runtime")]
-  Web <--> DB[("Supabase")]
+  Web <--> DB[("PostgreSQL")]
   Sites -->|"commands and recovery"| Orchestrator
   Orchestrator --> Streams[("Redis Streams")]
   Streams --> Worker["orchestrator worker role"]

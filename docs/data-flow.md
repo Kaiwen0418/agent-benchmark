@@ -8,13 +8,13 @@ This document describes the current runtime path. It does not treat planned Redi
 sequenceDiagram
   participant U as User Browser
   participant W as apps/web
-  participant D as Supabase
+  participant D as PostgreSQL
   participant A as orchestrator API
   participant R as Redis Streams
   participant K as partition worker
 
   U->>W: POST /api/runs
-  W->>D: insert benchmark_run
+  W->>D: transaction: insert benchmark_run + run.created event
   U->>W: GET /api/runs/:id/connect
   W->>D: load case and current revision ID
   W->>A: POST /api/attempts/init
@@ -30,7 +30,42 @@ sequenceDiagram
 
 Web sends `runId`, `caseId`, and `caseRevisionId`, but never sends the private suite manifest. The worker loads the selected service-role-only revision, validates it, generates a deterministic question snapshot, and binds the attempt to that revision. The attempt stores only revision identity, generation seed, and progress pointers. Each generated session stores its own `metadata.questionGeneration` snapshot. The first session is `active`; later sessions are `created`.
 
+Web-owned run creation, metadata connection transitions, and terminal updates
+use direct PostgreSQL through the Drizzle repository. Run creation and its
+initial event commit together. Completion applies a status compare-and-set and
+commits the terminal event and artifacts with the winning transition, so a
+duplicate completion cannot duplicate those dependent records.
+
 Attempt initialization also uses a short Redis lease to reduce duplicate work. PostgreSQL uniqueness on `(run_id, case_id, provider)` remains the correctness boundary when Redis is unavailable or two requests race. See [Hosted Attempt Consistency](./attempt-consistency.md).
+
+### Owner Cancellation
+
+```mermaid
+sequenceDiagram
+  participant U as User Browser
+  participant W as apps/web
+  participant O as orchestrator API
+  participant R as Redis Stream
+  participant K as partition worker
+  participant D as PostgreSQL
+  participant H as hosted-sites
+
+  U->>W: POST /api/runs/:id/cancel
+  W->>W: verify user or signed guest ownership
+  W->>O: attempt.cancel(runId)
+  O->>R: XADD attempt.cancel
+  K->>D: lock attempt; cancel open sessions and attempt
+  D-->>K: durable terminal result
+  K->>H: invalidate cancelled hosted session envelopes
+  K-->>W: cancellation succeeded
+  W->>D: CAS run status + insert run.cancelled
+  W-->>U: cancelled run
+```
+
+The browser closes SSE or fallback polling only after the Web endpoint returns
+the durable cancelled run. If the orchestrator is unavailable, synchronization
+continues so a later completion or retry remains visible. Pre-initialization
+cancellation succeeds because no hosted lifecycle rows exist yet.
 
 ## 2. Hosted Request and Session Lookup
 
@@ -51,9 +86,9 @@ flowchart TD
   Cache --> Handle
 ```
 
-Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy. Hosted-sites has no database credential. Its authenticated recovery request is resolved by the orchestrator from the latest successfully persisted `metadata.appState` snapshot, which may lag state that had existed only in Redis. Each durable `hosted.session.progress` event includes a short-lived viewer URL for its active session only, allowing the Web iframe to advance without exposing future write-session tokens.
+Nginx may send each request to any hosted-sites replica. Redis is the first shared lookup for write-session tokens; the local Map is a non-authoritative hot copy used only when Redis errors. A normal Redis cache miss recovers through the orchestrator instead of reviving local state. Hosted-sites has no database credential. Its authenticated recovery request is resolved by the orchestrator from the latest successfully persisted `metadata.appState` snapshot, which may lag state that had existed only in Redis. Each durable `hosted.session.progress` event includes a short-lived viewer URL for its active session only, allowing the Web iframe to advance without exposing future write-session tokens.
 
-The current local-Map fallback can serve stale state after a Redis miss, and Redis session writes are not revision-checked. These are known horizontal-scaling gaps, not guarantees supplied by the diagram.
+The Redis-error local-Map fallback can serve stale state, and Redis session writes are not revision-checked. These are known horizontal-scaling gaps, not guarantees supplied by the diagram.
 
 ## 3. Task Mutation, Telemetry, and Snapshot Persistence
 
@@ -65,7 +100,7 @@ sequenceDiagram
   participant O as orchestrator API
   participant S as Redis Stream
   participant K as partition worker
-  participant D as Supabase
+  participant D as PostgreSQL
   participant W as apps/web
 
   A->>H: task action with session token
@@ -97,7 +132,7 @@ flowchart LR
   Stream --> Group["hosted-orchestrator consumer group"]
   Group --> Worker["partition owner"]
   Worker --> Handler["typed command handler"]
-  Handler --> DB[("Supabase")]
+  Handler --> DB[("PostgreSQL")]
   Handler --> Result["24h command result key"]
   Result --> Reply["short-lived response list"]
   Reply --> API
@@ -116,7 +151,7 @@ sequenceDiagram
   participant O as orchestrator API
   participant R as Redis Stream
   participant K as partition worker
-  participant D as Supabase
+  participant D as PostgreSQL
   participant W as apps/web
 
   A->>H: terminal task action
@@ -166,17 +201,17 @@ and event-stream gaps. Visible active-run pages use a 60-second fallback poll;
 hidden pages and terminal runs do not poll, failed requests back off, and
 concurrent components share one in-flight request per run. The orchestrator
 serves this recovery projection through a short Redis read-through cache and
-invalidates the run key after attempt initialization, session completion, or
-attempt timeout. PostgreSQL remains the source of truth and is used directly
+invalidates the run key after attempt initialization, session completion,
+attempt timeout, or cancellation. PostgreSQL remains the source of truth and is used directly
 when Redis is unavailable.
 
 Recovery boundaries:
 
 - process-local Map loss is expected and recoverable from Redis
-- Redis session loss uses orchestrator recovery from the latest successful Supabase app-state snapshot
+- Redis session loss uses orchestrator recovery from the latest successful PostgreSQL app-state snapshot
 - Redis Stream loss can discard commands that had not produced durable database effects
 - duplicate terminal commands recover from PostgreSQL constraints and transactional functions
 - Web callback loss recovers through `hosted_callback_outbox`
-- there is no distributed transaction spanning Redis, Supabase, hosted-sites, and Web
+- there is no distributed transaction spanning Redis, PostgreSQL, hosted-sites, and Web
 
 The exact current RPO, concurrency gaps, and degraded behavior are documented in [Consistency and Failure](./consistency-and-failure.md).

@@ -13,11 +13,13 @@ fi
 
 case "${target}" in
   local|development|test)
-    database_url="${TEST_SUPABASE_DB_URL:-}"
+    direct_database_url="${DATABASE_DIRECT_URL:-}"
+    legacy_database_url="${TEST_SUPABASE_DB_URL:-}"
     database_label="test"
     ;;
   production|prod)
-    database_url="${PROD_SUPABASE_DB_URL:-}"
+    direct_database_url="${DATABASE_DIRECT_URL:-}"
+    legacy_database_url="${PROD_SUPABASE_DB_URL:-}"
     database_label="production"
     ;;
   *)
@@ -26,12 +28,26 @@ case "${target}" in
     ;;
 esac
 
+if [ -n "${direct_database_url}" ]; then
+  echo "Applying portable Drizzle migrations to ${database_label} database."
+  if [ "${mode}" = "--dry-run" ]; then
+    DATABASE_DIRECT_URL="${direct_database_url}" pnpm --filter @agentbench/database exec drizzle-kit check
+  elif [ -z "${mode}" ]; then
+    DATABASE_DIRECT_URL="${direct_database_url}" pnpm --filter @agentbench/database exec drizzle-kit migrate
+  else
+    echo "Unknown option: ${mode}" >&2
+    exit 2
+  fi
+  exit 0
+fi
+
+database_url="${legacy_database_url}"
 if [ -z "${database_url}" ]; then
   variable_name="TEST_SUPABASE_DB_URL"
   if [ "${database_label}" = "production" ]; then
     variable_name="PROD_SUPABASE_DB_URL"
   fi
-  echo "${variable_name} is required for ${target} migrations." >&2
+  echo "DATABASE_DIRECT_URL or ${variable_name} is required for ${target} migrations." >&2
   exit 1
 fi
 

@@ -46,6 +46,7 @@ type RunConnectPayload = {
       sessionId: string;
       app: string;
       taskSlug: string;
+      startUrl: string;
       sequenceIndex: number;
       goal: string;
       title: string | null;

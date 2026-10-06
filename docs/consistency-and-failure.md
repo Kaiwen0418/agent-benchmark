@@ -70,7 +70,7 @@ Hosted events, Web run events, snapshots, and access records travel through sepa
 | snapshot command fails | Redis request may still complete | newest app-state recovery point | retry/reconcile; do not claim zero-RPO recovery |
 | terminal command repeats | PostgreSQL transaction/unique constraints return the winner | none after first commit | safe retry |
 | Web completion callback fails | outbox remains pending/dead after retries | Web status freshness | maintenance retry, inspect dead outbox row |
-| Supabase unavailable | durable workers fail and commands retry/DLQ; Redis task pages may remain available | durable progress until recovery | restore DB before accepting durable guarantees |
+| PostgreSQL unavailable | durable workers fail and commands retry/DLQ; Redis task pages may remain available | durable progress until recovery | restore DB before accepting durable guarantees |
 
 ## Consistency Priorities
 

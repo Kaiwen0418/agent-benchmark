@@ -7,12 +7,14 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.js
 COPY scripts ./scripts
 COPY apps/hosted-orchestrator ./apps/hosted-orchestrator
 COPY apps/hosted-sites ./apps/hosted-sites
+COPY packages/database ./packages/database
 COPY packages/protocol ./packages/protocol
 COPY packages/scoring ./packages/scoring
 COPY packages/shared ./packages/shared
 COPY packages/test-cases ./packages/test-cases
 
 RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @agentbench/database build:runtime
 RUN pnpm --filter @agentbench/scoring build
 RUN pnpm --filter @agentbench/test-cases build
 RUN pnpm --filter hosted-orchestrator build
@@ -25,15 +27,17 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY scripts ./scripts
 COPY apps/hosted-orchestrator ./apps/hosted-orchestrator
+COPY packages/database ./packages/database
 COPY packages/protocol ./packages/protocol
 COPY packages/scoring ./packages/scoring
 COPY packages/shared ./packages/shared
 COPY packages/test-cases ./packages/test-cases
 COPY --from=build /app/apps/hosted-orchestrator/dist ./apps/hosted-orchestrator/dist
+COPY --from=build /app/packages/database/dist ./packages/database/dist
 COPY --from=build /app/packages/scoring/dist ./packages/scoring/dist
 COPY --from=build /app/packages/test-cases/dist ./packages/test-cases/dist
 
 RUN pnpm install --prod --frozen-lockfile
 
 EXPOSE 3004
-CMD ["pnpm", "--filter", "hosted-orchestrator", "start"]
+CMD ["node", "--conditions=agentbench-runtime", "apps/hosted-orchestrator/dist/apps/hosted-orchestrator/src/server.js"]

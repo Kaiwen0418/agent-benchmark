@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1787222482106,
+      "tag": "0000_portable_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787222497842,
+      "tag": "0001_portable_routines",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788252721536,
+      "tag": "0002_authjs_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790773897087,
+      "tag": "0003_attempt_cancellation",
+      "breakpoints": true
+    }
+  ]
+}

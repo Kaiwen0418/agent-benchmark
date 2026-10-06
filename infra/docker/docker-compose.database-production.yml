@@ -1,0 +1,53 @@
+name: agentbench-production-database
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      AGENTBENCH_DATABASE_NAME: agentbench_production_candidate
+      AGENTBENCH_DATABASE_USER: agentbench_prod
+      AGENTBENCH_DATABASE_PASSWORD: ${PRODUCTION_DATABASE_PASSWORD:?Set a production application password}
+      POSTGRES_DB: postgres
+      POSTGRES_USER: agentbench_prod_admin
+      POSTGRES_PASSWORD: ${PRODUCTION_DATABASE_ADMIN_PASSWORD:?Set a distinct production admin password}
+    ports:
+      - "127.0.0.1:${PRODUCTION_DATABASE_DIRECT_PORT:-55432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-agentbench.sh:/docker-entrypoint-initdb.d/10-agentbench.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  pgbouncer:
+    image: edoburu/pgbouncer@sha256:4c1ca296ef525f108f5d3552cc337c0c09587cf8dae7f0067fd93349e47dc1cd
+    environment:
+      AUTH_TYPE: scram-sha-256
+      DB_HOST: postgres
+      DB_NAME: agentbench_production_candidate
+      DB_USER: agentbench_prod
+      DB_PASSWORD: ${PRODUCTION_DATABASE_PASSWORD:?Set a production application password}
+      DB_PORT: 5432
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: ${PRODUCTION_DATABASE_MAX_CLIENT_CONN:-200}
+      DEFAULT_POOL_SIZE: ${PRODUCTION_DATABASE_POOL_SIZE:-20}
+      RESERVE_POOL_SIZE: 5
+    ports:
+      - "127.0.0.1:${PRODUCTION_DATABASE_POOL_PORT:-65432}:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -p 5432 -U "$${DB_USER}" -d "$${DB_NAME}"']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

@@ -6,13 +6,13 @@ This document defines who may read, mutate, and recover each state family. Owner
 
 | Data | Domain owner | Writers | Readers | Authority and notes |
 | --- | --- | --- | --- | --- |
-| `profiles`, Supabase Auth identity | Web control plane | Supabase Auth / Web | Web | User identity and plan data |
+| `profiles`, future Auth.js identity | Web control plane | Web through Drizzle | Web | User identity and plan data; quota reads use direct PostgreSQL |
 | `benchmark_cases` | Web control plane | release/admin workflow | Web, orchestrator service-role code | Case identity, visibility, display fields, and current revision pointer |
 | `public_benchmark_cases` | Web control plane | database projection | anonymous/authenticated clients, Web | Display-safe discovery only |
 | `benchmark_case_revisions` | benchmark release workflow | `publish_benchmark_case_catalog` | orchestrator, Web service-role recovery | Immutable private manifest, including optional capability coverage, scenario graph, and deterministic fault schedule, plus synchronized public case identity |
-| `benchmark_runs` | Web control plane | Web | Web, public read models | User-facing run lifecycle |
-| `model_catalog`, `model_catalog_sync_runs` | Web control plane | GitHub maintenance workflow through `packages/model-catalog-sync` | Web autocomplete and run metadata validation | Operational model identity and source health; not benchmark/scoring truth |
-| `run_events`, `artifacts` | Web control plane | Web internal APIs | Web UI and public read models | Live observability and output artifacts |
+| `benchmark_runs` | Web control plane | Web through Drizzle | Web, public read models | User-facing run lifecycle |
+| `model_catalog`, `model_catalog_sync_runs` | Web control plane | GitHub maintenance workflow through the Drizzle repository in `packages/database` | Web autocomplete and run metadata validation | Operational model identity and source health; not benchmark/scoring truth |
+| `run_events`, `artifacts` | Web control plane | Web internal APIs through Drizzle | Web UI and public read models | Live observability and output artifacts; lifecycle-coupled writes share a PostgreSQL transaction |
 | `benchmark_attempts` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; Web uses orchestrator APIs/public read models | Canonical hosted attempt lifecycle and active-session pointer |
 | `hosted_web_sessions` | hosted orchestrator | orchestrator workers and transactional RPCs | orchestrator only; hosted-sites recovery uses an internal API | Durable lifecycle, generated per-session task config, plus latest successful app-state snapshot |
 | `hosted_web_events` | hosted orchestrator | orchestrator workers | orchestrator and result/read-model code | Durable hosted telemetry |
@@ -58,6 +58,9 @@ Session keys and command keys currently share one Redis instance but are separat
 ## Boundary Rules
 
 - Browser clients never receive Supabase service-role or Redis credentials.
+- Database repositories are grouped by domain owner. Sharing the Drizzle schema
+  does not allow Web to call orchestrator write repositories or make
+  hosted-sites a database consumer.
 - Browsers search model identities through `/api/model-options`; they cannot
   read the catalog or submit their own verification timestamp.
 - Web does not submit private suite manifests to orchestrator; it submits a revision ID.

@@ -19,8 +19,7 @@ bash -n "${SMOKE}"
 set +e
 invalid_output="$({
   BENCHMARK_CASE_SLUG="Invalid slug" \
-    SUPABASE_URL="https://example.invalid" \
-    SUPABASE_SERVICE_ROLE_KEY="test-only" \
+    DATABASE_DIRECT_URL="postgresql://example.invalid/agentbench" \
     RUNNER_SHARED_SECRET="test-only" \
     START_LOCAL_SERVICES="false" \
     bash "${SMOKE}"
@@ -33,7 +32,10 @@ if [[ "${invalid_status}" -ne 2 || "${invalid_output}" != *"BENCHMARK_CASE_SLUG 
 fi
 
 require_text "${SMOKE}" 'BENCHMARK_CASE_SLUG="${BENCHMARK_CASE_SLUG:-hosted-web-suite}"'
-require_text "${SMOKE}" 'slug: `eq.${benchmarkCaseSlug}`'
+require_text "${SMOKE}" 'checkedFetch(`${webUrl}/api/benchmark-cases`)'
+require_text "${SMOKE}" 'where id = $1 and slug = $2'
+require_text "${SMOKE}" 'checkedFetch(`${webUrl}/api/runs`'
+require_text "${SMOKE}" 'const databaseUrl = process.env.DATABASE_DIRECT_URL;'
 require_text "${SMOKE}" 'redirect: "manual"'
 require_text "${SMOKE}" 'return checkedFetch(new URL(location, formUrl));'
 require_text "${SMOKE}" 'const minimumScore = minimumFullPassScore(revisionManifest);'
@@ -43,5 +45,11 @@ require_text "${WORKFLOW}" 'benchmark_case_slug:'
 require_text "${WORKFLOW}" '          - hosted-web-suite'
 require_text "${WORKFLOW}" '          - hosted-web-hard-suite'
 require_text "${WORKFLOW}" 'BENCHMARK_CASE_SLUG: ${{ matrix.benchmark_case_slug }}'
+require_text "${WORKFLOW}" 'DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}'
+
+if grep -Fq 'SUPABASE_SERVICE_ROLE_KEY' "${SMOKE}"; then
+  echo "lifecycle smoke must not depend on Supabase REST credentials" >&2
+  exit 1
+fi
 
 echo "hosted variant sweep workflow tests passed"

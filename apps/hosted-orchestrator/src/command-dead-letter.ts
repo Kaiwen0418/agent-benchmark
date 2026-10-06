@@ -1,5 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, Json } from "@agentbench/shared";
+import type { Json } from "@agentbench/shared";
 
 const knownSensitiveKeys = new Set([
   "apikey",
@@ -74,6 +73,16 @@ export type CommandDeadLetterRetention = {
   maxRows: number;
 };
 
+export type CommandDeadLetterMaintenancePersistence = {
+  prune: (input: {
+    deadBefore: string;
+    resolvedBefore: string;
+    limit: number;
+    maxRows: number;
+  }) => Promise<number>;
+  scrub: (limit: number) => Promise<number>;
+};
+
 export function compactCommandPayload(value: unknown, maxBytes: number): Json {
   const redacted = redactCommandPayload(value);
   const serialized = JSON.stringify(redacted);
@@ -93,24 +102,20 @@ export function compactCommandPayload(value: unknown, maxBytes: number): Json {
 }
 
 export async function pruneCommandDeadLetters(
-  supabase: SupabaseClient<Database>,
+  persistence: CommandDeadLetterMaintenancePersistence,
   retention: CommandDeadLetterRetention,
   currentTime = Date.now(),
 ) {
-  const args = {
-    p_dead_before: new Date(currentTime - retention.deadRetentionMs).toISOString(),
-    p_resolved_before: new Date(currentTime - retention.resolvedRetentionMs).toISOString(),
-    p_limit: retention.batchSize,
-    p_max_rows: retention.maxRows,
+  const input = {
+    deadBefore: new Date(currentTime - retention.deadRetentionMs).toISOString(),
+    resolvedBefore: new Date(currentTime - retention.resolvedRetentionMs).toISOString(),
+    limit: retention.batchSize,
+    maxRows: retention.maxRows,
   };
   let deleted = 0;
 
   for (let batch = 0; batch < retention.maxBatches; batch += 1) {
-    const { data, error } = await supabase.rpc("prune_orchestrator_command_dead_letters_v2", args);
-    if (error) {
-      throw error;
-    }
-    const batchDeleted = data ?? 0;
+    const batchDeleted = await persistence.prune(input);
     deleted += batchDeleted;
     if (batchDeleted < retention.batchSize) {
       break;
@@ -121,14 +126,8 @@ export async function pruneCommandDeadLetters(
 }
 
 export async function scrubCommandDeadLetters(
-  supabase: SupabaseClient<Database>,
+  persistence: CommandDeadLetterMaintenancePersistence,
   batchSize: number,
 ) {
-  const { data, error } = await supabase.rpc("scrub_orchestrator_command_dead_letters", {
-    p_limit: batchSize,
-  });
-  if (error) {
-    throw error;
-  }
-  return data ?? 0;
+  return persistence.scrub(batchSize);
 }
