@@ -73,6 +73,10 @@ environment unless production verification is explicitly requested.
    tokens.
 3. Complete every generated hosted task in suite order and verify its evaluator
    result.
+   Completing a case is an intermediate milestone: return to the connection
+   page and use Proceed for the next allocated active case. Stop only after
+   the whole suite completes, the run becomes terminal, or progress is genuinely
+   blocked; report the last confirmed progress and any blocker.
 4. After each task, verify advancement returns the next ordered session and a
    public HTTPS hosted URL.
 5. After the final task, verify advancement reports completion with no next
