@@ -59,6 +59,16 @@ flowchart LR
   input values or value-derived click labels. Safety-sensitive hosted apps
   reject confidential content and prohibited recipients before persisting a
   draft and retain only a non-content violation class for scoring.
+- Browser interaction labels are allowlisted static UI labels, not arbitrary
+  DOM text. Password and hidden fields are excluded. Input bursts are coalesced;
+  select/toggle edits identify the field but never expose its selected value.
+  Hosted-sites normalizes telemetry before runtime snapshots and durable event
+  writes. Web also normalizes browser-event ingress and legacy public reads.
+- Public interaction routes contain only logical app/section paths: hosts,
+  queries, fragments and dynamic identifiers are discarded. Navigation events
+  indicate attempts; a page-load event reports only the observed loaded route,
+  not proof of a preceding action succeeding. Expanded details never render
+  raw event payload JSON.
 - Redis should not be publicly reachable.
 - Nginx should expose only intended hosted and orchestrator routes.
 

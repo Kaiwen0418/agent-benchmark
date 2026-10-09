@@ -1,6 +1,7 @@
 import type { ServerResponse } from "node:http";
 import type { HostedSession } from "./runtime/types.js";
 import { readUiTheme, readUiVariant } from "./runtime/question-config.js";
+import { browserTelemetryScript } from "./runtime/browser-telemetry.js";
 
 export function escapeHtml(value: string) {
   return value
@@ -83,37 +84,17 @@ export function layout(params: {
       function abTelemetry(type, payload) {
         fetch("/api/telemetry", {
           method: "POST",
+          keepalive: true,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             session: window.AgentBenchHostedSession.token,
             type: type,
             payload: payload || {},
-            url: window.location.href,
-            title: document.title
+            url: window.location.pathname
           })
         }).catch(function () {});
       }
-      window.addEventListener("load", function () {
-        abTelemetry("page.load", {});
-      });
-      document.addEventListener("click", function (event) {
-        var target = event.target && event.target.closest ? event.target.closest("button,a,input,select,textarea") : null;
-        if (!target) return;
-        abTelemetry("click", {
-          tag: target.tagName,
-          text: (target.innerText || target.getAttribute("aria-label") || target.getAttribute("name") || "").slice(0, 80),
-          name: target.getAttribute("name"),
-          href: target.getAttribute("href")
-        });
-      }, true);
-      document.addEventListener("input", function (event) {
-        var target = event.target;
-        if (!target || !target.getAttribute) return;
-        abTelemetry("input", {
-          tag: target.tagName,
-          name: target.getAttribute("name")
-        });
-      }, true);
+      ${browserTelemetryScript()}
     </script>
   `;
 

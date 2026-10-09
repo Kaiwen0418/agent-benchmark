@@ -3,20 +3,7 @@ import type { HostedWebScoreResult } from "@agentbench/scoring";
 import type { HostedSession } from "../runtime/types.js";
 import { sendJson } from "../runtime/http.js";
 import { isActiveScoreApiAllowed } from "../runtime/score-preview-policy.js";
-
-function sanitizeTelemetryUrl(value: unknown, publicBaseUrl: string) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  try {
-    const parsed = new URL(value, publicBaseUrl);
-    parsed.searchParams.delete("session");
-    return `${parsed.pathname}${parsed.search}`;
-  } catch {
-    return null;
-  }
-}
+import { projectHostedInteraction } from "@agentbench/shared/hosted-telemetry";
 
 type ApiRoutesDeps = {
   publicBaseUrl: string;
@@ -148,17 +135,25 @@ export function createApiRoutes(deps: ApiRoutesDeps) {
         return true;
       }
       const telemetryType = typeof input.type === "string" ? input.type : "hosted.event";
+      const interaction = projectHostedInteraction(telemetryType, input.payload, input.url);
+      if (!interaction) {
+        deps.badRequest(response, "Unsupported browser telemetry type");
+        return true;
+      }
       const payload = {
         type: telemetryType,
-        payload: input.payload,
-        url: sanitizeTelemetryUrl(input.url, deps.publicBaseUrl),
-        title: input.title,
+        payload: { name: interaction.control, label: interaction.target },
+        interaction,
+        url: interaction.route,
+        title: interaction.route,
       };
       await deps.recordEvent(session, payload);
       await deps.forwardRunEvent(session, deps.telemetryRunEventType(telemetryType), {
         source: "hosted-sites",
         sessionId: session.id,
         taskSlug: session.taskSlug,
+        app: session.app,
+        sequenceIndex: session.sequenceIndex,
         ...payload,
       });
       sendJson(response, 201, { ok: true });

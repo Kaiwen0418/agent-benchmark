@@ -19,6 +19,44 @@ export function agentIdentityConfirmationInstruction() {
   ].join(" ");
 }
 
+export function buildAgentRunGuidance(params: {
+  runId: string;
+  connectUrl: string;
+  sessionCount?: number;
+  timeLimitMinutes?: number | null;
+}) {
+  const timeLimit = params.timeLimitMinutes
+    ? `You have ${params.timeLimitMinutes} minute${params.timeLimitMinutes === 1 ? "" : "s"} to complete each hosted task.`
+    : "";
+  const suiteInstructions = [
+    "Complete the entire ordered suite, not only the current case. A completed case is an intermediate milestone, not a stopping condition.",
+    "After each case completes, return to this connection page and use Proceed to open the next allocated active case. Repeat until the entire suite is completed.",
+    "Stop only when the entire suite is completed, the run has reached a terminal failure, cancellation, or timeout state, or further progress is clearly blocked. Report any blocker and the last confirmed suite progress.",
+  ];
+  return {
+    prompt: [
+      agentIdentityConfirmationInstruction(),
+      "Open the AgentBench connection page below.",
+      "Register the agent identity in the form, then open only the allocated active hosted case.",
+      ...suiteInstructions,
+      timeLimit,
+      params.connectUrl,
+    ].filter(Boolean).join("\n"),
+    instructions: [
+      agentIdentityConfirmationInstruction(),
+      `Open the connection page for run ${params.runId}.`,
+      ...(params.sessionCount === undefined ? [] : [
+        `This suite contains ${params.sessionCount} hosted session${params.sessionCount === 1 ? "" : "s"}.`,
+      ]),
+      timeLimit,
+      "Register the agent name, version, base model, and optional metadata in the form on this page.",
+      "Read the benchmark objective and hosted suite details. Open only the active hosted case shown on this page.",
+      "Use only the session URLs allocated for this run and the tools and sites exposed for this run.",
+      ...suiteInstructions,
+    ].filter(Boolean),
+  };
+}
+
 export async function buildRunConnectPayload(params: {
   run: BenchmarkRun;
   benchmarkCase: BenchmarkCase | null;
@@ -36,18 +74,12 @@ export async function buildRunConnectPayload(params: {
   const goal = getGoal(benchmarkCase);
   const title = benchmarkCase?.title ?? "AgentBench Run";
   const timeLimitMinutes = hostedWeb?.timeLimitMinutes ?? null;
-  const timeLimitSentence = timeLimitMinutes
-    ? `You have ${timeLimitMinutes} minute${timeLimitMinutes === 1 ? "" : "s"} to complete each hosted task.`
-    : "";
-  const prompt = [
-    agentIdentityConfirmationInstruction(),
-    "Open the AgentBench connection page below.",
-    "Register the agent identity in the form, then open the active hosted benchmark and complete the current objective.",
-    "Follow the ordered suite instructions and stop when the active task is completed or clearly blocked.",
-    timeLimitSentence,
-    "",
+  const guidance = buildAgentRunGuidance({
+    runId: run.id,
     connectUrl,
-  ].filter(Boolean).join("\n");
+    sessionCount: hostedWeb?.sessions.length,
+    timeLimitMinutes,
+  });
 
   return {
     runId: run.id,
@@ -61,28 +93,8 @@ export async function buildRunConnectPayload(params: {
       description: benchmarkCase?.description ?? null,
       goal,
     },
-    instructions: hostedWeb
-      ? [
-          agentIdentityConfirmationInstruction(),
-          `Open the hosted benchmark site for run ${run.id}.`,
-          `This suite contains ${hostedWeb.sessions.length} hosted session${hostedWeb.sessions.length === 1 ? "" : "s"}.`,
-          timeLimitSentence,
-          "Register the agent name, version, base model, and optional metadata in the form on this page.",
-          "Open only the active hosted case shown on this page.",
-          "After each case completes, return here and proceed to the next active case.",
-          "Use only the session URLs allocated for this run.",
-          "Stop after the active objective is completed or clearly blocked.",
-        ].filter(Boolean)
-      : [
-          agentIdentityConfirmationInstruction(),
-          `Open the connection page for run ${run.id}.`,
-          "Register the agent name, version, base model, and optional metadata in the form on this page.",
-          "Read the benchmark objective and hosted suite details.",
-          "Open the allocated hosted session URL for this run.",
-          "Use only the tools and sites exposed for this run.",
-          "Stop after the objective is completed or clearly blocked by policy.",
-        ],
-    prompt,
+    instructions: guidance.instructions,
+    prompt: guidance.prompt,
     connectUrl,
     configUrl,
     metadataUrl,
