@@ -123,6 +123,15 @@ Access handling follows the same transport: hosted-sites updates counters in the
 
 The direct hosted-sites-to-Web event is best effort and feeds live run observability. Durable hosted telemetry is written separately by the orchestrator worker. There is no transaction joining those two paths.
 
+Browser interaction telemetry includes a versioned display-safe context with
+action, static target/field label, logical route, optional destination/source,
+and observed/attempted/loaded semantics. Input edits are coalesced before sending
+and values are never collected. The API strips unapproved fields before
+snapshot/event persistence, and Web repeats the projection on ingress and reads
+for legacy events. Latest Events expands already-loaded context without an
+additional event-detail query. Navigation attempts and destination page loads
+remain distinct observations, not an exactly-once correlated navigation trace.
+
 ## 4. Orchestrator Command Processing
 
 ```mermaid
