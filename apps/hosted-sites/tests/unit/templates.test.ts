@@ -142,6 +142,6 @@ test("input telemetry records field identity without capturing typed values", ()
     defaultStartPathForApp: () => "/wiki",
   });
 
-  assert.match(html, /target\.getAttribute\("name"\)/);
+  assert.match(html, /target\.getAttribute\(['"]name['"]\)/);
   assert.doesNotMatch(html, /valuePreview|target\.value/);
 });

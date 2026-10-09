@@ -70,6 +70,7 @@ async function withApiServer<T>(
   const completedSessions: string[] = [];
   const forwardedEvents: string[] = [];
   const recordedEvents: string[] = [];
+  const recordedPayloads: Record<string, unknown>[] = [];
   const session = makeSession(accessMode);
   session.status = status;
   session.scorePreviewMode = scorePreviewMode;
@@ -89,6 +90,7 @@ async function withApiServer<T>(
     },
     recordEvent: async (_session, payload) => {
       recordedEvents.push(String(payload.type ?? "unknown"));
+      recordedPayloads.push(payload);
     },
     forwardRunEvent: async (_session, type) => {
       forwardedEvents.push(type);
@@ -129,6 +131,7 @@ async function withApiServer<T>(
       completedSessions,
       forwardedEvents,
       recordedEvents,
+      recordedPayloads,
     }));
   } finally {
     await new Promise<void>((resolve, reject) => {
@@ -136,6 +139,29 @@ async function withApiServer<T>(
     });
   }
 }
+
+test("browser telemetry strips private context before persistence", async () => {
+  const { result, recordedPayloads } = await withApiServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/telemetry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "input", session: "tok_1",
+        url: "https://internal.example/shopping/cart?session=private-token",
+        title: "private page title",
+        payload: { name: "tax", value: "private input", label: "private label", secret: "private secret" },
+      }),
+    });
+    return response.status;
+  });
+  assert.equal(result, 201);
+  assert.equal(recordedPayloads.length, 1);
+  const serialized = JSON.stringify(recordedPayloads[0]);
+  assert.equal(serialized.includes("private"), false);
+  assert.equal(serialized.includes("internal.example"), false);
+  assert.equal(recordedPayloads[0].url, "/shopping/cart");
+  assert.equal((recordedPayloads[0].interaction as Record<string, unknown>).contents, "redacted");
+});
 
 test("score route resolves sessions through token lookup", async () => {
   const { requestedTokens, result } = await withApiServer(async (baseUrl) => {

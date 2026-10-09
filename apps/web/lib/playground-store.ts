@@ -7,7 +7,9 @@ import type {
   RunEvent,
   RunExecutionMode,
   RunStatus,
+  HostedInteractionContext,
 } from "@agentbench/protocol";
+import { hostedEventDescription, hostedInteractionContext } from "./hosted-event-details";
 import { create } from "zustand";
 import {
   deriveHostedScoring,
@@ -46,6 +48,7 @@ export type TimelineEntry = {
   duration: string;
   status: "pending" | "success" | "warning" | "error";
   detail: string;
+  interaction?: HostedInteractionContext;
 };
 
 export type ArtifactEntry = {
@@ -212,9 +215,8 @@ function eventSummary(event: RunEvent) {
     case "hosted.session.progress":
       return "Hosted session progress updated";
     case "hosted.page.load":
-      return `Hosted page loaded${typeof event.payload.title === "string" ? `: ${event.payload.title}` : ""}`;
     case "hosted.action":
-      return `Hosted ${String(event.payload.type ?? "action")}`;
+      return hostedEventDescription(event.payload, event.type);
     case "hosted.task_signal":
       return `Hosted signal: ${String(event.payload.name ?? "task signal")}`;
     case "hosted.score":
@@ -269,7 +271,7 @@ function hostedTimelineDetail(event: RunEvent) {
   }
 
   if (event.type === "hosted.page.load") {
-    return String(event.payload.title ?? event.payload.url ?? "Hosted page loaded");
+    return hostedEventDescription(event.payload, event.type);
   }
 
   if (event.type === "hosted.task_signal") {
@@ -280,7 +282,7 @@ function hostedTimelineDetail(event: RunEvent) {
     return `Score ${String(event.payload.score ?? "--")}`;
   }
 
-  return String(event.payload.type ?? "Hosted action");
+  return hostedEventDescription(event.payload, event.type);
 }
 
 function mapRunStatus(status: RunStatus): RunPhase {
@@ -393,6 +395,9 @@ function mapTimeline(events: RunEvent[]): TimelineEntry[] {
         duration: typeof event.payload.duration === "string" ? event.payload.duration : "--",
         status,
         detail,
+        ...((event.type === "hosted.action" || event.type === "hosted.page.load") ? {
+          interaction: hostedInteractionContext(event.payload, event.type) ?? undefined,
+        } : {}),
       };
     });
 }

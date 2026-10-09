@@ -16,6 +16,7 @@ import {
   deriveHostedSessionProgressFromEvents,
 } from "@/lib/hosted-progress";
 import { shouldRefreshHostedConnection } from "@/lib/run-connection-refresh";
+import { RunEventRow } from "./RunEventRow";
 
 type RunConnectPayload = {
   runId: string;
@@ -250,17 +251,6 @@ function SessionDetailPanel({
           ))}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function EventRow({ label, timestamp, detail }: { label: string; timestamp: string; detail: string }) {
-  return (
-    <div className="flex items-start justify-between gap-3 py-1.5">
-      <div className="min-w-0">
-        <div className="text-xs text-[#292620]">{detail}</div>
-      </div>
-      <span className="shrink-0 text-[10px] tabular-nums text-[#8f897e]">{timestamp}</span>
     </div>
   );
 }
@@ -605,11 +595,12 @@ export function RunConnectionCard() {
                 <div className="space-y-1">
                   {timeline.length > 0 ? (
                     pagedEvents.map((entry) => (
-                      <EventRow
+                      <RunEventRow
                         key={entry.id}
                         label={entry.label}
                         timestamp={entry.timestamp}
                         detail={entry.detail}
+                        interaction={entry.interaction}
                       />
                     ))
                   ) : (

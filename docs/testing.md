@@ -87,3 +87,17 @@ environment unless production verification is explicitly requested.
 
 Treat any private or internal URL returned to a browser as a blocking issue.
 Successful scoring alone does not verify live-view behavior.
+
+## Event Detail Browser Fixture
+
+After a Web production build, run
+`pnpm --filter web exec tsx tests/fixtures/run-event-preview.ts` to render the
+actual event-row component at `http://127.0.0.1:3197`, without a database,
+production traffic, or polling. An optional file argument displays generated
+agent instructions alongside the rows.
+
+Verify collapsed and expanded rows, navigation attempts versus page loads,
+redacted edits and select changes, submit attempts, and the legacy missing-context
+fallback at desktop and narrow widths. Check keyboard expansion and absence of
+horizontal overflow. The fixture is component-level verification, not a substitute
+for preview lifecycle E2E. Close the browser and stop the fixture server afterward.
