@@ -42,6 +42,21 @@ export const runEventTypeSchema = z.enum([
 
 export type RunEventType = z.infer<typeof runEventTypeSchema>;
 
+/** Display-safe browser context. Never contains entered values or session URLs. */
+export type HostedInteractionContext = {
+  version: 1;
+  action: "page.load" | "click" | "input" | "select" | "toggle" | "submit" | "navigation";
+  target: string | null;
+  control: string | null;
+  route: string | null;
+  destination: string | null;
+  from: string | null;
+  outcome: "observed" | "attempted" | "loaded";
+  contents: "redacted" | null;
+  app?: string;
+  caseNumber?: number;
+};
+
 export const benchmarkCaseSchema = z.object({
   id: z.string().uuid(),
   slug: z.string(),

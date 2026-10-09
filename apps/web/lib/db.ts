@@ -10,6 +10,7 @@ import type {
   SubmitRunMetadataInput,
 } from "@agentbench/protocol";
 import type { Database } from "@agentbench/shared";
+import { publicBrowserEventPayload } from "./hosted-event-details";
 import path from "node:path";
 import fs from "node:fs";
 import { buildInitialRunMetadata, buildRunMetadataUpdate, parseBrowserEnvironment } from "./run-metadata";
@@ -462,7 +463,7 @@ export async function listRunEvents(runId: string): Promise<RunEvent[]> {
     id: item.id,
     runId: item.runId,
     type: item.type as RunEvent["type"],
-    payload: toEventPayload(item.payload),
+    payload: publicBrowserEventPayload(item.type, toEventPayload(item.payload)),
     createdAt: item.createdAt,
   }));
 }
@@ -508,7 +509,7 @@ export async function appendRunEvent(runId: string, input: AppendRunEventInput) 
   const result = await getWebControlPlaneRepository().appendEvent({
     runId,
     type: input.type,
-    payload: input.payload as JsonValue,
+    payload: publicBrowserEventPayload(input.type, input.payload) as JsonValue,
     transition,
   });
 
@@ -517,7 +518,7 @@ export async function appendRunEvent(runId: string, input: AppendRunEventInput) 
       id: result.event.id,
       runId: result.event.runId,
       type: result.event.type as RunEvent["type"],
-      payload: toEventPayload(result.event.payload),
+      payload: publicBrowserEventPayload(result.event.type, toEventPayload(result.event.payload)),
       createdAt: result.event.createdAt,
     },
     run: result.run ? mapDatabaseRunRow(result.run) : null,
