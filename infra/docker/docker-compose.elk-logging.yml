@@ -23,8 +23,16 @@ services:
       HOSTED_METRICS_TOKEN: ${HOSTED_METRICS_TOKEN:?Set HOSTED_METRICS_TOKEN}
     logging: *elk-logging
   hosted-orchestrator-worker-0:
+    environment:
+      HOSTED_STRUCTURED_LOGS: 'true'
+      HOSTED_METRICS_ENABLED: 'true'
+      HOSTED_METRICS_TOKEN: ${HOSTED_METRICS_TOKEN:?Set HOSTED_METRICS_TOKEN}
     logging: *elk-logging
   hosted-orchestrator-worker-1:
+    environment:
+      HOSTED_STRUCTURED_LOGS: 'true'
+      HOSTED_METRICS_ENABLED: 'true'
+      HOSTED_METRICS_TOKEN: ${HOSTED_METRICS_TOKEN:?Set HOSTED_METRICS_TOKEN}
     logging: *elk-logging
   gateway:
     logging: *elk-logging

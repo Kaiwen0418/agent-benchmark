@@ -16,6 +16,8 @@ test('request counters and cumulative histogram exclude secret-bearing labels', 
   assert.match(text, /agentbench_http_request_duration_seconds_count.* 1/);
   assert.doesNotMatch(text, /private|session/);
   assert.match(text, /agentbench_process_resident_memory_bytes/);
+  assert.match(text, /agentbench_process_heap_used_bytes.* [0-9]+/);
+  assert.match(text, /agentbench_process_cpu_seconds_total.* [0-9]+/);
 });
 
 test('scraping and disabled requests do not inflate request metrics', () => {

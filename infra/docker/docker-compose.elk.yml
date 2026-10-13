@@ -77,6 +77,20 @@ services:
     networks: [elk, elk-ingress]
     restart: unless-stopped
 
+  kibana-setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_STACK_VERSION:-8.19.23}
+    environment:
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD}
+    entrypoint: [bash, /setup/kibana-bootstrap.sh]
+    volumes:
+      - ../elk/kibana-bootstrap.sh:/setup/kibana-bootstrap.sh:ro
+      - ../elk/kibana:/setup/views:ro
+    depends_on:
+      kibana:
+        condition: service_started
+    networks: [elk]
+    restart: 'no'
+
   prometheus:
     image: prom/prometheus:${PROMETHEUS_VERSION:-v3.15.0}
     command:
@@ -87,6 +101,7 @@ services:
     mem_limit: 512m
     volumes:
       - ../elk/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../elk/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     secrets: [hosted-metrics-token]
     networks: [elk, hosted-runtime]

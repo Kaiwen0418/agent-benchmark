@@ -1,7 +1,8 @@
 # Observability
 
-The optional stack includes ELK for safe request logs and Prometheus/Grafana
-for request metrics. All operator interfaces remain local to the host.
+The optional stack includes ELK for safe request and lifecycle logs and
+Prometheus/Grafana for HTTP, worker, queue, callback and process metrics.
+All operator interfaces remain local to the host.
 
 ## Optional ELK stack
 
@@ -15,11 +16,13 @@ flowchart LR
   Gateway[Nginx safe request logs] --> Docker[Docker GELF driver]
   Sites[Hosted-sites safe request logs] --> Docker
   API[Orchestrator safe request logs] --> Docker
+  Worker[Command workers: lifecycle logs] --> Docker
   Docker -->|loopback UDP| LS[Logstash field allowlist]
   LS --> ES[(Elasticsearch: seven-day retention)]
   Kibana[Kibana: authenticated operator access] --> ES
   Sites -->|authenticated metrics| Prom[Prometheus]
   API -->|authenticated metrics| Prom
+  Worker -->|authenticated private metrics:3005| Prom
   Grafana[Grafana hosted-service dashboard] --> Prom
 ```
 
@@ -99,12 +102,20 @@ ssh -L 5602:127.0.0.1:5602 operator@host
 Open `http://localhost:5602`. Use the `elastic` account only for initial
 administration. Create named operator users with the `agentbench_log_reader`
 role; it grants read access to `agentbench-logs-*` and the default Kibana space.
-An administrator creates the `agentbench-logs-*` data view using `@timestamp`.
+The one-shot `kibana-setup` service provisions the `agentbench-logs` data view
+using `@timestamp` and four saved Discover searches: Command Lifecycle, Retries
+and Failures, Callback Delivery, and Workers and Collectors. Setup waits for
+Kibana readiness and overwrites only its own stable object IDs. Existing
+operator searches are preserved. Check its exit status after deployment;
+failure does not stop benchmark services.
 Do not publish Kibana or the ingest port through Cloudflare Tunnel.
 
 Useful Discover filters include `service: gateway AND status >= 500` and
 `request_id: "<request-id>"`. Gateway request IDs propagate to hosted services;
 direct requests receive a new UUID. Timing is normalized to milliseconds.
+Lifecycle events can be filtered by `command_id`, `run_id`, `attempt_id` and
+`session_id`. These are validated UUIDs, never authorization tokens. No raw
+exception messages or task payloads are indexed.
 
 ## Prometheus and Grafana
 
@@ -128,11 +139,49 @@ restart; this is expected for Prometheus rate calculations.
 Prometheus retains seven days or 2 GB of samples, whichever limit is reached
 first; allow additional WAL and compaction space. Grafana and Prometheus have
 independent persistent volumes. Worker queue/partition metrics, database/Redis
-exporters, host metrics and alert rules remain future work.
+exporters and host metrics are separate from the application diagnostics below.
+
+### Orchestrator diagnostics
+
+The AgentBench Orchestrator Operations dashboard adds:
+
+- Worker scrape health and partition lease ownership.
+- Pending entries, known stream lag, and oldest pending age per partition.
+- Command throughput, processing p95/p99, retries, reclaims and dead letters.
+- Callback backlog, oldest age, delivery latency, retries and terminal failures.
+- Active attempts/sessions and retained durable dead-letter count.
+- Per-process PostgreSQL pool total, idle, maximum and waiting connections.
+- Process CPU, heap usage and event-loop p99.
+- Collector health and snapshot age.
+
+API mode samples Redis every 15 seconds and one read-only PostgreSQL aggregate
+every 60 seconds. Scrapes read cached diagnostics and local pool statistics;
+they do not execute SQL or Redis commands. Workers expose an authenticated
+metrics-only listener on internal port 3005 (overridable with
+`HOSTED_ORCHESTRATOR_METRICS_PORT` for isolated local checks); it has no health or lifecycle
+routes and is not published through the gateway. API and workers share the
+dedicated metrics token. Instance labels distinguish their process metrics.
+
+Redis pending age is measured from the oldest pending stream entry's creation
+timestamp, not its last claim. Unknown stream lag is marked with
+`command_lag_known=0`, not interpreted as zero. Failed collectors retain the
+last successful values, mark themselves unavailable, and expose increasing
+snapshot age. Check health/freshness before interpreting queue counts.
+Callback delivery duration measures a single delivery attempt, not total
+time in the outbox; the oldest-age gauge measures backlog age.
+
+Prometheus loads rules for scrape failure, missing worker leases, stalled
+commands/callbacks, pool waiting, collector failure/staleness, and new dead
+letters. They are visible in Prometheus and Grafana's Prometheus datasource.
+No Alertmanager or external notification destination is configured. These
+thresholds are initial operational defaults, not throughput guarantees.
+Host/disk metrics, full database/Redis exporters and distributed tracing remain
+future work.
 
 ## Privacy and retention
 
-Only structured `http.request` records are accepted. The Logstash filter
+Only structured `http.request` and enumerated operational records are accepted.
+The Logstash filter
 creates a fresh event containing timestamp, environment, service, request ID,
 HTTP method, coarse route category, status and duration. Each string field is
 validated against a bounded format or enumeration. Query strings, IPs, URLs,
@@ -140,6 +189,10 @@ headers, tokens, bodies, exception text, evaluator inputs and arbitrary nested
 JSON are never indexed. Unstructured logs are intentionally dropped rather
 than relying on regex-based credential redaction. Logstash startup executes
 embedded filter tests and fails if privacy or timing checks fail.
+Operational fields are restricted to event, role, command type, UUID correlation
+IDs, partition, status, duration and collector source. Counters and histograms
+use bounded event/type labels; correlation IDs never become metric labels.
+Telemetry failures cannot change command acknowledgement or callback delivery.
 
 UDP and non-blocking Docker logging can lose events during downtime or overload.
 The Logstash queue only protects events received by Logstash. This is diagnostic
@@ -155,8 +208,11 @@ being required, private bindings, project isolation and non-blocking transport.
 Hosted-sites unit tests cover request privacy, timing and correlation.
 On a Docker host, run `tests/e2e/elk-smoke.sh /protected/development-elk.env`
 after startup to verify ingestion, normalization and rejection of private data.
-Run `bash tests/e2e/metrics-smoke.sh <test-env-file>` to require both hosted
+Run `bash tests/e2e/metrics-smoke.sh <test-env-file>` to require all four hosted
 Prometheus targets to be healthy after application deployment.
+Verify `kibana-setup` exited successfully and open both provisioned Grafana
+dashboards and a saved Discover search. Setup updates strict mappings on existing
+log indices as well as the template, so today's index accepts lifecycle fields.
 Then make a real development hosted request and check the corresponding gateway
 and service records. Do not use production lifecycle traffic for this check.
 

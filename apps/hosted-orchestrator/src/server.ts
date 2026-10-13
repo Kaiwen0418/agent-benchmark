@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { observeHttpRequest } from "@agentbench/shared/http-logging";
 import { createHttpMetrics, metricsAuthorized } from "@agentbench/shared/http-metrics";
+import { createOperationalObservability } from './observability.js';
+import { createObservabilityMonitor } from './observability-monitor.js';
 import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createClient as createRedisClient, type RedisClientType } from "redis";
@@ -51,6 +53,7 @@ import {
 } from "./run-session-projection-cache.js";
 import {
   getHostedOrchestratorRepository,
+  getOrchestratorDatabaseClient,
   getOrchestratorBenchmarkCaseRepository,
 } from "./database.js";
 import { timeoutExpiredAttempts } from "./expiry-sweep.js";
@@ -256,7 +259,9 @@ function getSupabaseAdmin() {
   return supabaseAdmin;
 }
 
+const operationalTelemetry = createOperationalObservability(orchestratorMode);
 const callbackOutbox = createCallbackOutboxProcessor({
+  observe: operationalTelemetry.record,
   getSupabaseAdmin,
   getPersistence: () => {
     const repository = getHostedOrchestratorRepository();
@@ -1845,6 +1850,7 @@ if (!orchestratorRedisUrl) {
 }
 
 const commandBackbone = createCommandBackbone({
+  observe: operationalTelemetry.record,
   redisUrl: orchestratorRedisUrl,
   handler: dispatchWriteCommand,
   role: orchestratorMode,
@@ -2039,6 +2045,16 @@ async function runCleanupSweep(trigger: "startup" | "interval") {
 }
 
 const httpMetrics = createHttpMetrics("hosted-orchestrator");
+const observabilityMonitor = createObservabilityMonitor({
+  telemetry: operationalTelemetry,
+  queue: () => commandBackbone.diagnostics(),
+  database: async () => getHostedOrchestratorRepository()?.operationalSnapshot() ?? null,
+});
+function renderMetrics() {
+  const pool = getOrchestratorDatabaseClient()?.poolStats();
+  if (pool) for (const [name, value] of Object.entries(pool)) operationalTelemetry.setGauge(`database_pool_${name}`, value);
+  return httpMetrics.render() + observabilityMonitor.render();
+}
 const server = createServer(async (request, response) => {
   observeHttpRequest(request, response, "hosted-orchestrator");
   httpMetrics.observe(request, response);
@@ -2048,7 +2064,7 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/metrics" && process.env.HOSTED_METRICS_ENABLED === "true") {
       if (!metricsAuthorized(request)) { sendJson(response, 401, { error: "Unauthorized" }); return; }
       response.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
-      response.end(httpMetrics.render());
+      response.end(renderMetrics());
       return;
     }
     if (request.method === "GET" && url.pathname === "/health") {
@@ -2460,6 +2476,21 @@ const server = createServer(async (request, response) => {
 });
 
 await commandBackbone.start();
+if (process.env.HOSTED_METRICS_ENABLED === 'true') {
+  if (orchestratorMode !== 'worker') {
+    void observabilityMonitor.refresh('redis');
+    void observabilityMonitor.refresh('database');
+    setInterval(() => { void observabilityMonitor.refresh('redis'); }, 15_000).unref();
+    setInterval(() => { void observabilityMonitor.refresh('database'); }, 60_000).unref();
+  } else {
+    createServer((request, response) => {
+      if (request.url !== '/metrics' || request.method !== 'GET') { response.writeHead(404); response.end(); return; }
+      if (!metricsAuthorized(request)) { response.writeHead(401); response.end(); return; }
+      response.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
+      response.end(renderMetrics());
+    }).listen(Number(process.env.HOSTED_ORCHESTRATOR_METRICS_PORT ?? 3005));
+  }
+}
 
 if (orchestratorMode !== "worker") {
   server.listen(port, () => {

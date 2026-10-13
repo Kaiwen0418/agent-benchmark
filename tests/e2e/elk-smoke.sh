@@ -18,12 +18,15 @@ safe="{\"event\":\"http.request\",\"service\":\"gateway\",\"method\":\"GET\",\"r
 # GELF contains a JSON string as short_message: escape its quotes.
 escaped="${safe//\"/\\\"}"
 printf '%s' "{\"version\":\"1.1\",\"host\":\"smoke\",\"short_message\":\"$escaped\"}" > /dev/udp/logstash/12201
+operational="{\"event\":\"command.completed\",\"service\":\"hosted-orchestrator\",\"role\":\"worker\",\"command_type\":\"attempt.init\",\"command_id\":\"$SMOKE_REQUEST_ID\",\"partition\":0,\"status\":200,\"duration_ms\":125,\"payload\":\"private-smoke-sentinel\"}"
+escaped="${operational//\"/\\\"}"
+printf '%s' "{\"version\":\"1.1\",\"host\":\"smoke\",\"short_message\":\"$escaped\"}" > /dev/udp/logstash/12201
 printf '%s' '{"version":"1.1","host":"smoke","short_message":"private-smoke-sentinel unstructured error"}' > /dev/udp/logstash/12201
 SH
   result="$("${compose[@]}" exec -T -e "SMOKE_REQUEST_ID=$request_id" elasticsearch bash -c '
     curl -fsS -u "elastic:$ELASTIC_PASSWORD" -H "Content-Type: application/json" \
       "http://localhost:9200/agentbench-logs-*/_search" \
-      --data-binary "{\"query\":{\"term\":{\"request_id\":\"$SMOKE_REQUEST_ID\"}}}"' || true)"
+      --data-binary "{\"size\":100,\"query\":{\"bool\":{\"should\":[{\"term\":{\"request_id\":\"$SMOKE_REQUEST_ID\"}},{\"term\":{\"command_id\":\"$SMOKE_REQUEST_ID\"}}],\"minimum_should_match\":1}}}"' || true)"
   if printf '%s' "$result" | python3 -c '
 import json, sys
 try:
@@ -31,14 +34,29 @@ try:
 except (ValueError, KeyError):
     sys.exit(1)
 if not hits: sys.exit(1)
-source = hits[0]["_source"]
+sources = [hit["_source"] for hit in hits]
+http = [source for source in sources if source["event"] == "http.request"]
+commands = [source for source in sources if source["event"] == "command.completed"]
+if not http or not commands: sys.exit(1)
+source = http[0]
 assert source["duration_ms"] == 250
 assert source["service"] == "gateway"
 assert source["environment"] in ("test", "development")
 assert set(source) <= {"@timestamp", "@version", "environment", "event", "service", "request_id", "method", "route", "status", "duration_ms"}
 assert "private-smoke-sentinel" not in json.dumps(source)
+source = commands[0]
+assert source["duration_ms"] == 125
+assert source["command_type"] == "attempt.init"
+assert source["role"] == "worker"
+assert set(source) <= {"@timestamp", "@version", "environment", "event", "service", "role", "command_type", "command_id", "partition", "status", "duration_ms"}
+assert "private-smoke-sentinel" not in json.dumps(source)
 '; then
-    echo 'ELK synthetic ingestion, timing and privacy smoke passed.'
+    for view in commands failures callbacks workers; do
+      "${compose[@]}" exec -T -e "SAVED_VIEW=$view" elasticsearch bash -c '
+        curl --max-time 10 -fsS -u "elastic:$ELASTIC_PASSWORD" \
+          "http://kibana:5601/api/saved_objects/search/agentbench-$SAVED_VIEW" >/dev/null'
+    done
+    echo 'ELK HTTP/lifecycle ingestion, privacy and saved Kibana searches passed.'
     exit 0
   fi
   sleep 2
