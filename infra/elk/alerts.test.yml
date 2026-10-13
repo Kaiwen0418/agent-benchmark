@@ -1,0 +1,47 @@
+rule_files:
+  - alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'agentbench_orchestrator_callback_oldest_age_seconds{instance="api"}'
+        values: '0 301 301 301'
+      - series: 'agentbench_orchestrator_redis_snapshot_age_seconds{instance="api"}'
+        values: '0 61 61 61'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: CallbackDeliveryStalled
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: CallbackDeliveryStalled
+        exp_alerts:
+          - exp_labels: { instance: api, severity: warning }
+            exp_annotations: { summary: 'A terminal callback has waited over five minutes' }
+      - eval_time: 2m
+        alertname: OrchestratorMetricsSnapshotStale
+        exp_alerts:
+          - exp_labels: { instance: api, severity: warning }
+            exp_annotations: { summary: 'Queue or durable state diagnostics have stopped refreshing' }
+  - interval: 1m
+    input_series:
+      - series: 'up{job="orchestrator-workers",instance="worker"}'
+        values: '1 0 0 1'
+      - series: 'agentbench_orchestrator_database_pool_waiting{instance="worker"}'
+        values: '0 2 2 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: HostedMetricsTargetDown
+        exp_alerts:
+          - exp_labels: { job: orchestrator-workers, instance: worker, severity: critical }
+            exp_annotations: { summary: 'A hosted metrics target is unavailable' }
+      - eval_time: 2m
+        alertname: OrchestratorDatabasePoolWaiting
+        exp_alerts:
+          - exp_labels: { instance: worker, severity: warning }
+            exp_annotations: { summary: 'Database requests are waiting for a pooled connection' }
+      - eval_time: 3m
+        alertname: HostedMetricsTargetDown
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: OrchestratorDatabasePoolWaiting
+        exp_alerts: []

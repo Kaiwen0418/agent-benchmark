@@ -98,6 +98,9 @@ set -euo pipefail
 if [[ "${1:-}" == login ]]; then
   cat >/dev/null
 fi
+if [[ -n "${FAKE_COMPOSE_ARGS_LOG:-}" ]]; then
+  printf '%s\n' "$*" >> "${FAKE_COMPOSE_ARGS_LOG}"
+fi
 for argument in "$@"; do
   if [[ "${argument}" == pull ]]; then
     printf '%s\n' "${AGENTBENCH_WEB_IMAGE_TAG:-unset}" >> "${FAKE_DOCKER_LOG}"
@@ -141,6 +144,29 @@ grep -Fq "AGENTBENCH_WEB_IMAGE_TAG=${deployment_tag}" "${development_env}" || {
 [[ "$(cat "${fake_docker_log}")" == "${deployment_tag}" ]] || {
   echo "Docker Compose did not receive the workflow image tag." >&2
   exit 1
+}
+
+elk_env="${temporary}/elk.env"
+printf '%s\n' 'ELK_PROJECT_NAME=agentbench-development-elk' \
+  'DEPLOYMENT_ENVIRONMENT=development' 'ELK_GELF_PORT=12202' 'ELK_KIBANA_PORT=5602' \
+  'ELK_GRAFANA_PORT=3302' 'ELK_RUNTIME_NETWORK=agentbench-local-development_default' > "${elk_env}"
+printf '\nELK_ENV_FILE=%s\n' "${elk_env}" >> "${development_env}"
+compose_args_log="${temporary}/compose-args.log"
+PATH="${fake_bin}:${PATH}" FAKE_COMPOSE_ARGS_LOG="${compose_args_log}" FAKE_DOCKER_LOG="${fake_docker_log}" \
+  GITHUB_REPOSITORY_OWNER=test GHCR_TOKEN=test GHCR_USERNAME=test IMAGE_TAG="${deployment_tag}" \
+  WEB_CHANGED=true bash "${deploy}" "${development_env}" >/dev/null
+grep -Fq 'docker-compose.elk.yml up -d' "${compose_args_log}"
+grep -Fq 'docker-compose.elk-logging.yml' "${compose_args_log}"
+printf '\nELK_GELF_PORT=12201\n' >> "${elk_env}"
+set +e
+output="$({
+  PATH="${fake_bin}:${PATH}" GITHUB_REPOSITORY_OWNER=test GHCR_TOKEN=test GHCR_USERNAME=test \
+    IMAGE_TAG="${deployment_tag}" bash "${deploy}" "${development_env}"
+} 2>&1)"
+status=$?
+set -e
+[[ "${status}" -ne 0 && "${output}" == *'ELK project, environment and listeners do not match'* ]] || {
+  echo 'Development deployment accepted production ELK ports.' >&2; exit 1;
 }
 
 production_env="${temporary}/production.env"

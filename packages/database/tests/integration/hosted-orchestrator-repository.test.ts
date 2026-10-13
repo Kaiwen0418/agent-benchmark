@@ -82,6 +82,12 @@ test("hosted orchestrator read repository maps durable attempt state", async () 
       },
     ]).returning();
     assert.equal(sessions.length, 2);
+    const snapshot = await repository.operationalSnapshot();
+    assert.ok(snapshot.active_attempts >= 1);
+    assert.ok(snapshot.active_sessions >= 1);
+    assert.ok(Number.isFinite(snapshot.callback_oldest_age_seconds));
+    assert.equal(client.poolStats().max, 1);
+    assert.equal(client.poolStats().waiting, 0);
     await client.db.insert(hostedWebResults).values({
       sessionId: sessions[0]!.id,
       runId: run.id,

@@ -79,6 +79,16 @@ P0 completion criterion: after any single-process failure or command retry, the 
 
 ## P1: Observability and Operations
 
+An optional ELK plus Prometheus/Grafana Compose stack provides authenticated,
+environment-isolated search of allowlisted HTTP request logs with seven-day
+retention and a provisioned request/latency/memory dashboard. It is not
+enabled by default; single-VM CD preserves activation when `ELK_ENV_FILE` is
+configured. Lifecycle correlation, worker diagnostics, queue/callback and pool
+metrics, collector freshness, Prometheus alert rules and saved Kibana searches
+are implemented. Alert delivery, host/exporter metrics, readiness and recovery
+runbooks remain outstanding. See
+[Observability](./observability.md) for provisioning and verification.
+
 - Emit structured logs with request ID, command ID, run ID, attempt ID, session ID, partition, and deployment environment.
 - Export command lag, pending/reclaimed entries, processing latency, callback backlog, active attempts, timeouts, and cleanup duration.
 - Separate liveness from readiness; readiness should cover Redis, partition ownership, and required PostgreSQL access.

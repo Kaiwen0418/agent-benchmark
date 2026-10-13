@@ -8,7 +8,9 @@ const redisUrl = process.env.REDIS_TEST_URL;
 test("Redis Stream command backbone processes and deduplicates commands", { skip: !redisUrl }, async () => {
   const namespace = crypto.randomUUID();
   let handled = 0;
+  const events: string[] = [];
   const backbone = createCommandBackbone({
+    observe: event => { events.push(event.event); },
     redisUrl: redisUrl!,
     streamKey: `test:orchestrator:commands:${namespace}`,
     groupName: `test-group:${namespace}`,
@@ -31,6 +33,11 @@ test("Redis Stream command backbone processes and deduplicates commands", { skip
     });
     assert.deepEqual(duplicate, first);
     assert.equal(handled, 1);
+    assert.equal(events.filter(event => event === 'command.completed').length, 1);
+    assert.equal(events.filter(event => event === 'command.queued').length, 2);
+    const partitions = await backbone.diagnostics();
+    assert.equal(partitions.length, 16);
+    assert.ok(partitions.every(partition => partition.lease && partition.pending === 0));
   } finally {
     await backbone.stop();
   }

@@ -32,5 +32,7 @@ assert_classification 'infra/scripts/registry-retry.sh' $'web=false\nhosted_site
 assert_classification 'infra/scripts/verify-orchestrator-worker-recovery.sh' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 assert_classification 'infra/scripts/validate-orchestrator-partitions.sh' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 assert_classification 'docs/deployment.md' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=false'
+assert_classification 'infra/docker/docker-compose.elk.yml' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
+assert_classification 'infra/elk/safe-event.rb' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 
 echo "deployment classifier tests passed"

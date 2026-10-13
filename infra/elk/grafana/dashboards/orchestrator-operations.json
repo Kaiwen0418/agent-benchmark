@@ -1,0 +1,582 @@
+{
+  "uid": "agentbench-orchestrator",
+  "title": "AgentBench Orchestrator Operations",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Worker Scrape Health",
+      "type": "stat",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"orchestrator-workers\"}",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Owned Partitions",
+      "type": "stat",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(agentbench_orchestrator_partition_lease)",
+          "legendFormat": "owned"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Collector Health",
+      "type": "stat",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=~\"agentbench_orchestrator_(redis|database)_collector_up\"}",
+          "legendFormat": "{{__name__}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Diagnostic Snapshot Age",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=~\"agentbench_orchestrator_(redis|database)_snapshot_age_seconds\"}",
+          "legendFormat": "{{__name__}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Pending Commands",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentbench_orchestrator_command_pending",
+          "legendFormat": "partition {{partition}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Known Command Lag",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentbench_orchestrator_command_lag and on(instance,partition) (agentbench_orchestrator_command_lag_known == 1)",
+          "legendFormat": "partition {{partition}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Oldest Pending Command",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentbench_orchestrator_oldest_pending_age_seconds",
+          "legendFormat": "partition {{partition}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Command Throughput",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(command_type) (rate(agentbench_orchestrator_events_total{event=\"command.completed\"}[5m]))",
+          "legendFormat": "{{command_type}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Command p95 / p99",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by(le,command_type) (rate(agentbench_orchestrator_operation_duration_seconds_bucket{kind=\"command\"}[5m])))",
+          "legendFormat": "{{command_type}} p95"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by(le,command_type) (rate(agentbench_orchestrator_operation_duration_seconds_bucket{kind=\"command\"}[5m])))",
+          "legendFormat": "{{command_type}} p99"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Retries / Reclaims / Dead Letters",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(event) (increase(agentbench_orchestrator_events_total{event=~\"command.retry|command.reclaimed|command.dead_letter|worker.lease_failure\"}[15m]))",
+          "legendFormat": "{{event}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Callback Backlog / Dead",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=~\"agentbench_orchestrator_callback_(backlog|dead)\"}",
+          "legendFormat": "{{__name__}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Oldest Callback",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentbench_orchestrator_callback_oldest_age_seconds",
+          "legendFormat": "oldest"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Callback Delivery p95",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(agentbench_orchestrator_operation_duration_seconds_bucket{kind=\"callback\"}[5m])))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Callback Outcomes",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(event) (increase(agentbench_orchestrator_events_total{event=~\"callback.*\"}[15m]))",
+          "legendFormat": "{{event}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Database Pool Connections",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=~\"agentbench_orchestrator_database_pool_(total|idle|max|waiting)\"}",
+          "legendFormat": "{{instance}} {{__name__}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Active Work / Durable DLQ",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 56
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=~\"agentbench_orchestrator_(active_attempts|active_sessions|dead_letters)\"}",
+          "legendFormat": "{{__name__}}"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Process CPU",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 64
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cores"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(agentbench_process_cpu_seconds_total[5m])",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Process Heap",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 64
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentbench_process_heap_used_bytes",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Event Loop p99",
+      "type": "timeseries",
+      "description": "Diagnostics are sampled asynchronously. Check collector health and snapshot age before interpreting queue and database values. Missing values are not zero.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 72
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "agentbench-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentbench_process_event_loop_p99_seconds",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    }
+  ]
+}

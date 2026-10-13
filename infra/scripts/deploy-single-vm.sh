@@ -68,8 +68,34 @@ else
 fi
 
 compose_file="${ROOT_DIR}/infra/docker/docker-compose.single-vm.yml"
+compose_files=(-f "${compose_file}")
+if [[ -n "${ELK_ENV_FILE:-}" ]]; then
+  [[ -r "${ELK_ENV_FILE}" ]] || { echo 'ELK environment file is not readable.' >&2; exit 1; }
+  # A separate, protected file owns only the optional observability credentials.
+  set -a
+  source "${ELK_ENV_FILE}"
+  set +a
+  expected_gelf_port=12201; expected_kibana_port=5601
+  expected_grafana_port=3300
+  if [[ "${deployment_environment}" == development ]]; then
+    expected_gelf_port=12202; expected_kibana_port=5602
+    expected_grafana_port=3302
+  fi
+  [[ "${ELK_PROJECT_NAME:-}" == "agentbench-${deployment_environment}-elk" &&
+     "${DEPLOYMENT_ENVIRONMENT:-}" == "${deployment_environment}" &&
+     "${ELK_GELF_PORT:-}" == "${expected_gelf_port}" &&
+     "${ELK_KIBANA_PORT:-}" == "${expected_kibana_port}" &&
+     "${ELK_GRAFANA_PORT:-}" == "${expected_grafana_port}" &&
+     "${ELK_RUNTIME_NETWORK:-}" == "${project}_default" ]] || {
+    echo 'ELK project, environment and listeners do not match this deployment.' >&2
+    exit 1
+  }
+  "${COMPOSE[@]}" --env-file "${ELK_ENV_FILE}" \
+    -f "${ROOT_DIR}/infra/docker/docker-compose.elk.yml" up -d
+  compose_files+=(-f "${ROOT_DIR}/infra/docker/docker-compose.elk-logging.yml")
+fi
 compose() {
-  "${COMPOSE[@]}" --env-file "${env_file}" -f "${compose_file}" "$@"
+  "${COMPOSE[@]}" --env-file "${env_file}" "${compose_files[@]}" "$@"
 }
 
 wait_for_http() {

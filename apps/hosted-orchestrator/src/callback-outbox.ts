@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@agentbench/shared";
+import type { OperationalEvent } from "./observability.js";
 
 type SupabaseCallbackOutboxRow = Database["public"]["Tables"]["hosted_callback_outbox"]["Row"];
 
@@ -39,6 +40,7 @@ type CallbackOutboxDeps = {
   sharedSecret: string | null;
   fetchFn?: typeof fetch;
   now?: () => Date;
+  observe?: (event: OperationalEvent) => void;
 };
 
 export type CallbackDeliverySummary = {
@@ -153,6 +155,10 @@ export function createCallbackOutboxProcessor(deps: CallbackOutboxDeps) {
     summary.claimed = rows.length;
 
     for (const row of rows) {
+      const started = performance.now();
+      const observe = (event: OperationalEvent['event']) => {
+        try { deps.observe?.({ event, run_id: row.runId, attempt_id: row.attemptId, duration_ms: performance.now() - started }); } catch { /* Diagnostics must not affect delivery. */ }
+      };
       try {
         const response = await fetchFn(
           `${deps.webBaseUrl}/api/runs/${encodeURIComponent(row.runId)}/complete`,
@@ -170,11 +176,14 @@ export function createCallbackOutboxProcessor(deps: CallbackOutboxDeps) {
         }
         await markDelivered(persistence, row);
         summary.delivered += 1;
+        observe('callback.delivered');
       } catch (error) {
         if (await markFailed(persistence, row, error)) {
           summary.dead += 1;
+          observe('callback.dead');
         } else {
           summary.retried += 1;
+          observe('callback.retry');
         }
       }
     }

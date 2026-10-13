@@ -8,6 +8,22 @@ import {
   type CallbackOutboxRow,
 } from "../../src/callback-outbox.js";
 
+test('callback telemetry failure does not retry an already delivered callback', async () => {
+  let delivered = 0; let failures = 0;
+  const row: CallbackOutboxRow = { id: 'row', attemptId: '12345678-1234-1234-1234-123456789abc',
+    runId: '12345678-1234-1234-1234-123456789abd', eventType: 'run_completion', payload: {},
+    status: 'delivering', attempts: 1, nextAttemptAt: '', lockedAt: null, deliveredAt: null,
+    lastError: null, createdAt: '', updatedAt: '' };
+  const processor = createCallbackOutboxProcessor({ getSupabaseAdmin: () => null,
+    getPersistence: () => ({ reconcile: async () => 0, claim: async () => [row],
+      markDelivered: async () => { delivered++; }, markFailed: async () => { failures++; } }),
+    webBaseUrl: 'https://example.test', sharedSecret: 'private',
+    fetchFn: async () => new Response('{}'), observe: () => { throw new Error('broken diagnostic sink'); },
+  });
+  const result = await processor.process();
+  assert.equal(delivered, 1); assert.equal(failures, 0); assert.equal(result.delivered, 1);
+});
+
 type OutboxRow = Database["public"]["Tables"]["hosted_callback_outbox"]["Row"];
 
 function makeRow(overrides: Partial<OutboxRow> = {}): OutboxRow {

@@ -8,6 +8,7 @@ export type DatabaseClient = {
   db: AgentBenchDatabase;
   ping: () => Promise<void>;
   close: () => Promise<void>;
+  poolStats: () => { total: number; idle: number; waiting: number; max: number };
 };
 
 export type DatabaseEnvironment = Record<string, string | undefined>;
@@ -60,5 +61,6 @@ export function createDatabaseClient(options: {
       await pool.query("select 1");
     },
     close: () => pool.end(),
+    poolStats: () => ({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount, max: options.max ?? 10 }),
   };
 }
