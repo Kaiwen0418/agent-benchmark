@@ -45,6 +45,15 @@ pnpm verify:ci
 
 `pnpm verify:ci` is the required pre-PR command. It runs static checks, PostgreSQL integration tests, unit and coverage suites, local multi-service smoke, and production builds. `scripts/check-test-layout.sh` prevents tests from being added to production source directories.
 
+ELK configuration checks run in `scripts/test-elk-config.sh`. The optional
+collector also validates embedded Ruby filter tests at Logstash startup.
+The configuration test requires Ruby and executes the actual filter with a
+small Logstash event adapter; the container smoke validates the real JVM pipeline.
+`ruby tests/helpers/elk-filter-test.rb` exercises the same filter locally without
+Docker. On a running test ELK project, `bash tests/e2e/elk-smoke.sh <env-file>`
+verifies synthetic GELF ingestion, safe projection and timing units. This smoke
+does not start or send traffic to the application services.
+
 `packages/model-catalog-sync` tests use recorded provider/aggregator payloads
 rather than live network calls and verify CLI source validation and merge
 precedence independently from Web. `scripts/test-model-catalog-postgres.sh`

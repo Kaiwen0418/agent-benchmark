@@ -32,6 +32,8 @@ on:
       - 'infra/docker/docker-compose.web.yml'
       - 'infra/docker/docker-compose.server.yml'
       - 'infra/docker/docker-compose.single-vm.yml'
+      - 'infra/docker/docker-compose.elk*.yml'
+      - 'infra/elk/**'
       - 'infra/docker/docker-compose.canary.yml'
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'
@@ -210,7 +212,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install repository verification tools
-        run: sudo apt-get update && sudo apt-get install --yes ripgrep
+        run: sudo apt-get update && sudo apt-get install --yes ripgrep ruby
 
       - name: Run repository verification
         run: pnpm verify:ci
@@ -483,6 +485,18 @@ jobs:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash infra/scripts/deploy-single-vm-development.sh "${SINGLE_VM_ENV_FILE}"
+
+      - name: Verify optional development ELK ingestion
+        shell: bash
+        env:
+          SINGLE_VM_ENV_FILE: ${{ vars.SINGLE_VM_ENV_FILE || '/srv/agentbench/secrets/development.env' }}
+        run: |
+          set -euo pipefail
+          source "${SINGLE_VM_ENV_FILE}"
+          if [[ -n "${ELK_ENV_FILE:-}" ]]; then
+            bash tests/e2e/elk-smoke.sh "${ELK_ENV_FILE}"
+            bash tests/e2e/metrics-smoke.sh "${ELK_ENV_FILE}"
+          fi
 
   deploy-cutover-canary:
     if: needs.validate-ref.outputs.deployment_mode == 'canary' && needs.validate-ref.outputs.canary_action == 'deploy'

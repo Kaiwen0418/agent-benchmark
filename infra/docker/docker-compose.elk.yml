@@ -1,0 +1,130 @@
+name: ${ELK_PROJECT_NAME:?Set an environment-specific ELK_PROJECT_NAME}
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_STACK_VERSION:-8.19.23}
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: 'true'
+      xpack.security.http.ssl.enabled: 'false'
+      xpack.security.transport.ssl.enabled: 'false'
+      xpack.ml.enabled: 'false'
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD}
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    mem_limit: 1536m
+    volumes:
+      - elastic-data:/usr/share/elasticsearch/data
+    networks: [elk]
+    healthcheck:
+      test: [CMD-SHELL, 'curl -fsS -u "elastic:$$ELASTIC_PASSWORD" http://localhost:9200/_cluster/health >/dev/null']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  elk-setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_STACK_VERSION:-8.19.23}
+    environment:
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD}
+      KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:?Set KIBANA_SYSTEM_PASSWORD}
+      LOGSTASH_PASSWORD: ${LOGSTASH_PASSWORD:?Set LOGSTASH_PASSWORD}
+    entrypoint: [bash, /setup/bootstrap.sh]
+    volumes:
+      - ../elk/bootstrap.sh:/setup/bootstrap.sh:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks: [elk]
+    restart: 'no'
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:${ELASTIC_STACK_VERSION:-8.19.23}
+    environment:
+      LOGSTASH_PASSWORD: ${LOGSTASH_PASSWORD:?Set LOGSTASH_PASSWORD}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:?Set DEPLOYMENT_ENVIRONMENT}
+      LS_JAVA_OPTS: -Xms256m -Xmx256m
+    mem_limit: 768m
+    ports:
+      - '127.0.0.1:${ELK_GELF_PORT:-12201}:12201/udp'
+    volumes:
+      - ../elk/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ../elk/pipeline:/usr/share/logstash/pipeline:ro
+      - ../elk/safe-event.rb:/usr/share/logstash/safe-event.rb:ro
+      - logstash-data:/usr/share/logstash/data
+    depends_on:
+      elk-setup:
+        condition: service_completed_successfully
+    networks: [elk, elk-ingress]
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_STACK_VERSION:-8.19.23}
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:?Set KIBANA_SYSTEM_PASSWORD}
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY:?Set a 32+ character KIBANA_ENCRYPTION_KEY}
+      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY}
+      XPACK_SECURITY_ENCRYPTIONKEY: ${KIBANA_ENCRYPTION_KEY}
+      TELEMETRY_ENABLED: 'false'
+      NODE_OPTIONS: --max-old-space-size=512
+    mem_limit: 1g
+    ports:
+      - '127.0.0.1:${ELK_KIBANA_PORT:-5601}:5601'
+    depends_on:
+      elk-setup:
+        condition: service_completed_successfully
+    networks: [elk, elk-ingress]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.15.0}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB
+    mem_limit: 512m
+    volumes:
+      - ../elk/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    secrets: [hosted-metrics-token]
+    networks: [elk, hosted-runtime]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-13.2.3}
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+    mem_limit: 512m
+    ports:
+      - '127.0.0.1:${ELK_GRAFANA_PORT:-3300}:3000'
+    volumes:
+      - ../elk/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../elk/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks: [elk, elk-ingress]
+    restart: unless-stopped
+
+networks:
+  elk:
+    internal: true
+  elk-ingress:
+  hosted-runtime:
+    external: true
+    name: ${ELK_RUNTIME_NETWORK:?Set the matching hosted Compose network}
+
+secrets:
+  hosted-metrics-token:
+    environment: HOSTED_METRICS_TOKEN
+
+volumes:
+  elastic-data:
+  logstash-data:
+  prometheus-data:
+  grafana-data:

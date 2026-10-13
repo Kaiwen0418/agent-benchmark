@@ -7,7 +7,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./hosted-telemetry": "./src/hosted-telemetry.ts"
+    "./hosted-telemetry": "./src/hosted-telemetry.ts",
+    "./http-logging": "./src/http-logging.ts",
+    "./http-metrics": "./src/http-metrics.ts"
   },
   "dependencies": {
     "@agentbench/protocol": "workspace:*"
