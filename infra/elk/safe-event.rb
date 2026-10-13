@@ -13,7 +13,29 @@ def filter(event)
   rescue JSON::ParserError
     return []
   end
-  return [] unless data.is_a?(Hash) && data['event'] == 'http.request'
+  return [] unless data.is_a?(Hash)
+  operational = %w[command.queued command.started command.completed command.retry command.dead_letter command.reclaimed worker.lease_failure callback.delivered callback.retry callback.dead monitor.failed]
+  if operational.include?(data['event'])
+    return [] unless data['service'] == 'hosted-orchestrator' && %w[api worker all].include?(data['role'])
+    safe = { '@timestamp' => event.get('@timestamp'), 'environment' => @environment,
+      'event' => data['event'], 'service' => data['service'], 'role' => data['role'] }
+    if data['event'].start_with?('command.')
+      types = %w[attempt.init session.snapshot session.access session.event attempt.complete-session attempt.timeout attempt.cancel maintenance.cleanup other]
+      return [] unless types.include?(data['command_type'])
+      safe['command_type'] = data['command_type']
+    end
+    %w[command_id run_id attempt_id session_id].each do |key|
+      value = data[key]
+      safe[key] = value if value.is_a?(String) && value.match?(/\A[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\z/i)
+    end
+    safe['source'] = data['source'] if %w[redis database].include?(data['source'])
+    safe['partition'] = data['partition'] if data['partition'].is_a?(Integer) && data['partition'].between?(0, 1023)
+    safe['status'] = data['status'] if data['status'].is_a?(Integer) && data['status'].between?(100, 599)
+    duration = data['duration_ms']
+    safe['duration_ms'] = duration if duration.is_a?(Numeric) && duration.finite? && duration.between?(0, 86400000)
+    return [LogStash::Event.new(safe)]
+  end
+  return [] unless data['event'] == 'http.request'
   return [] unless %w[gateway hosted-sites hosted-orchestrator].include?(data['service'])
   return [] unless %w[GET POST PUT PATCH DELETE HEAD OPTIONS OTHER].include?(data['method'])
   return [] unless %w[health api app other].include?(data['route'])
@@ -34,6 +56,20 @@ def filter(event)
   end
   # Build a fresh event; raw GELF fields, messages and nested payloads never reach ES.
   [LogStash::Event.new(safe)]
+end
+
+test 'operational logs preserve correlation but exclude payloads and error text' do
+  parameters { { 'environment' => 'test' } }
+  in_event do
+    { 'message' => JSON.generate({ 'event' => 'command.completed', 'service' => 'hosted-orchestrator',
+      'role' => 'worker', 'command_type' => 'attempt.init', 'command_id' => '12345678-1234-1234-1234-123456789abc',
+      'run_id' => 'private-token', 'status' => 200, 'duration_ms' => 15,
+      'error' => 'private-key', 'payload' => { 'canonicalValue' => 'hidden' } }) }
+  end
+  expect('only safe lifecycle fields') do |events|
+    events.length == 1 && events[0].get('command_id') == '12345678-1234-1234-1234-123456789abc' &&
+      events[0].get('payload').nil? && events[0].get('error').nil? && events[0].get('run_id').nil?
+  end
 end
 
 test 'normalize gateway seconds to milliseconds' do

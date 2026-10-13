@@ -13,8 +13,8 @@ for attempt in {1..30}; do
     python3 -c '
 import json, sys
 data = json.load(sys.stdin)
-targets = [t for t in data["data"]["activeTargets"] if t["labels"]["job"] == "hosted-services"]
-assert len(targets) == 2
+targets = [t for t in data["data"]["activeTargets"] if t["labels"]["job"] in ("hosted-services", "orchestrator-workers")]
+assert len(targets) == 4
 assert all(t["health"] == "up" for t in targets)
 '; then
     echo 'Prometheus authenticated hosted-service scrapes passed.'

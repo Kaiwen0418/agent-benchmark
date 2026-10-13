@@ -1,0 +1,30 @@
+{
+  "attributes": {
+    "title": "AgentBench Callback Delivery",
+    "description": "Allowlisted operational events only. Filter by run_id, attempt_id or command_id to correlate work.",
+    "columns": [
+      "@timestamp",
+      "event",
+      "run_id",
+      "attempt_id",
+      "status",
+      "duration_ms"
+    ],
+    "sort": [
+      [
+        "@timestamp",
+        "desc"
+      ]
+    ],
+    "kibanaSavedObjectMeta": {
+      "searchSourceJSON": "{\"query\":{\"query\":\"event: callback.*\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"
+    }
+  },
+  "references": [
+    {
+      "type": "index-pattern",
+      "id": "agentbench-logs",
+      "name": "kibanaSavedObjectMeta.searchSourceJSON.index"
+    }
+  ]
+}

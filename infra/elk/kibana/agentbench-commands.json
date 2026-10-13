@@ -1,0 +1,34 @@
+{
+  "attributes": {
+    "title": "AgentBench Command Lifecycle",
+    "description": "Allowlisted operational events only. Filter by run_id, attempt_id or command_id to correlate work.",
+    "columns": [
+      "@timestamp",
+      "event",
+      "command_type",
+      "command_id",
+      "run_id",
+      "attempt_id",
+      "session_id",
+      "partition",
+      "status",
+      "duration_ms"
+    ],
+    "sort": [
+      [
+        "@timestamp",
+        "desc"
+      ]
+    ],
+    "kibanaSavedObjectMeta": {
+      "searchSourceJSON": "{\"query\":{\"query\":\"event: command.*\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"
+    }
+  },
+  "references": [
+    {
+      "type": "index-pattern",
+      "id": "agentbench-logs",
+      "name": "kibanaSavedObjectMeta.searchSourceJSON.index"
+    }
+  ]
+}

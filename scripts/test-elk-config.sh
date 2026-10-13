@@ -29,7 +29,7 @@ root = pathlib.Path(sys.argv[1])
 configs = [json.loads((root / (env + '.json')).read_text()) for env in ('development', 'production')]
 for config in configs:
     services = config['services']
-    assert set(services) == {'elasticsearch', 'elk-setup', 'logstash', 'kibana', 'prometheus', 'grafana'}
+    assert set(services) == {'elasticsearch', 'elk-setup', 'logstash', 'kibana', 'kibana-setup', 'prometheus', 'grafana'}
     assert not services['elasticsearch'].get('ports')
     assert services['elasticsearch']['environment']['xpack.security.enabled'] == 'true'
     assert config['networks']['elk']['internal']
@@ -60,5 +60,26 @@ for service in services.values():
     assert logging["options"]["mode"] == "non-blocking"
 '
 bash -n "$ROOT_DIR/infra/elk/bootstrap.sh"
+bash -n "$ROOT_DIR/infra/elk/kibana-bootstrap.sh"
+node --input-type=module - "$ROOT_DIR" <<'JS'
+import { readFileSync, readdirSync } from 'node:fs';
+const root = process.argv[2];
+for (const directory of ['grafana/dashboards', 'kibana']) {
+  const path = root + '/infra/elk/' + directory;
+  for (const file of readdirSync(path).filter(file => file.endsWith('.json'))) {
+    const data = JSON.parse(readFileSync(path + '/' + file, 'utf8'));
+    if (directory === 'kibana') {
+      JSON.parse(data.attributes.kibanaSavedObjectMeta.searchSourceJSON);
+      if (data.references[0]?.id !== 'agentbench-logs') throw new Error('Unknown Kibana data view');
+    } else if (!data.uid || !data.panels.length) throw new Error('Invalid Grafana dashboard');
+  }
+}
+JS
 ruby "$ROOT_DIR/tests/helpers/elk-filter-test.rb"
+docker run --rm --network none --entrypoint /bin/promtool \
+  -v "$ROOT_DIR/infra/elk:/rules:ro" prom/prometheus:v3.15.0 \
+  check rules /rules/alerts.yml
+docker run --rm --network none --entrypoint /bin/promtool \
+  -v "$ROOT_DIR/infra/elk:/rules:ro" -w /rules prom/prometheus:v3.15.0 \
+  test rules /rules/alerts.test.yml
 echo 'ELK authentication, port isolation and non-blocking log transport checks passed.'

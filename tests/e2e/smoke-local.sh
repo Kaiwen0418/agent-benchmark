@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOSTED_PORT="${HOSTED_SITES_PORT:-$((3100 + (RANDOM % 700)))}"
 ORCHESTRATOR_PORT="${HOSTED_ORCHESTRATOR_PORT:-$((4100 + (RANDOM % 700)))}"
+WORKER_METRICS_PORT="$((6100 + (RANDOM % 700)))"
 HOSTED_URL="http://127.0.0.1:${HOSTED_PORT}"
 ORCHESTRATOR_URL="http://127.0.0.1:${ORCHESTRATOR_PORT}"
 SECRET="local-smoke-secret"
@@ -20,7 +21,7 @@ cleanup() {
     done
     kill "${pid}" >/dev/null 2>&1 || true
   }
-  for pid in "${HOSTED_PID:-}" "${ORCHESTRATOR_PID:-}"; do
+  for pid in "${HOSTED_PID:-}" "${ORCHESTRATOR_PID:-}" "${WORKER_PID:-}"; do
     if [[ -n "${pid}" ]]; then
       kill_tree "${pid}"
       wait "${pid}" 2>/dev/null || true
@@ -51,12 +52,22 @@ for _ in $(seq 1 30); do
 done
 
 HOSTED_ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT}" \
+ORCHESTRATOR_MODE=api \
+HOSTED_METRICS_ENABLED=true HOSTED_METRICS_TOKEN=local-metrics-secret \
 HOSTED_ORCHESTRATOR_PUBLIC_URL="${ORCHESTRATOR_URL}" \
 HOSTED_SITES_URL="${HOSTED_URL}" \
 RUNNER_SHARED_SECRET="${SECRET}" \
 ORCHESTRATOR_REDIS_URL="${REDIS_URL}" \
 pnpm --filter hosted-orchestrator exec tsx src/server.ts >"${LOG_DIR}/orchestrator.log" 2>&1 &
 ORCHESTRATOR_PID=$!
+
+ORCHESTRATOR_MODE=worker ORCHESTRATOR_WORKER_PARTITIONS=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 \
+HOSTED_ORCHESTRATOR_METRICS_PORT="${WORKER_METRICS_PORT}" \
+HOSTED_METRICS_ENABLED=true HOSTED_METRICS_TOKEN=local-metrics-secret \
+HOSTED_SITES_URL="${HOSTED_URL}" RUNNER_SHARED_SECRET="${SECRET}" \
+ORCHESTRATOR_REDIS_URL="${REDIS_URL}" \
+pnpm --filter hosted-orchestrator exec tsx src/server.ts >"${LOG_DIR}/worker.log" 2>&1 &
+WORKER_PID=$!
 
 HOSTED_SITES_PORT="${HOSTED_PORT}" \
 HOSTED_SITES_PUBLIC_URL="${HOSTED_URL}" \
@@ -78,6 +89,15 @@ if ! curl -fsS "${HOSTED_URL}/health" >/dev/null || ! curl -fsS "${ORCHESTRATOR_
   cat "${LOG_DIR}/hosted-sites.log" "${LOG_DIR}/orchestrator.log" >&2
   exit 1
 fi
+
+for metrics_url in "${ORCHESTRATOR_URL}/metrics" "http://127.0.0.1:${WORKER_METRICS_PORT}/metrics"; do
+  [[ "$(curl -sS -o /dev/null -w '%{http_code}' "${metrics_url}")" == 401 ]]
+  [[ "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer wrong' "${metrics_url}")" == 401 ]]
+  curl -fsS -H 'Authorization: Bearer local-metrics-secret' "${metrics_url}" |
+    grep -F 'agentbench_process_cpu_seconds_total' >/dev/null
+done
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${WORKER_METRICS_PORT}/health")" == 404 ]]
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${WORKER_METRICS_PORT}/api/attempts")" == 404 ]]
 
 SESSION_JSON="$(curl -fsS -X POST "${HOSTED_URL}/api/sessions" \
   -H 'Content-Type: application/json' \

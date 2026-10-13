@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { createClient } from "redis";
+import { correlationIds, type OperationalEvent } from "./observability.js";
 
 type CommandResponse = {
   statusCode: number;
@@ -37,6 +38,7 @@ type CommandBackboneOptions = {
   retryBaseDelayMs?: number;
   reclaimIdleMs?: number;
   onDeadLetter?: (deadLetter: CommandDeadLetter) => Promise<void>;
+  observe?: (event: OperationalEvent) => void;
 };
 
 type StoredResponse = CommandResponse & {
@@ -66,6 +68,9 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
   const reclaimIdleMs = Math.max(1, Math.trunc(options.reclaimIdleMs ?? 30_000));
   let running = false;
   let leaseTimer: ReturnType<typeof setInterval> | null = null;
+  function observe(event: OperationalEvent) {
+    try { options.observe?.(event); } catch { /* Monitoring cannot interrupt commands. */ }
+  }
 
   if (assignedPartitions.some((partition) => partition < 0 || partition >= partitionCount)) {
     throw new Error(`Worker partitions must be between 0 and ${partitionCount - 1}.`);
@@ -155,6 +160,8 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
   }
 
   async function processMessage(stream: string, id: string, message: Record<string, string>) {
+    const started = performance.now();
+    const partition = Number(stream.match(/:p(\d+)$/)?.[1] ?? 0);
     const commandId = message.commandId;
     const type = message.type;
     if (!commandId || !type) {
@@ -171,6 +178,7 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
 
     let response: StoredResponse | null = null;
     let payload: Record<string, unknown> = {};
+    observe({ event: 'command.started', command_id: commandId, command_type: type, partition });
     const persistedAttempts = Number(await producer.get(retryKey(commandId)) ?? 0);
     if (persistedAttempts >= maxCommandAttempts) {
       try {
@@ -198,6 +206,7 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
         statusCode: 500,
         body: { error: "orchestrator_command_dead_lettered", commandId, attempts: persistedAttempts },
       };
+      observe({ event: 'command.dead_letter', command_id: commandId, command_type: type, partition, ...correlationIds(payload) });
     }
     while (!response) {
       try {
@@ -208,6 +217,7 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
         const attempts = await producer.incr(retryKey(commandId));
         await producer.expire(retryKey(commandId), 24 * 60 * 60);
         if (attempts < maxCommandAttempts) {
+          observe({ event: 'command.retry', command_id: commandId, command_type: type, partition, ...correlationIds(payload) });
           await new Promise((resolve) => setTimeout(resolve, retryBaseDelayMs * 2 ** (attempts - 1)));
           continue;
         }
@@ -232,6 +242,7 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
           statusCode: 500,
           body: { error: "orchestrator_command_dead_lettered", commandId, attempts },
         };
+        observe({ event: 'command.dead_letter', command_id: commandId, command_type: type, partition, ...correlationIds(payload) });
       }
     }
 
@@ -240,6 +251,7 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
     await producer.set(resultKey(commandId), JSON.stringify(response), { EX: 24 * 60 * 60 });
     await publishResponse(response);
     await consumer.xAck(stream, groupName, id);
+    observe({ event: 'command.completed', command_id: commandId, command_type: type, partition, status: response.statusCode, duration_ms: performance.now() - started, ...correlationIds(payload) });
   }
 
   async function reclaimStaleMessages() {
@@ -248,6 +260,7 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
       const claimed = await consumer.xAutoClaim(stream, groupName, consumerName, reclaimIdleMs, "0-0", { COUNT: 16 });
       for (const entry of claimed.messages) {
         if (entry) {
+          observe({ event: 'command.reclaimed', command_id: entry.message.commandId, command_type: entry.message.type, partition });
           await processMessage(stream, entry.id, entry.message);
         }
       }
@@ -293,6 +306,7 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
         running = true;
         leaseTimer = setInterval(() => {
           void renewPartitionLeases().catch((error) => {
+            observe({ event: 'worker.lease_failure' });
             console.error("[hosted-orchestrator] partition lease renewal failed", error);
             running = false;
             process.exitCode = 1;
@@ -319,6 +333,7 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
         { commandId, type, partitionKey, payload: JSON.stringify(payload) },
         { TRIM: { strategy: "MAXLEN", strategyModifier: "~", threshold: maxStreamLength } },
       );
+      observe({ event: 'command.queued', command_id: commandId, command_type: type, partition, ...correlationIds(payload) });
       const reply = await waiter.brPop(responseKey(commandId), responseTimeoutSeconds);
       if (!reply) {
         return {
@@ -351,6 +366,20 @@ export function createCommandBackbone(options: CommandBackboneOptions) {
         .map((lease, partition) => (lease ? null : partition))
         .filter((partition): partition is number => partition !== null);
       return { ready: missingPartitions.length === 0, missingPartitions };
+    },
+
+    async diagnostics() {
+      const leases = await producer.mGet(Array.from({ length: partitionCount }, (_, p) => leaseKey(p)));
+      return Promise.all(Array.from({ length: partitionCount }, async (_, partition) => {
+        const stream = streamForPartition(partition);
+        const groups = await producer.xInfoGroups(stream);
+        const group = groups.find((entry) => entry.name === groupName);
+        if (!group) throw new Error('Command consumer group unavailable');
+        const pending = await producer.xPending(stream, groupName);
+        const oldest = pending.firstId ? Number(pending.firstId.split('-')[0]) : null;
+        return { partition, lease: Boolean(leases[partition]), pending: pending.pending,
+          lag: group.lag, oldestPendingAgeSeconds: oldest === null ? 0 : Math.max(0, (Date.now() - oldest) / 1000) };
+      }));
     },
 
     info: { streamKey, groupName, consumerName, role, partitionCount, assignedPartitions },

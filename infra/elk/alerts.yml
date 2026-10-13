@@ -1,0 +1,46 @@
+groups:
+  - name: agentbench-progress
+    rules:
+      - alert: HostedMetricsTargetDown
+        expr: up{job=~"hosted-services|orchestrator-workers"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: 'A hosted metrics target is unavailable' }
+      - alert: OrchestratorMissingPartition
+        expr: agentbench_orchestrator_partition_lease == 0
+        for: 30s
+        labels: { severity: critical }
+        annotations: { summary: 'An orchestrator partition has no worker lease' }
+      - alert: OrchestratorStalledCommands
+        expr: agentbench_orchestrator_oldest_pending_age_seconds > 120
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: 'Commands have remained pending for over two minutes' }
+      - alert: CallbackDeliveryStalled
+        expr: agentbench_orchestrator_callback_oldest_age_seconds > 300
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: 'A terminal callback has waited over five minutes' }
+      - alert: OrchestratorDatabasePoolWaiting
+        expr: agentbench_orchestrator_database_pool_waiting > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations: { summary: 'Database requests are waiting for a pooled connection' }
+      - alert: OrchestratorMetricsCollectorFailed
+        expr: agentbench_orchestrator_redis_collector_up == 0 or agentbench_orchestrator_database_collector_up == 0
+        for: 1m
+        labels: { severity: warning }
+        annotations: { summary: 'Queue or durable state diagnostics are unavailable' }
+      - alert: OrchestratorMetricsSnapshotStale
+        expr: agentbench_orchestrator_redis_snapshot_age_seconds > 60 or agentbench_orchestrator_database_snapshot_age_seconds > 180
+        for: 1m
+        labels: { severity: warning }
+        annotations: { summary: 'Queue or durable state diagnostics have stopped refreshing' }
+      - alert: OrchestratorDeadLetterCreated
+        expr: sum(increase(agentbench_orchestrator_events_total{event="command.dead_letter"}[5m])) > 0
+        labels: { severity: warning }
+        annotations: { summary: 'A command exhausted retries and entered the dead-letter queue' }
+      - alert: CallbackDeadLetterCreated
+        expr: sum(increase(agentbench_orchestrator_events_total{event="callback.dead"}[5m])) > 0
+        labels: { severity: warning }
+        annotations: { summary: 'A callback exhausted its delivery retries' }

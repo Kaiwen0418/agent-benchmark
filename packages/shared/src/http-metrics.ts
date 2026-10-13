@@ -1,10 +1,13 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 
 const buckets = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 
 export function createHttpMetrics(service: 'hosted-sites' | 'hosted-orchestrator') {
   const samples = new Map<string, { count: number; sum: number; buckets: number[] }>();
+  const loop = process.env.HOSTED_METRICS_ENABLED === 'true' ? monitorEventLoopDelay({ resolution: 20 }) : null;
+  loop?.enable();
   return {
     observe(request: IncomingMessage, response: ServerResponse, enabled = process.env.HOSTED_METRICS_ENABLED === 'true') {
       if (!enabled || (request.url ?? '').split('?')[0] === '/metrics') return;
@@ -40,6 +43,16 @@ export function createHttpMetrics(service: 'hosted-sites' | 'hosted-orchestrator
       lines.push(`agentbench_process_resident_memory_bytes{service="${service}"} ${process.memoryUsage().rss}`);
       lines.push('# TYPE agentbench_process_uptime_seconds gauge');
       lines.push(`agentbench_process_uptime_seconds{service="${service}"} ${process.uptime()}`);
+      lines.push('# TYPE agentbench_process_heap_used_bytes gauge');
+      lines.push(`agentbench_process_heap_used_bytes{service="${service}"} ${process.memoryUsage().heapUsed}`);
+      lines.push('# TYPE agentbench_process_cpu_seconds_total counter');
+      const cpu = process.cpuUsage();
+      lines.push(`agentbench_process_cpu_seconds_total{service="${service}"} ${(cpu.user + cpu.system) / 1e6}`);
+      if (loop && loop.count > 0) {
+        lines.push('# TYPE agentbench_process_event_loop_p99_seconds gauge');
+        lines.push(`agentbench_process_event_loop_p99_seconds{service="${service}"} ${loop.percentile(99) / 1e9}`);
+        loop.reset();
+      }
       return `${lines.join('\n')}\n`;
     },
   };

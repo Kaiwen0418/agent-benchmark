@@ -48,6 +48,18 @@ export type HostedSessionRecord = typeof hostedWebSessions.$inferSelect;
 
 export function createHostedOrchestratorRepository(db: AgentBenchDatabase) {
   return {
+    async operationalSnapshot() {
+      const result = await db.execute(sql`
+        select
+          (select count(*) from public.hosted_callback_outbox where status in ('pending', 'delivering')) as callback_backlog,
+          (select count(*) from public.hosted_callback_outbox where status = 'dead') as callback_dead,
+          (select coalesce(extract(epoch from now() - min(created_at)), 0) from public.hosted_callback_outbox where status in ('pending', 'delivering')) as callback_oldest_age_seconds,
+          (select count(*) from public.benchmark_attempts where status = 'running') as active_attempts,
+          (select count(*) from public.hosted_web_sessions where status = 'active') as active_sessions,
+          (select count(*) from public.orchestrator_command_dead_letters where status = 'dead') as dead_letters
+      `);
+      return Object.fromEntries(Object.entries(result.rows[0]).map(([name, value]) => [name, Math.max(0, Number(value))]));
+    },
     async findAttemptMetadata(attemptId: string) {
       const [row] = await db.select({ metadata: benchmarkAttempts.metadata })
         .from(benchmarkAttempts)
