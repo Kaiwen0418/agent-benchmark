@@ -34,6 +34,9 @@ bash scripts/test-orchestrator-topology.sh
 echo "== Redis topology =="
 bash scripts/test-redis-topology.sh
 
+echo "== ELK configuration =="
+bash scripts/test-elk-config.sh
+
 echo "== Web secret boundary =="
 bash scripts/check-web-secret-boundary.sh
 

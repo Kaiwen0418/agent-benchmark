@@ -1,0 +1,30 @@
+# Merge after the hosted server or single-VM Compose file. No Docker socket mount.
+x-elk-logging: &elk-logging
+  driver: gelf
+  options:
+    gelf-address: udp://127.0.0.1:${ELK_GELF_PORT:-12201}
+    tag: '{{.Name}}'
+    mode: non-blocking
+    max-buffer-size: 1m
+    cache-max-size: 10m
+    cache-max-file: '3'
+
+services:
+  hosted-sites:
+    environment:
+      HOSTED_STRUCTURED_LOGS: 'true'
+      HOSTED_METRICS_ENABLED: 'true'
+      HOSTED_METRICS_TOKEN: ${HOSTED_METRICS_TOKEN:?Set HOSTED_METRICS_TOKEN}
+    logging: *elk-logging
+  hosted-orchestrator:
+    environment:
+      HOSTED_STRUCTURED_LOGS: 'true'
+      HOSTED_METRICS_ENABLED: 'true'
+      HOSTED_METRICS_TOKEN: ${HOSTED_METRICS_TOKEN:?Set HOSTED_METRICS_TOKEN}
+    logging: *elk-logging
+  hosted-orchestrator-worker-0:
+    logging: *elk-logging
+  hosted-orchestrator-worker-1:
+    logging: *elk-logging
+  gateway:
+    logging: *elk-logging

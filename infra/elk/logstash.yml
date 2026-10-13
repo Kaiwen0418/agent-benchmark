@@ -1,0 +1,9 @@
+api.http.host: 0.0.0.0
+xpack.monitoring.enabled: false
+pipeline.workers: 1
+pipeline.batch.size: 50
+queue.type: persisted
+queue.max_bytes: 256mb
+dead_letter_queue.enable: false
+log.level: error
+config.support_escapes: true

@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { observeHttpRequest } from "@agentbench/shared/http-logging";
+import { createHttpMetrics, metricsAuthorized } from "@agentbench/shared/http-metrics";
 import crypto from "node:crypto";
 import { hostname } from "node:os";
 import {
@@ -219,10 +221,19 @@ const routes = createRoutes({
   notFound,
 });
 
+const httpMetrics = createHttpMetrics("hosted-sites");
 const server = createServer(async (request, response) => {
+  observeHttpRequest(request, response, "hosted-sites");
+  httpMetrics.observe(request, response);
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
   try {
+    if (request.method === "GET" && url.pathname === "/metrics" && process.env.HOSTED_METRICS_ENABLED === "true") {
+      if (!metricsAuthorized(request)) { sendJson(response, 401, { error: "Unauthorized" }); return; }
+      response.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
+      response.end(httpMetrics.render());
+      return;
+    }
     const requestToken = url.searchParams.get("session");
     if (isHostedViewerMutation(request.method, requestToken, viewerTokenSecret)) {
       sendJson(response, 403, { error: "Viewer sessions are read-only" });

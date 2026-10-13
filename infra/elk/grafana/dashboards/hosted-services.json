@@ -1,0 +1,53 @@
+{
+  "uid": "agentbench-hosted",
+  "title": "AgentBench Hosted Services",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "title": "Scrape Health", "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
+          "mappings": [{ "type": "value", "options": { "0": { "text": "Down" }, "1": { "text": "Up" } } }]
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" },
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "agentbench-prometheus" },
+      "targets": [{ "refId": "A", "expr": "up{job=\"hosted-services\"}", "legendFormat": "{{instance}}" }]
+    },
+    {
+      "id": 2, "title": "Requests Per Second", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "agentbench-prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum by(service) (rate(agentbench_http_requests_total[5m]))", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 3, "title": "5xx Error Rate", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "agentbench-prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum by(service) (rate(agentbench_http_requests_total{status_class=\"5xx\"}[5m]))", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 4, "title": "p95 / p99 Request Latency", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "datasource": { "type": "prometheus", "uid": "agentbench-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by(le,service) (rate(agentbench_http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{service}} p95" },
+        { "refId": "B", "expr": "histogram_quantile(0.99, sum by(le,service) (rate(agentbench_http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{service}} p99" }
+      ]
+    },
+    {
+      "id": 5, "title": "Process Resident Memory", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "datasource": { "type": "prometheus", "uid": "agentbench-prometheus" },
+      "targets": [{ "refId": "A", "expr": "agentbench_process_resident_memory_bytes", "legendFormat": "{{service}}" }]
+    }
+  ]
+}

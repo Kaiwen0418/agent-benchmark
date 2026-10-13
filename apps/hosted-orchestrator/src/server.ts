@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { observeHttpRequest } from "@agentbench/shared/http-logging";
+import { createHttpMetrics, metricsAuthorized } from "@agentbench/shared/http-metrics";
 import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createClient as createRedisClient, type RedisClientType } from "redis";
@@ -2036,10 +2038,19 @@ async function runCleanupSweep(trigger: "startup" | "interval") {
   }
 }
 
+const httpMetrics = createHttpMetrics("hosted-orchestrator");
 const server = createServer(async (request, response) => {
+  observeHttpRequest(request, response, "hosted-orchestrator");
+  httpMetrics.observe(request, response);
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
   try {
+    if (request.method === "GET" && url.pathname === "/metrics" && process.env.HOSTED_METRICS_ENABLED === "true") {
+      if (!metricsAuthorized(request)) { sendJson(response, 401, { error: "Unauthorized" }); return; }
+      response.writeHead(200, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
+      response.end(httpMetrics.render());
+      return;
+    }
     if (request.method === "GET" && url.pathname === "/health") {
       const readiness = await commandBackbone.readiness();
       sendJson(response, readiness.ready ? 200 : 503, {

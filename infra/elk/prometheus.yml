@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 5s
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+  - job_name: hosted-services
+    metrics_path: /metrics
+    authorization:
+      credentials_file: /run/secrets/hosted-metrics-token
+    static_configs:
+      - targets: ['hosted-sites:3003', 'hosted-orchestrator:3004']
