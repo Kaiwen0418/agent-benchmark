@@ -71,6 +71,59 @@ Deploying only an application image is insufficient for the initial attachment.
 
 ## Verification
 
+### Rootless Development
+
+Rootless development uses a dedicated Unix user and Docker daemon. Do not grant
+that user access to the rootful production Docker socket. Its aggregate ceiling
+is enforced by the **host** `user-<uid>.slice`, not the rootful
+`agentbench-development.slice`. This covers the user manager, rootless daemon,
+application, monitoring and migration containers together. Other processes
+under that user slice also count; a system-level CI runner service may live
+outside it. Never use a shared production/operator user for this budget.
+
+The operator installs the persistent dedicated-user limit:
+
+```bash
+sudo bash infra/scripts/install-rootless-development-budget.sh development-runner
+```
+
+Use your actual dedicated user name. The installer does not execute user-owned
+configuration as root or restart Docker. It applies the live user-slice ceiling
+and retains a persistent drop-in. This can constrain existing workloads, so
+install during a development maintenance window.
+
+Keep `AGENTBENCH_CGROUP_PARENT=agentbench-development.slice` in both development
+configuration files as the environment identity. CD detects rootless Docker,
+checks the actual host user-slice quota and daemon ancestry, and clears the
+container `cgroup_parent` override for Compose. Containers remain beneath their
+user manager, with the host slice providing the hard aggregate ceiling. Run
+the checker as the actual development runner user with its rootless Docker
+context and user-manager connection. It rejects a missing/mismatched budget,
+unsupported cgroup backend, daemon outside the user slice and rootless production.
+
+Rootless per-container limits still require Docker's systemd/cgroups-v2 backend
+and delegated CPU/memory controllers; see [Docker rootless resource limits](https://docs.docker.com/engine/security/rootless/tips/#limiting-resources).
+If delegation is missing, have an operator configure the dedicated user manager
+and verify Docker reports `systemd/2`; do not bypass this by using production Docker.
+
+Migrations stream a source-only archive into temporary container storage. They
+never install dependencies into the host checkout. Rootful execution retains
+the calling UID/GID; rootless execution uses container UID 0, which maps to the
+unprivileged daemon owner. No privileged container or rootful socket is mounted.
+For rootless development, migration preflight verifies the user budget before
+starting PostgreSQL/PgBouncer and applying migrations.
+
+Rootful and rootless daemons have independent containers, networks and volumes.
+Old stopped rootful development containers are not evidence that rootless data
+has been migrated. No automatic data transfer or volume deletion is performed;
+approve and verify any required historical development-data transfer separately.
+
+For rootless rollback, stop the development stack in its own Docker context,
+then have an operator remove the dedicated user's persistent/runtime limit only
+after all its workloads are stopped. Leave production slices and volumes alone.
+
+### Rootful Deployment
+
 ```bash
 bash infra/scripts/check-environment-resource-budget.sh production agentbench-production.slice
 bash infra/scripts/check-environment-resource-budget.sh development agentbench-development.slice

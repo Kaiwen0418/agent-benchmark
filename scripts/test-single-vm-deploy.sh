@@ -27,7 +27,10 @@ for expected in \
 done
 
 for expected in \
-  '--user "$(id -u):$(id -g)"' \
+  'container_user="$(id -u):$(id -g)"' \
+  '--user "$container_user"' \
+  'container_user=0:0' \
+  'tar -xf - -C /tmp/workspace' \
   '-e HOME=/tmp' \
   'corepack enable --install-directory /tmp/bin' \
   'export PATH="/tmp/bin:${PATH}"' \
@@ -95,6 +98,17 @@ mkdir -p "${fake_bin}"
 cat > "${fake_bin}/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == info ]]; then
+  if [[ "${3:-}" == '{{json .SecurityOptions}}' ]]; then
+    echo "${FAKE_SECURITY_OPTIONS:-[]}"
+  else
+    echo systemd/2
+  fi
+  exit 0
+fi
+if [[ -n "${FAKE_PARENT_LOG:-}" && "$*" == *' up '* ]]; then
+  printf '%s\n' "${AGENTBENCH_CGROUP_PARENT-unset}" >> "$FAKE_PARENT_LOG"
+fi
 if [[ "${1:-}" == login ]]; then
   cat >/dev/null
 fi
@@ -218,5 +232,21 @@ for expected in \
     echo "Production workflow is missing ${expected}." >&2; exit 1;
   }
 done
+
+cp "$ROOT_DIR/tests/fixtures/resource-budgets/"{id,systemctl} "$fake_bin/"
+chmod +x "$fake_bin/id" "$fake_bin/systemctl"
+rootless_env="$temporary/rootless.env"
+bash "$ROOT_DIR/infra/scripts/init-single-vm-env.sh" "$rootless_env" \
+  https://web-dev.example.test https://hosted-dev.example.test development >/dev/null
+printf '\nAGENTBENCH_CGROUP_PARENT=agentbench-development.slice\nELK_ENV_FILE=%s\n' "$elk_env" >> "$rootless_env"
+printf '\nAGENTBENCH_CGROUP_PARENT=agentbench-development.slice\nELK_GELF_PORT=12202\nELK_KIBANA_PORT=5602\nELK_GRAFANA_PORT=3302\n' >> "$elk_env"
+PATH="$fake_bin:$PATH" FAKE_SECURITY_OPTIONS='["name=rootless"]' \
+  FAKE_DOCKER_LOG="$temporary/rootless-docker.log" FAKE_PARENT_LOG="$temporary/parents.log" \
+  GITHUB_REPOSITORY_OWNER=test GHCR_TOKEN=test GHCR_USERNAME=test IMAGE_TAG="$deployment_tag" \
+  TOPOLOGY_CHANGED=true bash "$deploy" "$rootless_env" >/dev/null
+[[ -s "$temporary/parents.log" ]] && ! grep -q '[[:graph:]]' "$temporary/parents.log" || {
+  echo 'Rootless app/monitoring Compose startup retained a rootful cgroup parent.' >&2; exit 1;
+}
+grep -Fxq 'AGENTBENCH_CGROUP_PARENT=agentbench-development.slice' "$rootless_env"
 
 echo "Single-VM deployment workflow tests passed."

@@ -11,11 +11,24 @@ esac
 [[ "$(docker info --format '{{.CgroupDriver}}/{{.CgroupVersion}}')" == systemd/2 ]] || {
   echo 'Resource budgets require Docker systemd cgroups v2.' >&2; exit 1;
 }
-state="$(LC_ALL=C systemctl show "$parent" --property=ActiveState --property=MemoryMax --property=CPUQuotaPerSecUSec)"
+security_options="$(docker info --format '{{json .SecurityOptions}}')"
+unit="$parent"
+if [[ "$security_options" == *name=rootless* ]]; then
+  [[ "$environment" == development ]] || { echo 'Rootless resource budgets are supported only for development.' >&2; exit 1; }
+  uid="$(id -u)"
+  [[ "$uid" -ge 1000 ]] || { echo 'Rootless development requires a dedicated unprivileged user.' >&2; exit 1; }
+  unit="user-$uid.slice"
+  user_group="$(systemctl show "$unit" --property=ControlGroup --value)"
+  daemon_group="$(systemctl --user show docker.service --property=ControlGroup --value)"
+  [[ "$user_group" == "/user.slice/$unit" && "$daemon_group" == "$user_group/"* ]] || {
+    echo 'Rootless Docker is not inside the expected dedicated user budget.' >&2; exit 1;
+  }
+fi
+state="$(LC_ALL=C systemctl show "$unit" --property=ActiveState --property=MemoryMax --property=CPUQuotaPerSecUSec)"
 if ! grep -Fxq 'ActiveState=active' <<< "$state" ||
    ! grep -Fxq "MemoryMax=$expected_memory" <<< "$state" ||
    ! grep -Fxq "CPUQuotaPerSecUSec=$expected_cpu" <<< "$state"; then
-  echo "$environment resource slice is inactive or has incorrect CPU/memory limits; install the repository slice units first." >&2
+  echo "$environment resource slice is inactive or has incorrect CPU/memory limits; install the matching host budget first." >&2
   exit 1
 fi
 echo "$environment aggregate resource budget verified."

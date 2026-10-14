@@ -39,6 +39,7 @@ bash scripts/test-elk-config.sh
 
 echo "== Environment resource budgets =="
 bash scripts/test-environment-resource-budgets.sh
+bash scripts/test-rootless-migration.sh
 
 echo "== Web secret boundary =="
 bash scripts/check-web-secret-boundary.sh

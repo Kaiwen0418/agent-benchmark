@@ -58,6 +58,9 @@ does not start or send traffic to the application services.
 every application and monitoring service's cgroup placement, invalid preflight
 states and cross-environment deployment rejection. It renders Compose without
 installing systemd units or modifying running host services.
+`scripts/test-rootless-migration.sh` covers rootful/rootless UID selection,
+source-archive exclusions, private workspace execution, database bootstrap and
+rejection of rootless production migrations using deterministic Docker fixtures.
 
 `packages/model-catalog-sync` tests use recorded provider/aggregator payloads
 rather than live network calls and verify CLI source validation and merge

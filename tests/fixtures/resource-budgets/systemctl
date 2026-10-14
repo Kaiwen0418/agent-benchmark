@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == --user ]]; then
+  printf '%s\n' "${FAKE_DAEMON_GROUP:-/user.slice/user-1002.slice/user@1002.service/app.slice/docker.service}"
+  exit 0
+fi
 [[ "${1:-}" == show ]] || exit 2
 case "${2:-}" in
   agentbench-production.slice) memory=7516192768; cpu=8s ;;
   agentbench-development.slice) memory=4294967296; cpu=4s ;;
+  user-1002.slice)
+    if [[ "${3:-}" == --property=ControlGroup ]]; then
+      echo /user.slice/user-1002.slice
+      exit 0
+    fi
+    memory=4294967296; cpu=4s ;;
   *) exit 2 ;;
 esac
 printf 'ActiveState=%s\nMemoryMax=%s\nCPUQuotaPerSecUSec=%s\n' \

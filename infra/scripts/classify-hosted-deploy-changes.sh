@@ -60,7 +60,8 @@ if matches_any '^infra/docker/docker-compose\.server\.yml$' \
 fi
 if matches_any '^infra/systemd/' \
   '^infra/scripts/check-environment-resource-budget\.sh$' \
-  '^infra/scripts/install-environment-resource-slices\.sh$'; then
+  '^infra/scripts/install-environment-resource-slices\.sh$' \
+  '^infra/scripts/install-rootless-development-budget\.sh$'; then
   topology=true
 fi
 
