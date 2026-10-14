@@ -2,6 +2,7 @@ name: ${ELK_PROJECT_NAME:?Set an environment-specific ELK_PROJECT_NAME}
 
 services:
   elasticsearch:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_STACK_VERSION:-8.19.23}
     environment:
       discovery.type: single-node
@@ -23,6 +24,7 @@ services:
     restart: unless-stopped
 
   elk-setup:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_STACK_VERSION:-8.19.23}
     environment:
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD}
@@ -38,6 +40,7 @@ services:
     restart: 'no'
 
   logstash:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     image: docker.elastic.co/logstash/logstash:${ELASTIC_STACK_VERSION:-8.19.23}
     environment:
       LOGSTASH_PASSWORD: ${LOGSTASH_PASSWORD:?Set LOGSTASH_PASSWORD}
@@ -58,6 +61,7 @@ services:
     restart: unless-stopped
 
   kibana:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     image: docker.elastic.co/kibana/kibana:${ELASTIC_STACK_VERSION:-8.19.23}
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
@@ -78,6 +82,7 @@ services:
     restart: unless-stopped
 
   kibana-setup:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_STACK_VERSION:-8.19.23}
     environment:
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD}
@@ -92,6 +97,7 @@ services:
     restart: 'no'
 
   prometheus:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     image: prom/prometheus:${PROMETHEUS_VERSION:-v3.15.0}
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -108,6 +114,7 @@ services:
     restart: unless-stopped
 
   grafana:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     image: grafana/grafana:${GRAFANA_VERSION:-13.2.3}
     environment:
       GF_SECURITY_ADMIN_USER: admin

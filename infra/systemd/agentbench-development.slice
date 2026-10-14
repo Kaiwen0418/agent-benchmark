@@ -1,0 +1,7 @@
+[Unit]
+Description=AgentBench development aggregate resource budget
+
+[Slice]
+MemoryAccounting=yes
+CPUQuota=400%
+MemoryMax=4G

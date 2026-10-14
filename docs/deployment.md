@@ -3,6 +3,9 @@
 For optional centralized Elasticsearch, Logstash and Kibana deployment,
 environment isolation, access and rollback, see [Observability](./observability.md).
 
+For aggregate development and production CPU/memory limits, installation,
+container recreation and rollback, see [Environment Resource Budgets](./resource-budgets.md).
+
 ## Self-hosted PostgreSQL
 
 PostgreSQL and PgBouncer run as a dedicated Compose project so application

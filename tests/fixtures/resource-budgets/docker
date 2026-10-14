@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == compose && "${2:-}" == version ]]; then
+  exit 0
+fi
+[[ "${1:-}" == info ]] || { echo 'Unexpected Docker mutation during preflight.' >&2; exit 2; }
+printf '%s\n' "${FAKE_CGROUP_BACKEND:-systemd/2}"
