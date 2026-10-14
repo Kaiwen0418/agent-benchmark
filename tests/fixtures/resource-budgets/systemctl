@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == --user ]]; then
+  [[ "${XDG_RUNTIME_DIR:-}" == /run/user/1002 && "${DBUS_SESSION_BUS_ADDRESS:-}" == unix:path=/run/user/1002/bus ]] || exit 2
   printf '%s\n' "${FAKE_DAEMON_GROUP:-/user.slice/user-1002.slice/user@1002.service/app.slice/docker.service}"
   exit 0
 fi

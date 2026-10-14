@@ -98,8 +98,10 @@ checks the actual host user-slice quota and daemon ancestry, and clears the
 container `cgroup_parent` override for Compose. Containers remain beneath their
 user manager, with the host slice providing the hard aggregate ceiling. Run
 the checker as the actual development runner user with its rootless Docker
-context and user-manager connection. It rejects a missing/mismatched budget,
-unsupported cgroup backend, daemon outside the user slice and rootless production.
+context. The checker explicitly selects the current user's runtime directory
+and bus so system-level CI runner services need not inherit an interactive
+login session. It rejects a missing/mismatched budget, unsupported cgroup
+backend, daemon outside the user slice and rootless production.
 
 Rootless per-container limits still require Docker's systemd/cgroups-v2 backend
 and delegated CPU/memory controllers; see [Docker rootless resource limits](https://docs.docker.com/engine/security/rootless/tips/#limiting-resources).

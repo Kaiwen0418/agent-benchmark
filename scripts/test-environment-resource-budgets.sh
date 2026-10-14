@@ -26,6 +26,9 @@ reject env FAKE_SLICE_MEMORY=infinity bash "$checker" production agentbench-prod
 reject env FAKE_SLICE_CPU=infinity bash "$checker" development agentbench-development.slice
 PATH="$temporary/bin:$PATH" FAKE_SECURITY_OPTIONS='["name=rootless"]' \
   bash "$checker" development agentbench-development.slice
+PATH="$temporary/bin:$PATH" FAKE_SECURITY_OPTIONS='["name=rootless"]' \
+  XDG_RUNTIME_DIR=/wrong-user DBUS_SESSION_BUS_ADDRESS=unix:path=/wrong-user/bus \
+  bash "$checker" development agentbench-development.slice
 reject env FAKE_SECURITY_OPTIONS='["name=rootless"]' bash "$checker" production agentbench-production.slice
 reject env FAKE_SECURITY_OPTIONS='["name=rootless"]' FAKE_DAEMON_GROUP=/system.slice/docker.service \
   bash "$checker" development agentbench-development.slice
