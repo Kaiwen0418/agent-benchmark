@@ -6,6 +6,7 @@ x-callback: &callback
 
 services:
   postgres:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.database-production.yml
       service: postgres
@@ -13,6 +14,7 @@ services:
       AGENTBENCH_DATABASE_NAME: ${SINGLE_VM_DATABASE_NAME:-agentbench_production}
       AGENTBENCH_DATABASE_USER: ${SINGLE_VM_DATABASE_USER:-agentbench_prod}
   pgbouncer:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.database-production.yml
       service: pgbouncer
@@ -20,6 +22,7 @@ services:
       DB_NAME: ${SINGLE_VM_DATABASE_NAME:-agentbench_production}
       DB_USER: ${SINGLE_VM_DATABASE_USER:-agentbench_prod}
   web:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.web.yml
       service: web
@@ -27,12 +30,14 @@ services:
       pgbouncer:
         condition: service_healthy
   hosted-sites:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.server.yml
       service: hosted-sites
     environment:
       <<: *callback
   hosted-orchestrator:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.server.yml
       service: hosted-orchestrator
@@ -42,6 +47,7 @@ services:
       pgbouncer:
         condition: service_healthy
   hosted-orchestrator-worker-0:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.server.yml
       service: hosted-orchestrator-worker-0
@@ -51,6 +57,7 @@ services:
       pgbouncer:
         condition: service_healthy
   hosted-orchestrator-worker-1:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.server.yml
       service: hosted-orchestrator-worker-1
@@ -60,6 +67,7 @@ services:
       pgbouncer:
         condition: service_healthy
   session-redis:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.server.yml
       service: session-redis
@@ -67,6 +75,7 @@ services:
     volumes:
       - session-data:/data
   orchestrator-redis:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.server.yml
       service: orchestrator-redis
@@ -74,6 +83,7 @@ services:
     volumes:
       - command-data:/data
   gateway:
+    cgroup_parent: ${AGENTBENCH_CGROUP_PARENT:-}
     extends:
       file: docker-compose.server.yml
       service: gateway

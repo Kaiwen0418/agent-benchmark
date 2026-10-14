@@ -54,6 +54,11 @@ Docker. On a running test ELK project, `bash tests/e2e/elk-smoke.sh <env-file>`
 verifies synthetic GELF ingestion, safe projection and timing units. This smoke
 does not start or send traffic to the application services.
 
+`scripts/test-environment-resource-budgets.sh` checks aggregate slice quotas,
+every application and monitoring service's cgroup placement, invalid preflight
+states and cross-environment deployment rejection. It renders Compose without
+installing systemd units or modifying running host services.
+
 `packages/model-catalog-sync` tests use recorded provider/aggregator payloads
 rather than live network calls and verify CLI source validation and merge
 precedence independently from Web. `scripts/test-model-catalog-postgres.sh`

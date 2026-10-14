@@ -69,12 +69,19 @@ fi
 
 compose_file="${ROOT_DIR}/infra/docker/docker-compose.single-vm.yml"
 compose_files=(-f "${compose_file}")
+resource_parent="${AGENTBENCH_CGROUP_PARENT:-}"
+if [[ -n "$resource_parent" ]]; then
+  bash "$ROOT_DIR/infra/scripts/check-environment-resource-budget.sh" "$deployment_environment" "$resource_parent"
+fi
 if [[ -n "${ELK_ENV_FILE:-}" ]]; then
   [[ -r "${ELK_ENV_FILE}" ]] || { echo 'ELK environment file is not readable.' >&2; exit 1; }
   # A separate, protected file owns only the optional observability credentials.
   set -a
   source "${ELK_ENV_FILE}"
   set +a
+  [[ "${AGENTBENCH_CGROUP_PARENT:-}" == "$resource_parent" ]] || {
+    echo 'Runtime and observability resource slices do not match.' >&2; exit 1;
+  }
   expected_gelf_port=12201; expected_kibana_port=5601
   expected_grafana_port=3300
   if [[ "${deployment_environment}" == development ]]; then

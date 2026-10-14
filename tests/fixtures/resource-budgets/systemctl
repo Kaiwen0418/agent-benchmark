@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == show ]] || exit 2
+case "${2:-}" in
+  agentbench-production.slice) memory=7516192768; cpu=8s ;;
+  agentbench-development.slice) memory=4294967296; cpu=4s ;;
+  *) exit 2 ;;
+esac
+printf 'ActiveState=%s\nMemoryMax=%s\nCPUQuotaPerSecUSec=%s\n' \
+  "${FAKE_SLICE_STATE:-active}" "${FAKE_SLICE_MEMORY:-$memory}" "${FAKE_SLICE_CPU:-$cpu}"
