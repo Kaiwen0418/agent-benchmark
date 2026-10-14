@@ -35,4 +35,8 @@ assert_classification 'docs/deployment.md' $'web=false\nhosted_sites=false\norch
 assert_classification 'infra/docker/docker-compose.elk.yml' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 assert_classification 'infra/elk/safe-event.rb' $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
 
+for file in infra/systemd/agentbench-production.slice infra/scripts/check-environment-resource-budget.sh infra/scripts/install-environment-resource-slices.sh; do
+  assert_classification "$file" $'web=false\nhosted_sites=false\norchestrator=false\ninfra=false\ntopology=true'
+done
+
 echo "deployment classifier tests passed"

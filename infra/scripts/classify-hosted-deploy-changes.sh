@@ -58,6 +58,11 @@ if matches_any '^infra/docker/docker-compose\.server\.yml$' \
   '^infra/scripts/validate-orchestrator-partitions\.sh$'; then
   topology=true
 fi
+if matches_any '^infra/systemd/' \
+  '^infra/scripts/check-environment-resource-budget\.sh$' \
+  '^infra/scripts/install-environment-resource-slices\.sh$'; then
+  topology=true
+fi
 
 printf 'web=%s\n' "$web"
 printf 'hosted_sites=%s\n' "$hosted_sites"

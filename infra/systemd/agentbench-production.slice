@@ -1,0 +1,7 @@
+[Unit]
+Description=AgentBench production aggregate resource budget
+
+[Slice]
+MemoryAccounting=yes
+CPUQuota=800%
+MemoryMax=7G
