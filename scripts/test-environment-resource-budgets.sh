@@ -24,6 +24,14 @@ reject env FAKE_CGROUP_BACKEND=cgroupfs/1 bash "$checker" production agentbench-
 reject env FAKE_SLICE_STATE=inactive bash "$checker" development agentbench-development.slice
 reject env FAKE_SLICE_MEMORY=infinity bash "$checker" production agentbench-production.slice
 reject env FAKE_SLICE_CPU=infinity bash "$checker" development agentbench-development.slice
+PATH="$temporary/bin:$PATH" FAKE_SECURITY_OPTIONS='["name=rootless"]' \
+  bash "$checker" development agentbench-development.slice
+reject env FAKE_SECURITY_OPTIONS='["name=rootless"]' bash "$checker" production agentbench-production.slice
+reject env FAKE_SECURITY_OPTIONS='["name=rootless"]' FAKE_DAEMON_GROUP=/system.slice/docker.service \
+  bash "$checker" development agentbench-development.slice
+reject env FAKE_SECURITY_OPTIONS='["name=rootless"]' FAKE_SLICE_MEMORY=infinity \
+  bash "$checker" development agentbench-development.slice
+bash -n "$ROOT_DIR/infra/scripts/install-rootless-development-budget.sh"
 
 export ELASTIC_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 export KIBANA_SYSTEM_PASSWORD=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb

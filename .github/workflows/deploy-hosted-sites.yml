@@ -37,6 +37,7 @@ on:
       - 'infra/systemd/**'
       - 'infra/scripts/check-environment-resource-budget.sh'
       - 'infra/scripts/install-environment-resource-slices.sh'
+      - 'infra/scripts/install-rootless-development-budget.sh'
       - 'infra/docker/docker-compose.canary.yml'
       - 'infra/nginx/**'
       - 'infra/scripts/classify-hosted-deploy-changes.sh'

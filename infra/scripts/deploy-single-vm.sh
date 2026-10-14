@@ -70,6 +70,14 @@ fi
 compose_file="${ROOT_DIR}/infra/docker/docker-compose.single-vm.yml"
 compose_files=(-f "${compose_file}")
 resource_parent="${AGENTBENCH_CGROUP_PARENT:-}"
+security_options="$(docker info --format '{{json .SecurityOptions}}')"
+rootless=false
+[[ "$security_options" != *name=rootless* ]] || rootless=true
+if [[ "$rootless" == true ]]; then
+  [[ "$deployment_environment" == development && -n "$resource_parent" ]] || {
+    echo 'Rootless deployment requires a configured development resource budget.' >&2; exit 1;
+  }
+fi
 if [[ -n "$resource_parent" ]]; then
   bash "$ROOT_DIR/infra/scripts/check-environment-resource-budget.sh" "$deployment_environment" "$resource_parent"
 fi
@@ -82,6 +90,9 @@ if [[ -n "${ELK_ENV_FILE:-}" ]]; then
   [[ "${AGENTBENCH_CGROUP_PARENT:-}" == "$resource_parent" ]] || {
     echo 'Runtime and observability resource slices do not match.' >&2; exit 1;
   }
+  # Rootless containers stay under their user manager; the host user slice
+  # provides the aggregate ceiling rather than a rootful cgroup_parent.
+  [[ "$rootless" == false ]] || export AGENTBENCH_CGROUP_PARENT=
   expected_gelf_port=12201; expected_kibana_port=5601
   expected_grafana_port=3300
   if [[ "${deployment_environment}" == development ]]; then
@@ -101,6 +112,7 @@ if [[ -n "${ELK_ENV_FILE:-}" ]]; then
     -f "${ROOT_DIR}/infra/docker/docker-compose.elk.yml" up -d
   compose_files+=(-f "${ROOT_DIR}/infra/docker/docker-compose.elk-logging.yml")
 fi
+[[ "$rootless" == false ]] || export AGENTBENCH_CGROUP_PARENT=
 compose() {
   "${COMPOSE[@]}" --env-file "${env_file}" "${compose_files[@]}" "$@"
 }

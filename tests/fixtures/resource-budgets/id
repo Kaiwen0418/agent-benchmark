@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == -u || "${1:-}" == -g ]] || exit 2
+echo 1002

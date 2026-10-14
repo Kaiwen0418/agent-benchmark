@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == info ]]; then
+  if [[ "${3:-}" == '{{json .SecurityOptions}}' ]]; then
+    echo "${FAKE_SECURITY_OPTIONS:-[]}"
+  else
+    echo systemd/2
+  fi
+elif [[ "$1" == compose ]]; then
+  if [[ "$*" == *'config --format json'* ]]; then
+    printf '{"name":"%s","services":{"postgres":{"cgroup_parent":"agentbench-development.slice"}}}\n' "${FAKE_PROJECT:-agentbench-local-development}"
+  else
+    printf '%s parent=%s\n' "$*" "${AGENTBENCH_CGROUP_PARENT-unset}" >> "$FAKE_ARGUMENTS"
+  fi
+elif [[ "$1" == run ]]; then
+  printf '%s\n' "$*" >> "$FAKE_ARGUMENTS"
+  tar -tf - > "$FAKE_ARCHIVE"
+else
+  exit 2
+fi
