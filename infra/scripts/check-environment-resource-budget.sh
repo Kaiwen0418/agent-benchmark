@@ -19,7 +19,9 @@ if [[ "$security_options" == *name=rootless* ]]; then
   [[ "$uid" -ge 1000 ]] || { echo 'Rootless development requires a dedicated unprivileged user.' >&2; exit 1; }
   unit="user-$uid.slice"
   user_group="$(systemctl show "$unit" --property=ControlGroup --value)"
-  daemon_group="$(systemctl --user show docker.service --property=ControlGroup --value)"
+  # System-level CI runner services do not inherit a login session's bus.
+  daemon_group="$(XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+    systemctl --user show docker.service --property=ControlGroup --value)"
   [[ "$user_group" == "/user.slice/$unit" && "$daemon_group" == "$user_group/"* ]] || {
     echo 'Rootless Docker is not inside the expected dedicated user budget.' >&2; exit 1;
   }
